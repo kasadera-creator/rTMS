@@ -1,51 +1,78 @@
 {% extends "admin/base_site.html" %}
+{% block extrastyle %}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+    /* 印刷用スタイル */
+    @media print {
+        body * { visibility: hidden; }
+        .printable-area, .printable-area * { visibility: visible; }
+        .printable-area { position: absolute; left: 0; top: 0; width: 100%; }
+        .no-print { display: none !important; }
+        .card { border: none !important; box-shadow: none !important; }
+        input, textarea, select { border: none; background: transparent; resize: none; overflow: visible; }
+    }
+    .form-label { font-weight: bold; color: #555; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container py-4">
-    <div class="d-flex justify-content-between mb-3">
-        <h3>基本情報・初診入力: {{ patient.name }} 殿</h3>
-        <div>
-            <button class="btn btn-outline-secondary" onclick="printSection('medical-record')">
-                <i class="fas fa-print"></i> 初診カルテ印刷
+    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+        <h3 class="fw-bold">初診・基本情報入力</h3>
+        <div class="btn-group">
+            <button type="button" class="btn btn-outline-primary" onclick="printDiv('medical-record')">
+                <i class="fas fa-print"></i> カルテ印刷
             </button>
-            <button class="btn btn-outline-secondary" onclick="printSection('questionnaire')">
-                <i class="fas fa-print"></i> 適正質問票印刷
+            <button type="button" class="btn btn-outline-success" onclick="printDiv('questionnaire')">
+                <i class="fas fa-print"></i> 質問票印刷
             </button>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary">閉じる</a>
         </div>
     </div>
 
-    <form method="post">
+    <form method="post" id="mainForm">
         {% csrf_token %}
         
-        <div id="medical-record" class="card mb-4 p-4 shadow-sm">
-            <h5 class="text-primary border-bottom pb-2">基本情報・問診</h5>
-            <div class="row g-3">
-                <div class="col-md-3">
+        <div id="medical-record" class="printable-area card mb-4 p-4 shadow-sm">
+            <h4 class="border-bottom pb-2 mb-4">rTMS 診療録 (基本情報)</h4>
+            
+            <div class="row g-3 mb-4">
+                <div class="col-md-3 col-6">
                     <label class="form-label">カルテID</label>
                     {{ form.card_id }}
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-3 col-6">
                     <label class="form-label">氏名</label>
                     {{ form.name }}
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label">生年月日 (年齢)</label>
+                <div class="col-md-3 col-6">
+                    <label class="form-label">生年月日</label>
                     {{ form.birth_date }}
-                    <small class="text-muted">自動計算: {{ patient.age }}歳</small>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-3 col-6">
+                    <label class="form-label">年齢</label>
+                    <input type="text" class="form-control" value="{{ patient.age }}歳" readonly>
+                </div>
+                
+                <div class="col-md-3 col-6">
                     <label class="form-label">性別</label>
                     {{ form.gender }}
                 </div>
-                
-                <div class="col-md-6">
+                <div class="col-md-5">
                     <label class="form-label">紹介元</label>
                     {{ form.referral_source }}
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <label class="form-label">担当医</label>
                     {{ form.attending_physician }}
                 </div>
+            </div>
 
+            <div class="row g-3">
+                <div class="col-12">
+                    <label class="form-label">主訴・診断名</label>
+                    {{ form.diagnosis }}
+                </div>
                 <div class="col-12">
                     <label class="form-label">生活歴</label>
                     {{ form.life_history }}
@@ -65,38 +92,114 @@
             </div>
         </div>
 
-        <div id="questionnaire" class="card mb-4 p-4 shadow-sm">
-            <h5 class="text-success border-bottom pb-2">rTMS 適正質問票</h5>
-            <table class="table table-bordered">
-                <tr>
-                    <th>質問項目</th>
-                    <th width="150">回答</th>
-                </tr>
-                <tr>
-                    <td>1. 金属・電子機器の体内留置</td>
-                    <td>(Radio Button Here)</td>
-                </tr>
-                </table>
-            <div class="text-end mt-3">
-                <p>医師確認署名: ____________________</p>
+        <div id="questionnaire" class="printable-area card mb-4 p-4 shadow-sm">
+            <h4 class="border-bottom pb-2 mb-3">rTMS 適正に関する質問票</h4>
+            <div class="mb-3">
+                <strong>氏名: {{ patient.name }} 殿</strong>
+                <span class="ms-4">カルテID: {{ patient.card_id }}</span>
+            </div>
+            
+            <p class="small text-muted mb-3">以下の項目について、該当するものにチェックを入れてください。</p>
+            
+            <table class="table table-bordered table-sm">
+                <thead class="table-light">
+                    <tr>
+                        <th>質問項目</th>
+                        <th width="150" class="text-center">回答</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <input type="hidden" name="questionnaire_data" id="questionnaire_json">
+                    
+                    <tr>
+                        <td>1. 頭部・体内に金属や電子機器が入っていますか？<br><small class="text-muted">(ペースメーカー、人工内耳、脳動脈クリップ等)</small></td>
+                        <td class="text-center">
+                            <input type="radio" name="q_implants" value="いいえ" checked> いいえ
+                            <input type="radio" name="q_implants" value="はい" class="ms-2"> はい
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>2. けいれん発作（てんかん）の既往、脳波異常はありますか？</td>
+                        <td class="text-center">
+                            <input type="radio" name="q_epilepsy" value="いいえ" checked> いいえ
+                            <input type="radio" name="q_epilepsy" value="はい" class="ms-2"> はい
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>3. 脳卒中、脳腫瘍、頭部外傷などの脳の病気はありますか？</td>
+                        <td class="text-center">
+                            <input type="radio" name="q_brain" value="いいえ" checked> いいえ
+                            <input type="radio" name="q_brain" value="はい" class="ms-2"> はい
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>4. 現在妊娠している、またはその可能性はありますか？</td>
+                        <td class="text-center">
+                            <input type="radio" name="q_preg" value="いいえ" checked> いいえ
+                            <input type="radio" name="q_preg" value="はい" class="ms-2"> はい
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>5. 最近お薬の変更はありましたか？</td>
+                        <td class="text-center">
+                            <input type="radio" name="q_meds" value="いいえ" checked> いいえ
+                            <input type="radio" name="q_meds" value="はい" class="ms-2"> はい
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>6. 昨夜は十分睡眠がとれましたか？</td>
+                        <td class="text-center">
+                            <input type="radio" name="q_sleep" value="はい" checked> はい
+                            <input type="radio" name="q_sleep" value="いいえ" class="ms-2"> いいえ
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <div class="mt-4 pt-4 border-top">
+                <div class="row">
+                    <div class="col-6 text-center">
+                        <p>確認日: _______ 年 ____ 月 ____ 日</p>
+                    </div>
+                    <div class="col-6 text-center">
+                        <p>医師署名: ___________________________</p>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="text-center">
-            <button type="submit" class="btn btn-primary btn-lg px-5">保存する</button>
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-lg px-5">戻る</a>
+        <div class="fixed-bottom bg-white p-3 border-top shadow text-center no-print">
+            <button type="submit" class="btn btn-primary px-5 fw-bold">保存して終了</button>
         </div>
     </form>
 </div>
 
 <script>
-function printSection(divId) {
-    var printContents = document.getElementById(divId).innerHTML;
-    var originalContents = document.body.innerHTML;
-    document.body.innerHTML = printContents;
-    window.print();
-    document.body.innerHTML = originalContents;
-    location.reload(); // 画面をリセット
-}
+    // 印刷機能
+    function printDiv(divId) {
+        var originalContents = document.body.innerHTML;
+        var printContents = document.getElementById(divId).outerHTML;
+        document.body.innerHTML = printContents;
+        window.print();
+        document.body.innerHTML = originalContents;
+        // イベントリスナー等が消えるためリロード推奨
+        window.location.reload();
+    }
+
+    // フォーム送信時にラジオボタンの値をJSONにして隠しフィールドに入れる
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const data = {
+            implants: document.querySelector('input[name="q_implants"]:checked')?.value,
+            epilepsy: document.querySelector('input[name="q_epilepsy"]:checked')?.value,
+            brain: document.querySelector('input[name="q_brain"]:checked')?.value,
+            preg: document.querySelector('input[name="q_preg"]:checked')?.value,
+            meds: document.querySelector('input[name="q_meds"]:checked')?.value,
+            sleep: document.querySelector('input[name="q_sleep"]:checked')?.value
+        };
+        document.getElementById('questionnaire_json').value = JSON.stringify(data);
+    });
+
+    // 保存されたJSONデータを復元してラジオボタンに反映（ロード時）
+    // ※Django側で初期値を渡す処理が必要ですが、簡易的には未実装でも新規入力は動きます
 </script>
 {% endblock %}

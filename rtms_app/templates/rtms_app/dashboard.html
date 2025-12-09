@@ -3,101 +3,92 @@
 
 {% block extrastyle %}
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
-    /* Adminのスタイルと干渉しないように調整 */
     .dashboard-container { font-family: "Noto Sans JP", sans-serif; max-width: 1200px; margin: 0 auto; }
-    .card-task { transition: all 0.2s; border: none; border-radius: 10px; }
-    .card-task:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-    .task-header { font-weight: bold; padding: 15px; border-radius: 10px 10px 0 0; color: white; display: flex; justify-content: space-between; align-items: center;}
-    .task-list { max-height: 400px; overflow-y: auto; }
+    .card-task { transition: transform 0.2s; border: none; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .card-task:hover { transform: translateY(-3px); box-shadow: 0 8px 16px rgba(0,0,0,0.1); }
+    .task-header { padding: 12px 15px; border-radius: 8px 8px 0 0; color: white; display: flex; justify-content: space-between; align-items: center; font-weight: bold;}
+    .task-list { max-height: 350px; overflow-y: auto; }
+    .btn-circle { width: 30px; height: 30px; border-radius: 50%; padding: 0; line-height: 30px; text-align: center; }
     a { text-decoration: none; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="dashboard-container py-4">
+<div class="dashboard-container py-3">
 
     <div class="d-flex justify-content-between align-items-center mb-4 bg-white p-3 rounded shadow-sm">
         <a href="?date={{ prev_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm">
-            &laquo; 前日 ({{ prev_day|date:"n/j" }})
+            <i class="fas fa-chevron-left"></i> 前日
         </a>
         
         <div class="text-center">
-            <h3 class="mb-0 fw-bold">{{ today|date:"Y年n月j日 (l)" }}</h3>
-            <span class="text-muted small">本日の業務一覧</span>
+            <h4 class="mb-0 fw-bold">{{ today|date:"Y年n月j日 (l)" }}</h4>
+            <input type="date" class="form-control form-control-sm d-inline-block w-auto mt-1" 
+                   value="{{ today|date:'Y-m-d' }}" onchange="location.href='?date='+this.value">
         </div>
 
         <a href="?date={{ next_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm">
-            翌日 ({{ next_day|date:"n/j" }}) &raquo;
+            翌日 <i class="fas fa-chevron-right"></i>
         </a>
     </div>
 
-    <div class="row g-4">
+    <div class="row g-3">
         
-        <div class="col-md-6 col-lg-3">
-            <div class="card shadow-sm h-100 card-task">
-                <div class="task-header bg-info">
-                    <span><i class="bi bi-person-plus-fill"></i> ① 初診</span>
-                    <span class="badge bg-white text-info rounded-pill">{{ new_patients|length }}</span>
+        <div class="col-md-4 col-lg-3">
+            <div class="card h-100 card-task">
+                <div class="task-header bg-primary">
+                    <span><i class="fas fa-user-md"></i> ① 初診・入院</span>
+                    <span class="badge bg-white text-primary rounded-pill">{{ new_patients|length|add:admissions|length }}</span>
                 </div>
                 <div class="list-group list-group-flush task-list">
+                    <div class="p-2 text-center border-bottom bg-light">
+                        <a href="{% url 'patient_add' %}" class="btn btn-sm btn-primary w-100 shadow-sm">
+                            <i class="fas fa-plus"></i> 新規患者登録
+                        </a>
+                    </div>
+                    
                     {% for item in new_patients %}
-                    <a href="{% url 'patient_detail' item.obj.id %}" class="list-group-item list-group-item-action">
+                    <a href="{% url 'patient_first_visit' item.obj.id %}" class="list-group-item list-group-item-action">
                         <div class="d-flex w-100 justify-content-between">
-                            <h6 class="mb-1 fw-bold">{{ item.obj.name }}</h6>
-                            <small class="text-muted">済</small>
+                            <strong>{{ item.obj.name }}</strong>
+                            <span class="badge bg-info text-dark">初診</span>
                         </div>
                         <small class="text-muted">ID: {{ item.obj.card_id }}</small>
                     </a>
-                    {% empty %}
-                    <div class="p-3 text-center text-muted small">予定なし</div>
                     {% endfor %}
-                    <div class="p-2 text-center border-top">
-                        <a href="{% url 'patient_add' %}" class="btn btn-sm btn-outline-info w-100">＋ 新規登録</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-6 col-lg-3">
-            <div class="card shadow-sm h-100 card-task">
-                <div class="task-header bg-primary">
-                    <span><i class="bi bi-hospital"></i> ② 入院</span>
-                    <span class="badge bg-white text-primary rounded-pill">{{ admissions|length }}</span>
-                </div>
-                <div class="list-group list-group-flush task-list">
+                    
                     {% for item in admissions %}
-                    <a href="{% url 'patient_detail' item.obj.id %}" class="list-group-item list-group-item-action">
+                    <a href="{% url 'patient_first_visit' item.obj.id %}" class="list-group-item list-group-item-action">
                         <div class="d-flex w-100 justify-content-between">
-                            <h6 class="mb-1 fw-bold">{{ item.obj.name }}</h6>
-                            {% if item.status == 'done' %}
-                                <span class="badge bg-secondary">済</span>
-                            {% else %}
-                                <span class="badge bg-warning text-dark">未</span>
-                            {% endif %}
+                            <strong>{{ item.obj.name }}</strong>
+                            <span class="badge bg-warning text-dark">入院</span>
                         </div>
-                        <small>入院オリエンテーション</small>
+                        <small class="text-muted">ID: {{ item.obj.card_id }}</small>
                     </a>
-                    {% empty %}
-                    <div class="p-3 text-center text-muted small">予定なし</div>
                     {% endfor %}
+
+                    {% if not new_patients and not admissions %}
+                    <div class="p-4 text-center text-muted small">予定なし</div>
+                    {% endif %}
                 </div>
             </div>
         </div>
 
-        <div class="col-md-6 col-lg-3">
-            <div class="card shadow-sm h-100 card-task">
+        <div class="col-md-4 col-lg-3">
+            <div class="card h-100 card-task">
                 <div class="task-header bg-warning text-dark">
-                    <span><i class="bi bi-geo-alt-fill"></i> ③ 位置決め</span>
+                    <span><i class="fas fa-crosshairs"></i> ② 位置決め</span>
                     <span class="badge bg-white text-warning rounded-pill">{{ mappings|length }}</span>
                 </div>
                 <div class="list-group list-group-flush task-list">
                     {% for item in mappings %}
-                    <a href="{% url 'patient_detail' item.obj.id %}" class="list-group-item list-group-item-action">
+                    <a href="{% url 'mapping_add' item.obj.id %}" class="list-group-item list-group-item-action">
                         <div class="d-flex w-100 justify-content-between">
-                            <h6 class="mb-1 fw-bold">{{ item.obj.name }}</h6>
+                            <strong>{{ item.obj.name }}</strong>
                             {% if item.status == 'done' %}
-                                <span class="badge bg-success">済</span>
+                                <i class="fas fa-check-circle text-success"></i>
                             {% else %}
                                 <span class="badge bg-danger">未</span>
                             {% endif %}
@@ -105,75 +96,79 @@
                         <small class="text-muted">MT測定・部位特定</small>
                     </a>
                     {% empty %}
-                    <div class="p-3 text-center text-muted small">予定なし</div>
+                    <div class="p-4 text-center text-muted small">予定なし</div>
                     {% endfor %}
                 </div>
             </div>
         </div>
 
-        <div class="col-md-6 col-lg-3">
-            <div class="card shadow-sm h-100 card-task">
+        <div class="col-md-4 col-lg-3">
+            <div class="card h-100 card-task">
                 <div class="task-header bg-success">
-                    <span><i class="bi bi-lightning-fill"></i> ④ 治療実施</span>
+                    <span><i class="fas fa-bolt"></i> ③ 治療実施</span>
                     <span class="badge bg-white text-success rounded-pill">{{ treatments|length }}</span>
                 </div>
                 <div class="list-group list-group-flush task-list">
                     {% for item in treatments %}
-                    <a href="{% if item.status == 'todo' %}/admin/rtms_app/treatmentsession/add/?patient={{ item.obj.id }}{% else %}#{% endif %}" 
-                       class="list-group-item list-group-item-action {% if item.status == 'done' %}bg-light{% endif %}">
-                        
-                        <div class="d-flex w-100 justify-content-between align-items-center mb-1">
-                            <h6 class="mb-0 fw-bold">{{ item.obj.name }}</h6>
+                    <a href="{% url 'treatment_add' item.obj.id %}" 
+                       class="list-group-item list-group-item-action {% if item.status == 'done' %}bg-light text-muted{% endif %}">
+                        <div class="d-flex w-100 justify-content-between align-items-center">
+                            <strong>{{ item.obj.name }}</strong>
                             {% if item.status == 'done' %}
-                                <span class="badge bg-secondary">実施済</span>
+                                <span class="badge bg-secondary">済</span>
                             {% else %}
-                                <span class="badge bg-success">実施する</span>
+                                <span class="badge bg-success">実施</span>
                             {% endif %}
                         </div>
-
-                        <div class="d-flex justify-content-between align-items-center">
+                        <div class="d-flex justify-content-between mt-1">
                             <small class="text-muted">{{ item.note }}</small>
                             {% if item.is_eval %}
-                                <span class="badge bg-danger rounded-pill">評価日</span>
+                                <span class="badge bg-danger rounded-pill">★評価日</span>
                             {% endif %}
                         </div>
                     </a>
                     {% empty %}
-                    <div class="p-3 text-center text-muted small">本日の治療なし</div>
+                    <div class="p-4 text-center text-muted small">本日の治療予定なし</div>
                     {% endfor %}
                 </div>
             </div>
         </div>
-		
-		<div class="col-md-6 col-lg-3">
-            <div class="card shadow-sm h-100 card-task">
+
+        <div class="col-md-4 col-lg-3">
+            <div class="card h-100 card-task">
                 <div class="task-header bg-danger">
-                    <span><i class="bi bi-clipboard-data"></i> ⑤ 状態評価</span>
+                    <span><i class="fas fa-clipboard-list"></i> ④ 状態評価</span>
                     <span class="badge bg-white text-danger rounded-pill">{{ assessments_due|length }}</span>
                 </div>
                 <div class="list-group list-group-flush task-list">
                     {% for item in assessments_due %}
-                    <a href="{% url 'patient_detail' item.obj.id %}" class="list-group-item list-group-item-action">
+                    <a href="{% url 'assessment_add' item.obj.id %}" class="list-group-item list-group-item-action">
                         <div class="d-flex w-100 justify-content-between">
-                            <h6 class="mb-1 fw-bold">{{ item.obj.name }}</h6>
-                            <small class="text-danger">{{ item.reason }}</small>
+                            <strong>{{ item.obj.name }}</strong>
+                            {% if item.status == 'done' %}
+                                <span class="badge bg-secondary">済</span>
+                            {% else %}
+                                <span class="badge bg-danger">未</span>
+                            {% endif %}
                         </div>
-                        <small class="text-muted">HAM-D / QIDS など</small>
+                        <small class="text-danger fw-bold">{{ item.reason }}</small>
                     </a>
                     {% empty %}
-                    <div class="p-3 text-center text-muted small">評価予定なし</div>
+                    <div class="p-4 text-center text-muted small">評価予定なし</div>
                     {% endfor %}
                 </div>
             </div>
         </div>
 
-    </div> <div class="mt-5 text-end">
-        {% if user.is_staff %}
-        <span class="text-muted small me-2">管理者メニュー:</span>
-        <a href="{% url 'export_csv' %}" class="btn btn-sm btn-outline-secondary me-1">CSV出力</a>
-        <a href="{% url 'download_db' %}" class="btn btn-sm btn-outline-secondary">DB保存</a>
-        {% endif %}
     </div>
 
+    {% if user.is_staff %}
+    <div class="mt-4 pt-3 border-top text-end">
+        <span class="text-muted small me-2"><i class="fas fa-cog"></i> 管理メニュー:</span>
+        <a href="{% url 'export_csv' %}" class="btn btn-sm btn-outline-secondary me-1">CSV出力</a>
+        <a href="{% url 'download_db' %}" class="btn btn-sm btn-outline-secondary me-1">DBバックアップ</a>
+        <a href="/admin/" class="btn btn-sm btn-outline-dark">設定(Admin)</a>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
