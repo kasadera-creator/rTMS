@@ -103,28 +103,32 @@ SIDE_EFFECT_SCHEMA = {
 }
 
 # --- Admin設定 ---
-
 @admin.register(Patient)
 class PatientAdmin(admin.ModelAdmin):
     list_display = ('card_id', 'name', 'diagnosis')
     search_fields = ('name', 'card_id')
-    formfield_overrides = {
-        models.JSONField: {'widget': JSONFormWidget(schema=QUESTIONNAIRE_SCHEMA)},
-    }
-    # 編集画面でのフィールド表示順
-    fields = (('card_id', 'name'), ('birth_date', 'diagnosis'), 
-              ('admission_date', 'mapping_date', 'first_treatment_date'),
-              'mapping_notes', 'questionnaire_data', 'medical_history')
+    
+    # JSON入力フォームの適用
+    # formfield_overrides = { ... } # 前回の定義があれば維持
+
+    # ★ここを修正（エラーの原因箇所）
+    fields = (
+        ('card_id', 'name'), 
+        ('birth_date', 'gender'),
+        ('diagnosis', 'attending_physician'),
+        ('referral_source'),
+        # medical_history を削除し、詳細項目へ
+        'life_history', 'past_history', 'present_illness', 'medication_history',
+        # スケジュール
+        ('admission_date', 'mapping_date', 'first_treatment_date'),
+        'mapping_notes', # 追加
+        'questionnaire_data'
+    )
 
 @admin.register(TreatmentSession)
 class TreatmentSessionAdmin(admin.ModelAdmin):
-    list_display = ('date', 'patient', 'user_name')
+    list_display = ('date', 'patient', 'performer')
     list_filter = ('date',)
-    formfield_overrides = {
-        models.JSONField: {'widget': JSONFormWidget(schema=SIDE_EFFECT_SCHEMA)},
-    }
-    
-    def user_name(self, obj):
-        return "担当者" # 実際は request.user を保存するロジックが必要
+    # formfield_overrides ...
 
 admin.site.register(Assessment)

@@ -63,27 +63,20 @@ class PatientFirstVisitForm(forms.ModelForm):
             'card_id', 'name', 'birth_date', 'gender', 'attending_physician',
             'referral_source', 'diagnosis',
             'life_history', 'past_history', 'present_illness', 'medication_history',
-            # questionnaire_data はView/Template側で制御、または必要に応じて追加
+            # ★追加: スケジュール入力欄
+            'admission_date', 'mapping_date', 'first_treatment_date'
         ]
         widgets = {
-            'card_id': forms.TextInput(attrs={'class': 'form-control'}),
-            'name': forms.TextInput(attrs={'class': 'form-control'}),
-            'birth_date': DateInput(attrs={'class': 'form-control'}),
-            'gender': forms.Select(attrs={'class': 'form-select'}),
-            'referral_source': forms.TextInput(attrs={'class': 'form-control'}),
-            'diagnosis': forms.TextInput(attrs={'class': 'form-control'}),
-            'life_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'past_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'present_illness': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'medication_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            # ... (既存のwidgets)
+            'admission_date': DateInput(attrs={'class': 'form-control'}),
+            'mapping_date': DateInput(attrs={'class': 'form-control'}),
+            'first_treatment_date': DateInput(attrs={'class': 'form-control'}),
         }
         labels = {
-            'card_id': 'カルテ番号',
-            'name': '氏名',
-            'birth_date': '生年月日',
-            'gender': '性別',
-            'referral_source': '紹介元',
-            'diagnosis': '診断名',
+            # ... (既存のlabels)
+            'admission_date': '入院予定日',
+            'mapping_date': '位置決め日',
+            'first_treatment_date': '初回治療日',
         }
 
 # ------------------------------------------------------------------

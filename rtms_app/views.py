@@ -17,25 +17,22 @@ from .forms import PatientFirstVisitForm, MappingForm, TreatmentForm, PatientSch
 # ------------------------------------------------------------------
 @login_required
 def dashboard_view(request):
-    """
-    業務タスク一覧を表示するトップ画面
-    - 日付指定がない場合は「今日」にリダイレクト
-    - 4つの業務カテゴリ＋状態評価のToDoリストを表示
-    """
-    # 日付指定がない場合、今日の日付を付与してリロード (URLを固定するため)
+    # 日本時間を取得して今日の日付とする
+    jst_now = timezone.localtime(timezone.now())
+    today_str = jst_now.strftime('%Y-%m-%d')
+
+    # 日付指定がない場合は、日本時間の「今日」にリダイレクト
     if 'date' not in request.GET:
-        today_str = timezone.now().strftime('%Y-%m-%d')
         return redirect(f'{request.path}?date={today_str}')
 
-    # 日付の取得
     date_str = request.GET.get('date')
     try:
         target_date = parse_date(date_str)
     except:
-        target_date = timezone.now().date()
+        target_date = jst_now.date()
         
     if not target_date:
-        target_date = timezone.now().date()
+        target_date = jst_now.date()
 
     # 前日・翌日ナビゲーション用
     prev_day = target_date - timedelta(days=1)
