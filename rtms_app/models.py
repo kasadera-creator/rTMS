@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from datetime import timedelta
 
 class Patient(models.Model):
     """患者情報"""
@@ -7,6 +8,11 @@ class Patient(models.Model):
     name = models.CharField("氏名", max_length=100)
     birth_date = models.DateField("生年月日")
     diagnosis = models.CharField("診断名", max_length=200, default="うつ病")
+    
+    # ★追加: スケジュール管理用フィールド
+    admission_date = models.DateField("入院予定日", null=True, blank=True)
+    mapping_date = models.DateField("位置決め予定日", null=True, blank=True)
+    first_treatment_date = models.DateField("初回治療日", null=True, blank=True)
     
     # 既往歴やチェックリスト
     medical_history = models.JSONField("既往歴・禁忌チェック", default=dict, blank=True, null=True)
@@ -35,6 +41,14 @@ class Patient(models.Model):
         # 改善率 = (初期 - 現在) / 初期 * 100
         improvement = (baseline - current) / baseline * 100
         return round(improvement, 1)
+        
+    def is_active_treatment(self):
+        # 初回治療日が設定されており、かつ完了フラグ(後で作る)が立っていない場合
+        # ここでは簡易的に「初回治療日が今日以前」なら治療期間中とみなします
+        if self.first_treatment_date and self.first_treatment_date <= timezone.now().date():
+            # 本当は「終了日」などの判定も必要ですが一旦これで行きます
+            return True
+        return False
 
 
 class TreatmentSession(models.Model):

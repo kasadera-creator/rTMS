@@ -135,9 +135,9 @@ JAZZMIN_SETTINGS = {
     "site_logo_classes": "btn btn-circle",
     "topmenu_links": [
         {
-            "name": "ダッシュボードに戻る", 
-            "url": "dashboard",  # urls.pyでつけた名前
-            "permissions": ["auth.view_user"], 
+            "name": "◀ 今日の業務に戻る",  # わかりやすく変更
+            "url": "dashboard",
+            "permissions": ["auth.view_user"],
             "new_window": False
         },
     ],
