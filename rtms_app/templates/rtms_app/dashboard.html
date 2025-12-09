@@ -15,6 +15,23 @@
 </head>
 <body>
 
+<div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
+    <a href="?date={{ prev_day|date:'Y-m-d' }}" class="btn btn-outline-secondary">
+        &laquo; {{ prev_day|date:"n/j" }}
+    </a>
+    
+    <div class="text-center">
+        <h4 class="mb-0 fw-bold">{{ today|date:"Y年n月j日 (l)" }}</h4>
+        <input type="date" class="form-control form-control-sm mt-1" 
+               value="{{ today|date:'Y-m-d' }}" 
+               onchange="location.href='?date='+this.value">
+    </div>
+
+    <a href="?date={{ next_day|date:'Y-m-d' }}" class="btn btn-outline-secondary">
+        {{ next_day|date:"n/j" }} &raquo;
+    </a>
+</div>
+
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
     <div class="container">
         <a class="navbar-brand fw-bold" href="#">rTMS Clinical Dashboard</a>

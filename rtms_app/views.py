@@ -3,19 +3,26 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from datetime import timedelta
 from .models import Patient, TreatmentSession
-from .forms import PatientRegistrationForm
+from .forms import PatientBasicForm, PatientScheduleForm, PatientRegistrationForm
 import csv
 from django.http import HttpResponse, FileResponse
 from django.conf import settings
 import os
 
+# --- ダッシュボード (日付移動機能付き) ---
 @login_required
 def dashboard_view(request):
-    """
-    現場用ダッシュボード
-    - 全患者の治療進捗一覧
-    - アラート表示 (MT再測定期限、定期評価時期)
-    """
+    # GETパラメータで日付を受け取る。なければ今日。
+    date_str = request.GET.get('date')
+    if date_str:
+        target_date = parse_date(date_str) or timezone.now().date()
+    else:
+        target_date = timezone.now().date()
+    
+    # 前日と翌日の計算
+    prev_day = target_date - timedelta(days=1)
+    next_day = target_date + timedelta(days=1)
+    
     today = timezone.now().date()
     patients_data = []
 
@@ -33,7 +40,7 @@ def dashboard_view(request):
         
         if first_session:
             start_date = first_session.date.date()
-            days_elapsed = (today - start_date).days
+            days_elapsed = (target_date - start_date).days
 
         # 2. アラート判定
         alerts = []
@@ -75,11 +82,17 @@ def dashboard_view(request):
         })
 
     context = {
-        'patients_data': patients_data,
-        'today': today,
+        'today': target_date, # テンプレートでの表示用
+        'prev_day': prev_day,
+        'next_day': next_day,
+        'new_patients': new_patients, # 以下、前回の変数
+        'admissions': admissions,
+        'mappings': mappings,
+        'treatments': treatments,
     }
     return render(request, 'rtms_app/dashboard.html', context)
     
+# --- 新規: 患者登録ページ ---
 @login_required
 def patient_add_view(request):
     """新規患者登録画面 (現場用)"""
@@ -93,6 +106,51 @@ def patient_add_view(request):
         form = PatientRegistrationForm()
     
     return render(request, 'rtms_app/patient_add.html', {'form': form})
+    
+# --- 新規: 患者詳細ページ (ハブ画面) ---
+@login_required
+def patient_detail_view(request, patient_id):
+    patient = get_object_or_404(Patient, pk=patient_id)
+    # 治療履歴などもここで取得
+    sessions = TreatmentSession.objects.filter(patient=patient).order_by('-date')
+    
+    return render(request, 'rtms_app/patient_detail.html', {
+        'patient': patient,
+        'sessions': sessions
+    })
+    
+# --- 新規: 基本情報編集ページ ---
+@login_required
+def patient_edit_basic(request, patient_id):
+    patient = get_object_or_404(Patient, pk=patient_id)
+    if request.method == 'POST':
+        form = PatientBasicForm(request.POST, instance=patient)
+        if form.is_valid():
+            form.save()
+            return redirect('patient_detail', patient_id=patient.id)
+    else:
+        form = PatientBasicForm(instance=patient)
+    
+    return render(request, 'rtms_app/patient_form.html', {
+        'form': form, 'title': '基本情報の編集', 'patient': patient
+    })
+
+# --- 新規: スケジュール編集ページ ---
+@login_required
+def patient_edit_schedule(request, patient_id):
+    patient = get_object_or_404(Patient, pk=patient_id)
+    if request.method == 'POST':
+        form = PatientScheduleForm(request.POST, instance=patient)
+        if form.is_valid():
+            form.save()
+            return redirect('patient_detail', patient_id=patient.id)
+    else:
+        form = PatientScheduleForm(instance=patient)
+    
+    return render(request, 'rtms_app/patient_form.html', {
+        'form': form, 'title': 'スケジュールの管理', 'patient': patient
+    })
+    
 
 @login_required
 def export_treatment_csv(request):
