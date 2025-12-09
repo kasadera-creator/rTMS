@@ -1,136 +1,157 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>rTMS 臨床ダッシュボード</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Noto Sans JP', sans-serif; background-color: #f8f9fa; }
-        .card-patient { transition: transform 0.2s; cursor: pointer; }
-        .card-patient:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        .alert-badge { font-size: 0.85rem; padding: 5px 10px; border-radius: 20px; display: inline-block; margin-right: 5px; margin-bottom: 5px;}
-    </style>
-</head>
-<body>
+{% extends "admin/base_site.html" %}
+{% load static %}
 
-<div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
-    <a href="?date={{ prev_day|date:'Y-m-d' }}" class="btn btn-outline-secondary">
-        &laquo; {{ prev_day|date:"n/j" }}
-    </a>
-    
-    <div class="text-center">
-        <h4 class="mb-0 fw-bold">{{ today|date:"Y年n月j日 (l)" }}</h4>
-        <input type="date" class="form-control form-control-sm mt-1" 
-               value="{{ today|date:'Y-m-d' }}" 
-               onchange="location.href='?date='+this.value">
-    </div>
+{% block extrastyle %}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+    /* Adminのスタイルと干渉しないように調整 */
+    .dashboard-container { font-family: "Noto Sans JP", sans-serif; max-width: 1200px; margin: 0 auto; }
+    .card-task { transition: all 0.2s; border: none; border-radius: 10px; }
+    .card-task:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+    .task-header { font-weight: bold; padding: 15px; border-radius: 10px 10px 0 0; color: white; display: flex; justify-content: space-between; align-items: center;}
+    .task-list { max-height: 400px; overflow-y: auto; }
+    a { text-decoration: none; }
+</style>
+{% endblock %}
 
-    <a href="?date={{ next_day|date:'Y-m-d' }}" class="btn btn-outline-secondary">
-        {{ next_day|date:"n/j" }} &raquo;
-    </a>
-</div>
+{% block content %}
+<div class="dashboard-container py-4">
 
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
-    <div class="container">
-        <a class="navbar-brand fw-bold" href="#">rTMS Clinical Dashboard</a>
-        <div class="d-flex text-white align-items-center">
-            <span class="me-3">{{ user.username }} さん</span>
-            <a href="/admin/logout/" class="btn btn-sm btn-light text-primary fw-bold">ログアウト</a>
+    <div class="d-flex justify-content-between align-items-center mb-4 bg-white p-3 rounded shadow-sm">
+        <a href="?date={{ prev_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm">
+            &laquo; 前日 ({{ prev_day|date:"n/j" }})
+        </a>
+        
+        <div class="text-center">
+            <h3 class="mb-0 fw-bold">{{ today|date:"Y年n月j日 (l)" }}</h3>
+            <span class="text-muted small">本日の業務一覧</span>
         </div>
-    </div>
-</nav>
 
-<div class="container">
-	{% if user.is_staff %}
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card bg-light border-0">
-                <div class="card-body py-2 d-flex justify-content-end align-items-center gap-2">
-                    <span class="text-muted small fw-bold me-2">管理者メニュー:</span>
-                    <a href="/app/export/csv/" class="btn btn-sm btn-outline-secondary">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-spreadsheet" viewBox="0 0 16 16"><path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2zM9.5 3A1.5 1.5 0 0 0 11 4.5h2V9H3V2a1 1 0 0 1 1-1h5.5v2zM3 12v-2h2v2H3zm0 1h2v2H3v-2zm3-3v-2h2v2H6zm0 1h2v2H6v-2zm3-3v-2h2v2H9zm0 1h2v2H9v-2z"/></svg>
-                        データCSV出力
-                    </a>
-                    <a href="/app/backup/db/" class="btn btn-sm btn-outline-dark">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-database-down" viewBox="0 0 16 16"><path d="M12.5 9a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Zm.354 5.854 1.5-1.5a.5.5 0 0 0-.708-.708l-.646.647V10.5a.5.5 0 0 0-1 0v2.793l-.646-.647a.5.5 0 0 0-.708.708l1.5 1.5a.5.5 0 0 0 .708 0ZM11 1a2 2 0 0 0-2 2v4.793l5 5V3a2 2 0 0 0-2-2h-1Z"/><path d="M11.354 6.964a.5.5 0 0 0-.708 0l-6 6a.5.5 0 0 0 .708.708l6-6a.5.5 0 0 0 0-.708Z"/></svg>
-                        DBバックアップ
-                    </a>
-                    <a href="/admin/" class="btn btn-sm btn-primary">
-                        設定(Admin)へ
-                    </a>
+        <a href="?date={{ next_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm">
+            翌日 ({{ next_day|date:"n/j" }}) &raquo;
+        </a>
+    </div>
+
+    <div class="row g-4">
+        
+        <div class="col-md-6 col-lg-3">
+            <div class="card shadow-sm h-100 card-task">
+                <div class="task-header bg-info">
+                    <span><i class="bi bi-person-plus-fill"></i> ① 初診</span>
+                    <span class="badge bg-white text-info rounded-pill">{{ new_patients|length }}</span>
                 </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-    <div class="row mb-4">
-        <div class="col-md-8">
-            <h4 class="mb-3 text-secondary">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-calendar-check me-2" viewBox="0 0 16 16">
-                    <path d="M10.854 7.146a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 1 1 .708-.708L7.5 9.793l2.646-2.647a.5.5 0 0 1 .708 0z"/>
-                    <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1z"/>
-                </svg>
-                本日の状況 ({{ today }})
-            </h4>
-        </div>
-        <div class="col-md-4 text-end">
-            <a href="{% url 'patient_add' %}" class="btn btn-success shadow-sm fw-bold">
-    ＋ 新規患者登録
-</a>
-        </div>
-    </div>
-
-    <div class="row">
-        {% for data in patients_data %}
-        <div class="col-md-12 mb-3">
-            <div class="card card-patient shadow-sm border-0" onclick="location.href='/admin/rtms_app/patient/{{ data.obj.id }}/change/';">
-                <div class="card-body d-flex align-items-center justify-content-between">
-                    
-                    <div class="d-flex align-items-center">
-                        <div class="bg-light rounded-circle p-3 me-3 text-center" style="width: 60px; height: 60px;">
-                            <span class="h5 text-primary mb-0 fw-bold">{{ data.obj.name|slice:":1" }}</span>
+                <div class="list-group list-group-flush task-list">
+                    {% for item in new_patients %}
+                    <a href="{% url 'patient_detail' item.obj.id %}" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1 fw-bold">{{ item.obj.name }}</h6>
+                            <small class="text-muted">済</small>
                         </div>
-                        <div>
-                            <h5 class="mb-1 fw-bold">{{ data.obj.name }} <span class="text-muted fs-6 ms-2">ID: {{ data.obj.card_id }}</span></h5>
-                            <p class="mb-0 text-muted small">
-                                {% if data.start_date %}
-                                    治療開始: {{ data.start_date }} (Day {{ data.days_elapsed }})
-                                {% else %}
-                                    <span class="badge bg-secondary">治療未開始</span>
-                                {% endif %}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div class="text-end">
-                        {% for alert in data.alerts %}
-                            <div class="alert-badge bg-{{ alert.level }} text-white">
-                                {{ alert.msg }}
-                            </div><br>
-                        {% empty %}
-                            <span class="text-success small">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check-circle-fill me-1" viewBox="0 0 16 16"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg>
-                                状態良好
-                            </span>
-                        {% endfor %}
-                    </div>
-                    
-                    <div class="ms-4 text-muted">
-                        Details >
+                        <small class="text-muted">ID: {{ item.obj.card_id }}</small>
+                    </a>
+                    {% empty %}
+                    <div class="p-3 text-center text-muted small">予定なし</div>
+                    {% endfor %}
+                    <div class="p-2 text-center border-top">
+                        <a href="{% url 'patient_add' %}" class="btn btn-sm btn-outline-info w-100">＋ 新規登録</a>
                     </div>
                 </div>
             </div>
         </div>
-        {% empty %}
-        <div class="col-12 text-center py-5 text-muted">
-            <p>登録されている患者はいません。</p>
-        </div>
-        {% endfor %}
-    </div>
-</div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+        <div class="col-md-6 col-lg-3">
+            <div class="card shadow-sm h-100 card-task">
+                <div class="task-header bg-primary">
+                    <span><i class="bi bi-hospital"></i> ② 入院</span>
+                    <span class="badge bg-white text-primary rounded-pill">{{ admissions|length }}</span>
+                </div>
+                <div class="list-group list-group-flush task-list">
+                    {% for item in admissions %}
+                    <a href="{% url 'patient_detail' item.obj.id %}" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1 fw-bold">{{ item.obj.name }}</h6>
+                            {% if item.status == 'done' %}
+                                <span class="badge bg-secondary">済</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">未</span>
+                            {% endif %}
+                        </div>
+                        <small>入院オリエンテーション</small>
+                    </a>
+                    {% empty %}
+                    <div class="p-3 text-center text-muted small">予定なし</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-lg-3">
+            <div class="card shadow-sm h-100 card-task">
+                <div class="task-header bg-warning text-dark">
+                    <span><i class="bi bi-geo-alt-fill"></i> ③ 位置決め</span>
+                    <span class="badge bg-white text-warning rounded-pill">{{ mappings|length }}</span>
+                </div>
+                <div class="list-group list-group-flush task-list">
+                    {% for item in mappings %}
+                    <a href="{% url 'patient_detail' item.obj.id %}" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1 fw-bold">{{ item.obj.name }}</h6>
+                            {% if item.status == 'done' %}
+                                <span class="badge bg-success">済</span>
+                            {% else %}
+                                <span class="badge bg-danger">未</span>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted">MT測定・部位特定</small>
+                    </a>
+                    {% empty %}
+                    <div class="p-3 text-center text-muted small">予定なし</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-lg-3">
+            <div class="card shadow-sm h-100 card-task">
+                <div class="task-header bg-success">
+                    <span><i class="bi bi-lightning-fill"></i> ④ 治療実施</span>
+                    <span class="badge bg-white text-success rounded-pill">{{ treatments|length }}</span>
+                </div>
+                <div class="list-group list-group-flush task-list">
+                    {% for item in treatments %}
+                    <a href="{% if item.status == 'todo' %}/admin/rtms_app/treatmentsession/add/?patient={{ item.obj.id }}{% else %}#{% endif %}" 
+                       class="list-group-item list-group-item-action {% if item.status == 'done' %}bg-light{% endif %}">
+                        
+                        <div class="d-flex w-100 justify-content-between align-items-center mb-1">
+                            <h6 class="mb-0 fw-bold">{{ item.obj.name }}</h6>
+                            {% if item.status == 'done' %}
+                                <span class="badge bg-secondary">実施済</span>
+                            {% else %}
+                                <span class="badge bg-success">実施する</span>
+                            {% endif %}
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">{{ item.note }}</small>
+                            {% if item.is_eval %}
+                                <span class="badge bg-danger rounded-pill">評価日</span>
+                            {% endif %}
+                        </div>
+                    </a>
+                    {% empty %}
+                    <div class="p-3 text-center text-muted small">本日の治療なし</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+    </div> <div class="mt-5 text-end">
+        {% if user.is_staff %}
+        <span class="text-muted small me-2">管理者メニュー:</span>
+        <a href="{% url 'export_csv' %}" class="btn btn-sm btn-outline-secondary me-1">CSV出力</a>
+        <a href="{% url 'download_db' %}" class="btn btn-sm btn-outline-secondary">DB保存</a>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}
