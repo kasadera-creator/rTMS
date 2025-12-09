@@ -189,9 +189,22 @@ def treatment_add(request, patient_id):
     # 最新の位置決め情報を取得 (MT表示用)
     latest_mapping = MappingSession.objects.filter(patient=patient).order_by('-date').first()
     
-    # 今日の日付で既にデータがあればそれを編集モードで開く（オプション）
-    # ここではシンプルに「常に新規作成」とします（1日2セッションの場合もあるため）
-    
+    # 副作用チェック項目の定義 (キー, 表示ラベル)
+    # ガイドライン/CSVに基づく項目リスト
+    side_effect_items = [
+        ('scalp', '頭皮痛（刺激痛）'),
+        ('discomfort', '刺激部位の不快感'),
+        ('tooth', '歯痛'),
+        ('twitch', '顔面のけいれん'),
+        ('headache', '頭痛'),
+        ('dizzy', 'めまい'),
+        ('nausea', '吐き気'),
+        ('tinnitus', '耳鳴り'),
+        ('hearing', '聴力低下'),
+        ('anxiety', '不安感・焦燥感'),
+        ('other', 'その他'),
+    ]
+
     if request.method == 'POST':
         form = TreatmentForm(request.POST)
         if form.is_valid():
@@ -199,15 +212,19 @@ def treatment_add(request, patient_id):
             session.patient = patient
             session.performer = request.user
             
-            # 副作用チェックデータの処理 (HTML側のname="side_effect_key"等を拾う)
-            # ここでは簡易的に、POSTデータから副作用関連のキーを抽出してJSON化する例です
-            # 実際には django-jsonform を使うと自動で clean されますが
-            # 手動で拾う場合は以下のようなロジックが必要です
-            side_effect_data = {}
-            # checkbox等の値を取得（実装に合わせて調整してください）
-            # 今回はモデル側でJSONFieldを定義しているので、フォーム側でうまく処理されている前提
-            # もしフォームにJSONフィールドがない場合、ここで構築します
+            # 副作用チェックデータの収集
+            # POSTされたデータから "se_頭痛" などの値(0~3)を拾ってJSON化
+            se_data = {}
+            for key, label in side_effect_items:
+                # フォームのname属性は "se_key" とします
+                val = request.POST.get(f'se_{key}')
+                if val:
+                    se_data[key] = val
             
+            # 特記事項
+            se_data['note'] = request.POST.get('se_note', '')
+            
+            session.side_effects = se_data
             session.save()
             return redirect('dashboard')
     else:
@@ -225,7 +242,8 @@ def treatment_add(request, patient_id):
     return render(request, 'rtms_app/treatment_add.html', {
         'patient': patient,
         'form': form,
-        'latest_mapping': latest_mapping
+        'latest_mapping': latest_mapping,
+        'side_effect_items': side_effect_items, # ★これをHTMLに渡す
     })
 
 

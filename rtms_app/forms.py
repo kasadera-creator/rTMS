@@ -49,6 +49,8 @@ class PatientRegistrationForm(forms.ModelForm):
 # ------------------------------------------------------------------
 # 2. 初診・基本情報入力フォーム (詳細画面用)
 # ------------------------------------------------------------------
+# ... (上部はそのまま)
+
 class PatientFirstVisitForm(forms.ModelForm):
     attending_physician = forms.ModelChoiceField(
         queryset=User.objects.all(), 
@@ -63,22 +65,37 @@ class PatientFirstVisitForm(forms.ModelForm):
             'card_id', 'name', 'birth_date', 'gender', 'attending_physician',
             'referral_source', 'diagnosis',
             'life_history', 'past_history', 'present_illness', 'medication_history',
-            # ★追加: スケジュール入力欄
+            # ★ここ重要: 以下の3つが fields リストに含まれているか確認してください！
             'admission_date', 'mapping_date', 'first_treatment_date'
         ]
         widgets = {
-            # ... (既存のwidgets)
+            'card_id': forms.TextInput(attrs={'class': 'form-control'}),
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'birth_date': DateInput(attrs={'class': 'form-control'}),
+            'gender': forms.Select(attrs={'class': 'form-select'}),
+            'referral_source': forms.TextInput(attrs={'class': 'form-control'}),
+            'diagnosis': forms.TextInput(attrs={'class': 'form-control'}),
+            'life_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'past_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'present_illness': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'medication_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            
+            # ★日付ウィジェットの設定も確認
             'admission_date': DateInput(attrs={'class': 'form-control'}),
             'mapping_date': DateInput(attrs={'class': 'form-control'}),
             'first_treatment_date': DateInput(attrs={'class': 'form-control'}),
         }
         labels = {
-            # ... (既存のlabels)
+            'card_id': 'カルテ番号',
+            'name': '氏名',
+            'birth_date': '生年月日',
+            'gender': '性別',
+            'referral_source': '紹介元',
+            'diagnosis': '診断名',
             'admission_date': '入院予定日',
-            'mapping_date': '位置決め日',
+            'mapping_date': '初回位置決め日',
             'first_treatment_date': '初回治療日',
         }
-
 # ------------------------------------------------------------------
 # 3. スケジュール管理フォーム (エラーの原因だったもの)
 # ------------------------------------------------------------------
