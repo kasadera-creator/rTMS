@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     'rtms_app',
+    'django_jsonform',
 ]
 
 MIDDLEWARE = [
