@@ -1,0 +1,102 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between mb-3">
+        <h3>基本情報・初診入力: {{ patient.name }} 殿</h3>
+        <div>
+            <button class="btn btn-outline-secondary" onclick="printSection('medical-record')">
+                <i class="fas fa-print"></i> 初診カルテ印刷
+            </button>
+            <button class="btn btn-outline-secondary" onclick="printSection('questionnaire')">
+                <i class="fas fa-print"></i> 適正質問票印刷
+            </button>
+        </div>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        
+        <div id="medical-record" class="card mb-4 p-4 shadow-sm">
+            <h5 class="text-primary border-bottom pb-2">基本情報・問診</h5>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">カルテID</label>
+                    {{ form.card_id }}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">氏名</label>
+                    {{ form.name }}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">生年月日 (年齢)</label>
+                    {{ form.birth_date }}
+                    <small class="text-muted">自動計算: {{ patient.age }}歳</small>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">性別</label>
+                    {{ form.gender }}
+                </div>
+                
+                <div class="col-md-6">
+                    <label class="form-label">紹介元</label>
+                    {{ form.referral_source }}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">担当医</label>
+                    {{ form.attending_physician }}
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label">生活歴</label>
+                    {{ form.life_history }}
+                </div>
+                <div class="col-12">
+                    <label class="form-label">既往歴</label>
+                    {{ form.past_history }}
+                </div>
+                <div class="col-12">
+                    <label class="form-label">現病歴</label>
+                    {{ form.present_illness }}
+                </div>
+                <div class="col-12">
+                    <label class="form-label">薬剤治療歴</label>
+                    {{ form.medication_history }}
+                </div>
+            </div>
+        </div>
+
+        <div id="questionnaire" class="card mb-4 p-4 shadow-sm">
+            <h5 class="text-success border-bottom pb-2">rTMS 適正質問票</h5>
+            <table class="table table-bordered">
+                <tr>
+                    <th>質問項目</th>
+                    <th width="150">回答</th>
+                </tr>
+                <tr>
+                    <td>1. 金属・電子機器の体内留置</td>
+                    <td>(Radio Button Here)</td>
+                </tr>
+                </table>
+            <div class="text-end mt-3">
+                <p>医師確認署名: ____________________</p>
+            </div>
+        </div>
+
+        <div class="text-center">
+            <button type="submit" class="btn btn-primary btn-lg px-5">保存する</button>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-lg px-5">戻る</a>
+        </div>
+    </form>
+</div>
+
+<script>
+function printSection(divId) {
+    var printContents = document.getElementById(divId).innerHTML;
+    var originalContents = document.body.innerHTML;
+    document.body.innerHTML = printContents;
+    window.print();
+    document.body.innerHTML = originalContents;
+    location.reload(); // 画面をリセット
+}
+</script>
+{% endblock %}

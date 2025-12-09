@@ -127,17 +127,14 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 # JAZZMIN設定（見た目のカスタマイズ）
 JAZZMIN_SETTINGS = {
-    # タイトル・ロゴ設定
     "site_title": "rTMS 実施記録 DB",
-    "site_header": "rTMS DB",
-    "site_brand": "○○病院 rTMS",  # ★病院名を入れてください
-    # "site_logo": "img/logo.png",  # ★ロゴ画像がある場合はコメントアウトを外す
+    "site_header": "笠寺精治寮病院 rTMS", 
+    "site_brand": "笠寺精治寮病院 rTMS", 
     "welcome_sign": "rTMS 実施記録システム",
-    "copyright": "○○ Hospital",
-
-    # トップ画面へのリンク
+    "copyright": "Kasadera Seichiryo Hospital",
+    "site_logo": "img/logo.jpg", 
     "topmenu_links": [
-        {"name": "◀ 業務ダッシュボードへ", "url": "dashboard", "permissions": ["auth.view_user"]},
+        {"name": "◀ 業務メニューへ", "url": "dashboard", "permissions": ["auth.view_user"]},
     ],
 
     # サイドバーのメニュー順序制御

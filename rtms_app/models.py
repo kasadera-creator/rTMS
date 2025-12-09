@@ -1,68 +1,71 @@
 from django.db import models
 from django.utils import timezone
-from datetime import timedelta
+from django.contrib.auth.models import User
+import math
 
 class Patient(models.Model):
     """患者情報"""
+    GENDER_CHOICES = [('M', '男性'), ('F', '女性'), ('O', 'その他')]
+    
+    # 基本情報
     card_id = models.CharField("カルテ番号", max_length=20, unique=True)
     name = models.CharField("氏名", max_length=100)
     birth_date = models.DateField("生年月日")
+    gender = models.CharField("性別", max_length=1, choices=GENDER_CHOICES, default='M')
+    
+    # 診療情報
+    attending_physician = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, verbose_name="担当医", related_name="patients")
+    referral_source = models.CharField("紹介元", max_length=200, blank=True)
     diagnosis = models.CharField("診断名", max_length=200, default="うつ病")
     
-    # ★追加: スケジュール管理用フィールド
+    # 病歴・生活歴（自由記載）
+    life_history = models.TextField("生活歴", blank=True)
+    past_history = models.TextField("既往歴", blank=True)
+    present_illness = models.TextField("現病歴", blank=True)
+    medication_history = models.TextField("薬剤治療歴", blank=True)
+
+    # スケジュール
     admission_date = models.DateField("入院予定日", null=True, blank=True)
-    mapping_date = models.DateField("位置決め予定日", null=True, blank=True)
+    mapping_date = models.DateField("初回位置決め日", null=True, blank=True)
     first_treatment_date = models.DateField("初回治療日", null=True, blank=True)
+
+    # 初診時適正質問票（JSONで保存）
+    questionnaire_data = models.JSONField("適正質問票回答", default=dict, blank=True, null=True)
     
-    # 既往歴やチェックリスト
-    medical_history = models.JSONField("既往歴・禁忌チェック", default=dict, blank=True, null=True)
     created_at = models.DateTimeField("登録日", auto_now_add=True)
 
-    # ★追加: 位置決め情報のメモ欄（装置記録のバックアップ用）
-    mapping_notes = models.TextField("位置決め記録", blank=True, help_text="MT値や刺激部位のメモなど")
+    def __str__(self):
+        return f"{self.name} ({self.card_id})"
 
-    # ★追加: 初診時の適正質問票データ (JSONで保存)
-    questionnaire_data = models.JSONField("適正質問票回答", default=dict, blank=True, null=True)
+    @property
+    def age(self):
+        """生年月日から年齢を自動計算"""
+        today = timezone.now().date()
+        return today.year - self.birth_date.year - ((today.month, today.day) < (self.birth_date.month, self.birth_date.day))
 
     class Meta:
         verbose_name = "患者情報"
         verbose_name_plural = "患者情報一覧"
 
-    def __str__(self):
-        return f"{self.name} ({self.card_id})"
 
-    # ★追加: 最新のHAM-Dスコアを取得する機能
-    def get_latest_hamd(self):
-        latest = self.assessment_set.filter(type='HAM-D').order_by('-date').first()
-        return latest.total_score if latest else None
+class MappingSession(models.Model):
+    """位置決め記録 (週1回などを想定)"""
+    WEEK_CHOICES = [(1, '第1週'), (2, '第2週'), (3, '第3週'), (4, 'その他')]
+    
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, verbose_name="患者")
+    date = models.DateField("実施日", default=timezone.now)
+    week_number = models.IntegerField("時期", choices=WEEK_CHOICES, default=1)
+    
+    resting_mt = models.IntegerField("安静時MT(%)")
+    stimulation_site = models.CharField("刺激部位", max_length=100, default="左DLPFC (Brainsway H1)")
+    notes = models.TextField("特記事項", blank=True)
 
-    # ★追加: ベースライン（初回）との比較機能
-    def get_improvement_rate(self):
-        # 古い順に並べて最初をベースライン、最後を現在とする
-        assessments = self.assessment_set.filter(type='HAM-D').order_by('date')
-        if assessments.count() < 2:
-            return None # 比較データなし
-        
-        baseline = assessments.first().total_score
-        current = assessments.last().total_score
-        
-        if baseline == 0: return 0
-        
-        # 改善率 = (初期 - 現在) / 初期 * 100
-        improvement = (baseline - current) / baseline * 100
-        return round(improvement, 1)
-        
-    def is_active_treatment(self):
-        # 初回治療日が設定されており、かつ完了フラグ(後で作る)が立っていない場合
-        # ここでは簡易的に「初回治療日が今日以前」なら治療期間中とみなします
-        if self.first_treatment_date and self.first_treatment_date <= timezone.now().date():
-            # 本当は「終了日」などの判定も必要ですが一旦これで行きます
-            return True
-        return False
+    class Meta:
+        ordering = ['date']
 
 
 class TreatmentSession(models.Model):
-    """日々の治療実施記録 (Brainsway H1コイル)"""
+    """日々の治療実施記録"""
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, verbose_name="患者")
     date = models.DateTimeField("実施日時", default=timezone.now)
     
@@ -72,87 +75,53 @@ class TreatmentSession(models.Model):
     safety_meds = models.BooleanField("服薬変更なし", default=True)
     
     # 治療パラメータ
-    motor_threshold = models.IntegerField("MT(%)", help_text="安静時運動閾値")
-    intensity = models.IntegerField("刺激強度(%)", default=120, help_text="通常120%")
-    frequency = models.IntegerField("周波数(Hz)", default=18)
-    duration_sec = models.IntegerField("刺激時間(秒)", default=2)
-    interval_sec = models.IntegerField("刺激間隔(秒)", default=20)
+    motor_threshold = models.IntegerField("MT(%)", help_text="当日の設定MT")
+    intensity = models.IntegerField("刺激強度(%)", default=120)
     total_pulses = models.IntegerField("総パルス数", default=1980)
     
-    # ★追加: 副作用チェック表データ (JSONで保存)
-    side_effect_data = models.JSONField("副作用チェック", default=dict, blank=True, null=True)
-    class Meta:
-        verbose_name = "治療実施記録"
-        verbose_name_plural = "治療実施記録一覧"    
+    # 副作用チェック（Excelシート準拠・集計用）
+    # JSONFieldですが、schemaで構造を固定します
+    side_effects = models.JSONField("副作用チェック詳細", default=dict, blank=True, null=True)
     
-    # 実施後観察
-    adverse_events = models.JSONField("有害事象・観察", default=dict, blank=True, null=True)
-    
+    # 担当者
+    performer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, verbose_name="実施者")
+
     def __str__(self):
         return f"{self.date.strftime('%Y-%m-%d')} - {self.patient.name}"
 
 
 class Assessment(models.Model):
-    """心理検査記録 (HAM-Dなど)"""
-    ASSESSMENT_TYPES = [
-        ('HAM-D', 'HAM-D (うつ病評価尺度)'),
-        ('BDI-II', 'BDI-II (ベック抑うつ尺度)'),
-        ('QIDS', 'QIDS (簡易抑うつ症状尺度)'),
-    ]
+    """心理検査 (HAM-D等)"""
+    ASSESSMENT_TYPES = [('HAM-D', 'HAM-D')]
     
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, verbose_name="患者")
-    date = models.DateField("検査実施日", default=timezone.now)
+    date = models.DateField("検査日", default=timezone.now)
     type = models.CharField("検査種別", max_length=20, choices=ASSESSMENT_TYPES, default='HAM-D')
-    total_score = models.IntegerField("合計点")
     
-    class Meta:
-        verbose_name = "状態評価・心理検査"
-        verbose_name_plural = "状態評価・心理検査一覧"
+    # HAM-D 21項目のスコアをJSONで保存 { "q1": 2, "q2": 0 ... }
+    scores = models.JSONField("各項目スコア", default=dict)
     
-    # 3週目・6週目のタグ付け用
-    TIMING_CHOICES = [
-        ('baseline', '治療前 (ベースライン)'),
-        ('week3', '3週目 (継続判定)'),
-        ('week6', '6週目 (最終評価)'),
-        ('other', 'その他'),
-    ]
-    timing = models.CharField("評価タイミング", max_length=20, choices=TIMING_CHOICES, default='other')
+    total_score_21 = models.IntegerField("合計点(21)", default=0)
+    total_score_17 = models.IntegerField("合計点(17)", default=0)
     
-    # 自動判定の結果を保存するフィールド（表示用）
-    note = models.TextField("判定・特記事項", blank=True, help_text="自動判定結果などがここに入ります")
+    timing = models.CharField("評価時期", max_length=20, 
+        choices=[('baseline', '治療前'), ('week3', '3週目'), ('week6', '6週目'), ('other', 'その他')],
+        default='other')
+    
+    note = models.TextField("判定・コメント", blank=True)
+
+    def calculate_scores(self):
+        """HAM-D 21と17を計算して保存"""
+        s = self.scores # dict
+        # HAM-D 17項目に含まれるKey (q1~q17と仮定)
+        keys_17 = [f'q{i}' for i in range(1, 18)]
+        # 全21項目
+        keys_21 = [f'q{i}' for i in range(1, 22)]
+        
+        self.total_score_17 = sum(int(s.get(k, 0)) for k in keys_17)
+        self.total_score_21 = sum(int(s.get(k, 0)) for k in keys_21)
 
     def save(self, *args, **kwargs):
-        # 保存前に自動判定ロジックを走らせる
         if self.type == 'HAM-D':
-            self.generate_judgment()
+            self.calculate_scores()
         super().save(*args, **kwargs)
-
-    def generate_judgment(self):
-        # 1. 寛解判定 (Brainsway指針: 9点以下)
-        if self.total_score <= 9:
-            self.note = f"【寛解】スコア{self.total_score} (9点以下)。著しい改善です。"
-            return
-
-        # 2. 過去データと比較して反応率を計算
-        baseline = Assessment.objects.filter(
-            patient=self.patient, 
-            type='HAM-D', 
-            timing='baseline'
-        ).first()
-        
-        if baseline and baseline.total_score > 0:
-            improvement = (baseline.total_score - self.total_score) / baseline.total_score * 100
-            result_str = f"ベースライン({baseline.total_score}点)から {improvement:.1f}% 改善。"
-            
-            if improvement >= 50:
-                result_str += " 【反応あり(Response)】"
-            elif self.timing == 'week3' and improvement < 20:
-                result_str += " 【要検討】改善が乏しい可能性があります。"
-            
-            self.note = result_str
-        else:
-            if not self.note:
-                self.note = "ベースラインとの比較不可"
-
-    def __str__(self):
-        return f"{self.date} - {self.get_type_display()}: {self.total_score}点"
