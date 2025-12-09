@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>rTMS 臨床ダッシュボード</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans JP', sans-serif; background-color: #f8f9fa; }
+        .card-patient { transition: transform 0.2s; cursor: pointer; }
+        .card-patient:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .alert-badge { font-size: 0.85rem; padding: 5px 10px; border-radius: 20px; display: inline-block; margin-right: 5px; margin-bottom: 5px;}
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="#">rTMS Clinical Dashboard</a>
+        <div class="d-flex text-white align-items-center">
+            <span class="me-3">{{ user.username }} さん</span>
+            <a href="/admin/logout/" class="btn btn-sm btn-light text-primary fw-bold">ログアウト</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h4 class="mb-3 text-secondary">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-calendar-check me-2" viewBox="0 0 16 16">
+                    <path d="M10.854 7.146a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 1 1 .708-.708L7.5 9.793l2.646-2.647a.5.5 0 0 1 .708 0z"/>
+                    <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1z"/>
+                </svg>
+                本日の状況 ({{ today }})
+            </h4>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="/admin/rtms_app/patient/add/" class="btn btn-success shadow-sm">
+                ＋ 新規患者登録
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        {% for data in patients_data %}
+        <div class="col-md-12 mb-3">
+            <div class="card card-patient shadow-sm border-0" onclick="location.href='/admin/rtms_app/patient/{{ data.obj.id }}/change/';">
+                <div class="card-body d-flex align-items-center justify-content-between">
+                    
+                    <div class="d-flex align-items-center">
+                        <div class="bg-light rounded-circle p-3 me-3 text-center" style="width: 60px; height: 60px;">
+                            <span class="h5 text-primary mb-0 fw-bold">{{ data.obj.name|slice:":1" }}</span>
+                        </div>
+                        <div>
+                            <h5 class="mb-1 fw-bold">{{ data.obj.name }} <span class="text-muted fs-6 ms-2">ID: {{ data.obj.card_id }}</span></h5>
+                            <p class="mb-0 text-muted small">
+                                {% if data.start_date %}
+                                    治療開始: {{ data.start_date }} (Day {{ data.days_elapsed }})
+                                {% else %}
+                                    <span class="badge bg-secondary">治療未開始</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="text-end">
+                        {% for alert in data.alerts %}
+                            <div class="alert-badge bg-{{ alert.level }} text-white">
+                                {{ alert.msg }}
+                            </div><br>
+                        {% empty %}
+                            <span class="text-success small">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check-circle-fill me-1" viewBox="0 0 16 16"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg>
+                                状態良好
+                            </span>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="ms-4 text-muted">
+                        Details >
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12 text-center py-5 text-muted">
+            <p>登録されている患者はいません。</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
