@@ -9,7 +9,7 @@ class Patient(models.Model):
     diagnosis = models.CharField("診断名", max_length=200, default="うつ病")
     
     # 既往歴やチェックリスト
-    medical_history = models.JSONField("既往歴・禁忌チェック", default=dict, blank=True)
+    medical_history = models.JSONField("既往歴・禁忌チェック", default=dict, blank=True, null=True)
     created_at = models.DateTimeField("登録日", auto_now_add=True)
 
     def __str__(self):
@@ -56,8 +56,8 @@ class TreatmentSession(models.Model):
     total_pulses = models.IntegerField("総パルス数", default=1980)
     
     # 実施後観察
-    adverse_events = models.JSONField("有害事象・観察", default=dict, blank=True)
-
+    adverse_events = models.JSONField("有害事象・観察", default=dict, blank=True, null=True)
+    
     def __str__(self):
         return f"{self.date.strftime('%Y-%m-%d')} - {self.patient.name}"
 
