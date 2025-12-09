@@ -133,6 +133,14 @@ JAZZMIN_SETTINGS = {
     "copyright": "笠寺精治寮病院 SE室",
     "site_url": "/app/dashboard/",
     "site_logo_classes": "btn btn-circle",
+    "topmenu_links": [
+        {
+            "name": "ダッシュボードに戻る", 
+            "url": "dashboard",  # urls.pyでつけた名前
+            "permissions": ["auth.view_user"], 
+            "new_window": False
+        },
+    ],
 }
 
 # ログインしていない時に飛ばされる先（管理画面のログインページを利用）

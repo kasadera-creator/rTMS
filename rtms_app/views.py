@@ -1,8 +1,9 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from datetime import timedelta
 from .models import Patient, TreatmentSession
+from .forms import PatientRegistrationForm
 import csv
 from django.http import HttpResponse, FileResponse
 from django.conf import settings
@@ -79,6 +80,20 @@ def dashboard_view(request):
     }
     return render(request, 'rtms_app/dashboard.html', context)
     
+@login_required
+def patient_add_view(request):
+    """新規患者登録画面 (現場用)"""
+    if request.method == 'POST':
+        form = PatientRegistrationForm(request.POST)
+        if form.is_valid():
+            patient = form.save()
+            # 登録できたらダッシュボードへ戻る（あるいは詳細画面へ）
+            return redirect('dashboard')
+    else:
+        form = PatientRegistrationForm()
+    
+    return render(request, 'rtms_app/patient_add.html', {'form': form})
+
 @login_required
 def export_treatment_csv(request):
     """治療記録をCSVで出力（研究用）"""
