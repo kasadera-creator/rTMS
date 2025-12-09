@@ -132,3 +132,12 @@ JAZZMIN_SETTINGS = {
     "welcome_sign": "rTMS 実施記録システムへようこそ",
     "copyright": "Kasadera Creator",
 }
+
+# ログインしていない時に飛ばされる先（管理画面のログインページを利用）
+LOGIN_URL = '/admin/login/'
+
+# ログインに成功した後に飛ばされる先（今回作ったダッシュボード）
+LOGIN_REDIRECT_URL = '/app/dashboard/'
+
+# ログアウトした後に飛ばされる先
+LOGOUT_REDIRECT_URL = '/admin/login/'
