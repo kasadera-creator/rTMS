@@ -1,125 +1,114 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from datetime import timedelta
-from .models import Patient, TreatmentSession
-from .forms import PatientBasicForm, PatientScheduleForm, PatientRegistrationForm
-import csv
 from django.http import HttpResponse, FileResponse
 from django.conf import settings
 import os
+import csv
+
+from .models import Patient, TreatmentSession
+from .forms import PatientBasicForm, PatientScheduleForm, PatientRegistrationForm
 
 # --- ダッシュボード (日付移動機能付き) ---
 @login_required
 def dashboard_view(request):
-    # GETパラメータで日付を受け取る。なければ今日。
+    """
+    トップ画面：業務タスク一覧 (日付移動対応)
+    """
+    # 1. 表示する日付の決定
     date_str = request.GET.get('date')
     if date_str:
         target_date = parse_date(date_str) or timezone.now().date()
     else:
         target_date = timezone.now().date()
     
-    # 前日と翌日の計算
+    # 前日と翌日（ナビゲーション用）
     prev_day = target_date - timedelta(days=1)
     next_day = target_date + timedelta(days=1)
+
+    # 2. データの取得 (全て target_date を基準にする)
+
+    # (A) 今日の初診 (登録日が target_date)
+    new_patients_query = Patient.objects.filter(created_at__date=target_date)
+    new_patients = []
+    for p in new_patients_query:
+        new_patients.append({'obj': p, 'status': 'done'})
+
+    # (B) 今日の入院 (入院予定日が target_date)
+    admissions_query = Patient.objects.filter(admission_date=target_date)
+    admissions = []
+    for p in admissions_query:
+        admissions.append({'obj': p, 'status': 'todo'})
+
+    # (C) 今日の位置決め (位置決め日が target_date)
+    mappings_query = Patient.objects.filter(mapping_date=target_date)
+    mappings = []
+    for p in mappings_query:
+        # その日に治療記録(MT測定など)があるかチェック
+        has_session = TreatmentSession.objects.filter(patient=p, date__date=target_date).exists()
+        mappings.append({
+            'obj': p, 
+            'status': 'done' if has_session else 'todo'
+        })
+
+    # (D) 今日の治療 (初回治療日が target_date 以前の患者)
+    active_patients = Patient.objects.filter(first_treatment_date__lte=target_date).order_by('card_id')
+    treatments = []
     
-    today = timezone.now().date()
-    patients_data = []
-
-    # 全患者を取得
-    patients = Patient.objects.all().order_by('card_id')
-
-    for p in patients:
-        # 1. 治療開始日と経過日数の計算
-        sessions = TreatmentSession.objects.filter(patient=p).order_by('date')
-        first_session = sessions.first()
-        last_session = sessions.last()
+    for p in active_patients:
+        # その日の治療記録が存在するか確認
+        sessions = TreatmentSession.objects.filter(patient=p, date__date=target_date)
+        is_done = sessions.exists()
         
-        days_elapsed = 0
-        start_date = None
+        # 過去を含めた全セッション数（通算回数）
+        # ※未来の日付を見ている場合などは厳密には計算が変わりますが、簡易的に「現在のDB上の総数」を使います
+        total_sessions = TreatmentSession.objects.filter(patient=p).count()
+        next_session_no = total_sessions + 1 if not is_done else total_sessions
         
-        if first_session:
-            start_date = first_session.date.date()
-            days_elapsed = (target_date - start_date).days
-
-        # 2. アラート判定
-        alerts = []
+        # 評価日判定 (5回ごと)
+        note = f"{next_session_no}回目"
+        is_evaluation_day = False
+        check_num = total_sessions if is_done else next_session_no
         
-        # A. MT(運動閾値)の有効期限チェック (ガイドライン: 最低週1回再測定 [cite: 31])
-        # 最終測定日を取得（とりあえず最終セッション日を基準とします）
-        days_since_last_mt = 0
-        if last_session:
-            last_mt_date = last_session.date.date()
-            days_since_last_mt = (today - last_mt_date).days
-            
-            # 7日以上空いていたら警告
-            if days_since_last_mt >= 7:
-                alerts.append({
-                    'level': 'danger', 
-                    'msg': f'MT再測定期限切れ ({days_since_last_mt}日経過)'
-                })
-            elif days_since_last_mt >= 5:
-                alerts.append({
-                    'level': 'warning', 
-                    'msg': 'そろそろMT再測定'
-                })
+        if check_num > 0 and check_num % 5 == 0:
+            note += " ★評価日"
+            is_evaluation_day = True
 
-        # B. 定期評価の時期チェック (3週目=21日, 6週目=42日)
-        # 前後3日間を「評価期間」として表示
-        if first_session:
-            if 18 <= days_elapsed <= 24:
-                alerts.append({'level': 'info', 'msg': '★3週目の評価時期です'})
-            elif 39 <= days_elapsed <= 45:
-                alerts.append({'level': 'info', 'msg': '★6週目の評価時期です'})
-
-        # データをリストに格納
-        patients_data.append({
+        treatments.append({
             'obj': p,
-            'start_date': start_date,
-            'days_elapsed': days_elapsed,
-            'last_mt_days': days_since_last_mt,
-            'alerts': alerts,
+            'status': 'done' if is_done else 'todo',
+            'note': note,
+            'is_eval': is_evaluation_day
         })
 
     context = {
-        'today': target_date, # テンプレートでの表示用
+        'today': target_date,
         'prev_day': prev_day,
         'next_day': next_day,
-        'new_patients': new_patients, # 以下、前回の変数
+        'new_patients': new_patients,
         'admissions': admissions,
         'mappings': mappings,
         'treatments': treatments,
     }
     return render(request, 'rtms_app/dashboard.html', context)
-    
-# --- 新規: 患者登録ページ ---
-@login_required
-def patient_add_view(request):
-    """新規患者登録画面 (現場用)"""
-    if request.method == 'POST':
-        form = PatientRegistrationForm(request.POST)
-        if form.is_valid():
-            patient = form.save()
-            # 登録できたらダッシュボードへ戻る（あるいは詳細画面へ）
-            return redirect('dashboard')
-    else:
-        form = PatientRegistrationForm()
-    
-    return render(request, 'rtms_app/patient_add.html', {'form': form})
-    
-# --- 新規: 患者詳細ページ (ハブ画面) ---
+
+
+# --- 患者詳細ページ ---
 @login_required
 def patient_detail_view(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
-    # 治療履歴などもここで取得
+    # 治療履歴
     sessions = TreatmentSession.objects.filter(patient=patient).order_by('-date')
     
     return render(request, 'rtms_app/patient_detail.html', {
         'patient': patient,
         'sessions': sessions
     })
-    
-# --- 新規: 基本情報編集ページ ---
+
+
+# --- 基本情報編集 ---
 @login_required
 def patient_edit_basic(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
@@ -135,7 +124,8 @@ def patient_edit_basic(request, patient_id):
         'form': form, 'title': '基本情報の編集', 'patient': patient
     })
 
-# --- 新規: スケジュール編集ページ ---
+
+# --- スケジュール編集 ---
 @login_required
 def patient_edit_schedule(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
@@ -150,24 +140,35 @@ def patient_edit_schedule(request, patient_id):
     return render(request, 'rtms_app/patient_form.html', {
         'form': form, 'title': 'スケジュールの管理', 'patient': patient
     })
-    
 
+
+# --- 新規患者登録 (現場用) ---
+@login_required
+def patient_add_view(request):
+    if request.method == 'POST':
+        form = PatientRegistrationForm(request.POST)
+        if form.is_valid():
+            patient = form.save()
+            return redirect('dashboard')
+    else:
+        form = PatientRegistrationForm()
+    
+    return render(request, 'rtms_app/patient_add.html', {'form': form})
+
+
+# --- データ出力系 ---
 @login_required
 def export_treatment_csv(request):
-    """治療記録をCSVで出力（研究用）"""
-    response = HttpResponse(content_type='text/csv; charset=utf-8-sig') # Excelで文字化けしないおまじない
+    """治療記録をCSVで出力"""
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
     response['Content-Disposition'] = 'attachment; filename="treatment_data.csv"'
 
     writer = csv.writer(response)
-    # ヘッダー
     writer.writerow(['ID', 'Patient Name', 'Date', 'MT(%)', 'Intensity(%)', 'Pulses', 'Safety(Sleep)', 'Adverse Events'])
 
-    # データ行
     treatments = TreatmentSession.objects.all().select_related('patient').order_by('date')
     for t in treatments:
-        # 有害事象JSONを文字列化して格納
         adverse_str = str(t.adverse_events) if t.adverse_events else ""
-        
         writer.writerow([
             t.patient.card_id,
             t.patient.name,
@@ -182,7 +183,7 @@ def export_treatment_csv(request):
 
 @login_required
 def download_db(request):
-    """現在のSQLiteデータベースファイルをダウンロード（簡易バックアップ）"""
+    """DBバックアップ"""
     if not request.user.is_superuser:
         return HttpResponse("管理者のみ実行可能です", status=403)
         
