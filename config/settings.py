@@ -130,7 +130,9 @@ JAZZMIN_SETTINGS = {
     "site_title": "rTMS Record DB",
     "site_header": "rTMS 実施記録",
     "welcome_sign": "rTMS 実施記録システムへようこそ",
-    "copyright": "Kasadera Creator",
+    "copyright": "笠寺精治寮病院 SE室",
+    "site_url": "/app/dashboard/",
+    "site_logo_classes": "btn btn-circle",
 }
 
 # ログインしていない時に飛ばされる先（管理画面のログインページを利用）

@@ -3,6 +3,10 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from datetime import timedelta
 from .models import Patient, TreatmentSession
+import csv
+from django.http import HttpResponse, FileResponse
+from django.conf import settings
+import os
 
 @login_required
 def dashboard_view(request):
@@ -74,3 +78,43 @@ def dashboard_view(request):
         'today': today,
     }
     return render(request, 'rtms_app/dashboard.html', context)
+    
+@login_required
+def export_treatment_csv(request):
+    """治療記録をCSVで出力（研究用）"""
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig') # Excelで文字化けしないおまじない
+    response['Content-Disposition'] = 'attachment; filename="treatment_data.csv"'
+
+    writer = csv.writer(response)
+    # ヘッダー
+    writer.writerow(['ID', 'Patient Name', 'Date', 'MT(%)', 'Intensity(%)', 'Pulses', 'Safety(Sleep)', 'Adverse Events'])
+
+    # データ行
+    treatments = TreatmentSession.objects.all().select_related('patient').order_by('date')
+    for t in treatments:
+        # 有害事象JSONを文字列化して格納
+        adverse_str = str(t.adverse_events) if t.adverse_events else ""
+        
+        writer.writerow([
+            t.patient.card_id,
+            t.patient.name,
+            t.date.strftime('%Y-%m-%d %H:%M'),
+            t.motor_threshold,
+            t.intensity,
+            t.total_pulses,
+            'OK' if t.safety_sleep else 'NG',
+            adverse_str
+        ])
+    return response
+
+@login_required
+def download_db(request):
+    """現在のSQLiteデータベースファイルをダウンロード（簡易バックアップ）"""
+    if not request.user.is_superuser:
+        return HttpResponse("管理者のみ実行可能です", status=403)
+        
+    db_path = settings.DATABASES['default']['NAME']
+    if os.path.exists(db_path):
+        return FileResponse(open(db_path, 'rb'), as_attachment=True, filename='db.sqlite3')
+    else:
+        return HttpResponse("DBファイルが見つかりません", status=404)
