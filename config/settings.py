@@ -127,20 +127,38 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 # JAZZMIN設定（見た目のカスタマイズ）
 JAZZMIN_SETTINGS = {
-    "site_title": "rTMS Record DB",
-    "site_header": "rTMS 実施記録",
-    "welcome_sign": "rTMS 実施記録システムへようこそ",
-    "copyright": "笠寺精治寮病院 SE室",
-    "site_url": "/app/dashboard/",
-    "site_logo_classes": "btn btn-circle",
+    # タイトル・ロゴ設定
+    "site_title": "rTMS 実施記録 DB",
+    "site_header": "rTMS DB",
+    "site_brand": "○○病院 rTMS",  # ★病院名を入れてください
+    # "site_logo": "img/logo.png",  # ★ロゴ画像がある場合はコメントアウトを外す
+    "welcome_sign": "rTMS 実施記録システム",
+    "copyright": "○○ Hospital",
+
+    # トップ画面へのリンク
     "topmenu_links": [
-        {
-            "name": "◀ 今日の業務に戻る",  # わかりやすく変更
-            "url": "dashboard",
-            "permissions": ["auth.view_user"],
-            "new_window": False
-        },
+        {"name": "◀ 業務ダッシュボードへ", "url": "dashboard", "permissions": ["auth.view_user"]},
     ],
+
+    # サイドバーのメニュー順序制御
+    "order_with_respect_to": [
+        "rtms_app.Patient",           # 1. 患者情報
+        "rtms_app.TreatmentSession",  # 2. 治療実施
+        "rtms_app.Assessment",        # 3. 状態評価
+    ],
+
+    # アイコン設定 (FontAwesome)
+    "icons": {
+        "rtms_app.Patient": "fas fa-user-injured",
+        "rtms_app.TreatmentSession": "fas fa-procedures",
+        "rtms_app.Assessment": "fas fa-chart-line",
+    },
+}
+
+# ★サイドバーの色を明るくする設定
+JAZZMIN_UI_TWEAKS = {
+    "theme": "flatly",   # 明るく清潔感のあるテーマ
+    "dark_mode_theme": None,
 }
 
 # ログインしていない時に飛ばされる先（管理画面のログインページを利用）

@@ -1,128 +1,130 @@
 from django.contrib import admin
-from django.db import models  # ★この行を追加してください
+from django.db import models
 from django_jsonform.widgets import JSONFormWidget
 from .models import Patient, TreatmentSession, Assessment
 
-# --- チェックリストの定義 (ここを書き換えるだけで項目が増減します) ---
-
-# 1. 問診・禁忌チェックリスト (ガイドライン参照)
-MEDICAL_HISTORY_SCHEMA = {
+# --- 1. 適正に関する質問票 (初診時) ---
+QUESTIONNAIRE_SCHEMA = {
     'type': 'object',
-    'title': '問診・禁忌チェック',
+    'title': 'rTMS 適正質問票',
     'properties': {
         'implants': {
-            'type': 'boolean',
-            'title': '【禁忌】金属・電子機器の体内留置 (ペースメーカー/人工内耳/クリップ等)',
-            'helpText': '該当する場合は治療不可'
+            'type': 'string',
+            'title': '1. 頭部・体内に金属や電子機器が入っていますか？',
+            'enum': ['いいえ', 'はい'],
+            'widget': 'radio',
+            'helpText': 'ペースメーカー、人工内耳、脳動脈クリップ、インプラント等'
         },
         'epilepsy': {
-            'type': 'boolean',
-            'title': '【禁忌】てんかん・けいれん発作の既往',
-        },
-        'medication': {
             'type': 'string',
-            'title': '服用中の薬剤',
-            'widget': 'textarea',
-            'default': '特になし'
+            'title': '2. けいれん発作（てんかん）の既往、または脳波異常はありますか？',
+            'enum': ['いいえ', 'はい'],
+            'widget': 'radio'
         },
-        'other_risks': {
-            'type': 'array',
-            'title': 'その他リスク因子',
-            'items': {
-                'type': 'string',
-                'enum': [
-                    '睡眠不足',
-                    'アルコール多飲',
-                    'カフェイン過剰摂取',
-                    '頭部外傷の既往'
-                ]
-            },
-            'widget': 'checkboxes',
-            'uniqueItems': True
+        'brain_disease': {
+            'type': 'string',
+            'title': '3. 脳卒中、脳腫瘍、頭部外傷などの脳の病気はありますか？',
+            'enum': ['いいえ', 'はい'],
+            'widget': 'radio'
+        },
+        'pregnancy': {
+            'type': 'string',
+            'title': '4. 現在妊娠している、またはその可能性はありますか？',
+            'enum': ['いいえ', 'はい'],
+            'widget': 'radio'
+        },
+        'medication_change': {
+            'type': 'string',
+            'title': '5. 最近お薬の変更はありましたか？',
+            'enum': ['いいえ', 'はい'],
+            'widget': 'radio'
+        },
+        'sleep_deprivation': {
+            'type': 'string',
+            'title': '6. 昨夜は十分睡眠がとれましたか？（睡眠不足ではないですか？）',
+            'enum': ['はい (十分とれた)', 'いいえ (睡眠不足)'],
+            'widget': 'radio'
+        },
+        'alcohol_caffeine': {
+            'type': 'string',
+            'title': '7. アルコールやカフェインを過剰に摂取していませんか？',
+            'enum': ['いいえ', 'はい'],
+            'widget': 'radio'
+        },
+        'doctor_check': {
+            'type': 'boolean',
+            'title': '医師による確認済',
+            'helpText': '上記項目を確認し、治療適応と判断しました。'
         }
     }
 }
 
-# 2. 治療後観察・有害事象リスト (ガイドライン参照)
-ADVERSE_EVENTS_SCHEMA = {
+# --- 2. 副作用チェック表 (治療毎) ---
+SIDE_EFFECT_SCHEMA = {
     'type': 'object',
-    'title': '治療後観察',
+    'title': '副作用チェック表',
     'properties': {
-        'status': {
-            'type': 'string',
-            'title': '状態',
-            'enum': ['問題なし', '軽度の不快感あり', '有害事象あり'],
-            'default': '問題なし'
-        },
         'symptoms': {
             'type': 'array',
-            'title': '症状詳細',
+            'title': '自覚症状の有無',
             'items': {
-                'type': 'string',
-                'enum': [
-                    '頭皮痛(刺激痛)',
-                    '刺激部位の不快感',
-                    '歯痛',
-                    '顔面のけいれん',
-                    '頭痛',
-                    'めまい',
-                    '吐き気'
-                ]
-            },
-            'widget': 'checkboxes',
-            'uniqueItems': True
+                'type': 'object',
+                'properties': {
+                    'name': {
+                        'type': 'string',
+                        'title': '症状',
+                        'enum': [
+                            '頭皮痛（刺激痛）', '刺激部位の不快感', '歯痛', 
+                            '顔面のけいれん', '頭痛', 'めまい', '吐き気', 
+                            '耳鳴り', '聴力低下', '不安感・焦燥感', 'その他'
+                        ]
+                    },
+                    'severity': {
+                        'type': 'string',
+                        'title': '程度',
+                        'enum': ['なし', '軽度', '中等度', '重度'],
+                        'widget': 'radio',
+                        'default': 'なし'
+                    }
+                }
+            }
+        },
+        'seizure_sign': {
+            'type': 'boolean',
+            'title': 'けいれん発作の兆候なし',
+            'default': True
         },
         'note': {
             'type': 'string',
-            'title': '自由記載メモ',
+            'title': '特記事項',
             'widget': 'textarea'
         }
     }
 }
 
-# --- 管理画面の設定 ---
-
-class AssessmentInline(admin.TabularInline):
-    model = Assessment
-    extra = 0
-    readonly_fields = ('note',)
-    fields = ('date', 'timing', 'type', 'total_score', 'note')
-    ordering = ('-date',)
-
-class TreatmentSessionInline(admin.TabularInline):
-    model = TreatmentSession
-    extra = 0
-    fields = ('date', 'motor_threshold', 'intensity', 'total_pulses', 'safety_sleep', 'safety_meds')
-    ordering = ('-date',)
+# --- Admin設定 ---
 
 @admin.register(Patient)
 class PatientAdmin(admin.ModelAdmin):
-    list_display = ('card_id', 'name', 'latest_hamd_display', 'improvement_display')
+    list_display = ('card_id', 'name', 'diagnosis')
     search_fields = ('name', 'card_id')
-    inlines = [AssessmentInline, TreatmentSessionInline]
-    
-    # ★ここでJSON入力をリッチなフォームに変換します
     formfield_overrides = {
-        models.JSONField: {'widget': JSONFormWidget(schema=MEDICAL_HISTORY_SCHEMA)},
+        models.JSONField: {'widget': JSONFormWidget(schema=QUESTIONNAIRE_SCHEMA)},
     }
-
-    def latest_hamd_display(self, obj):
-        return obj.get_latest_hamd()
-    latest_hamd_display.short_description = "最新HAM-D"
-
-    def improvement_display(self, obj):
-        rate = obj.get_improvement_rate()
-        return f"{rate}%" if rate is not None else "-"
-    improvement_display.short_description = "改善率"
+    # 編集画面でのフィールド表示順
+    fields = (('card_id', 'name'), ('birth_date', 'diagnosis'), 
+              ('admission_date', 'mapping_date', 'first_treatment_date'),
+              'mapping_notes', 'questionnaire_data', 'medical_history')
 
 @admin.register(TreatmentSession)
 class TreatmentSessionAdmin(admin.ModelAdmin):
-    list_display = ('date', 'patient', 'motor_threshold', 'intensity')
+    list_display = ('date', 'patient', 'user_name')
     list_filter = ('date',)
-    
-    # ★治療記録側のJSONも変換
     formfield_overrides = {
-        models.JSONField: {'widget': JSONFormWidget(schema=ADVERSE_EVENTS_SCHEMA)},
+        models.JSONField: {'widget': JSONFormWidget(schema=SIDE_EFFECT_SCHEMA)},
     }
+    
+    def user_name(self, obj):
+        return "担当者" # 実際は request.user を保存するロジックが必要
 
 admin.site.register(Assessment)

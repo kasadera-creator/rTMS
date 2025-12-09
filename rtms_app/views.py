@@ -82,6 +82,23 @@ def dashboard_view(request):
             'note': note,
             'is_eval': is_evaluation_day
         })
+        
+    # (E) 今日の評価対象 (治療中の患者で、評価日が近い人)
+    assessments_due = []
+    # 治療中の患者をループ
+    for p in active_patients:
+        total_sessions = TreatmentSession.objects.filter(patient=p).count()
+        # 例えば 15回目(3週), 30回目(6週) の前後を表示
+        if total_sessions > 0 and total_sessions % 5 == 0:
+             assessments_due.append({
+                 'obj': p,
+                 'reason': f'{total_sessions}回目完了 (評価推奨)'
+             })
+        # または、すでに入力された今日のAssessmentがあるか
+        today_assessments = p.assessment_set.filter(date=target_date)
+        if today_assessments.exists():
+            for a in today_assessments:
+                assessments_due.append({'obj': p, 'reason': f'済: {a.get_type_display()}'})
 
     context = {
         'today': target_date,
@@ -91,6 +108,7 @@ def dashboard_view(request):
         'admissions': admissions,
         'mappings': mappings,
         'treatments': treatments,
+        'assessments_due': assessments_due,
     }
     return render(request, 'rtms_app/dashboard.html', context)
 

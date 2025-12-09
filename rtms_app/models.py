@@ -18,6 +18,16 @@ class Patient(models.Model):
     medical_history = models.JSONField("既往歴・禁忌チェック", default=dict, blank=True, null=True)
     created_at = models.DateTimeField("登録日", auto_now_add=True)
 
+    # ★追加: 位置決め情報のメモ欄（装置記録のバックアップ用）
+    mapping_notes = models.TextField("位置決め記録", blank=True, help_text="MT値や刺激部位のメモなど")
+
+    # ★追加: 初診時の適正質問票データ (JSONで保存)
+    questionnaire_data = models.JSONField("適正質問票回答", default=dict, blank=True, null=True)
+
+    class Meta:
+        verbose_name = "患者情報"
+        verbose_name_plural = "患者情報一覧"
+
     def __str__(self):
         return f"{self.name} ({self.card_id})"
 
@@ -69,6 +79,12 @@ class TreatmentSession(models.Model):
     interval_sec = models.IntegerField("刺激間隔(秒)", default=20)
     total_pulses = models.IntegerField("総パルス数", default=1980)
     
+    # ★追加: 副作用チェック表データ (JSONで保存)
+    side_effect_data = models.JSONField("副作用チェック", default=dict, blank=True, null=True)
+    class Meta:
+        verbose_name = "治療実施記録"
+        verbose_name_plural = "治療実施記録一覧"    
+    
     # 実施後観察
     adverse_events = models.JSONField("有害事象・観察", default=dict, blank=True, null=True)
     
@@ -88,6 +104,10 @@ class Assessment(models.Model):
     date = models.DateField("検査実施日", default=timezone.now)
     type = models.CharField("検査種別", max_length=20, choices=ASSESSMENT_TYPES, default='HAM-D')
     total_score = models.IntegerField("合計点")
+    
+    class Meta:
+        verbose_name = "状態評価・心理検査"
+        verbose_name_plural = "状態評価・心理検査一覧"
     
     # 3週目・6週目のタグ付け用
     TIMING_CHOICES = [

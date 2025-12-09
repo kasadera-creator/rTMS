@@ -144,6 +144,28 @@
                 </div>
             </div>
         </div>
+		
+		<div class="col-md-6 col-lg-3">
+            <div class="card shadow-sm h-100 card-task">
+                <div class="task-header bg-danger">
+                    <span><i class="bi bi-clipboard-data"></i> ⑤ 状態評価</span>
+                    <span class="badge bg-white text-danger rounded-pill">{{ assessments_due|length }}</span>
+                </div>
+                <div class="list-group list-group-flush task-list">
+                    {% for item in assessments_due %}
+                    <a href="{% url 'patient_detail' item.obj.id %}" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1 fw-bold">{{ item.obj.name }}</h6>
+                            <small class="text-danger">{{ item.reason }}</small>
+                        </div>
+                        <small class="text-muted">HAM-D / QIDS など</small>
+                    </a>
+                    {% empty %}
+                    <div class="p-3 text-center text-muted small">評価予定なし</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
 
     </div> <div class="mt-5 text-end">
         {% if user.is_staff %}
