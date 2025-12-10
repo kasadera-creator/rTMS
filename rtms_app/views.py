@@ -324,14 +324,19 @@ def assessment_add(request, patient_id):
         'recommendation': recommendation
     })
 
-# ... (patient_summary_view, patient_add_view, export, download, logout はそのまま) ...
-# ※patient_summary_viewの修正
+
+# ------------------------------------------------------------------
+# サマリー入力・確認画面
+# ------------------------------------------------------------------
 @login_required
 def patient_summary_view(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     sessions = TreatmentSession.objects.filter(patient=patient).order_by('date')
     assessments = Assessment.objects.filter(patient=patient).order_by('date')
     
+    # ★追加：推移表表示用の全検査データ
+    test_scores = assessments 
+
     score_admin = assessments.first()
     score_w3 = assessments.filter(timing='week3').first()
     score_w6 = assessments.filter(timing='week6').first()
@@ -357,6 +362,7 @@ def patient_summary_view(request, patient_id):
     admission_date_str = patient.admission_date.strftime('%Y年%m月%d日') if patient.admission_date else "不明"
     created_at_str = patient.created_at.strftime('%Y年%m月%d日')
     
+    # 自動生成テキスト（初期値として使用）
     summary_text = (
         f"{created_at_str}初診、{admission_date_str}任意入院。\n"
         f"入院時{fmt_score(score_admin)}、{start_date_str}から全{total_count}回のrTMS治療を実施した。\n"
@@ -364,11 +370,19 @@ def patient_summary_view(request, patient_id):
         f"治療中の合併症：{side_effects_summary}。\n"
         f"{end_date_str}退院。紹介元へ逆紹介、抗うつ薬の治療継続を依頼した。"
     )
+
+    # ★注意: 現在の仕様では「保存」してもDBに保存するフィールドがないため、
+    # POST処理を追加する場合はPatientモデルに summary_text フィールド等が必要です。
+    # ここでは表示のみ行います。
+
     return render(request, 'rtms_app/patient_summary.html', {
-        'patient': patient, 'summary_text': summary_text, 'history_list': history_list, 'today': timezone.now().date()
+        'patient': patient, 
+        'summary_text': summary_text, 
+        'history_list': history_list, 
+        'today': timezone.now().date(),
+        'test_scores': test_scores, # ★追加
     })
 
-# ... (その他は変更なし)
 @login_required
 def patient_add_view(request):
     if request.method == 'POST':
@@ -399,3 +413,33 @@ def download_db(request):
 def custom_logout_view(request):
     logout(request)
     return redirect('/admin/login/')
+    
+# 1. 初診・基本情報の印刷プレビュー (前回のエラー解消用)
+def patient_print_preview(request, pk):
+    patient = get_object_or_404(Patient, pk=pk)
+    # 必要に応じて関連オブジェクトも取得
+    # first_visit = get_object_or_404(FirstVisit, patient=patient) 
+    
+    context = {
+        'patient': patient,
+        # 'object': first_visit, # テンプレート内で object.xxx を使っている場合
+    }
+    return render(request, 'rtms_app/print_preview.html', context)
+
+# ------------------------------------------------------------------
+# サマリー・紹介状 印刷用ビュー
+# ------------------------------------------------------------------
+def patient_print_summary(request, pk):
+    patient = get_object_or_404(Patient, pk=pk)
+    mode = request.GET.get('mode', 'summary')
+    
+    # ★追加：心理検査データ
+    test_scores = Assessment.objects.filter(patient=patient).order_by('date')
+    
+    context = {
+        'patient': patient,
+        'mode': mode,
+        'today': datetime.date.today(), # import datetimeが必要です
+        'test_scores': test_scores, # ★追加
+    }
+    return render(request, 'rtms_app/print_summary.html', context)

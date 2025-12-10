@@ -1,114 +1,105 @@
 {% extends "rtms_app/base.html" %}
 {% block extrastyle %}
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <style>
-    textarea { width: 100%; border: 1px solid #ced4da; border-radius: 4px; padding: 10px; font-family: inherit; }
-    @media print {
-        @page { size: A4; margin: 15mm; }
-        body * { visibility: hidden; }
-        .printable-area, .printable-area * { visibility: visible; }
-        .printable-area { position: absolute; left: 0; top: 0; width: 100%; color: #000; font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
-        .no-print { display: none !important; }
-        body.mode-summary .referral-only { display: none !important; }
-        body.mode-referral .summary-only { display: none !important; }
-        .doc-header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 10px; }
-        .doc-header h1 { font-size: 24px; margin: 0; }
-        .hospital-info { text-align: right; font-size: 11px; line-height: 1.4; margin-bottom: 20px; }
-        .referral-address { font-size: 16px; margin-bottom: 20px; text-decoration: underline; }
-        .info-row { display: flex; justify-content: space-between; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 2px;}
-        .section-header { font-weight: bold; margin-top: 15px; margin-bottom: 5px; background-color: #eee; padding: 2px 5px; -webkit-print-color-adjust: exact;}
-        textarea { border: none; resize: none; overflow: visible; height: auto; }
-        .screen-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10pt; }
-        .screen-table th, .screen-table td { border: 1px solid #000; padding: 4px; text-align: center; }
-    }
-    .screen-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-    .screen-table th, .screen-table td { border: 1px solid #ddd; padding: 8px; text-align: center; }
-    .screen-table th { background-color: #f8f9fa; }
+    textarea { width: 100%; border: 1px solid #ced4da; border-radius: 4px; padding: 10px; resize: vertical; }
+    .history-table th { background-color: #f8f9fa; text-align: center; white-space: nowrap; }
+    .history-table td { text-align: center; vertical-align: middle; }
+    .score-table th { background-color: #e8f5e9; text-align: center; font-size: 0.9rem; }
+    .score-table td { text-align: center; font-size: 0.9rem; }
 </style>
-{% load static %}
-<link rel="icon" href="{% static 'img/logo.jpg' %}">
 {% endblock %}
 
 {% block content %}
 <div class="container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4 no-print">
+    <div class="d-flex justify-content-between align-items-center mb-4">
         <h3><i class="fas fa-file-alt"></i> サマリー・紹介状作成</h3>
         <div class="btn-group">
-            <button type="button" class="btn btn-outline-primary" onclick="printMode('summary')"><i class="fas fa-print"></i> 退院サマリー印刷</button>
-            <button type="button" class="btn btn-outline-success" onclick="printMode('referral')"><i class="fas fa-envelope"></i> 紹介状形式で印刷</button>
+            <a href="{% url 'patient_print_summary' patient.id %}?mode=summary" target="_blank" class="btn btn-outline-primary">
+                <i class="fas fa-print"></i> 退院サマリー印刷
+            </a>
+            <a href="{% url 'patient_print_summary' patient.id %}?mode=referral" target="_blank" class="btn btn-outline-success">
+                <i class="fas fa-envelope"></i> 紹介状形式で印刷
+            </a>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary">戻る</a>
         </div>
     </div>
 
-    <div id="document-area" class="printable-area bg-white p-5 shadow-sm">
-        <div class="referral-only">
-            <div class="hospital-info">
-                <strong>笠寺精治寮病院</strong><br>〒457-0051 愛知県名古屋市南区笠寺町柚ノ木３<br>TEL: 052-821-9221 FAX: 052-824-0286<br>
-                担当医: {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}
+    <div class="bg-white p-4 shadow-sm rounded">
+        <div class="alert alert-light border mb-4">
+            <div class="row">
+                <div class="col-md-3"><strong>ID:</strong> {{ patient.card_id }}</div>
+                <div class="col-md-3"><strong>氏名:</strong> {{ patient.name }}</div>
+                <div class="col-md-3"><strong>担当医:</strong> {{ patient.attending_physician }}</div>
+                <div class="col-md-3"><strong>入院:</strong> {{ patient.admission_date|default:"-" }}</div>
             </div>
-            <div class="referral-address">紹介元医療機関 御机下</div>
-            <div class="doc-header"><h1>診療情報提供書（逆紹介）</h1></div>
-            <p>下記の患者につきまして、当院でのrTMS治療が終了しましたのでご報告申し上げます。</p>
-        </div>
-
-        <div class="summary-only">
-            <div class="doc-header"><h1>治療サマリー</h1><p style="text-align: right; font-size: 12px; margin:0;">笠寺精治寮病院</p></div>
         </div>
 
         <div class="row mb-4">
-            <div class="col-6 info-row"><span>ID:</span> <strong>{{ patient.card_id }}</strong></div>
-            <div class="col-6 info-row"><span>氏名:</span> <strong>{{ patient.name }}</strong></div>
-            <div class="col-6 info-row"><span>生年月日:</span> {{ patient.birth_date }} ({{ patient.age }}歳)</div>
-            <div class="col-6 info-row"><span>性別:</span> {{ patient.get_gender_display }}</div>
-            <div class="col-6 info-row"><span>入院日:</span> {{ patient.admission_date|default:"-" }}</div>
-            <div class="col-6 info-row"><span>退院日:</span> {{ today }} (予定)</div>
-            <div class="col-12 info-row"><span>担当医:</span> {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}</div>
+            <div class="col-lg-8">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">入院経過・治療結果（サマリー本文）</label>
+                    <textarea name="summary_text" rows="12" class="form-control">{{ summary_text }}</textarea>
+                    <div class="form-text text-muted">
+                        ※現在は自動生成されたテキストが表示されています。
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <label class="form-label fw-bold text-success"><i class="fas fa-chart-line"></i> 心理検査推移 (HAMD)</label>
+                <div class="card border-success mb-3">
+                    <div class="card-body p-0">
+                        <table class="table table-sm table-striped score-table mb-0">
+                            <thead>
+                                <tr>
+                                    <th>実施日</th>
+                                    <th>17項</th>
+                                    <th>21項</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for score in test_scores %}
+                                <tr>
+                                    <td>{{ score.date|date:"n/j" }}</td>
+                                    <td class="fw-bold">{{ score.total_score_17 }}</td>
+                                    <td>{{ score.total_score_21 }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="3" class="text-muted py-3">データなし</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="text-muted small">
+                    <i class="fas fa-info-circle"></i> 最新の評価結果を参照してサマリーを作成してください。
+                </div>
+            </div>
         </div>
 
-        <div class="mb-3"><div class="section-header">主訴</div><p>{{ patient.chief_complaint }}</p></div>
-        <div class="mb-3"><div class="section-header">紹介元</div><p>{{ patient.referral_source }}</p></div>
-        <div class="mb-3"><div class="section-header">生活歴・既往歴・現病歴・薬剤歴</div><p style="white-space: pre-wrap;">{{ patient.life_history }}
-{{ patient.past_history }}
-{{ patient.present_illness }}
-{{ patient.medication_history }}</p></div>
+        <hr>
 
-        <div class="mb-3">
-            <div class="section-header">入院経過・治療結果</div>
-            <textarea id="course-text" rows="10">{{ summary_text }}</textarea>
-        </div>
-        
         <div class="mt-4">
-            <h6 class="fw-bold border-bottom">治療進捗詳細</h6>
-            <table class="screen-table">
-                <thead><tr><th>回数</th><th>日付</th><th>MT(%)</th><th>強度(%)</th><th>合併症・副作用</th></tr></thead>
-                <tbody>
-                    {% for item in history_list %}
-                    <tr><td>{{ item.count }}</td><td>{{ item.date|date:"Y/n/j" }}</td><td>{{ item.mt }}</td><td>{{ item.intensity }}</td><td class="text-start">{{ item.se }}</td></tr>
-                    {% empty %}<tr><td colspan="5">記録なし</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <div class="referral-only mt-5">
-            <p>今後とも何卒よろしくお願い申し上げます。</p>
-            <div style="text-align: right; margin-top: 30px;">記載日: {{ today }}<br>医師署名: ____________________</div>
-        </div>
-    </div>
-    
-    <div class="d-flex justify-content-end align-items-center mt-4 mb-5 no-print">
-        <div class="btn-group">
-            <button type="button" class="btn btn-outline-primary" onclick="printMode('summary')"><i class="fas fa-print"></i> 退院サマリー印刷</button>
-            <button type="button" class="btn btn-outline-success" onclick="printMode('referral')"><i class="fas fa-envelope"></i> 紹介状形式で印刷</button>
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary">戻る</a>
+            <h6 class="fw-bold border-bottom pb-2">rTMS 治療実施記録</h6>
+            <div style="max-height: 300px; overflow-y: auto;">
+                <table class="table table-bordered history-table table-sm">
+                    <thead><tr><th>回数</th><th>日付</th><th>MT(%)</th><th>強度(%)</th><th>備考・副作用</th></tr></thead>
+                    <tbody>
+                        {% for item in history_list %}
+                        <tr>
+                            <td>{{ item.count }}</td>
+                            <td>{{ item.date|date:"Y/n/j" }}</td>
+                            <td>{{ item.mt }}</td>
+                            <td>{{ item.intensity }}</td>
+                            <td class="text-start">{{ item.se }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5">記録がありません</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
-<script>
-    function printMode(mode) {
-        document.body.className = ''; document.body.classList.add('mode-' + mode);
-        const tx = document.getElementById('course-text'); tx.style.height = 'auto'; tx.style.height = (tx.scrollHeight) + 'px';
-        window.print();
-    }
-</script>
 {% endblock %}
