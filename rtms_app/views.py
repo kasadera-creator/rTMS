@@ -152,26 +152,22 @@ def mapping_add(request, patient_id):
 def patient_first_visit(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     dashboard_date = request.GET.get('dashboard_date')
-    end_date_est = get_completion_date(patient.first_treatment_date)
-
-    # --- 紹介元・紹介医の連携データ作成 ---
+    
+    # 連携データ
     all_patients = Patient.objects.all()
-    referral_map = {} # {'病院A': ['医師A', '医師B'], '病院B': [...]}
+    referral_map = {}
     referral_sources_set = set()
-
     for p in all_patients:
         src = p.referral_source
         doc = p.referral_doctor
         if src:
             referral_sources_set.add(src)
             if doc:
-                if src not in referral_map:
-                    referral_map[src] = set()
+                if src not in referral_map: referral_map[src] = set()
                 referral_map[src].add(doc)
-    
-    # セットをリストに変換 (JSON化のため)
     referral_map_json = {k: sorted(list(v)) for k, v in referral_map.items()}
     referral_options = sorted(list(referral_sources_set))
+    end_date_est = get_completion_date(patient.first_treatment_date)
 
     if request.method == 'POST':
         form = PatientFirstVisitForm(request.POST, instance=patient)
@@ -188,12 +184,9 @@ def patient_first_visit(request, patient_id):
             return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'dashboard')
     else:
         form = PatientFirstVisitForm(instance=patient)
-        
     return render(request, 'rtms_app/patient_first_visit.html', {
-        'patient': patient, 
-        'form': form, 
-        'referral_options': referral_options, 
-        'referral_map_json': json.dumps(referral_map_json, ensure_ascii=False), # JSへ渡す
+        'patient': patient, 'form': form, 'referral_options': referral_options, 
+        'referral_map_json': json.dumps(referral_map_json, ensure_ascii=False),
         'end_date_est': end_date_est,
         'dashboard_date': dashboard_date
     })
@@ -346,5 +339,22 @@ def download_db(request):
     return HttpResponse("Not found", 404)
 
 def custom_logout_view(request): logout(request); return redirect('/admin/login/')
-def patient_print_preview(request, pk): patient = get_object_or_404(Patient, pk=pk); end_date_est = get_completion_date(patient.first_treatment_date); context = { 'patient': patient, 'end_date_est': end_date_est }; return render(request, 'rtms_app/print_preview.html', context)
-def patient_print_summary(request, pk): patient = get_object_or_404(Patient, pk=pk); mode = request.GET.get('mode', 'summary'); test_scores = Assessment.objects.filter(patient=patient).order_by('date'); context = {'patient': patient, 'mode': mode, 'today': datetime.date.today(), 'test_scores': test_scores}; return render(request, 'rtms_app/print_summary.html', context)
+
+# ★修正: プレビュー画面のビューでmodeパラメータを受け取り、テンプレートに渡す
+def patient_print_preview(request, pk):
+    patient = get_object_or_404(Patient, pk=pk)
+    end_date_est = get_completion_date(patient.first_treatment_date)
+    mode = request.GET.get('mode', 'summary') # デフォルトはsummary (サマリー)
+    context = { 
+        'patient': patient, 
+        'end_date_est': end_date_est,
+        'mode': mode 
+    }
+    return render(request, 'rtms_app/print_preview.html', context)
+
+def patient_print_summary(request, pk):
+    patient = get_object_or_404(Patient, pk=pk)
+    mode = request.GET.get('mode', 'summary')
+    test_scores = Assessment.objects.filter(patient=patient).order_by('date')
+    context = {'patient': patient, 'mode': mode, 'today': datetime.date.today(), 'test_scores': test_scores}
+    return render(request, 'rtms_app/print_summary.html', context)

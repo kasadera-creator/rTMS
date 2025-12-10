@@ -11,8 +11,8 @@
     .q-header-row { background-color: #e9ecef; font-weight: bold; }
     
     /* 右下固定ボタンエリア */
-    .floating-actions { position: fixed; bottom: 20px; right: 20px; z-index: 1050; display: flex; gap: 10px; }
-    .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; }
+    .floating-actions { position: fixed; bottom: 20px; right: 20px; z-index: 1050; display: flex; gap: 10px; flex-direction: column; align-items: flex-end; }
+    .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; width: fit-content; }
 </style>
 {% endblock %}
 
@@ -21,8 +21,11 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h3 class="fw-bold"><i class="fas fa-file-medical"></i> 初診・基本情報入力</h3>
         <div class="btn-group">
-            <a href="{% url 'patient_print_preview' patient.id %}" target="_blank" class="btn btn-outline-primary">
-                <i class="fas fa-print"></i> プレビュー
+            <a href="{% url 'patient_print_preview' patient.id %}?mode=summary" target="_blank" class="btn btn-outline-primary">
+                <i class="fas fa-print"></i> サマリー印刷
+            </a>
+            <a href="{% url 'patient_print_preview' patient.id %}?mode=questionnaire" target="_blank" class="btn btn-outline-success">
+                <i class="fas fa-print"></i> 問診票印刷
             </a>
             <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary">戻る</a>
         </div>
@@ -59,6 +62,7 @@
                     </div>
                 </div>
             </div>
+            <!-- (中略: 既存フォームフィールドはそのまま) -->
             <div class="mb-3"><label class="fw-bold">主訴</label>{{ form.chief_complaint }}</div>
             <div class="mb-3"><label class="fw-bold">生活歴</label><textarea name="{{ form.life_history.name }}" class="form-control" rows="3">{{ form.life_history.value|default_if_none:"" }}</textarea></div>
             <div class="mb-3"><label class="fw-bold">既往歴</label><textarea name="{{ form.past_history.name }}" class="form-control" rows="3">{{ form.past_history.value|default_if_none:"" }}</textarea></div>
@@ -77,13 +81,13 @@
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="パニック症" id="d_pd"><label class="form-check-label" for="d_pd">パニック症</label></div></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="広場恐怖症" id="d_ag"><label class="form-check-label" for="d_ag">広場恐怖症</label></div></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="全般性不安症" id="d_gad"><label class="form-check-label" for="d_gad">全般性不安症</label></div></div>
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="PTSD" id="d_ptsd"><label class="form-check-label" for="d_ptsd">PTSD</label></div></div>
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="心的外傷後ストレス症" id="d_ptsd"><label class="form-check-label" for="d_ptsd">心的外傷後ストレス症</label></div></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="知的発達症" id="d_mr"><label class="form-check-label" for="d_mr">知的発達症</label></div></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="自閉スペクトラム症" id="d_asd"><label class="form-check-label" for="d_asd">自閉スペクトラム症</label></div></div>
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="ADHD" id="d_adhd"><label class="form-check-label" for="d_adhd">ADHD</label></div></div>
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="注意欠如多動症" id="d_adhd"><label class="form-check-label" for="d_adhd">注意欠如多動症</label></div></div>
                         <div class="col-12"><hr class="my-2"></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="軽度認知障害(MCI)" id="d_mci"><label class="form-check-label" for="d_mci">軽度認知障害（MCI）</label></div></div>
-                        <div class="col-md-8"><div class="d-flex align-items-center"><div class="form-check me-2"><input class="form-check-input" type="checkbox" name="diag_list" value="認知症" id="d_dementia"><label class="form-check-label" for="d_dementia" style="white-space: nowrap;">認知症（詳細は下記へ）</label></div></div></div>
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="認知症" id="d_dementia"><label class="form-check-label" for="d_dementia">認知症（詳細は下記へ）</label></div></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="パーキンソン病" id="d_parkinson"><label class="form-check-label" for="d_parkinson">パーキンソン病</label></div></div>
                         <div class="col-12 mt-2"><label class="small text-muted fw-bold">詳細・その他の診断名 (認知症の型などもこちらへ)</label><input type="text" name="diag_other" class="form-control form-control-sm" placeholder="例: アルツハイマー型認知症、レビー小体型認知症など"></div>
                     </div>
@@ -97,15 +101,15 @@
                 <div class="col-md-4"><label class="form-label text-primary fw-bold">入院予定日</label>{{ form.admission_date }}</div>
                 <div class="col-md-4"><label class="form-label text-warning fw-bold">初回位置決め日</label>{{ form.mapping_date }}</div>
                 <div class="col-md-4"><label class="form-label text-success fw-bold">初回治療日</label>{{ form.first_treatment_date }}</div>
-                <div class="col-md-8"><label class="form-label fw-bold">今後の担当医</label><div class="d-flex align-items-center">{{ form.attending_physician }}<span class="form-text ms-2 mb-0">※診察結果に基づき、決定した担当医を入力</span></div></div>
+                <div class="col-md-8"><label class="form-label fw-bold">今後の担当医</label><div class="d-flex align-items-center">{{ form.attending_physician }}<span class="form-text ms-2 mb-0">※担当医を入力してください</span></div></div>
             </div>
         </div>
 
         <div class="form-section">
             <h5 class="section-title">rTMS 適正に関する質問票</h5>
-            <p class="text-muted small">※患者様への聴取結果を入力してください。</p>
+            <!-- (質問票テーブル部分は既存のままでOK) -->
+            <!-- 中略 -->
             <table class="q-table">
-                <!-- (質問票テーブル) -->
                 <thead class="table-light"><tr><th style="text-align: left;">質問項目</th><th width="80" class="text-center">はい</th><th width="80" class="text-center">いいえ</th></tr></thead>
                 <tbody>
                     <tr class="q-header-row"><td colspan="3">これまでに、以下のことがありましたか？</td></tr>
@@ -137,6 +141,14 @@
         
         <!-- 右下固定ボタン -->
         <div class="floating-actions">
+            <div class="btn-group-vertical mb-2">
+                <a href="{% url 'patient_print_preview' patient.id %}?mode=summary" target="_blank" class="btn btn-outline-primary btn-fab mb-1" style="background:white; color:#0d6efd;">
+                    <i class="fas fa-print"></i> サマリー印刷
+                </a>
+                <a href="{% url 'patient_print_preview' patient.id %}?mode=questionnaire" target="_blank" class="btn btn-outline-success btn-fab" style="background:white; color:#198754;">
+                    <i class="fas fa-print"></i> 問診票印刷
+                </a>
+            </div>
             <button type="submit" class="btn btn-primary btn-fab text-white">
                 <i class="fas fa-save"></i> 保存して終了
             </button>
@@ -150,7 +162,6 @@
 
 {% block scripts %}
 <script>
-    // 紹介元・紹介医の連携ロジック
     const referralMap = JSON.parse('{{ referral_map_json|safe }}');
     const sourceInput = document.querySelector('input[name="referral_source"]');
     const doctorInput = document.querySelector('input[name="referral_doctor"]');
@@ -158,8 +169,7 @@
 
     function updateDoctorOptions() {
         const selectedSource = sourceInput.value;
-        doctorDatalist.innerHTML = ''; // クリア
-        
+        doctorDatalist.innerHTML = '';
         if (referralMap[selectedSource]) {
             referralMap[selectedSource].forEach(docName => {
                 const option = document.createElement('option');
@@ -168,15 +178,10 @@
             });
         }
     }
-
     sourceInput.addEventListener('input', updateDoctorOptions);
     sourceInput.addEventListener('change', updateDoctorOptions);
-    
-    // 医師名入力欄にリスト紐付け
     doctorInput.setAttribute('list', 'doctor-options');
 
-
-    // 質問票のJSON化処理
     document.getElementById('mainForm').addEventListener('submit', function(e) {
         const data = {}; 
         document.querySelectorAll('input[type="radio"]:checked').forEach(r => { data[r.name] = r.value; });
@@ -184,9 +189,7 @@
         document.getElementById('questionnaire_json').value = JSON.stringify(data);
     });
     
-    // データ復元処理
     document.addEventListener('DOMContentLoaded', function() {
-        // 診断名チェックボックス
         const diagStr = "{{ patient.diagnosis }}";
         if(diagStr) {
             const diags = diagStr.split(', ');
@@ -194,16 +197,13 @@
                 const el = document.querySelector(`input[name="diag_list"][value="${d}"]`);
                 if(el) el.checked = true;
                 const otherMatch = d.match(/^その他\((.+)\)$/);
-                if (otherMatch && otherMatch[1]) {
-                    document.querySelector('input[name="diag_other"]').value = otherMatch[1];
-                }
+                if (otherMatch && otherMatch[1]) { document.querySelector('input[name="diag_other"]').value = otherMatch[1]; }
             });
         } else {
             const depEl = document.getElementById('d_dep');
             if(depEl) depEl.checked = true;
         }
         
-        // 質問票JSON
         const raw = '{{ patient.questionnaire_data|safe }}';
         if(raw && raw !== '{}' && raw !== 'None' && raw !== 'null') {
             try {
@@ -219,8 +219,6 @@
                 }
             } catch(e) { console.error("JSON Parse Error", e); }
         }
-        
-        // 初期ロード時にも医師リスト更新
         updateDoctorOptions();
     });
 </script>

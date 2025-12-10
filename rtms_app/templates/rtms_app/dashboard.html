@@ -14,7 +14,7 @@
     .bg-g-5 { background: linear-gradient(135deg, #dc3545, #b02a37); }
     .bg-g-6 { background: linear-gradient(135deg, #0dcaf0, #0aa2c0); }
 
-    .list-group-item { border: none; border-bottom: 1px solid #f0f0f0; padding: 12px 15px; }
+    .list-group-item { border: none; border-bottom: 1px solid #f0f0f0; padding: 10px 15px; font-size: 0.95rem; }
     .list-group-item:hover { background-color: #f8f9fa; }
     .list-group-item a { text-decoration: none; color: inherit; display: block; }
     
@@ -41,16 +41,13 @@
                 <i class="fas fa-chevron-left"></i>
             </a>
             
-            <div class="d-inline-flex align-items-center bg-light px-2 py-1 rounded border">
+            <div class="d-inline-flex align-items-center bg-light px-2 py-1 rounded border position-relative">
                 <span class="fw-bold fs-5 me-2">{{ target_date_display }}</span>
-                <!-- カレンダーアイコンで日付選択 -->
-                <label for="datePicker" style="cursor: pointer;">
-                    <i class="far fa-calendar-alt text-primary fs-5"></i>
-                </label>
                 <input type="date" id="datePicker" 
-                       style="width: 0; height: 0; opacity: 0; padding: 0; border: none; overflow: hidden;"
+                       style="position: absolute; left:0; top:0; width: 100%; height: 100%; opacity: 0; cursor: pointer;"
                        value="{{ today|date:'Y-m-d' }}" 
                        onchange="location.href='?date='+this.value">
+                <i class="far fa-calendar-alt text-primary fs-5 pointer-events-none"></i>
             </div>
             
             <a href="?date={{ next_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm ms-2" title="翌日">
@@ -89,16 +86,18 @@
                         <a href="{% url 'patient_first_visit' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
                             <div class="mb-1">
                                 <span class="fw-bold fs-5">{{ item.obj.name }}</span>
-                                <span class="status-badge status-done">{{ item.status }}</span>
+                                <span class="status-badge status-done">登録済</span>
                             </div>
                             <div class="todo-badge"><i class="fas fa-check-circle me-1"></i>{{ item.todo }}</div>
                             <div class="task-meta">
                                 <div><i class="far fa-id-card"></i> ID: {{ item.obj.card_id }}</div>
-                                <div><i class="fas fa-user-md"></i> 担当: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
+                                <div><i class="fas fa-user-md"></i> 担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
                             </div>
                         </a>
                     </div>
-                    {% empty %}<div class="text-center py-4 text-muted small">予定なし</div>{% endfor %}
+                    {% empty %}
+                    <div class="text-center py-4 text-muted small">予定なし</div>
+                    {% endfor %}
                 </div>
             </div>
         </div>
@@ -121,11 +120,13 @@
                             <div class="todo-badge"><i class="fas fa-tasks me-1"></i>{{ item.todo }}</div>
                             <div class="task-meta">
                                 <div><i class="far fa-id-card"></i> ID: {{ item.obj.card_id }}</div>
-                                <div><i class="fas fa-user-md"></i> 担当: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
+                                <div><i class="fas fa-user-md"></i> 担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
                             </div>
                         </a>
                     </div>
-                    {% empty %}<div class="text-center py-4 text-muted small">予定なし</div>{% endfor %}
+                    {% empty %}
+                    <div class="text-center py-4 text-muted small">予定なし</div>
+                    {% endfor %}
                 </div>
             </div>
         </div>
@@ -148,11 +149,13 @@
                             <div class="todo-badge"><i class="fas fa-ruler-combined me-1"></i>{{ item.todo }}</div>
                             <div class="task-meta">
                                 <div><i class="far fa-id-card"></i> ID: {{ item.obj.card_id }}</div>
-                                <div><i class="fas fa-user-md"></i> 担当: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
+                                <div><i class="fas fa-user-md"></i> 担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
                             </div>
                         </a>
                     </div>
-                    {% empty %}<div class="text-center py-4 text-muted small">予定なし</div>{% endfor %}
+                    {% empty %}
+                    <div class="text-center py-4 text-muted small">予定なし</div>
+                    {% endfor %}
                 </div>
             </div>
         </div>
@@ -175,11 +178,13 @@
                             <div class="todo-badge"><i class="fas fa-bolt me-1"></i>{{ item.todo }} ({{ item.note }})</div>
                             <div class="task-meta">
                                 <div><i class="far fa-id-card"></i> ID: {{ item.obj.card_id }}</div>
-                                <div><i class="fas fa-user-md"></i> 担当: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
+                                <div><i class="fas fa-user-md"></i> 担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
                             </div>
                         </a>
                     </div>
-                    {% empty %}<div class="text-center py-4 text-muted small">予定なし</div>{% endfor %}
+                    {% empty %}
+                    <div class="text-center py-4 text-muted small">予定なし</div>
+                    {% endfor %}
                 </div>
             </div>
         </div>
@@ -202,11 +207,13 @@
                             <div class="todo-badge text-danger border-danger"><i class="fas fa-exclamation me-1"></i>{{ item.todo }}</div>
                             <div class="task-meta">
                                 <div><i class="far fa-id-card"></i> ID: {{ item.obj.card_id }}</div>
-                                <div><i class="fas fa-user-md"></i> 担当: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
+                                <div><i class="fas fa-user-md"></i> 担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
                             </div>
                         </a>
                     </div>
-                    {% empty %}<div class="text-center py-4 text-muted small">予定なし</div>{% endfor %}
+                    {% empty %}
+                    <div class="text-center py-4 text-muted small">予定なし</div>
+                    {% endfor %}
                 </div>
             </div>
         </div>
@@ -229,15 +236,29 @@
                             <div class="todo-badge"><i class="fas fa-file-signature me-1"></i>{{ item.todo }}</div>
                             <div class="task-meta">
                                 <div><i class="far fa-id-card"></i> ID: {{ item.obj.card_id }}</div>
-                                <div><i class="fas fa-user-md"></i> 担当: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
+                                <div><i class="fas fa-user-md"></i> 担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
                             </div>
                         </a>
                     </div>
-                    {% empty %}<div class="text-center py-4 text-muted small">予定なし</div>{% endfor %}
+                    {% empty %}
+                    <div class="text-center py-4 text-muted small">予定なし</div>
+                    {% endfor %}
                 </div>
             </div>
         </div>
 
     </div>
+    
+    {% if user.is_superuser %}
+    <div class="mt-5 text-end pt-3 border-top">
+        <small class="text-muted me-2">管理者メニュー:</small>
+        <a href="{% url 'export_csv' %}" class="btn btn-sm btn-outline-secondary me-1">
+            <i class="fas fa-file-csv"></i> CSV出力
+        </a>
+        <a href="{% url 'download_db' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-database"></i> DBバックアップ
+        </a>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
