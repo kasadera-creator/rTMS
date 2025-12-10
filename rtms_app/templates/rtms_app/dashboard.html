@@ -40,7 +40,7 @@
 
 {% block content %}
 <div class="container py-4">
-    <!-- 日付ナビゲーション (レスポンシブ対応) -->
+    <!-- 日付ナビゲーション -->
     <div class="date-nav d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
         
         <!-- 左側: タイトルと日付操作 -->
@@ -54,7 +54,6 @@
                 
                 <!-- 日付表示 + カレンダーピッカー -->
                 <div class="d-inline-flex align-items-center bg-light px-3 py-1 rounded border position-relative date-picker-wrapper">
-                    <!-- 文字サイズ調整: モバイルfs-6, PC fs-5 -->
                     <span class="fw-bold fs-6 fs-md-5 me-2 text-nowrap" onclick="document.getElementById('datePicker').showPicker()">
                         {{ target_date_display }}
                     </span>
@@ -76,7 +75,7 @@
             </a>
         </div>
         
-        <!-- 右側: アクションボタン (スマホでは縦並び) -->
+        <!-- 右側: アクションボタン -->
         <div class="w-100 w-md-auto">
             <div class="d-grid gap-2 d-md-flex justify-content-md-end">
                 <a href="{% url 'patient_add' %}" class="btn btn-primary btn-sm fw-bold shadow-sm text-nowrap">
@@ -113,6 +112,7 @@
                     {% for item in task_group.list %}
                     <div class="list-group-item">
                         {% if task_group.title == "① 初診" %}
+                            <!-- ★修正: リンク先を patient_first_visit に変更 -->
                             <a href="{% url 'patient_first_visit' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
                         {% elif task_group.title == "② 入院" %}
                             <a href="{% url 'admission_procedure' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
@@ -146,6 +146,7 @@
                             <!-- 3. ID・担当医 (下) -->
                             <div class="task-meta">
                                 <span>ID: {{ item.obj.card_id }}</span>
+                                <!-- 担当医: 姓のみ表示 -->
                                 <span>担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
                             </div>
                         </a>
