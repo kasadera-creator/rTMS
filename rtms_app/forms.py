@@ -14,19 +14,26 @@ class PhysicianChoiceField(forms.ModelChoiceField):
         name = f"{obj.last_name} {obj.first_name}" if obj.last_name else obj.username
         return f"{name}"
 
-# --- 1. 新規登録フォーム ---
+# --- 1. 新規登録フォーム (修正) ---
 class PatientRegistrationForm(forms.ModelForm):
     class Meta:
         model = Patient
-        fields = ['card_id', 'name', 'birth_date']
+        # ★フィールドを追加
+        fields = ['card_id', 'name', 'birth_date', 'gender', 'referral_source', 'referral_doctor']
         widgets = {
             'card_id': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '例: 12345'}),
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '例: 笠寺 太郎'}),
             'birth_date': DateInput(attrs={'class': 'form-control'}),
+            'gender': forms.Select(attrs={'class': 'form-select'}),
+            # 紹介元はdatalistを使うためlist属性を追加
+            'referral_source': forms.TextInput(attrs={'class': 'form-control', 'list': 'referral-options', 'placeholder': '医療機関名 (任意)'}),
+            'referral_doctor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '医師名 (任意)'}),
         }
+        
     def clean_card_id(self):
         card_id = self.cleaned_data['card_id']
-        if Patient.objects.filter(card_id=card_id).exists(): raise forms.ValidationError("登録済み")
+        if Patient.objects.filter(card_id=card_id).exists(): 
+            raise forms.ValidationError("このカルテ番号は既に登録されています")
         return card_id
 
 # --- 2. 初診フォーム ---
@@ -36,8 +43,6 @@ class PatientFirstVisitForm(forms.ModelForm):
         label="担当医", required=False, widget=forms.Select(attrs={'class': 'form-select'})
     )
     
-    # ★修正: 保存エラー回避のため required=False に設定
-    # 実際の値は views.py でチェックボックスから構築して保存するため、フォームバリデーションではスルーさせる
     diagnosis = forms.CharField(widget=forms.HiddenInput(), required=False)
 
     class Meta:
@@ -73,7 +78,6 @@ class PatientFirstVisitForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # ★修正: 薬剤治療歴が空の場合、テンプレートをインスタンスにセットして表示させる
         default_medication_text = (
             "抗うつ薬：\n"
             "抗精神病薬：\n"

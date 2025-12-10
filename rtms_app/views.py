@@ -75,7 +75,6 @@ def dashboard_view(request):
     task_assessment = []
     task_discharge = []
     
-    # 入院時の評価 (治療前)
     for adm in task_admission:
         is_done = Assessment.objects.filter(patient=adm['obj'], date=target_date).exists()
         task_assessment.append({'obj': adm['obj'], 'status': "実施済" if is_done else "実施未", 'color': "success" if is_done else "danger", 'timing_code': 'baseline', 'todo': "治療前評価"})
@@ -84,7 +83,6 @@ def dashboard_view(request):
     for p in active_candidates:
         session_num = get_session_number(p.first_treatment_date, target_date)
         
-        # 30回目: 退院準備 & 終了評価
         if session_num == 30:
             task_discharge.append({'obj': p, 'status': "退院準備", 'color': "info", 'todo': "サマリー・紹介状作成"})
             is_assessed = Assessment.objects.filter(patient=p, date=target_date).exists()
@@ -93,12 +91,10 @@ def dashboard_view(request):
 
         if session_num <= 0 or session_num > 35: continue
         
-        # 治療
         today_session = TreatmentSession.objects.filter(patient=p, date__date=target_date).first()
         is_done = today_session is not None
         task_treatment.append({'obj': p, 'note': f"第{session_num}回", 'status': "実施済" if is_done else "実施未", 'color': "success" if is_done else "danger", 'session_num': session_num, 'todo': "rTMS治療"})
 
-        # 評価 (15回目) -> 中間評価（3週間）
         if session_num == 15:
             is_assessed = Assessment.objects.filter(patient=p, date=target_date).exists()
             task_assessment.append({'obj': p, 'status': "実施済" if is_assessed else "実施未", 'color': "success" if is_assessed else "danger", 'timing_code': 'week3', 'todo': "中間評価（3週間）"})
@@ -187,6 +183,7 @@ def patient_first_visit(request, patient_id):
             return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'dashboard')
     else:
         form = PatientFirstVisitForm(instance=patient)
+        
     return render(request, 'rtms_app/patient_first_visit.html', {
         'patient': patient, 'form': form, 'referral_options': referral_options, 
         'referral_map_json': json.dumps(referral_map_json, ensure_ascii=False),
@@ -314,13 +311,26 @@ def patient_summary_view(request, patient_id):
     else: summary_text = (f"{created_at_str}初診、{admission_date_str}任意入院。\n" f"入院時{fmt_score(score_admin)}、{start_date_str}から全{total_count}回のrTMS治療を実施した。\n" f"3週時、{fmt_score(score_w3)}、6週時、{fmt_score(score_w6)}となった。\n" f"治療中の合併症：{side_effects_summary}。\n" f"{end_date_str}退院。紹介元へ逆紹介、抗うつ薬の治療継続を依頼した。")
     return render(request, 'rtms_app/patient_summary.html', {'patient': patient, 'summary_text': summary_text, 'history_list': history_list, 'today': timezone.now().date(), 'test_scores': test_scores, 'dashboard_date': dashboard_date})
 
+# --- ★新規追加: 新規登録画面ビュー ---
 @login_required
 def patient_add_view(request):
+    # 紹介元病院のプルダウン用リストを作成
+    # 既存の患者データからユニークな医療機関名を取得
+    referral_options = Patient.objects.values_list('referral_source', flat=True).distinct()
+    referral_options = [r for r in referral_options if r] # 空文字を除去
+
     if request.method == 'POST':
         form = PatientRegistrationForm(request.POST)
-        if form.is_valid(): form.save(); return redirect('dashboard')
-    else: form = PatientRegistrationForm()
-    return render(request, 'rtms_app/patient_add.html', {'form': form})
+        if form.is_valid(): 
+            form.save()
+            return redirect('dashboard')
+    else: 
+        form = PatientRegistrationForm()
+    
+    return render(request, 'rtms_app/patient_add.html', {
+        'form': form,
+        'referral_options': referral_options # テンプレートへ渡す
+    })
 
 @login_required
 def export_treatment_csv(request):

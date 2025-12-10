@@ -1,31 +1,78 @@
 {% extends "rtms_app/base.html" %}
+
 {% block extrastyle %}
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+    /* 必要に応じてスタイルを追加 */
+</style>
 {% endblock %}
 
 {% block content %}
 <div class="container py-5">
-    <div class="card col-md-8 mx-auto shadow-sm">
-        <div class="card-header bg-primary text-white">
-            <h4 class="mb-0">新規患者登録</h4>
-        </div>
-        <div class="card-body p-4">
-            <form method="post">
-                {% csrf_token %}
-                {% for field in form %}
-                <div class="mb-3">
-                    <label class="form-label fw-bold">{{ field.label }}</label>
-                    {{ field }}
-                    {% if field.errors %}
-                    <div class="text-danger small">{{ field.errors }}</div>
-                    {% endif %}
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow border-0">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0 fw-bold"><i class="fas fa-user-plus me-2"></i>新規患者登録</h4>
                 </div>
-                {% endfor %}
-                <div class="text-center mt-4">
-                    <button type="submit" class="btn btn-primary px-5">登録する</button>
-                    <a href="{% url 'dashboard' %}" class="btn btn-link text-secondary">キャンセル</a>
+                <div class="card-body p-4">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        {% if form.errors %}
+                        <div class="alert alert-danger">
+                            <strong>入力エラーがあります:</strong>
+                            {{ form.errors }}
+                        </div>
+                        {% endif %}
+
+                        <div class="row g-3">
+                            <!-- 基本情報 -->
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">カルテID <span class="badge bg-danger">必須</span></label>
+                                {{ form.card_id }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">氏名 <span class="badge bg-danger">必須</span></label>
+                                {{ form.name }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">生年月日 <span class="badge bg-danger">必須</span></label>
+                                {{ form.birth_date }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">性別</label>
+                                {{ form.gender }}
+                            </div>
+
+                            <div class="col-12"><hr class="my-3"></div>
+
+                            <!-- 紹介情報 (任意) -->
+                            <h6 class="text-secondary mb-3"><i class="fas fa-hospital me-1"></i> 紹介情報 (任意)</h6>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">紹介元医療機関</label>
+                                {{ form.referral_source }}
+                                <!-- datalistで候補を表示 -->
+                                <datalist id="referral-options">
+                                    {% for opt in referral_options %}
+                                        <option value="{{ opt }}">
+                                    {% endfor %}
+                                </datalist>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">紹介医</label>
+                                {{ form.referral_doctor }}
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 mt-5 d-md-flex justify-content-md-end">
+                            <a href="{% url 'dashboard' %}" class="btn btn-secondary me-md-2 px-4">キャンセル</a>
+                            <button type="submit" class="btn btn-primary px-5 fw-bold">
+                                <i class="fas fa-check me-1"></i> 登録する
+                            </button>
+                        </div>
+                    </form>
                 </div>
-            </form>
+            </div>
         </div>
     </div>
 </div>

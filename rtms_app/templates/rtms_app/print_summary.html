@@ -21,7 +21,6 @@
         body { background-color: white; margin: 0; }
         .page-container { width: 100%; margin: 0; padding: 15mm 20mm; box-shadow: none; border: none; }
         .no-print { display: none !important; }
-        /* URL印字の抑制 */
         a[href]:after { content: none !important; }
     }
 
@@ -41,10 +40,8 @@
 
     .content-section { margin-bottom: 15px; }
     .section-label { font-weight: bold; border-left: 4px solid #555; padding-left: 8px; margin-bottom: 6px; background-color: #eee; font-size: 10.5pt; }
-    /* 行間と文字サイズを少し詰める */
     .text-content { font-size: 10pt; line-height: 1.5; white-space: pre-wrap; text-align: justify; }
 
-    /* スコアテーブル印刷用 */
     .print-score-table { width: 70%; margin-top: 8px; border-collapse: collapse; font-size: 9.5pt; }
     .print-score-table th, .print-score-table td { border: 1px solid #000; padding: 3px; text-align: center; }
     .print-score-table th { background-color: #f0f0f0 !important; -webkit-print-color-adjust: exact; }
@@ -77,12 +74,7 @@
             <div class="referral-to">
                 {{ patient.referral_source|default:"紹介元医療機関" }} <br>
                 <span style="margin-left: 1em;">
-                    {% if patient.referral_doctor %}
-                        {{ patient.referral_doctor }} 先生
-                    {% else %}
-                        担当医 先生
-                    {% endif %}
-                    御机下
+                    {% if patient.referral_doctor %}{{ patient.referral_doctor }} 先生{% else %}担当医 先生{% endif %} 御机下
                 </span>
             </div>
             <div class="referral-from">
@@ -90,7 +82,6 @@
                 <div style="font-weight: bold; font-size: 11pt; margin: 3px 0;">笠寺精治寮病院</div>
                 <div>〒457-0051 愛知県名古屋市南区笠寺町柚ノ木３</div>
                 <div>TEL: 052-821-9221</div>
-                <!-- 担当医: フルネーム -->
                 <div style="margin-top: 8px;">担当医: {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}</div>
             </div>
         </div>
@@ -101,7 +92,6 @@
         <div class="summary-header">
             <div>作成日: {{ today|date:"Y年n月j日" }}</div>
             <div>笠寺精治寮病院</div>
-            <!-- 担当医: フルネーム -->
             <div>担当医: {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}</div>
         </div>
         <h1 class="doc-title">退院時サマリー</h1>
@@ -125,7 +115,13 @@
         <tr>
             <th>入院期間</th>
             <td colspan="3">
-                {{ patient.admission_date|date:"Y/n/j" }} 〜 {{ today|date:"Y/n/j" }}
+                {{ patient.admission_date|date:"Y/n/j" }} 〜 
+                <!-- ★修正: 退院日があれば退院日を、なければ今日を表示 -->
+                {% if patient.discharge_date %}
+                    {{ patient.discharge_date|date:"Y/n/j" }} (退院)
+                {% else %}
+                    {{ today|date:"Y/n/j" }} (入院中)
+                {% endif %}
             </td>
         </tr>
     </table>
@@ -141,7 +137,6 @@
 
         <div class="section-label">入院経過・治療結果</div>
         <div class="text-content" style="min-height: 200px; margin-bottom: 15px;">
-            <!-- 保存されたサマリーテキストを表示 -->
             {{ patient.summary_text|linebreaksbr }}
         </div>
 
@@ -169,7 +164,7 @@
         {% endif %}
     </div>
     
-    <!-- 退院時処方 (入院時薬ではなくこちらを表示) -->
+    <!-- 退院時処方 -->
     <div class="content-section">
         <div class="section-label">退院時処方</div>
         <div class="text-content">
