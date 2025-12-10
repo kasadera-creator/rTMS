@@ -25,6 +25,7 @@ class Patient(models.Model):
     
     summary_text = models.TextField("サマリー本文", blank=True)
     discharge_prescription = models.TextField("退院時処方", blank=True)
+    discharge_date = models.DateField("退院日", null=True, blank=True) # ★新規追加
 
     mapping_notes = models.TextField("位置決め記録メモ", blank=True)
     
@@ -44,7 +45,6 @@ class Patient(models.Model):
         return today.year - self.birth_date.year - ((today.month, today.day) < (self.birth_date.month, self.birth_date.day))
 
 class MappingSession(models.Model):
-    # ★修正: 第1週〜第6週までに拡張
     WEEK_CHOICES = [
         (1, '第1週'), (2, '第2週'), (3, '第3週'), 
         (4, '第4週'), (5, '第5週'), (6, '第6週'), 
@@ -70,24 +70,19 @@ class TreatmentSession(models.Model):
     performer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
 
 class Assessment(models.Model):
-    # ★追加: 時期の日本語表示用定義
     TIMING_CHOICES = [
         ('baseline', '治療前 (Base)'),
         ('week3', '3週目'),
         ('week6', '6週目'),
         ('other', 'その他'),
     ]
-    
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE)
     date = models.DateField("日", default=timezone.now)
     type = models.CharField("種別", max_length=20, default='HAM-D')
     scores = models.JSONField("スコア", default=dict)
     total_score_21 = models.IntegerField("合計21", default=0)
     total_score_17 = models.IntegerField("合計17", default=0)
-    
-    # ★修正: choicesを追加
     timing = models.CharField("時期", max_length=20, choices=TIMING_CHOICES, default='other')
-    
     note = models.TextField("特記", blank=True)
     
     def calculate_scores(self):
