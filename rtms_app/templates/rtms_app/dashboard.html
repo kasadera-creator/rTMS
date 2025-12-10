@@ -21,7 +21,7 @@
         .list-group-item:hover { background-color: #f8f9fa; }
         .list-group-item a { text-decoration: none; color: inherit; display: block; }
         .status-badge { font-size: 0.75rem; padding: 5px 10px; border-radius: 20px; min-width: 70px; text-align: center; display: inline-block; }
-        .status-success, .status-done, .status-手続済, .status-実施済 { background-color: #e6f9ed; color: #198754; border: 1px solid #c3e6cb; }
+        .status-success, .status-done, .status-手続済, .status-実施済, .status-登録済 { background-color: #e6f9ed; color: #198754; border: 1px solid #c3e6cb; }
         .status-warning, .status-要対応, .status-要手続 { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
         .status-danger, .status-実施未 { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         .status-info, .status-退院準備 { background-color: #cff4fc; color: #055160; border: 1px solid #b6effb; }
@@ -29,55 +29,30 @@
     </style>
 </head>
 <body>
-
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top shadow-sm">
     <div class="container-fluid px-4">
-        <a class="navbar-brand" href="#">
-            <i class="fas fa-hospital-alt me-2"></i>笠寺精治寮病院 rTMSダッシュボード
-        </a>
-        
+        <a class="navbar-brand" href="#"><i class="fas fa-hospital-alt me-2"></i>笠寺精治寮病院 rTMSダッシュボード</a>
         <div class="d-flex align-items-center">
-            <span class="text-white me-3 small">
-                <i class="fas fa-user me-1"></i> 
-                {% if user.last_name %}{{ user.last_name }} {{ user.first_name }}{% else %}{{ user.username }}{% endif %}
-            </span>
-            
+            <span class="text-white me-3 small"><i class="fas fa-user me-1"></i> {% if user.last_name %}{{ user.last_name }} {{ user.first_name }}{% else %}{{ user.username }}{% endif %}</span>
             {% if user.is_superuser %}
-            <a href="/admin/" class="btn btn-sm btn-outline-light me-2">
-                <i class="fas fa-cog"></i> 設定
-            </a>
+            <a href="/admin/" class="btn btn-sm btn-outline-light me-2"><i class="fas fa-cog"></i> 設定</a>
             {% endif %}
-            
-            <a href="/admin/logout/" class="btn btn-sm btn-secondary">
-                <i class="fas fa-sign-out-alt"></i>
-            </a>
+            <a href="/admin/logout/" class="btn btn-sm btn-secondary"><i class="fas fa-sign-out-alt"></i></a>
         </div>
     </div>
 </nav>
-
 <div class="container py-4">
-
     <div class="date-nav d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center">
-            <a href="?date={{ prev_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm me-2">
-                <i class="fas fa-chevron-left"></i> 前日
-            </a>
-            <input type="date" class="form-control form-control-sm d-inline-block w-auto border-0 bg-light fw-bold" 
-                   value="{{ today|date:'Y-m-d' }}" onchange="location.href='?date='+this.value">
-            <a href="?date={{ next_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm ms-2">
-                翌日 <i class="fas fa-chevron-right"></i>
-            </a>
+            <a href="?date={{ prev_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm me-2"><i class="fas fa-chevron-left"></i> 前日</a>
+            <input type="date" class="form-control form-control-sm d-inline-block w-auto border-0 bg-light fw-bold" value="{{ today|date:'Y-m-d' }}" onchange="location.href='?date='+this.value">
+            <a href="?date={{ next_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm ms-2">翌日 <i class="fas fa-chevron-right"></i></a>
         </div>
-        
         <div>
-            <a href="{% url 'patient_list' %}" class="btn btn-outline-primary btn-sm fw-bold">
-                <i class="fas fa-users me-1"></i> 患者一覧・検索
-            </a>
+            <a href="{% url 'patient_list' %}" class="btn btn-outline-primary btn-sm fw-bold"><i class="fas fa-users me-1"></i> 患者一覧・検索</a>
         </div>
     </div>
-
     <div class="row g-4">
-        
         <div class="col-md-6 col-lg-3">
             <div class="card-task h-100 bg-white">
                 <div class="task-header bg-gradient-blue">
@@ -85,9 +60,7 @@
                     <span class="badge bg-white text-primary rounded-pill">{{ new_patients|length|add:admissions|length }}</span>
                 </div>
                 <div class="p-2 border-bottom text-center bg-light">
-                    <a href="{% url 'patient_add' %}" class="btn btn-primary btn-sm w-100 shadow-sm fw-bold">
-                        <i class="fas fa-plus-circle"></i> 新規患者登録
-                    </a>
+                    <a href="{% url 'patient_add' %}" class="btn btn-primary btn-sm w-100 shadow-sm fw-bold"><i class="fas fa-plus-circle"></i> 新規患者登録</a>
                 </div>
                 <div class="list-group list-group-flush">
                     {% for item in new_patients %}
@@ -101,7 +74,6 @@
                         </a>
                     </div>
                     {% endfor %}
-                    
                     {% for item in admissions %}
                     <div class="list-group-item">
                         <a href="{% url 'admission_procedure' item.obj.id %}">
@@ -113,14 +85,12 @@
                         </a>
                     </div>
                     {% endfor %}
-                    
                     {% if not new_patients and not admissions %}
                     <div class="text-center py-5 text-muted small">予定なし</div>
                     {% endif %}
                 </div>
             </div>
         </div>
-
         <div class="col-md-6 col-lg-3">
             <div class="card-task h-100 bg-white">
                 <div class="task-header bg-gradient-orange">
@@ -144,7 +114,6 @@
                 </div>
             </div>
         </div>
-
         <div class="col-md-6 col-lg-3">
             <div class="card-task h-100 bg-white">
                 <div class="task-header bg-gradient-green">
@@ -162,17 +131,13 @@
                             <div class="d-flex justify-content-between align-items-center mt-1">
                                 <small class="text-muted fw-bold">{{ item.note }}</small>
                                 {% if item.is_discharge %}
-                                    <span class="badge bg-info text-dark">
-                                        <i class="fas fa-flag-checkered"></i> 退院準備
-                                    </span>
+                                    <span class="badge bg-info text-dark"><i class="fas fa-flag-checkered"></i> 退院準備</span>
                                 {% endif %}
                             </div>
                         </a>
                         {% if item.is_discharge %}
                         <div class="mt-2 text-center">
-                            <a href="{% url 'patient_summary' item.obj.id %}" class="btn btn-outline-info btn-sm w-100">
-                                サマリー作成へ
-                            </a>
+                            <a href="{% url 'patient_summary' item.obj.id %}" class="btn btn-outline-info btn-sm w-100">サマリー作成へ</a>
                         </div>
                         {% endif %}
                     </div>
@@ -182,7 +147,6 @@
                 </div>
             </div>
         </div>
-
         <div class="col-md-6 col-lg-3">
             <div class="card-task h-100 bg-white">
                 <div class="task-header bg-gradient-red">
@@ -206,18 +170,15 @@
                 </div>
             </div>
         </div>
-
     </div>
-    
-    {% if user.is_staff %}
+    {% if user.is_superuser %}
     <div class="mt-5 text-end pt-3 border-top">
         <small class="text-muted me-2">管理者メニュー:</small>
-        <a href="{% url 'export_csv' %}" class="btn btn-sm btn-outline-secondary me-1">CSV</a>
-        <a href="{% url 'download_db' %}" class="btn btn-sm btn-outline-secondary">DBバックアップ</a>
+        <a href="{% url 'export_csv' %}" class="btn btn-sm btn-outline-secondary me-1"><i class="fas fa-file-csv"></i> CSV出力</a>
+        <a href="{% url 'download_db' %}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-database"></i> DBバックアップ</a>
     </div>
     {% endif %}
 </div>
-
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
