@@ -24,7 +24,6 @@
             <a href="{% url 'patient_print_preview' patient.id %}" target="_blank" class="btn btn-outline-primary">
                 <i class="fas fa-print"></i> プレビュー
             </a>
-            <!-- 日付維持の戻るボタン -->
             <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary">戻る</a>
         </div>
     </div>
@@ -32,7 +31,6 @@
     <form method="post" id="mainForm">
         {% csrf_token %}
         
-        <!-- (中略: 入力フォーム部分は変更なし) -->
         {% if form.errors %}
         <div class="alert alert-danger">
             <strong>保存できませんでした。以下の項目を確認してください:</strong>
@@ -56,6 +54,7 @@
                         </div>
                         <div class="col-md-6">
                             <div class="input-group"><span class="input-group-text bg-light">医師名</span>{{ form.referral_doctor }}<span class="input-group-text bg-light">先生</span></div>
+                            <datalist id="doctor-options"></datalist>
                         </div>
                     </div>
                 </div>
@@ -106,8 +105,7 @@
             <h5 class="section-title">rTMS 適正に関する質問票</h5>
             <p class="text-muted small">※患者様への聴取結果を入力してください。</p>
             <table class="q-table">
-                <!-- (質問票テーブル部分は長いので省略しますが、元のままでOKです) -->
-                <!-- 必要であればここも貼り付けますが、変更はないため割愛します -->
+                <!-- (質問票テーブル) -->
                 <thead class="table-light"><tr><th style="text-align: left;">質問項目</th><th width="80" class="text-center">はい</th><th width="80" class="text-center">いいえ</th></tr></thead>
                 <tbody>
                     <tr class="q-header-row"><td colspan="3">これまでに、以下のことがありましたか？</td></tr>
@@ -135,7 +133,6 @@
             <input type="hidden" name="questionnaire_data" id="questionnaire_json">
         </div>
 
-        <!-- 以前の固定フッターは削除し、右下のフローティングボタンへ移行 -->
         <div style="height: 50px;"></div>
         
         <!-- 右下固定ボタン -->
@@ -153,6 +150,32 @@
 
 {% block scripts %}
 <script>
+    // 紹介元・紹介医の連携ロジック
+    const referralMap = JSON.parse('{{ referral_map_json|safe }}');
+    const sourceInput = document.querySelector('input[name="referral_source"]');
+    const doctorInput = document.querySelector('input[name="referral_doctor"]');
+    const doctorDatalist = document.getElementById('doctor-options');
+
+    function updateDoctorOptions() {
+        const selectedSource = sourceInput.value;
+        doctorDatalist.innerHTML = ''; // クリア
+        
+        if (referralMap[selectedSource]) {
+            referralMap[selectedSource].forEach(docName => {
+                const option = document.createElement('option');
+                option.value = docName;
+                doctorDatalist.appendChild(option);
+            });
+        }
+    }
+
+    sourceInput.addEventListener('input', updateDoctorOptions);
+    sourceInput.addEventListener('change', updateDoctorOptions);
+    
+    // 医師名入力欄にリスト紐付け
+    doctorInput.setAttribute('list', 'doctor-options');
+
+
     // 質問票のJSON化処理
     document.getElementById('mainForm').addEventListener('submit', function(e) {
         const data = {}; 
@@ -196,6 +219,9 @@
                 }
             } catch(e) { console.error("JSON Parse Error", e); }
         }
+        
+        // 初期ロード時にも医師リスト更新
+        updateDoctorOptions();
     });
 </script>
 {% endblock %}

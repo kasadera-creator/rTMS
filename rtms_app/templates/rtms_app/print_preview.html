@@ -64,13 +64,18 @@
     
     .q-section-title { font-size: 12pt; font-weight: bold; margin-top: 20px; margin-bottom: 10px; border-bottom: 1px solid #000; display: inline-block; }
     
+    /* 質問票テーブル調整 */
     .q-form-table { width: 100%; border-collapse: collapse; font-size: 11pt; }
-    .q-form-table td { padding: 6px 0; border-bottom: 1px dotted #ccc; vertical-align: bottom; }
-    .q-check-col { width: 70px; white-space: nowrap; }
-    .q-text-col { padding-left: 10px; }
+    .q-form-table td { padding: 8px 0; border-bottom: 1px dotted #ccc; vertical-align: middle; }
+    
+    /* チェックボックス列: 少し余裕を持たせる */
+    .q-check-col { width: 80px; white-space: nowrap; font-weight: bold; }
+    
+    /* 質問文列: 左側に大きな余白を入れて右側に寄せる */
+    .q-text-col { padding-left: 40px; text-align: left; }
     
     /* チェックボックスの見た目（文字で再現） */
-    .cb-mark { font-family: "Arial", sans-serif; font-size: 13pt; display: inline-block; width: 1.2em; }
+    .cb-mark { font-family: "Arial", sans-serif; font-size: 14pt; display: inline-block; width: 1.2em; vertical-align: -2px; }
     
     .q-details-box { 
         border: 1px solid #000; 
@@ -130,16 +135,15 @@
             <div class="basic-info-item"><label>生年月日:</label> {{ patient.birth_date|date:"Y年n月j日" }} ({{ patient.age }}歳)</div>
             <div class="basic-info-item"><label>性別:</label> {{ patient.get_gender_display }}</div>
             <div class="basic-info-item"><label>紹介元:</label> {{ patient.referral_source|default:"-" }}</div>
-            <div class="basic-info-item"><label>初診担当医:</label> {{ request.user.last_name }} {{ request.user.first_name }}</div>
+            <!-- 初診担当医: last_nameのみ -->
+            <div class="basic-info-item"><label>初診担当医:</label> {{ request.user.last_name }}</div>
         </div>
 
         <table class="summary-table">
-            <!-- 要望: 病名を一番上に -->
             <tr>
                 <th>診断名</th>
                 <td>{{ patient.diagnosis }}</td>
             </tr>
-            <!-- 要望: 主訴を近づける -->
             <tr>
                 <th>主訴</th>
                 <td>{{ patient.chief_complaint|default:"-" }}</td>
@@ -167,7 +171,7 @@
             <div style="margin-bottom: 10px;">
                 <strong>主治医（担当医）：</strong> 
                 {% if patient.attending_physician %}
-                    {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}
+                    {{ patient.attending_physician.last_name }}
                 {% else %}
                     <span style="color: #999;">（未定）</span>
                 {% endif %}
@@ -184,7 +188,6 @@
                     <td>{{ patient.admission_date|default:"-" }}</td>
                     <td>{{ patient.mapping_date|default:"-" }}</td>
                     <td>{{ patient.first_treatment_date|default:"-" }}</td>
-                    <!-- 注意: end_date_est は viewから渡されている必要があります。なければ空白 -->
                     <td>{{ end_date_est|date:"Y-m-d"|default:"-" }}</td>
                 </tr>
             </table>
@@ -211,7 +214,6 @@
 
         <div class="q-section-title">これまでに、以下のことがありましたか？</div>
         <table class="q-form-table">
-            <!-- 行ヘルパー: q_val が 'はい' なら左にチェック、それ以外は右にチェック -->
             <tr>
                 <td class="q-check-col"><span class="cb-mark">{% if q.q_past_rtms == 'はい' %}☑{% else %}□{% endif %}</span> はい</td>
                 <td class="q-check-col"><span class="cb-mark">{% if q.q_past_rtms == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td>
@@ -324,7 +326,7 @@
                 <div class="signature-label">担当医署名：</div>
                 <div class="signature-line">
                     <!-- 入力された担当医名を表示 -->
-                    <span style="font-size: 14pt; padding-left: 10px;">{{ request.user.last_name }} {{ request.user.first_name }}</span>
+                    <span style="font-size: 14pt; padding-left: 10px;">{{ request.user.last_name }}</span>
                 </div>
                 <div class="date-line">（日付：　　　　年　　月　　日）</div>
             </div>
