@@ -100,13 +100,13 @@
                             </div>
                         </div>
 
+                        <!-- 修正: 認知症入力欄を統合 -->
                         <div class="col-md-8">
                             <div class="d-flex align-items-center">
                                 <div class="form-check me-2">
                                     <input class="form-check-input" type="checkbox" name="diag_list" value="認知症" id="d_dementia">
-                                    <label class="form-check-label" for="d_dementia" style="white-space: nowrap;">認知症</label>
+                                    <label class="form-check-label" for="d_dementia" style="white-space: nowrap;">認知症（詳細は下記へ）</label>
                                 </div>
-                                <input type="text" name="dementia_detail" class="form-control form-control-sm" placeholder="詳細（アルツハイマー型、レビー小体型など）">
                             </div>
                         </div>
 
@@ -118,8 +118,8 @@
                         </div>
 
                         <div class="col-12 mt-2">
-                            <label class="small text-muted">その他の診断名</label>
-                            <input type="text" name="diag_other" class="form-control form-control-sm" placeholder="上記以外にある場合に入力">
+                            <label class="small text-muted fw-bold">詳細・その他の診断名 (認知症の型などもこちらへ)</label>
+                            <input type="text" name="diag_other" class="form-control form-control-sm" placeholder="例: アルツハイマー型認知症、レビー小体型認知症など">
                         </div>
                     </div>
                 </div>
@@ -201,10 +201,6 @@
         document.querySelectorAll('input[type="radio"]:checked').forEach(r => { data[r.name] = r.value; });
         data['q_details'] = document.querySelector('textarea[name="q_details"]').value;
         document.getElementById('questionnaire_json').value = JSON.stringify(data);
-
-        // 2. 認知症詳細の結合処理 (dementia_detailの内容を diag_other に追記するなど)
-        // 今回は単純にdiag_listのチェック状態とdiag_otherをそのまま送信します。
-        // ※もし「認知症(アルツハイマー型)」のように一つの文字列にして保存したい場合はここで加工します。
     });
     
     // データ復元処理
@@ -216,9 +212,11 @@
             diags.forEach(d => {
                 const el = document.querySelector(`input[name="diag_list"][value="${d}"]`);
                 if(el) el.checked = true;
-                // その他入力欄の復元
-                if(d.startsWith("その他(")) {
-                    document.querySelector('input[name="diag_other"]').value = d.replace("その他(", "").replace(")", "");
+                
+                // 修正: 正規表現で「その他(...)」を検出して復元
+                const otherMatch = d.match(/^その他\((.+)\)$/);
+                if (otherMatch && otherMatch[1]) {
+                    document.querySelector('input[name="diag_other"]').value = otherMatch[1];
                 }
             });
         }

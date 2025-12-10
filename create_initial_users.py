@@ -20,23 +20,24 @@ def create_initial_data():
         Group.objects.get_or_create(name=name)
 
     # ---------------------------------------------------------
-    # 2. ユーザーの作成
+    # 2. ユーザーの作成 (姓名を分離・先生なし)
     # ---------------------------------------------------------
+    # フォーマット: (username, password, last_name, first_name, is_staff, is_superuser, group_name)
+    # ※実在する先生のお名前に書き換えてください。ここでは仮の名を使用しています。
     users_data = [
-        ('admin', 'adminpassword123', '管理者', '', True, True, '管理者'),
-        ('mori', 'password!', '森', '先生', True, False, '医師'),
-        ('kiya', 'password!', '木谷', '先生', True, False, '医師'),
-        ('furukawa', 'password!', '古川', '先生', True, False, '医師'),
-        ('iwata', 'password!', '岩田', '先生', True, False, '医師'),
-        ('nurse', 'password!', '看護師', 'スタッフ', True, False, '看護師'),
+        ('admin', 'adminpassword123', '管理者', '太郎', True, True, '管理者'),
+        ('mori', 'password!', '森', '◯◯', True, False, '医師'),      # 仮名
+        ('kiya', 'password!', '木谷', '◯◯', True, False, '医師'),    # 仮名
+        ('furukawa', 'password!', '古川', '◯◯', True, False, '医師'), # 仮名
+        ('iwata', 'password!', '岩田', '◯◯', True, False, '医師'),    # 仮名
+        ('nurse', 'password!', '看護', '◯◯', True, False, '看護師'),
     ]
 
     print("\n--- Creating Users ---")
     for username, password, lname, fname, is_staff, is_superuser, group_name in users_data:
+        # 既存ユーザーがいれば情報を更新、なければ作成
         user, created = User.objects.get_or_create(username=username)
-        if created:
-            user.set_password(password)
-        
+        user.set_password(password)
         user.email = f"{username}@example.com"
         user.last_name = lname
         user.first_name = fname
@@ -47,9 +48,11 @@ def create_initial_data():
         if group_name:
             group = Group.objects.get(name=group_name)
             user.groups.add(group)
+        
+        print(f"User: {lname} {fname} ({username}) - Updated/Created")
 
     # ---------------------------------------------------------
-    # 3. デフォルト患者の作成 (★新規追加)
+    # 3. デフォルト患者の作成
     # ---------------------------------------------------------
     print("\n--- Creating Dummy Patient ---")
     
@@ -82,12 +85,15 @@ def create_initial_data():
     )
 
     if created:
-        # 初診日(created_at)を指定日に強制変更 (auto_now_add=Trueのため後からupdateが必要)
+        # 初診日(created_at)を指定日に強制変更
         target_date = datetime(2025, 12, 10, 10, 0, 0, tzinfo=timezone.get_current_timezone())
         Patient.objects.filter(pk=patient.pk).update(created_at=target_date)
-        print(f"Created patient: {patient.name} (Doctor: {doctor_iwata.last_name})")
+        print(f"Created patient: {patient.name}")
     else:
-        print(f"Patient already exists: {patient.name}")
+        # 既存患者の担当医を更新（ユーザー再作成でIDが変わる可能性があるため）
+        patient.attending_physician = doctor_iwata
+        patient.save()
+        print(f"Patient updated: {patient.name}")
 
 if __name__ == "__main__":
     create_initial_data()

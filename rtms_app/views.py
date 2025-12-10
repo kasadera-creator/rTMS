@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from datetime import timedelta
-import datetime # ★ここを追加（エラーの修正）
+import datetime
 from django.http import HttpResponse, FileResponse
 from django.conf import settings
 from django.contrib.auth import logout
@@ -42,8 +42,10 @@ def get_completion_date(start_date):
 @login_required
 def dashboard_view(request):
     jst_now = timezone.localtime(timezone.now())
+    # URLパラメータに日付がない場合、今日の日付でリダイレクト
     if 'date' not in request.GET:
         return redirect(f'{request.path}?date={jst_now.strftime("%Y-%m-%d")}')
+    
     try: target_date = parse_date(request.GET.get('date'))
     except: target_date = jst_now.date()
     if not target_date: target_date = jst_now.date()
@@ -51,47 +53,58 @@ def dashboard_view(request):
     prev_day = target_date - timedelta(days=1)
     next_day = target_date + timedelta(days=1)
 
+    # 1. 新規登録（初診）
     new_patients = [{'obj': p, 'status': "登録済"} for p in Patient.objects.filter(created_at__date=target_date)]
 
+    # 2. 入院予定
     admissions = []
     for p in Patient.objects.filter(admission_date=target_date):
         status = "手続済" if p.is_admission_procedure_done else "要手続"
         color = "success" if p.is_admission_procedure_done else "warning"
         admissions.append({'obj': p, 'status': status, 'color': color})
 
+    # 3. 位置決め (Mapping)
+    # mapping_date が target_date と一致する患者を表示
     mappings = []
     for p in Patient.objects.filter(mapping_date=target_date):
         is_done = MappingSession.objects.filter(patient=p, date=target_date).exists()
-        mappings.append({'obj': p, 'status': "実施済" if is_done else "実施未", 'color': "success" if is_done else "danger"})
+        mappings.append({
+            'obj': p, 
+            'status': "実施済" if is_done else "実施未", 
+            'color': "success" if is_done else "danger"
+        })
 
+    # 4. 治療実施 & 5. 評価
     treatments = []
     assessments_due = []
     
+    # 入院時評価のチェック
     for adm in admissions:
         is_done = Assessment.objects.filter(patient=adm['obj'], date=target_date).exists()
         assessments_due.append({'obj': adm['obj'], 'reason': "入院時評価 (治療前)", 'status': "実施済" if is_done else "実施未", 'color': "success" if is_done else "danger", 'timing_code': 'baseline'})
 
+    # 治療進行中の患者をチェック
     active_candidates = Patient.objects.filter(first_treatment_date__isnull=False).order_by('card_id')
     for p in active_candidates:
         session_num = get_session_number(p.first_treatment_date, target_date)
         
-        # 30回目は「治療」タブには出さず、「状態評価・退院準備」タブに出す
+        # 終了・評価タイミング
         if session_num == 30:
             assessments_due.append({
                 'obj': p, 'reason': "退院準備・サマリー作成", 
                 'status': "退院準備", 'color': "info", 'is_discharge': True
             })
-            # 30回目の評価も必要
             is_assessed = Assessment.objects.filter(patient=p, date=target_date).exists()
             assessments_due.append({
                 'obj': p, 'reason': "終了時評価 (30回)", 
                 'status': "実施済" if is_assessed else "実施未", 
                 'color': "success" if is_assessed else "danger", 'timing_code': 'week6'
             })
-            continue # 治療タブには追加しない
+            continue 
 
         if session_num <= 0 or session_num > 35: continue
         
+        # 治療リストへの追加
         today_session = TreatmentSession.objects.filter(patient=p, date__date=target_date).first()
         is_done = today_session is not None
         
@@ -159,14 +172,21 @@ def patient_first_visit(request, patient_id):
         form = PatientFirstVisitForm(request.POST, instance=patient)
         if form.is_valid():
             p = form.save(commit=False)
-            diag_list = request.POST.getlist('diag_list')
-            diag_other = request.POST.get('diag_other', '').strip()
-            # 診断名の保存処理 (リスト結合)
-            # 既存のロジックに合わせて実装
+            
+            # --- 診断名の処理修正 ---
+            diag_list = request.POST.getlist('diag_list') # チェックされた項目のリスト
+            diag_other = request.POST.get('diag_other', '').strip() # 自由記述欄
+            
+            # リストを結合
             full_diagnosis = ", ".join(diag_list)
+            
+            # 自由記述がある場合、「その他(内容)」として結合
             if diag_other: 
-                if full_diagnosis: full_diagnosis += f", その他({diag_other})"
-                else: full_diagnosis = f"その他({diag_other})"
+                if full_diagnosis: 
+                    full_diagnosis += f", その他({diag_other})"
+                else: 
+                    full_diagnosis = f"その他({diag_other})"
+            
             p.diagnosis = full_diagnosis
             p.save()
             return redirect('dashboard')

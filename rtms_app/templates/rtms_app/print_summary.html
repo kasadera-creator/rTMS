@@ -54,6 +54,7 @@
 {% endblock %}
 
 {% block content %}
+<!-- 印刷操作バー -->
 <div class="container-fluid no-print bg-dark text-white p-2 fixed-top">
     <div class="container d-flex justify-content-between align-items-center">
         <span>
@@ -69,7 +70,9 @@
 
 <div class="page-container">
     
+    <!-- 1. ヘッダー部分（モードにより切り替え） -->
     {% if mode == 'referral' %}
+        <!-- 紹介状モード -->
         <div class="referral-header">
             <div class="referral-to">
                 {{ patient.referral_source|default:"紹介元医療機関" }}  御机下
@@ -79,22 +82,26 @@
                 <div style="font-weight: bold; font-size: 12pt; margin: 5px 0;">笠寺精治寮病院</div>
                 <div>〒457-0051 愛知県名古屋市南区笠寺町柚ノ木３</div>
                 <div>TEL: 052-821-9221</div>
-                <div style="margin-top: 10px;">担当医: {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}</div>
+                <!-- 担当医: 印刷用なので last_name のみ (先生を除去) -->
+                <div style="margin-top: 10px;">担当医: {{ patient.attending_physician.last_name }}</div>
             </div>
         </div>
         <h1 class="doc-title">診療情報提供書</h1>
         <p class="mb-4">いつも大変お世話になっております。<br>下記患者様につきまして、当院でのrTMS治療経過をご報告申し上げます。</p>
 
     {% else %}
+        <!-- サマリーモード -->
         <div class="summary-header">
             <div>作成日: {{ today|date:"Y年n月j日" }}</div>
             <div>笠寺精治寮病院</div>
-            <div>担当医: {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}</div>
+            <!-- 担当医: 印刷用なので last_name のみ -->
+            <div>担当医: {{ patient.attending_physician.last_name }}</div>
         </div>
         <h1 class="doc-title">退院時サマリー</h1>
     {% endif %}
 
 
+    <!-- 2. 患者情報（共通） -->
     <table class="info-table">
         <tr>
             <th>患者ID</th>
@@ -117,6 +124,7 @@
     </table>
 
 
+    <!-- 3. 本文エリア -->
     <div class="content-section">
         <div class="section-label">診断名・主訴</div>
         <div class="text-content mb-3">
@@ -125,9 +133,16 @@
         </div>
 
         <div class="section-label">入院経過・治療結果</div>
+        <!-- 
+           注意：現時点ではDBにサマリーテキストを保存していないため、
+           手書き用に空けるか、views.pyで生成したテキストを表示する形になります。
+        -->
         <div class="text-content" style="min-height: 250px; margin-bottom: 20px;">
-            </div>
+            <!-- 自動生成テキストを表示したい場合は以下をコメントイン -->
+            <!-- {{ summary_text|linebreaksbr }} -->
+        </div>
 
+        <!-- 心理検査経過表 -->
         {% if test_scores %}
         <div class="mt-3">
             <div style="font-weight: bold; font-size: 10pt; margin-bottom: 5px; border-bottom: 1px dashed #ccc; width: fit-content;">
@@ -151,6 +166,7 @@
         {% endif %}
     </div>
     
+    <!-- 処方情報など（必要に応じて） -->
     {% if patient.medication_history %}
     <div class="content-section">
         <div class="section-label">処方薬</div>
@@ -161,6 +177,7 @@
     {% endif %}
 
 
+    <!-- 4. フッター署名（紹介状モードのみ） -->
     {% if mode == 'referral' %}
     <div class="footer-area">
         <p>ご多忙の折、誠に恐縮ではございますが、<br>今後の加療を何卒よろしくお願い申し上げます。</p>
