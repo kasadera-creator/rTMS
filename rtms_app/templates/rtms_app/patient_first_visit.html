@@ -1,32 +1,66 @@
-{% extends "admin/base_site.html" %}
+{% extends "rtms_app/base.html" %}
 {% block extrastyle %}
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <style>
     .form-section { background-color: #fff; padding: 25px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
     .section-title { border-left: 5px solid #0d6efd; padding-left: 10px; font-weight: bold; margin-bottom: 20px; color: #333; font-size: 1.2rem; }
-    .diag-check-group { background-color: #f8f9fa; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6; }
+    .diag-check-group { background-color: #f8f9fa; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6; margin-left: 0; margin-right: 0; }
     
+    /* 質問票テーブル */
+    .q-table { width: 100%; border-collapse: collapse; }
+    .q-table th { background-color: #f8f9fa; padding: 10px; border-bottom: 2px solid #dee2e6; }
+    .q-table td { padding: 8px 10px; border-bottom: 1px solid #dee2e6; vertical-align: middle; }
+    .q-header-row { background-color: #e9ecef; font-weight: bold; }
+
+    /* 印刷用スタイル */
     @media print {
-        @page { size: A4; margin: 10mm; } /* 余白を狭く */
-        body { font-size: 10pt; line-height: 1.2; } /* 文字サイズ縮小 */
+        @page { size: A4; margin: 12mm; }
+        body { font-size: 10.5pt; line-height: 1.3; font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; color: #000; }
         body * { visibility: hidden; }
         .printable-area, .printable-area * { visibility: visible; }
-        .printable-area { position: absolute; left: 0; top: 0; width: 100%; color: #000; font-family: "Hiragino Mincho ProN", serif; }
+        .printable-area { position: absolute; left: 0; top: 0; width: 100%; }
         .no-print { display: none !important; }
         
-        .form-section { padding: 0; border: none; box-shadow: none; margin-bottom: 10px; }
-        .section-title { font-size: 12pt; margin-bottom: 5px; padding-left: 5px; border-left-width: 3px; }
-        .row { margin-bottom: 5px; }
-        .col-12, .col-md-3, .col-md-6, .col-md-9 { padding: 2px 5px; }
+        /* フォームの装飾解除 */
+        .form-section { padding: 0; border: none; box-shadow: none; margin-bottom: 5px; }
+        .section-title { font-size: 14pt; border-bottom: 2px solid #000; border-left: none; padding-left: 0; margin-bottom: 10px; }
         
-        /* 入力欄の見た目を消してテキストのみに */
-        textarea, input[type="text"] { border: none; resize: none; padding: 0; margin: 0; height: auto; overflow: visible; }
-        label { font-size: 9pt; color: #555; display: block; margin-bottom: 0; }
+        /* 入力欄をテキスト化 */
+        textarea, input[type="text"], input[type="date"], select { 
+            border: none !important; 
+            background: transparent !important;
+            padding: 0; margin: 0; 
+            resize: none; 
+            overflow: visible;
+            font-family: inherit;
+            font-size: inherit;
+            width: auto;
+            -webkit-appearance: none;
+        }
         
-        /* スケジュール表 */
-        .schedule-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 9pt; }
-        .schedule-table th, .schedule-table td { border: 1px solid #000; padding: 3px 5px; text-align: center; }
-        .schedule-table th { background-color: #eee !important; -webkit-print-color-adjust: exact; }
+        /* ラベル */
+        label.fw-bold { font-weight: bold; color: #000; margin-right: 5px; }
+        
+        /* 基本情報のレイアウト調整 */
+        .basic-info-row { display: flex; justify-content: space-between; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 2px; }
+        
+        /* 自由記載欄 */
+        textarea { height: auto; display: block; width: 100%; white-space: pre-wrap; }
+        
+        /* スケジュール表 (下部) */
+        .schedule-section { margin-top: 20px; border-top: 2px solid #000; padding-top: 10px; page-break-inside: avoid; }
+        .schedule-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+        .schedule-table th, .schedule-table td { border: 1px solid #000; padding: 4px 8px; text-align: center; }
+        .schedule-table th { background-color: #eee !important; -webkit-print-color-adjust: exact; font-weight: bold; }
+        
+        /* 質問票のテーブル線 */
+        .q-table { font-size: 10pt; border: 2px solid #000; }
+        .q-table th, .q-table td { border: 1px solid #000; padding: 4px; }
+        .q-header-row { background-color: #ddd !important; -webkit-print-color-adjust: exact; }
+        
+        /* 署名欄 */
+        .signature-section { margin-top: 40px; display: flex; justify-content: flex-end; }
+        .signature-box { width: 50%; }
+        .signature-line { border-bottom: 1px solid #000; margin-top: 30px; }
     }
 </style>
 {% endblock %}
@@ -37,6 +71,7 @@
         <h3 class="fw-bold"><i class="fas fa-file-medical"></i> 初診・基本情報入力</h3>
         <div class="btn-group">
             <button type="button" class="btn btn-outline-primary" onclick="printDiv('medical-record')"><i class="fas fa-print"></i> 初診サマリー印刷</button>
+            <button type="button" class="btn btn-outline-success" onclick="printDiv('questionnaire')"><i class="fas fa-print"></i> 質問票印刷</button>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary">戻る</a>
         </div>
     </div>
@@ -44,75 +79,130 @@
     <form method="post" id="mainForm">
         {% csrf_token %}
         
+        {% if form.errors %}
+        <div class="alert alert-danger no-print">
+            <strong>保存できませんでした。以下の項目を確認してください:</strong>
+            {{ form.errors }}
+        </div>
+        {% endif %}
+
         <div id="medical-record" class="printable-area form-section">
             <h5 class="section-title">rTMS 初診時サマリー</h5>
             
-            <div class="row g-2 mb-2">
-                <div class="col-md-3 col-3"><label class="fw-bold">ID</label>{{ form.card_id }}</div>
-                <div class="col-md-3 col-3"><label class="fw-bold">氏名</label>{{ form.name }}</div>
-                <div class="col-md-3 col-3"><label class="fw-bold">生年月日</label>{{ form.birth_date }}</div>
-                <div class="col-md-3 col-3"><label class="fw-bold">年齢</label><div>{{ patient.age }}歳</div></div>
-                <div class="col-md-3 col-3"><label class="fw-bold">性別</label>{{ form.gender }}</div>
-                <div class="col-md-6 col-6"><label class="fw-bold">紹介元</label>{{ form.referral_source }}<datalist id="referral-options">{% for opt in referral_options %}<option value="{{ opt }}">{% endfor %}</datalist></div>
-                <div class="col-md-3 col-3"><label class="fw-bold">診察日</label><div>{% now "Y-m-d" %}</div></div> </div>
+            <div class="row g-3 mb-3 no-print">
+                <div class="col-md-3"><label class="form-label fw-bold">カルテID</label>{{ form.card_id }}</div>
+                <div class="col-md-3"><label class="form-label fw-bold">氏名</label>{{ form.name }}</div>
+                <div class="col-md-3"><label class="form-label fw-bold">生年月日</label>{{ form.birth_date }}</div>
+                <div class="col-md-3"><label class="form-label fw-bold">性別</label>{{ form.gender }}</div>
+                <div class="col-md-9"><label class="form-label fw-bold">紹介元</label>{{ form.referral_source }}<datalist id="referral-options">{% for opt in referral_options %}<option value="{{ opt }}">{% endfor %}</datalist></div>
+                <div class="col-md-3"><label class="form-label fw-bold">担当医</label>{{ form.attending_physician }}</div>
+            </div>
 
-            <div class="d-none d-print-block mb-3">
+            <div class="d-none d-print-block mb-4">
+                <div class="basic-info-row">
+                    <span><strong>ID:</strong> {{ patient.card_id }}</span>
+                    <span><strong>氏名:</strong> {{ patient.name }} 殿</span>
+                    <span><strong>診察日:</strong> {% now "Y年n月j日" %}</span>
+                </div>
+                <div class="basic-info-row">
+                    <span><strong>生年月日:</strong> {{ patient.birth_date|date:"Y年n月j日" }} ({{ patient.age }}歳 / {{ patient.get_gender_display }})</span>
+                    <span><strong>紹介元:</strong> {{ patient.referral_source }}</span>
+                    <span><strong>担当医:</strong> {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}</span>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="fw-bold">主訴</label>
+                <div>{{ form.chief_complaint }}</div>
+            </div>
+
+            <div class="mb-3"><label class="fw-bold">生活歴</label><textarea name="{{ form.life_history.name }}" class="form-control" rows="3">{{ form.life_history.value|default_if_none:"" }}</textarea></div>
+            <div class="mb-3"><label class="fw-bold">既往歴</label><textarea name="{{ form.past_history.name }}" class="form-control" rows="3">{{ form.past_history.value|default_if_none:"" }}</textarea></div>
+            <div class="mb-3"><label class="fw-bold">現病歴</label><textarea name="{{ form.present_illness.name }}" class="form-control" rows="8">{{ form.present_illness.value|default_if_none:"" }}</textarea></div>
+            <div class="mb-3"><label class="fw-bold">薬剤治療歴</label><textarea name="{{ form.medication_history.name }}" class="form-control" rows="6">{{ form.medication_history.value|default_if_none:"" }}</textarea></div>
+
+            <div class="mb-3">
+                <label class="fw-bold">診断名</label>
+                <div class="d-none d-print-block">{{ patient.diagnosis }}</div>
+                
+                <div class="no-print mt-1">
+                    {{ form.diagnosis }} <div class="diag-check-group px-3 py-3">
+                        <div class="row g-2"> <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="うつ病" id="d_dep" checked><label class="form-check-label" for="d_dep">うつ病</label></div></div>
+                            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="双極症" id="d_bp"><label class="form-check-label" for="d_bp">双極症</label></div></div>
+                            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="統合失調症" id="d_sch"><label class="form-check-label" for="d_sch">統合失調症</label></div></div>
+                            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="強迫症" id="d_ocd"><label class="form-check-label" for="d_ocd">強迫症</label></div></div>
+                            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="社交不安症" id="d_sad"><label class="form-check-label" for="d_sad">社交不安症</label></div></div>
+                            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="パニック症" id="d_pd"><label class="form-check-label" for="d_pd">パニック症</label></div></div>
+                            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="広場恐怖症" id="d_ag"><label class="form-check-label" for="d_ag">広場恐怖症</label></div></div>
+                            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="全般性不安症" id="d_gad"><label class="form-check-label" for="d_gad">全般性不安症</label></div></div>
+                            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="PTSD" id="d_ptsd"><label class="form-check-label" for="d_ptsd">PTSD</label></div></div>
+                            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="知的発達症" id="d_mr"><label class="form-check-label" for="d_mr">知的発達症</label></div></div>
+                            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="自閉スペクトラム症" id="d_asd"><label class="form-check-label" for="d_asd">自閉スペクトラム症</label></div></div>
+                            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="ADHD" id="d_adhd"><label class="form-check-label" for="d_adhd">ADHD</label></div></div>
+                            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="軽度認知障害(MCI)" id="d_mci"><label class="form-check-label" for="d_mci">軽度認知障害 (MCI)</label></div></div>
+                            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="パーキンソン病" id="d_pd_dis"><label class="form-check-label" for="d_pd_dis">パーキンソン病</label></div></div>
+                            <div class="col-12 mt-2">
+                                <label class="small text-muted">その他 / 認知症詳細</label>
+                                <input type="text" name="diag_other" class="form-control form-control-sm" placeholder="認知症の場合は詳細を記入">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="schedule-section d-none d-print-block">
+                <h6 class="fw-bold">今後の予定：</h6>
                 <table class="schedule-table">
-                    <tr><th>入院予定</th><th>位置決め</th><th>治療開始</th><th>終了予定 (30回)</th><th>担当医</th></tr>
+                    <tr><th>入院予定</th><th>位置決め</th><th>治療開始</th><th>治療終了予定 (30回)</th></tr>
                     <tr>
                         <td>{{ form.admission_date.value|default:"-" }}</td>
                         <td>{{ form.mapping_date.value|default:"-" }}</td>
                         <td>{{ form.first_treatment_date.value|default:"-" }}</td>
                         <td>{{ end_date_est|date:"Y-m-d"|default:"-" }}</td>
-                        <td>{{ patient.attending_physician.last_name }} 先生</td>
                     </tr>
                 </table>
             </div>
-
-            <div class="mb-2"><label class="fw-bold">主訴</label>{{ form.chief_complaint }}</div>
-
-            <div class="no-print mb-3">
-                <label class="fw-bold">診断名</label>
-                <div class="diag-check-group">
-                    <div class="row">
-                        <div class="col-md-4 mb-1"><input class="form-check-input" type="checkbox" name="diag_list" value="うつ病" id="d_dep" checked><label class="form-check-label ms-1" for="d_dep">うつ病</label></div>
-                        <div class="col-md-4 mb-1"><input class="form-check-input" type="checkbox" name="diag_list" value="双極症" id="d_bp"><label class="form-check-label ms-1" for="d_bp">双極症</label></div>
-                        <div class="col-md-4 mb-1"><input class="form-check-input" type="checkbox" name="diag_list" value="統合失調症" id="d_sch"><label class="form-check-label ms-1" for="d_sch">統合失調症</label></div>
-                        <div class="col-md-4 mb-1"><input class="form-check-input" type="checkbox" name="diag_list" value="強迫症" id="d_ocd"><label class="form-check-label ms-1" for="d_ocd">強迫症</label></div>
-                        <div class="col-md-4 mb-1"><input class="form-check-input" type="checkbox" name="diag_list" value="社交不安症" id="d_sad"><label class="form-check-label ms-1" for="d_sad">社交不安症</label></div>
-                        <div class="col-md-4 mb-1"><input class="form-check-input" type="checkbox" name="diag_list" value="パニック症" id="d_pd"><label class="form-check-label ms-1" for="d_pd">パニック症</label></div>
-                        <div class="col-md-4 mb-1"><input class="form-check-input" type="checkbox" name="diag_list" value="広場恐怖症" id="d_ag"><label class="form-check-label ms-1" for="d_ag">広場恐怖症</label></div>
-                        <div class="col-md-4 mb-1"><input class="form-check-input" type="checkbox" name="diag_list" value="全般性不安症" id="d_gad"><label class="form-check-label ms-1" for="d_gad">全般性不安症</label></div>
-                        <div class="col-md-4 mb-1"><input class="form-check-input" type="checkbox" name="diag_list" value="PTSD" id="d_ptsd"><label class="form-check-label ms-1" for="d_ptsd">PTSD</label></div>
-                        <div class="col-md-4 mb-1"><input class="form-check-input" type="checkbox" name="diag_list" value="知的発達症" id="d_mr"><label class="form-check-label ms-1" for="d_mr">知的発達症</label></div>
-                        <div class="col-md-4 mb-1"><input class="form-check-input" type="checkbox" name="diag_list" value="自閉スペクトラム症" id="d_asd"><label class="form-check-label ms-1" for="d_asd">自閉スペクトラム症</label></div>
-                        <div class="col-md-4 mb-1"><input class="form-check-input" type="checkbox" name="diag_list" value="ADHD" id="d_adhd"><label class="form-check-label ms-1" for="d_adhd">ADHD</label></div>
-                        <div class="col-md-4 mb-1"><input class="form-check-input" type="checkbox" name="diag_list" value="軽度認知障害(MCI)" id="d_mci"><label class="form-check-label ms-1" for="d_mci">軽度認知障害 (MCI)</label></div>
-                        <div class="col-md-4 mb-1"><input class="form-check-input" type="checkbox" name="diag_list" value="パーキンソン病" id="d_pd_dis"><label class="form-check-label ms-1" for="d_pd_dis">パーキンソン病</label></div>
-                        <div class="col-md-12 mt-2"><label class="small text-muted">その他 / 認知症詳細</label><input type="text" name="diag_other" class="form-control form-control-sm" placeholder="認知症の場合は詳細を記入"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="d-none d-print-block mb-2">
-                <label class="fw-bold">診断名</label>
-                <div>{{ patient.diagnosis }}</div>
-            </div>
-
-            <div class="mb-2"><label class="fw-bold">生活歴</label><textarea name="{{ form.life_history.name }}" class="form-control" rows="3">{{ form.life_history.value|default_if_none:"" }}</textarea></div>
-            <div class="mb-2"><label class="fw-bold">既往歴</label><textarea name="{{ form.past_history.name }}" class="form-control" rows="3">{{ form.past_history.value|default_if_none:"" }}</textarea></div>
-            <div class="mb-2"><label class="fw-bold">現病歴</label><textarea name="{{ form.present_illness.name }}" class="form-control" rows="8">{{ form.present_illness.value|default_if_none:"" }}</textarea></div>
-            <div class="mb-2"><label class="fw-bold">薬剤治療歴</label><textarea name="{{ form.medication_history.name }}" class="form-control" rows="3">{{ form.medication_history.value|default_if_none:"" }}</textarea></div>
         </div>
 
         <div class="form-section no-print">
             <h5 class="section-title">スケジュール設定</h5>
             <div class="row g-3">
-                <div class="col-md-3"><label class="form-label text-primary">入院予定日</label>{{ form.admission_date }}</div>
-                <div class="col-md-3"><label class="form-label text-warning">初回位置決め日</label>{{ form.mapping_date }}</div>
-                <div class="col-md-3"><label class="form-label text-success">初回治療日</label>{{ form.first_treatment_date }}</div>
-                <div class="col-md-3"><label class="form-label">担当医</label>{{ form.attending_physician }}</div>
+                <div class="col-md-4"><label class="form-label text-primary fw-bold">入院予定日</label>{{ form.admission_date }}</div>
+                <div class="col-md-4"><label class="form-label text-warning fw-bold">初回位置決め日</label>{{ form.mapping_date }}</div>
+                <div class="col-md-4"><label class="form-label text-success fw-bold">初回治療日</label>{{ form.first_treatment_date }}</div>
             </div>
+        </div>
+
+        <div id="questionnaire" class="printable-area form-section">
+            <div class="print-header d-none d-print-block"><h2>rTMS 適正に関する質問票</h2><p style="text-align: right; font-size: 10px;">笠寺精治寮病院</p></div>
+            <div class="print-row d-none d-print-flex"><div style="width: 30%;">ID: <strong>{{ patient.card_id }}</strong></div><div style="width: 40%;">氏名: <strong>{{ patient.name }} 殿</strong></div><div style="width: 30%; text-align: right;">生年月日: {{ patient.birth_date|date:"Y年n月j日" }}</div></div>
+            <table class="q-table">
+                <thead class="table-light"><tr><th style="text-align: left;">質問項目</th><th width="60" class="text-center">はい</th><th width="60" class="text-center">いいえ</th></tr></thead>
+                <tbody>
+                    <tr class="q-header-row"><td colspan="3">これまでに、以下のことがありましたか？</td></tr>
+                    <tr><td>rTMS実施経験（治験、研究を問わない）</td><td class="text-center"><input type="radio" name="q_past_rtms" value="はい"></td><td class="text-center"><input type="radio" name="q_past_rtms" value="いいえ" checked></td></tr>
+                    <tr><td>rTMSのあとに副作用などの不快な経験</td><td class="text-center"><input type="radio" name="q_past_side_effect" value="はい"></td><td class="text-center"><input type="radio" name="q_past_side_effect" value="いいえ" checked></td></tr>
+                    <tr><td>電気けいれん療法（副作用の有無など）</td><td class="text-center"><input type="radio" name="q_past_ect" value="はい"></td><td class="text-center"><input type="radio" name="q_past_ect" value="いいえ" checked></td></tr>
+                    <tr><td>けいれん発作（てんかんの診断の有無を問わない）</td><td class="text-center"><input type="radio" name="q_past_seizure" value="はい"></td><td class="text-center"><input type="radio" name="q_past_seizure" value="いいえ" checked></td></tr>
+                    <tr><td>意識消失発作</td><td class="text-center"><input type="radio" name="q_past_loc" value="はい"></td><td class="text-center"><input type="radio" name="q_past_loc" value="いいえ" checked></td></tr>
+                    <tr><td>脳卒中（脳梗塞や脳出血など）</td><td class="text-center"><input type="radio" name="q_past_stroke" value="はい"></td><td class="text-center"><input type="radio" name="q_past_stroke" value="いいえ" checked></td></tr>
+                    <tr><td>頭部外傷（意識がなくなるなど重度なもの）</td><td class="text-center"><input type="radio" name="q_past_trauma" value="はい"></td><td class="text-center"><input type="radio" name="q_past_trauma" value="いいえ" checked></td></tr>
+                    <tr><td>頭部の手術</td><td class="text-center"><input type="radio" name="q_past_surgery" value="はい"></td><td class="text-center"><input type="radio" name="q_past_surgery" value="いいえ" checked></td></tr>
+                    <tr><td>脳外科もしくは神経内科の病気</td><td class="text-center"><input type="radio" name="q_past_neuro" value="はい"></td><td class="text-center"><input type="radio" name="q_past_neuro" value="いいえ" checked></td></tr>
+                    <tr><td>脳障害をおこす可能性のある内科疾患</td><td class="text-center"><input type="radio" name="q_past_internal" value="はい"></td><td class="text-center"><input type="radio" name="q_past_internal" value="いいえ" checked></td></tr>
+                    <tr><td>アルコールや薬物の乱用</td><td class="text-center"><input type="radio" name="q_past_abuse" value="はい"></td><td class="text-center"><input type="radio" name="q_past_abuse" value="いいえ" checked></td></tr>
+                    <tr class="q-header-row"><td colspan="3">現在、以下のことはありますか？</td></tr>
+                    <tr><td>頻繁または重度な頭痛</td><td class="text-center"><input type="radio" name="q_cur_headache" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_headache" value="いいえ" checked></td></tr>
+                    <tr><td>頭の中に金属や磁性体（チタン製品かどうか要確認）</td><td class="text-center"><input type="radio" name="q_cur_metal" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_metal" value="いいえ" checked></td></tr>
+                    <tr><td>体内埋め込み式の医療機器（心臓ペースメーカーなど）</td><td class="text-center"><input type="radio" name="q_cur_device" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_device" value="いいえ" checked></td></tr>
+                    <tr><td>多量の飲酒や薬物の乱用</td><td class="text-center"><input type="radio" name="q_cur_abuse" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_abuse" value="いいえ" checked></td></tr>
+                    <tr><td>妊娠中、もしくは妊娠の可能性が否定されない</td><td class="text-center"><input type="radio" name="q_cur_preg" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_preg" value="いいえ" checked></td></tr>
+                    <tr><td>家族内にてんかんを持っているかた</td><td class="text-center"><input type="radio" name="q_cur_family_epilepsy" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_family_epilepsy" value="いいえ" checked></td></tr>
+                </tbody>
+            </table>
+            <div class="mt-3"><label class="form-label fw-bold small">「はい」とチェックした項目について、より詳しくおしえてください</label><textarea name="q_details" class="form-control" rows="4"></textarea></div>
+            <div class="signature-section d-none d-print-flex"><div class="signature-box"><p style="font-size: 11px;">上記項目を確認し、治療適応と判断しました。</p><div class="signature-line">確認日：　　　　年　　月　　日</div><div class="signature-line">医師署名：</div></div></div>
+            <input type="hidden" name="questionnaire_data" id="questionnaire_json">
         </div>
 
         <div class="fixed-bottom bg-white p-3 border-top shadow text-center no-print">
@@ -120,13 +210,28 @@
         </div>
     </form>
 </div>
+
 <script>
     function printDiv(divId) {
-        var originalContents = document.body.innerHTML; var printContents = document.getElementById(divId).outerHTML;
-        document.body.innerHTML = printContents; window.print(); document.body.innerHTML = originalContents; window.location.reload();
+        var originalContents = document.body.innerHTML; 
+        var printContents = document.getElementById(divId).outerHTML;
+        document.body.innerHTML = printContents; 
+        window.print(); 
+        document.body.innerHTML = originalContents; 
+        window.location.reload();
     }
-    // ロード時にデータを復元
+
+    // 質問票のJSON化処理
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const data = {}; 
+        document.querySelectorAll('input[type="radio"]:checked').forEach(r => { data[r.name] = r.value; });
+        data['q_details'] = document.querySelector('textarea[name="q_details"]').value;
+        document.getElementById('questionnaire_json').value = JSON.stringify(data);
+    });
+    
+    // データ復元処理
     window.addEventListener('load', function() {
+        // 診断名チェックボックス
         const diagStr = "{{ patient.diagnosis }}";
         if(diagStr) {
             const diags = diagStr.split(', ');
@@ -135,6 +240,23 @@
                 if(el) el.checked = true;
                 if(d.startsWith("その他(")) document.querySelector('input[name="diag_other"]').value = d.replace("その他(", "").replace(")", "");
             });
+        }
+        
+        // 質問票JSON
+        const raw = '{{ patient.questionnaire_data|safe }}';
+        if(raw && raw !== '{}' && raw !== 'None' && raw !== 'null') {
+            try {
+                const data = JSON.parse(raw);
+                for (const [key, value] of Object.entries(data)) {
+                    if (key === 'q_details') { 
+                        const txt = document.querySelector('textarea[name="q_details"]'); 
+                        if(txt) txt.value = value; 
+                    } else { 
+                        const el = document.querySelector(`input[name="${key}"][value="${value}"]`); 
+                        if(el) el.checked = true; 
+                    }
+                }
+            } catch(e) {}
         }
     });
 </script>
