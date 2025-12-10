@@ -21,7 +21,7 @@ class Patient(models.Model):
     life_history = models.TextField("生活歴", blank=True)
     past_history = models.TextField("既往歴", blank=True)
     present_illness = models.TextField("現病歴", blank=True)
-    medication_history = models.TextField("薬剤治療歴", blank=True) # 入院時/紹介時の薬剤
+    medication_history = models.TextField("薬剤治療歴", blank=True)
     
     summary_text = models.TextField("サマリー本文", blank=True)
     discharge_prescription = models.TextField("退院時処方", blank=True)
@@ -44,7 +44,12 @@ class Patient(models.Model):
         return today.year - self.birth_date.year - ((today.month, today.day) < (self.birth_date.month, self.birth_date.day))
 
 class MappingSession(models.Model):
-    WEEK_CHOICES = [(1, '第1週'), (2, '第2週'), (3, '第3週'), (4, 'その他')]
+    # ★修正: 第1週〜第6週までに拡張
+    WEEK_CHOICES = [
+        (1, '第1週'), (2, '第2週'), (3, '第3週'), 
+        (4, '第4週'), (5, '第5週'), (6, '第6週'), 
+        (99, 'その他')
+    ]
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE)
     date = models.DateField("実施日", default=timezone.now)
     week_number = models.IntegerField("時期", choices=WEEK_CHOICES, default=1)
@@ -65,17 +70,27 @@ class TreatmentSession(models.Model):
     performer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
 
 class Assessment(models.Model):
+    # ★追加: 時期の日本語表示用定義
+    TIMING_CHOICES = [
+        ('baseline', '治療前 (Base)'),
+        ('week3', '3週目'),
+        ('week6', '6週目'),
+        ('other', 'その他'),
+    ]
+    
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE)
     date = models.DateField("日", default=timezone.now)
     type = models.CharField("種別", max_length=20, default='HAM-D')
     scores = models.JSONField("スコア", default=dict)
     total_score_21 = models.IntegerField("合計21", default=0)
     total_score_17 = models.IntegerField("合計17", default=0)
-    timing = models.CharField("時期", max_length=20, default='other')
+    
+    # ★修正: choicesを追加
+    timing = models.CharField("時期", max_length=20, choices=TIMING_CHOICES, default='other')
+    
     note = models.TextField("特記", blank=True)
     
     def calculate_scores(self):
-        # ★修正: キーを 'q1', 'q2' ... の形式に変更
         keys17 = [f"q{i}" for i in range(1, 18)]
         keys21 = [f"q{i}" for i in range(1, 22)]
         self.total_score_17 = sum(int(self.scores.get(k, 0)) for k in keys17)
