@@ -13,4 +13,5 @@ urlpatterns = [
     path('patient/<int:patient_id>/summary/', views.patient_summary_view, name='patient_summary'),
     path('export/csv/', views.export_treatment_csv, name='export_csv'),
     path('backup/db/', views.download_db, name='download_db'),
+    path('logout/', views.custom_logout_view, name='custom_logout'),
 ]
