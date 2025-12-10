@@ -40,7 +40,7 @@
 
 {% block content %}
 <div class="container py-4">
-    <!-- 日付ナビゲーション (レスポンシブ対応: スマホは縦並び、PCは横並び) -->
+    <!-- 日付ナビゲーション (レスポンシブ対応) -->
     <div class="date-nav d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
         
         <!-- 左側: タイトルと日付操作 -->
@@ -54,7 +54,7 @@
                 
                 <!-- 日付表示 + カレンダーピッカー -->
                 <div class="d-inline-flex align-items-center bg-light px-3 py-1 rounded border position-relative date-picker-wrapper">
-                    <!-- スマホでは文字サイズを少し小さく (fs-6), PCでは標準 (fs-5) -->
+                    <!-- 文字サイズ調整: モバイルfs-6, PC fs-5 -->
                     <span class="fw-bold fs-6 fs-md-5 me-2 text-nowrap" onclick="document.getElementById('datePicker').showPicker()">
                         {{ target_date_display }}
                     </span>
@@ -76,14 +76,16 @@
             </a>
         </div>
         
-        <!-- 右側: アクションボタン (スマホでは下段に配置) -->
-        <div class="d-flex gap-2 w-100 w-md-auto justify-content-center justify-content-md-end">
-            <a href="{% url 'patient_add' %}" class="btn btn-primary btn-sm fw-bold shadow-sm text-nowrap">
-                <i class="fas fa-user-plus me-1"></i> 新規患者登録
-            </a>
-            <a href="{% url 'patient_list' %}?dashboard_date={{ today|date:'Y-m-d' }}" class="btn btn-outline-dark btn-sm fw-bold text-nowrap">
-                <i class="fas fa-users me-1"></i> 患者一覧
-            </a>
+        <!-- 右側: アクションボタン (スマホでは縦並び) -->
+        <div class="w-100 w-md-auto">
+            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                <a href="{% url 'patient_add' %}" class="btn btn-primary btn-sm fw-bold shadow-sm text-nowrap">
+                    <i class="fas fa-user-plus me-1"></i> 新規患者登録
+                </a>
+                <a href="{% url 'patient_list' %}?dashboard_date={{ today|date:'Y-m-d' }}" class="btn btn-outline-dark btn-sm fw-bold text-nowrap">
+                    <i class="fas fa-users me-1"></i> 患者一覧
+                </a>
+            </div>
         </div>
     </div>
 

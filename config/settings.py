@@ -1,7 +1,7 @@
 """
 Django settings for config project.
-(中略: 変更なし)
 """
+
 from pathlib import Path
 import os
 import dj_database_url
@@ -9,16 +9,86 @@ import dj_database_url
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# (中略: 変更なし)
+# SECURITY WARNING: keep the secret key used in production secret!
+# (Render等の環境変数で上書きされることを推奨しますが、ここではデフォルト値を維持)
+SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-_y5m9v54tdo0dc_c3rq^#ac4nez0vwziv5smsk5!oaq)!$$(ej")
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = 'RENDER' not in os.environ
+
+ALLOWED_HOSTS = ['*']
+
+# Application definition
+INSTALLED_APPS = [
+    'jazzmin', # Admin UI theme
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles", # ★これが消えるとcollectstaticエラーになります
+    'rtms_app',
+    'django_jsonform',
+]
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    'whitenoise.middleware.WhiteNoiseMiddleware', # Static files handling
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+ROOT_URLCONF = "config.urls"
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ],
+        },
+    },
+]
+
+WSGI_APPLICATION = "config.wsgi.application"
+
+# Database
+DATABASES = {
+    'default': dj_database_url.config(
+        default='sqlite:///' + str(BASE_DIR / 'db.sqlite3'),
+        conn_max_age=600
+    )
+}
+
+# Password validation
+AUTH_PASSWORD_VALIDATORS = [
+    { "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator" },
+    { "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator" },
+    { "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator" },
+    { "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator" },
+]
+
+# Internationalization
+LANGUAGE_CODE = 'ja'
+TIME_ZONE = 'Asia/Tokyo'
+USE_I18N = True
+USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.0/howto/static-files/
-
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
-# JAZZMIN設定（見た目のカスタマイズ）
+# JAZZMIN設定
 JAZZMIN_SETTINGS = {
     "site_title": "rTMS 実施記録 DB",
     "site_header": "笠寺精治寮病院 rTMS", 
@@ -29,32 +99,28 @@ JAZZMIN_SETTINGS = {
     "topmenu_links": [
         {"name": "◀ ダッシュボードへ", "url": "dashboard", "permissions": ["auth.view_user"]},
     ],
-
-    # サイドバーのメニュー順序制御
     "order_with_respect_to": [
-        "rtms_app.Patient",           # 1. 患者情報
-        "rtms_app.TreatmentSession",  # 2. 治療実施
-        "rtms_app.Assessment",        # 3. 状態評価
+        "rtms_app.Patient",
+        "rtms_app.TreatmentSession",
+        "rtms_app.Assessment",
     ],
-
-    # アイコン設定 (FontAwesome)
     "icons": {
         "rtms_app.Patient": "fas fa-user-injured",
         "rtms_app.TreatmentSession": "fas fa-procedures",
         "rtms_app.Assessment": "fas fa-chart-line",
     },
-    
-    # ★追加: カスタムCSSの読み込み
+    # ★追加: カスタムCSSの読み込み (admin_custom.css)
     "custom_css": "css/admin_custom.css",
 }
 
-# ★サイドバーの色を明るくする設定
 JAZZMIN_UI_TWEAKS = {
-    "theme": "flatly",   # 明るく清潔感のあるテーマ
+    "theme": "flatly",
     "dark_mode_theme": None,
 }
 
-# (以下変更なし)
 LOGIN_URL = '/admin/login/'
 LOGIN_REDIRECT_URL = '/app/dashboard/'
 LOGOUT_REDIRECT_URL = '/admin/login/'
+
+# Default primary key field type
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
