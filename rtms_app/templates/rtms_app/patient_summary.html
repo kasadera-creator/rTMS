@@ -16,18 +16,19 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3><i class="fas fa-file-alt"></i> サマリー・紹介状作成</h3>
         <div class="btn-group">
-            <a href="{% url 'patient_print_summary' patient.id %}?mode=summary" target="_blank" class="btn btn-outline-primary">
+            <!-- 修正: ボタンタイプをbuttonにし、onclickで保存＆印刷を実行 -->
+            <button type="button" class="btn btn-outline-primary" onclick="saveAndPrint('summary')">
                 <i class="fas fa-print"></i> 退院サマリー印刷
-            </a>
-            <a href="{% url 'patient_print_summary' patient.id %}?mode=referral" target="_blank" class="btn btn-outline-success">
-                <i class="fas fa-envelope"></i> 紹介状印刷
-            </a>
+            </button>
+            <button type="button" class="btn btn-outline-success" onclick="saveAndPrint('referral')">
+                <i class="fas fa-envelope"></i> 紹介状形式で印刷
+            </button>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary">戻る</a>
         </div>
     </div>
 
     <!-- メインエリア: フォームで囲む -->
-    <form method="post" class="bg-white p-4 shadow-sm rounded">
+    <form method="post" id="summaryForm" class="bg-white p-4 shadow-sm rounded">
         {% csrf_token %}
         
         <!-- 1. 患者情報ヘッダー -->
@@ -52,11 +53,11 @@
             <label class="form-label fw-bold">入院経過・治療結果（サマリー本文）</label>
             <textarea name="summary_text" rows="10" class="form-control">{{ summary_text }}</textarea>
             <div class="form-text text-muted">
-                ※内容は編集可能です。下部の「保存」ボタンで保存してください。
+                ※内容は編集可能です。印刷ボタンを押すと自動保存されます。
             </div>
         </div>
 
-        <!-- 3. 退院時処方 (新規追加) -->
+        <!-- 3. 退院時処方 -->
         <div class="mb-4">
             <label class="form-label fw-bold text-primary">退院時処方</label>
             <textarea name="discharge_prescription" rows="4" class="form-control" placeholder="退院時の処方内容を入力してください...">{{ patient.discharge_prescription }}</textarea>
@@ -95,24 +96,28 @@
                     <thead>
                         <tr>
                             <th style="min-width:120px;">実施日</th>
+                            <th style="min-width:100px;">時期</th>
                             <th style="min-width:100px;">HAMD 17項</th>
                             <th style="min-width:100px;">HAMD 21項</th>
-                            <th style="min-width:100px;">時期</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for score in test_scores %}
                         <tr>
                             <td>{{ score.date|date:"Y/n/j" }}</td>
+                            <td>{{ score.get_timing_display|default:"-" }}</td>
                             <td class="fw-bold">{{ score.total_score_17 }}</td>
                             <td>{{ score.total_score_21 }}</td>
-                            <td>{{ score.get_timing_display|default:"-" }}</td>
                         </tr>
                         {% empty %}
                         <tr><td colspan="4" class="text-muted py-3">データなし</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
+                <div class="mt-2 p-2 bg-light border rounded small text-muted">
+                    <strong>※HAMD17 参考基準:</strong> 
+                    0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23-:最重症
+                </div>
             </div>
         </div>
 
@@ -125,4 +130,36 @@
         <div style="height: 50px;"></div>
     </form>
 </div>
+
+<!-- 自動保存用スクリプト -->
+<script>
+    function saveAndPrint(mode) {
+        const form = document.getElementById('summaryForm');
+        const formData = new FormData(form);
+        const url = window.location.href;
+
+        // 非同期で保存リクエスト送信
+        fetch(url, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest', // Ajaxリクエストであることを示す
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                // 保存成功後に印刷ウィンドウを開く
+                const printUrl = "{% url 'patient_print_summary' patient.id %}?mode=" + mode;
+                window.open(printUrl, '_blank');
+            } else {
+                alert('保存に失敗しました。');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('通信エラーが発生しました。');
+        });
+    }
+</script>
 {% endblock %}

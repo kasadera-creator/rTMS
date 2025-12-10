@@ -20,7 +20,7 @@
         <h3 class="fw-bold"><i class="fas fa-file-medical"></i> 初診・基本情報入力</h3>
         <div class="btn-group">
             <a href="{% url 'patient_print_preview' patient.id %}" target="_blank" class="btn btn-outline-primary">
-                <i class="fas fa-print"></i> 印刷プレビューを開く
+                <i class="fas fa-print"></i> 初診時サマリー・rTMS適正質問票 印刷
             </a>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary">戻る</a>
         </div>
@@ -88,6 +88,7 @@
             <div class="mb-3"><label class="fw-bold">生活歴</label><textarea name="{{ form.life_history.name }}" class="form-control" rows="3">{{ form.life_history.value|default_if_none:"" }}</textarea></div>
             <div class="mb-3"><label class="fw-bold">既往歴</label><textarea name="{{ form.past_history.name }}" class="form-control" rows="3">{{ form.past_history.value|default_if_none:"" }}</textarea></div>
             <div class="mb-3"><label class="fw-bold">現病歴</label><textarea name="{{ form.present_illness.name }}" class="form-control" rows="8">{{ form.present_illness.value|default_if_none:"" }}</textarea></div>
+            <!-- 薬剤治療歴: form.value にデフォルト値が入っているため、それを表示 -->
             <div class="mb-3"><label class="fw-bold">薬剤治療歴</label><textarea name="{{ form.medication_history.name }}" class="form-control" rows="6">{{ form.medication_history.value|default_if_none:"" }}</textarea></div>
             
             <div class="mb-3">
@@ -211,7 +212,6 @@
 <script>
     // 質問票のJSON化処理
     document.getElementById('mainForm').addEventListener('submit', function(e) {
-        // 1. 質問票データのJSON化
         const data = {}; 
         document.querySelectorAll('input[type="radio"]:checked').forEach(r => { data[r.name] = r.value; });
         data['q_details'] = document.querySelector('textarea[name="q_details"]').value;
@@ -228,12 +228,16 @@
                 const el = document.querySelector(`input[name="diag_list"][value="${d}"]`);
                 if(el) el.checked = true;
                 
-                // 修正: 正規表現で「その他(...)」を検出して復元
+                // その他入力欄の復元
                 const otherMatch = d.match(/^その他\((.+)\)$/);
                 if (otherMatch && otherMatch[1]) {
                     document.querySelector('input[name="diag_other"]').value = otherMatch[1];
                 }
             });
+        } else {
+            // ★追加: 診断名が空の場合、デフォルトで「うつ病」をチェック
+            const depEl = document.getElementById('d_dep');
+            if(depEl) depEl.checked = true;
         }
         
         // 質問票JSON

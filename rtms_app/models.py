@@ -23,7 +23,6 @@ class Patient(models.Model):
     present_illness = models.TextField("現病歴", blank=True)
     medication_history = models.TextField("薬剤治療歴", blank=True) # 入院時/紹介時の薬剤
     
-    # ★新規追加: サマリー用フィールド
     summary_text = models.TextField("サマリー本文", blank=True)
     discharge_prescription = models.TextField("退院時処方", blank=True)
 
@@ -74,11 +73,14 @@ class Assessment(models.Model):
     total_score_17 = models.IntegerField("合計17", default=0)
     timing = models.CharField("時期", max_length=20, default='other')
     note = models.TextField("特記", blank=True)
+    
     def calculate_scores(self):
-        keys17 = [str(i) for i in range(1, 18)]
-        keys21 = [str(i) for i in range(1, 22)]
+        # ★修正: キーを 'q1', 'q2' ... の形式に変更
+        keys17 = [f"q{i}" for i in range(1, 18)]
+        keys21 = [f"q{i}" for i in range(1, 22)]
         self.total_score_17 = sum(int(self.scores.get(k, 0)) for k in keys17)
         self.total_score_21 = sum(int(self.scores.get(k, 0)) for k in keys21)
+        
     def save(self, *args, **kwargs):
         if self.type == 'HAM-D': self.calculate_scores()
         super().save(*args, **kwargs)

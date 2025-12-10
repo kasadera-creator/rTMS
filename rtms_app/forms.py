@@ -36,11 +36,15 @@ class PatientFirstVisitForm(forms.ModelForm):
         label="担当医", required=False, widget=forms.Select(attrs={'class': 'form-select'})
     )
     
+    # ★修正: 保存エラー回避のため required=False に設定
+    # 実際の値は views.py でチェックボックスから構築して保存するため、フォームバリデーションではスルーさせる
+    diagnosis = forms.CharField(widget=forms.HiddenInput(), required=False)
+
     class Meta:
         model = Patient
         fields = [
             'card_id', 'name', 'birth_date', 'gender', 'attending_physician', 
-            'referral_source', 'referral_doctor', # ★追加
+            'referral_source', 'referral_doctor',
             'chief_complaint', 'diagnosis', 
             'life_history', 'past_history', 'present_illness', 'medication_history', 
             'admission_date', 'mapping_date', 'first_treatment_date'
@@ -50,12 +54,9 @@ class PatientFirstVisitForm(forms.ModelForm):
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'birth_date': DateInput(attrs={'class': 'form-control'}),
             'gender': forms.Select(attrs={'class': 'form-select'}),
-            # 紹介元と紹介医のウィジェット設定
             'referral_source': forms.TextInput(attrs={'class': 'form-control', 'list': 'referral-options', 'placeholder': '医療機関名'}),
-            'referral_doctor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '医師名 (姓のみ、またはフルネーム)'}), # ★追加
-            
+            'referral_doctor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '医師名 (姓のみ、またはフルネーム)'}),
             'chief_complaint': forms.TextInput(attrs={'class': 'form-control'}),
-            'diagnosis': forms.HiddenInput(),
             'life_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'past_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'present_illness': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
@@ -72,15 +73,18 @@ class PatientFirstVisitForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # ★修正: 薬剤治療歴が空の場合、テンプレートをインスタンスにセットして表示させる
+        default_medication_text = (
+            "抗うつ薬：\n"
+            "抗精神病薬：\n"
+            "気分安定薬：\n"
+            "抗不安薬：\n"
+            "睡眠薬：\n"
+            "その他："
+        )
         if not self.instance.medication_history:
-            self.fields['medication_history'].initial = (
-                "抗うつ薬：\n"
-                "抗精神病薬：\n"
-                "気分安定薬：\n"
-                "抗不安薬：\n"
-                "睡眠薬：\n"
-                "その他："
-            )
+            self.instance.medication_history = default_medication_text
+            self.initial['medication_history'] = default_medication_text
 
 # --- 3. 位置決めフォーム ---
 class MappingForm(forms.ModelForm):

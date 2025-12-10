@@ -4,7 +4,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from datetime import timedelta
 import datetime
-from django.http import HttpResponse, FileResponse
+from django.http import HttpResponse, FileResponse, JsonResponse # ★追加
 from django.conf import settings
 from django.contrib.auth import logout
 import os
@@ -308,6 +308,11 @@ def patient_summary_view(request, patient_id):
         patient.summary_text = request.POST.get('summary_text', '')
         patient.discharge_prescription = request.POST.get('discharge_prescription', '')
         patient.save()
+        
+        # ★追加: Ajaxリクエストの場合はJSONを返して終了（画面遷移しない）
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            return JsonResponse({'status': 'success'})
+            
         return redirect('dashboard')
 
     sessions = TreatmentSession.objects.filter(patient=patient).order_by('date')
@@ -340,7 +345,6 @@ def patient_summary_view(request, patient_id):
     admission_date_str = patient.admission_date.strftime('%Y年%m月%d日') if patient.admission_date else "不明"
     created_at_str = patient.created_at.strftime('%Y年%m月%d日')
     
-    # 保存されているサマリーがあればそれを使う、なければ自動生成
     if patient.summary_text:
         summary_text = patient.summary_text
     else:
