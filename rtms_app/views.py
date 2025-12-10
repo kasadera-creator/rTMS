@@ -58,7 +58,8 @@ def dashboard_view(request):
     # --- 1. 初診 ---
     task_first_visit = []
     for p in Patient.objects.filter(created_at__date=target_date):
-        task_first_visit.append({'obj': p, 'status': "登録済", 'todo': "初診"})
+        # ★修正: ステータスを「診察済」に変更
+        task_first_visit.append({'obj': p, 'status': "診察済", 'todo': "初診"})
 
     # --- 2. 入院 ---
     task_admission = []
@@ -121,7 +122,6 @@ def dashboard_view(request):
                 deadline_str = f"期限: {deadline_date.strftime('%-m/%-d')}"
                 task_assessment.append({'obj': p, 'status': "実施未", 'color': "danger", 'timing_code': target_timing, 'todo': f"{todo_label} {deadline_str}"})
 
-    # ★修正: テンプレート側でのループエラーを防ぐため、ここでリストを作成する
     dashboard_tasks = [
         {'list': task_first_visit, 'title': "① 初診", 'color': "bg-g-1", 'icon': "fa-user-plus"},
         {'list': task_admission, 'title': "② 入院", 'color': "bg-g-2", 'icon': "fa-procedures"},
@@ -135,7 +135,7 @@ def dashboard_view(request):
         'today': target_date, 'target_date_display': target_date_display, 
         'prev_day': prev_day, 'next_day': next_day,
         'today_raw': jst_now.date(),
-        'dashboard_tasks': dashboard_tasks, # まとめたデータを渡す
+        'dashboard_tasks': dashboard_tasks, 
     })
 
 @login_required
@@ -181,7 +181,7 @@ def patient_add_view(request):
 
 @login_required
 def patient_list_view(request):
-    patients = Patient.objects.all().order_by('card_id', 'course_number')
+    patients = Patient.objects.all().order_by('card_id')
     dashboard_date = request.GET.get('dashboard_date')
     return render(request, 'rtms_app/patient_list.html', {'patients': patients, 'dashboard_date': dashboard_date})
 
@@ -288,8 +288,7 @@ def assessment_add(request, patient_id):
     history = Assessment.objects.filter(patient=patient).order_by('date')
     hamd_items = [('q1', '1. 抑うつ気分', 4, "0. なし..."), ('q2', '2. 罪責感', 4, "0. なし..."), ('q3', '3. 自殺', 4, "0. なし..."), ('q4', '4. 入眠障害', 2, "0. 入眠困難はない..."), ('q5', '5. 熟眠障害', 2, "0. 熟眠困難はない..."), ('q6', '6. 早朝睡眠障害', 2, "0. 早朝睡眠に困難はない..."), ('q7', '7. 仕事と活動', 4, "0. 困難なくできる..."), ('q8', '8. 精神運動抑制', 4, "0. 発話・思考は正常である..."), ('q9', '9. 精神運動激越', 4, "0. なし..."), ('q10', '10. 不安, 精神症状', 4, "0. 問題なし..."), ('q11', '11. 不安, 身体症状', 4, "0. なし..."), ('q12', '12. 身体症状, 消化器系', 2, "0. なし..."), ('q13', '13. 身体症状, 一般的', 2, "0. なし..."), ('q14', '14. 生殖器症状', 2, "0. なし..."), ('q15', '15. 心気症', 4, "0. なし..."), ('q16', '16. 体重減少', 2, "0. 体重減少なし..."), ('q17', '17. 病識', 2, "0. うつ状態であり病気であることを認める..."), ('q18', '18. 日内変動', 2, "<strong>A. 変動の有無</strong>..."), ('q19', '19. 現実感喪失, 離人症', 4, "0. なし..."), ('q20', '20. 妄想症状', 3, "0. なし..."), ('q21', '21. 強迫症状', 2, "0. なし...")]
     
-    # ★修正: 項目を2分割する
-    mid_index = 11 # 11問目で分割
+    mid_index = 11
     hamd_items_left = hamd_items[:mid_index]
     hamd_items_right = hamd_items[mid_index:]
 
@@ -317,15 +316,7 @@ def assessment_add(request, patient_id):
             assessment.save()
             return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'dashboard')
         except Exception as e: print(e)
-        
-    return render(request, 'rtms_app/assessment_add.html', {
-        'patient': patient, 'history': history, 'today': target_date_str, 
-        # 分割したリストを渡す
-        'hamd_items_left': hamd_items_left,
-        'hamd_items_right': hamd_items_right,
-        'initial_timing': timing, 'existing_assessment': existing_assessment, 
-        'recommendation': recommendation, 'dashboard_date': dashboard_date
-    })
+    return render(request, 'rtms_app/assessment_add.html', {'patient': patient, 'history': history, 'today': target_date_str, 'hamd_items_left': hamd_items_left, 'hamd_items_right': hamd_items_right, 'initial_timing': timing, 'existing_assessment': existing_assessment, 'recommendation': recommendation, 'dashboard_date': dashboard_date})
 
 @login_required
 def patient_summary_view(request, patient_id):
@@ -389,14 +380,9 @@ def patient_add_view(request):
 
 @login_required
 def export_treatment_csv(request):
-    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
-    response['Content-Disposition'] = 'attachment; filename="treatment_data.csv"'
-    writer = csv.writer(response)
-    writer.writerow(['ID', '氏名', '実施日時', 'MT(%)', '強度(%)', 'パルス数', '実施者', '副作用'])
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig'); response['Content-Disposition'] = 'attachment; filename="treatment_data.csv"'; writer = csv.writer(response); writer.writerow(['ID', '氏名', '実施日時', 'MT(%)', '強度(%)', 'パルス数', '実施者', '副作用'])
     treatments = TreatmentSession.objects.all().select_related('patient', 'performer').order_by('date')
-    for t in treatments:
-        se_str = json.dumps(t.side_effects, ensure_ascii=False) if t.side_effects else ""
-        writer.writerow([t.patient.card_id, t.patient.name, t.date.strftime('%Y-%m-%d %H:%M'), t.motor_threshold, t.intensity, t.total_pulses, t.performer.username if t.performer else "", se_str])
+    for t in treatments: se_str = json.dumps(t.side_effects, ensure_ascii=False) if t.side_effects else ""; writer.writerow([t.patient.card_id, t.patient.name, t.date.strftime('%Y-%m-%d %H:%M'), t.motor_threshold, t.intensity, t.total_pulses, t.performer.username if t.performer else "", se_str])
     return response
 
 @login_required

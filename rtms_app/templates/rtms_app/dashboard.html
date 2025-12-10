@@ -18,8 +18,9 @@
     .list-group-item:hover { background-color: #f8f9fa; }
     .list-group-item a { text-decoration: none; color: inherit; display: block; }
     
+    /* ★修正: .status-診察済 を追加 */
     .status-badge { font-size: 0.7rem; padding: 3px 8px; border-radius: 12px; min-width: 60px; text-align: center; float: right; margin-left: 5px; }
-    .status-success, .status-done, .status-手続済, .status-実施済, .status-登録済 { background-color: #e6f9ed; color: #198754; border: 1px solid #c3e6cb; }
+    .status-success, .status-done, .status-手続済, .status-実施済, .status-登録済, .status-診察済 { background-color: #e6f9ed; color: #198754; border: 1px solid #c3e6cb; }
     .status-warning, .status-要対応, .status-要手続 { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
     .status-danger, .status-実施未 { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     .status-info, .status-退院準備 { background-color: #cff4fc; color: #055160; border: 1px solid #b6effb; }
@@ -137,6 +138,7 @@
                             <!-- 3. ID・担当医 (下) -->
                             <div class="task-meta">
                                 <span>ID: {{ item.obj.card_id }}</span>
+                                <!-- 担当医: 姓のみ表示 -->
                                 <span>担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
                             </div>
                         </a>
