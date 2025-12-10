@@ -22,11 +22,17 @@
     .task-meta i { width: 15px; text-align: center; margin-right: 4px; }
     .todo-badge { font-size: 0.8rem; font-weight: bold; color: #495057; background-color: #e9ecef; padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 4px; }
     
-    .status-badge { font-size: 0.7rem; padding: 3px 8px; border-radius: 12px; min-width: 60px; text-align: center; float: right; }
+    .status-badge { font-size: 0.7rem; padding: 3px 8px; border-radius: 12px; min-width: 60px; text-align: center; float: right; margin-left: 5px; }
     .status-success, .status-done, .status-手続済, .status-実施済, .status-登録済 { background-color: #e6f9ed; color: #198754; border: 1px solid #c3e6cb; }
     .status-warning, .status-要対応, .status-要手続 { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
     .status-danger, .status-実施未 { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     .status-info, .status-退院準備 { background-color: #cff4fc; color: #055160; border: 1px solid #b6effb; }
+    
+    /* 日付ピッカー用スタイル調整 */
+    .date-picker-wrapper { position: relative; cursor: pointer; transition: background 0.2s; }
+    .date-picker-wrapper:hover { background-color: #e2e6ea !important; }
+    /* 透明なinputを前面に配置してクリックを吸わせる */
+    .date-picker-input { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10; }
 </style>
 {% endblock %}
 
@@ -41,13 +47,17 @@
                 <i class="fas fa-chevron-left"></i>
             </a>
             
-            <div class="d-inline-flex align-items-center bg-light px-2 py-1 rounded border position-relative">
+            <!-- 日付表示 + カレンダーピッカー -->
+            <div class="d-inline-flex align-items-center bg-light px-3 py-1 rounded border date-picker-wrapper">
                 <span class="fw-bold fs-5 me-2">{{ target_date_display }}</span>
-                <input type="date" id="datePicker" 
-                       style="position: absolute; left:0; top:0; width: 100%; height: 100%; opacity: 0; cursor: pointer;"
+                <i class="far fa-calendar-alt text-primary fs-5"></i>
+                
+                <!-- 透明なinputで全体をカバー -->
+                <input type="date" 
+                       class="date-picker-input"
                        value="{{ today|date:'Y-m-d' }}" 
-                       onchange="location.href='?date='+this.value">
-                <i class="far fa-calendar-alt text-primary fs-5 pointer-events-none"></i>
+                       onchange="location.href='?date='+this.value"
+                       onclick="this.showPicker()">
             </div>
             
             <a href="?date={{ next_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm ms-2" title="翌日">
@@ -84,14 +94,14 @@
                     {% for item in task_first_visit %}
                     <div class="list-group-item">
                         <a href="{% url 'patient_first_visit' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
-                            <div class="mb-1">
-                                <span class="fw-bold fs-5">{{ item.obj.name }}</span>
-                                <span class="status-badge status-done">登録済</span>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="fw-bold fs-5 text-primary">{{ item.obj.name }}</span>
+                                <span class="status-badge status-done">{{ item.status }}</span>
                             </div>
                             <div class="todo-badge"><i class="fas fa-check-circle me-1"></i>{{ item.todo }}</div>
                             <div class="task-meta">
-                                <div><i class="far fa-id-card"></i> ID: {{ item.obj.card_id }}</div>
-                                <div><i class="fas fa-user-md"></i> 担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
+                                <span>ID: {{ item.obj.card_id }}</span>
+                                <span>担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
                             </div>
                         </a>
                     </div>
@@ -113,14 +123,14 @@
                     {% for item in task_admission %}
                     <div class="list-group-item">
                         <a href="{% url 'admission_procedure' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
-                            <div class="mb-1">
-                                <span class="fw-bold fs-5">{{ item.obj.name }}</span>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="fw-bold fs-5 text-primary">{{ item.obj.name }}</span>
                                 <span class="status-badge status-{{ item.color }}">{{ item.status }}</span>
                             </div>
                             <div class="todo-badge"><i class="fas fa-tasks me-1"></i>{{ item.todo }}</div>
                             <div class="task-meta">
-                                <div><i class="far fa-id-card"></i> ID: {{ item.obj.card_id }}</div>
-                                <div><i class="fas fa-user-md"></i> 担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
+                                <span>ID: {{ item.obj.card_id }}</span>
+                                <span>担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
                             </div>
                         </a>
                     </div>
@@ -142,14 +152,14 @@
                     {% for item in task_mapping %}
                     <div class="list-group-item">
                         <a href="{% url 'mapping_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
-                            <div class="mb-1">
-                                <span class="fw-bold fs-5">{{ item.obj.name }}</span>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="fw-bold fs-5 text-primary">{{ item.obj.name }}</span>
                                 <span class="status-badge status-{{ item.color }}">{{ item.status }}</span>
                             </div>
                             <div class="todo-badge"><i class="fas fa-ruler-combined me-1"></i>{{ item.todo }}</div>
                             <div class="task-meta">
-                                <div><i class="far fa-id-card"></i> ID: {{ item.obj.card_id }}</div>
-                                <div><i class="fas fa-user-md"></i> 担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
+                                <span>ID: {{ item.obj.card_id }}</span>
+                                <span>担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
                             </div>
                         </a>
                     </div>
@@ -171,14 +181,14 @@
                     {% for item in task_treatment %}
                     <div class="list-group-item {% if item.status == '実施済' %}bg-light text-muted{% endif %}">
                         <a href="{% url 'treatment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
-                            <div class="mb-1">
-                                <span class="fw-bold fs-5">{{ item.obj.name }}</span>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="fw-bold fs-5 text-primary">{{ item.obj.name }}</span>
                                 <span class="status-badge status-{{ item.color }}">{{ item.status }}</span>
                             </div>
                             <div class="todo-badge"><i class="fas fa-bolt me-1"></i>{{ item.todo }} ({{ item.note }})</div>
                             <div class="task-meta">
-                                <div><i class="far fa-id-card"></i> ID: {{ item.obj.card_id }}</div>
-                                <div><i class="fas fa-user-md"></i> 担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
+                                <span>ID: {{ item.obj.card_id }}</span>
+                                <span>担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
                             </div>
                         </a>
                     </div>
@@ -200,14 +210,14 @@
                     {% for item in task_assessment %}
                     <div class="list-group-item">
                         <a href="{% url 'assessment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&timing={{ item.timing_code }}&dashboard_date={{ today|date:'Y-m-d' }}">
-                            <div class="mb-1">
-                                <span class="fw-bold fs-5">{{ item.obj.name }}</span>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="fw-bold fs-5 text-primary">{{ item.obj.name }}</span>
                                 <span class="status-badge status-{{ item.color }}">{{ item.status }}</span>
                             </div>
                             <div class="todo-badge text-danger border-danger"><i class="fas fa-exclamation me-1"></i>{{ item.todo }}</div>
                             <div class="task-meta">
-                                <div><i class="far fa-id-card"></i> ID: {{ item.obj.card_id }}</div>
-                                <div><i class="fas fa-user-md"></i> 担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
+                                <span>ID: {{ item.obj.card_id }}</span>
+                                <span>担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
                             </div>
                         </a>
                     </div>
@@ -229,14 +239,14 @@
                     {% for item in task_discharge %}
                     <div class="list-group-item">
                         <a href="{% url 'patient_summary' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
-                            <div class="mb-1">
-                                <span class="fw-bold fs-5">{{ item.obj.name }}</span>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="fw-bold fs-5 text-primary">{{ item.obj.name }}</span>
                                 <span class="status-badge status-info">退院準備</span>
                             </div>
                             <div class="todo-badge"><i class="fas fa-file-signature me-1"></i>{{ item.todo }}</div>
                             <div class="task-meta">
-                                <div><i class="far fa-id-card"></i> ID: {{ item.obj.card_id }}</div>
-                                <div><i class="fas fa-user-md"></i> 担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</div>
+                                <span>ID: {{ item.obj.card_id }}</span>
+                                <span>担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
                             </div>
                         </a>
                     </div>

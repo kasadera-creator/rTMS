@@ -10,6 +10,9 @@
     /* 右下固定ボタンエリア */
     .floating-actions { position: fixed; bottom: 20px; right: 20px; z-index: 1050; display: flex; gap: 10px; flex-direction: column; align-items: flex-end; }
     .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; width: fit-content; }
+
+    /* 退院日設定エリアのスタイル */
+    .discharge-date-card { border-left: 5px solid #17a2b8; background-color: #f0fdf4; }
 </style>
 {% endblock %}
 
@@ -19,8 +22,8 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3><i class="fas fa-file-alt"></i> サマリー・紹介状作成</h3>
         <div class="btn-group">
-            <button type="button" class="btn btn-outline-primary" onclick="saveAndPrint('summary')"><i class="fas fa-print"></i> 退院サマリー</button>
-            <button type="button" class="btn btn-outline-success" onclick="saveAndPrint('referral')"><i class="fas fa-envelope"></i> 紹介状</button>
+            <button type="button" class="btn btn-outline-primary" onclick="saveAndPrint('summary')"><i class="fas fa-print"></i> 退院サマリー 印刷</button>
+            <button type="button" class="btn btn-outline-success" onclick="saveAndPrint('referral')"><i class="fas fa-envelope"></i> 紹介状 印刷</button>
             <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary">戻る</a>
         </div>
     </div>
@@ -28,7 +31,7 @@
     <form method="post" id="summaryForm" class="bg-white p-4 shadow-sm rounded">
         {% csrf_token %}
         
-        <!-- 1. 患者情報ヘッダー -->
+        <!-- 1. 患者情報ヘッダー (退院日はここから削除し、下へ移動) -->
         <div class="alert alert-light border mb-4">
             <div class="row align-items-center">
                 <div class="col-md-3"><strong>ID:</strong> {{ patient.card_id }}</div>
@@ -41,21 +44,41 @@
                         未定
                     {% endif %}
                 </div>
-                <div class="col-md-3">
-                    <label class="small fw-bold">退院日設定:</label>
-                    <input type="date" name="discharge_date" class="form-control form-control-sm d-inline-block w-auto" value="{{ patient.discharge_date|date:'Y-m-d' }}">
+                <div class="col-md-3"><strong>入院日:</strong> {{ patient.admission_date|default:"-" }}</div>
+            </div>
+        </div>
+
+        <!-- 2. 退院日設定 (独立させて目立たせる) -->
+        <div class="card discharge-date-card mb-4 shadow-sm">
+            <div class="card-body py-3">
+                <div class="row align-items-center">
+                    <div class="col-md-auto">
+                        <label class="fw-bold text-info mb-0" style="font-size: 1.1rem;">
+                            <i class="fas fa-calendar-check me-2"></i>退院日設定
+                        </label>
+                    </div>
+                    <div class="col-md-auto">
+                        <input type="date" name="discharge_date" id="dischargeDateInput" 
+                               class="form-control fw-bold" 
+                               value="{{ patient.discharge_date|date:'Y-m-d' }}">
+                    </div>
+                    <div class="col">
+                        <span class="text-muted small">
+                            ※退院日が決まったら設定してください。入力すると下のサマリー本文に自動反映されます。
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- 2. サマリー入力 -->
+        <!-- 3. サマリー入力 -->
         <div class="mb-4">
             <label class="form-label fw-bold">入院経過・治療結果（サマリー本文）</label>
-            <textarea name="summary_text" rows="10" class="form-control">{{ summary_text }}</textarea>
+            <textarea name="summary_text" id="summaryText" rows="10" class="form-control">{{ summary_text }}</textarea>
             <div class="form-text text-muted">※内容は編集可能です。印刷ボタンを押すと自動保存されます。</div>
         </div>
 
-        <!-- 3. 退院時処方 -->
+        <!-- 4. 退院時処方 -->
         <div class="mb-4">
             <label class="form-label fw-bold text-primary">退院時処方</label>
             <textarea name="discharge_prescription" rows="4" class="form-control" placeholder="退院時の処方内容を入力してください...">{{ patient.discharge_prescription }}</textarea>
@@ -63,7 +86,7 @@
 
         <hr>
 
-        <!-- 4. 治療実施履歴 -->
+        <!-- 5. 治療実施履歴 -->
         <div class="mt-4">
             <h6 class="fw-bold border-bottom pb-2">rTMS 治療実施記録</h6>
             <div style="max-height: 300px; overflow-y: auto;">
@@ -82,7 +105,7 @@
             </div>
         </div>
 
-        <!-- 5. 心理検査推移 -->
+        <!-- 6. 心理検査推移 -->
         <div class="mt-4">
             <h6 class="fw-bold border-bottom pb-2 text-success"><i class="fas fa-chart-line"></i> 心理検査推移 (HAMD)</h6>
             <div style="overflow-x: auto;">
@@ -107,10 +130,10 @@
         <div class="floating-actions">
             <div class="btn-group-vertical">
                 <button type="button" class="btn btn-primary btn-fab mb-2" onclick="saveAndPrint('summary')">
-                    <i class="fas fa-print"></i> 退院サマリー
+                    <i class="fas fa-print"></i> 退院サマリー 印刷
                 </button>
                 <button type="button" class="btn btn-success btn-fab mb-2" onclick="saveAndPrint('referral')">
-                    <i class="fas fa-envelope"></i> 紹介状印刷
+                    <i class="fas fa-envelope"></i> 紹介状 印刷
                 </button>
             </div>
             <button type="submit" class="btn btn-dark btn-fab mb-2">
@@ -124,6 +147,32 @@
 </div>
 
 <script>
+    // 退院日が変更されたらサマリー本文の日付を自動更新するスクリプト
+    document.getElementById('dischargeDateInput').addEventListener('change', function(e) {
+        const dateVal = e.target.value; // YYYY-MM-DD
+        if (!dateVal) return;
+        
+        // 日付を「YYYY年M月D日」形式に変換
+        const d = new Date(dateVal);
+        const formattedDate = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+        
+        const textarea = document.getElementById('summaryText');
+        let text = textarea.value;
+        
+        // 「未定退院」または「〇〇年〇〇月〇〇日退院」というパターンを探して置換する
+        // 正規表現: (日付文字列 OR "未定") + "退院"
+        const regex = /(\d{4}年\d{1,2}月\d{1,2}日|未定)退院/;
+        
+        if (text.match(regex)) {
+            const newText = text.replace(regex, `${formattedDate}退院`);
+            textarea.value = newText;
+            
+            // 少しエフェクトをつけて更新を知らせる
+            textarea.style.backgroundColor = "#e6f9ed";
+            setTimeout(() => { textarea.style.backgroundColor = ""; }, 500);
+        }
+    });
+
     function saveAndPrint(mode) {
         const form = document.getElementById('summaryForm');
         const formData = new FormData(form);

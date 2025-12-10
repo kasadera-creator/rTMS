@@ -75,6 +75,7 @@ def dashboard_view(request):
     task_assessment = []
     task_discharge = []
     
+    # 入院時の評価 (治療前)
     for adm in task_admission:
         is_done = Assessment.objects.filter(patient=adm['obj'], date=target_date).exists()
         task_assessment.append({'obj': adm['obj'], 'status': "実施済" if is_done else "実施未", 'color': "success" if is_done else "danger", 'timing_code': 'baseline', 'todo': "治療前評価"})
@@ -83,21 +84,24 @@ def dashboard_view(request):
     for p in active_candidates:
         session_num = get_session_number(p.first_treatment_date, target_date)
         
+        # 30回目: 退院準備 & 終了評価
         if session_num == 30:
             task_discharge.append({'obj': p, 'status': "退院準備", 'color': "info", 'todo': "サマリー・紹介状作成"})
             is_assessed = Assessment.objects.filter(patient=p, date=target_date).exists()
-            task_assessment.append({'obj': p, 'status': "実施済" if is_assessed else "実施未", 'color': "success" if is_assessed else "danger", 'timing_code': 'week6', 'todo': "最終評価 (6週間)"})
+            task_assessment.append({'obj': p, 'status': "実施済" if is_assessed else "実施未", 'color': "success" if is_assessed else "danger", 'timing_code': 'week6', 'todo': "最終評価（6週間）"})
             continue 
 
         if session_num <= 0 or session_num > 35: continue
         
+        # 治療
         today_session = TreatmentSession.objects.filter(patient=p, date__date=target_date).first()
         is_done = today_session is not None
         task_treatment.append({'obj': p, 'note': f"第{session_num}回", 'status': "実施済" if is_done else "実施未", 'color': "success" if is_done else "danger", 'session_num': session_num, 'todo': "rTMS治療"})
 
+        # 評価 (15回目) -> 中間評価（3週間）
         if session_num == 15:
             is_assessed = Assessment.objects.filter(patient=p, date=target_date).exists()
-            task_assessment.append({'obj': p, 'status': "実施済" if is_assessed else "実施未", 'color': "success" if is_assessed else "danger", 'timing_code': 'week3', 'todo': "中間評価 (3週間)"})
+            task_assessment.append({'obj': p, 'status': "実施済" if is_assessed else "実施未", 'color': "success" if is_assessed else "danger", 'timing_code': 'week3', 'todo': "中間評価（3週間）"})
 
     return render(request, 'rtms_app/dashboard.html', {
         'today': target_date, 'target_date_display': target_date_display, 
@@ -153,7 +157,6 @@ def patient_first_visit(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     dashboard_date = request.GET.get('dashboard_date')
     
-    # 連携データ
     all_patients = Patient.objects.all()
     referral_map = {}
     referral_sources_set = set()
@@ -339,20 +342,14 @@ def download_db(request):
     return HttpResponse("Not found", 404)
 
 def custom_logout_view(request): logout(request); return redirect('/admin/login/')
-
-# ★修正: プレビュー画面のビューでmodeパラメータを受け取り、テンプレートに渡す
-def patient_print_preview(request, pk):
+def patient_print_preview(request, pk): 
     patient = get_object_or_404(Patient, pk=pk)
     end_date_est = get_completion_date(patient.first_treatment_date)
-    mode = request.GET.get('mode', 'summary') # デフォルトはsummary (サマリー)
-    context = { 
-        'patient': patient, 
-        'end_date_est': end_date_est,
-        'mode': mode 
-    }
+    mode = request.GET.get('mode', 'summary')
+    context = { 'patient': patient, 'end_date_est': end_date_est, 'mode': mode }
     return render(request, 'rtms_app/print_preview.html', context)
 
-def patient_print_summary(request, pk):
+def patient_print_summary(request, pk): 
     patient = get_object_or_404(Patient, pk=pk)
     mode = request.GET.get('mode', 'summary')
     test_scores = Assessment.objects.filter(patient=patient).order_by('date')
