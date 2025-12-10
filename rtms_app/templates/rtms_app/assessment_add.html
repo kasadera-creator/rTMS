@@ -9,7 +9,6 @@
     .history-table th, .history-table td { text-align: center; vertical-align: middle; }
     .tooltip-inner { max-width: 400px !important; text-align: left !important; white-space: pre-wrap; }
     .help-icon { color: #0d6efd; cursor: pointer; margin-left: 5px; font-size: 1.1rem; }
-    .help-icon:hover { color: #0a58ca; }
 </style>
 {% load static %}
 <link rel="icon" href="{% static 'img/logo.jpg' %}">
@@ -21,45 +20,24 @@
         <h3><i class="fas fa-chart-bar text-danger"></i> 状態評価 (HAM-D)</h3>
         <div class="text-end">
             <span class="h5 fw-bold">{{ patient.name }} 殿</span>
-            <span class="text-muted ms-2 small">ID: {{ patient.card_id }}</span>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary ms-3">戻る</a>
         </div>
     </div>
     
-    <div class="card mb-4 shadow-sm">
-        <div class="card-header bg-light fw-bold">過去の評価履歴</div>
-        <div class="table-responsive">
-            <table class="table table-bordered table-sm mb-0 history-table">
-                <thead class="table-light">
-                    <tr>
-                        <th>項目</th>
-                        {% for h in history %}
-                            <th>{{ h.get_timing_display }}<br><small class="text-muted">{{ h.date|date:"Y/n/j" }}</small></th>
-                        {% endfor %}
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="fw-bold bg-white">HAM-D 17</td>
-                        {% for h in history %}
-                            <td class="fw-bold text-primary">{{ h.total_score_17 }}</td>
-                        {% endfor %}
-                    </tr>
-                    <tr>
-                        <td class="fw-bold bg-white">HAM-D 21</td>
-                        {% for h in history %}
-                            <td class="fw-bold">{{ h.total_score_21 }}</td>
-                        {% endfor %}
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
+    {% if recommendation %}
+    <div class="alert alert-info fw-bold mb-4"><i class="fas fa-comment-medical"></i> {{ recommendation }}</div>
+    {% endif %}
 
     <form method="post" class="card shadow-sm border-0">
         {% csrf_token %}
         <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center p-3">
-            <h5 class="mb-0"><i class="fas fa-pen"></i> 新規評価入力</h5>
+            <h5 class="mb-0">
+                {% if existing_assessment %}
+                    <i class="fas fa-edit"></i> 評価の編集 (保存済み)
+                {% else %}
+                    <i class="fas fa-pen"></i> 新規評価入力
+                {% endif %}
+            </h5>
             <div class="d-flex gap-2 align-items-center">
                 <label class="text-white small me-1">実施日:</label>
                 <input type="date" name="date" class="form-control form-control-sm" value="{{ today }}">
@@ -78,28 +56,23 @@
                 <div class="row align-items-center">
                     <div class="col-md-9 d-flex align-items-center">
                         <span class="fw-bold me-2">{{ label }}</span>
-                        <i class="fas fa-info-circle help-icon" 
-                           data-bs-toggle="tooltip" 
-                           data-bs-html="true" 
-                           title="{{ text }}"></i>
+                        <i class="fas fa-info-circle help-icon" data-bs-toggle="tooltip" data-bs-html="true" title="{{ text }}"></i>
                     </div>
                     <div class="col-md-3 text-end d-flex justify-content-end align-items-center">
                         <span class="text-muted small me-2">(0 - {{ max_score }})</span>
-                        <input type="number" name="{{ key }}" class="form-control score-input" 
+                        <input type="number" name="{{ key }}" id="id_{{ key }}" class="form-control score-input" 
                                min="0" max="{{ max_score }}" value="0" required tabindex="{{ forloop.counter }}">
                     </div>
                 </div>
             </div>
             {% endfor %}
-            
             <div class="p-4 bg-light border-top">
                 <label class="form-label fw-bold">コメント・判定</label>
-                <textarea name="note" class="form-control" rows="2" tabindex="22" placeholder="特記事項があれば記載してください"></textarea>
+                <textarea name="note" id="id_note" class="form-control" rows="2">{{ existing_assessment.note|default:"" }}</textarea>
             </div>
         </div>
-
         <div class="card-footer text-center p-3">
-            <button type="submit" class="btn btn-primary btn-lg px-5 fw-bold shadow-sm" tabindex="23">
+            <button type="submit" class="btn btn-primary btn-lg px-5 fw-bold shadow-sm">
                 <i class="fas fa-save"></i> 評価を保存する
             </button>
         </div>
@@ -108,9 +81,19 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl)
-    })
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) { return new bootstrap.Tooltip(tooltipTriggerEl) });
+
+    // 既存データがある場合、フォームに値をセットする
+    window.addEventListener('load', function() {
+        {% if existing_assessment %}
+            // Djangoテンプレート変数からJSONとしてデータを展開
+            const scores = {{ existing_assessment.scores|safe }};
+            for (const [key, value] of Object.entries(scores)) {
+                const input = document.getElementById('id_' + key);
+                if(input) input.value = value;
+            }
+        {% endif %}
+    });
 </script>
 {% endblock %}

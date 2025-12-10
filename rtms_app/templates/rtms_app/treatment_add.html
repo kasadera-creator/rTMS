@@ -19,32 +19,51 @@
     }
 </style>
 {% endblock %}
+
 {% block content %}
 <div class="container py-4 mb-5">
     <div class="d-flex justify-content-between align-items-center mb-4 no-print">
         <h3><i class="fas fa-bolt"></i> 治療実施記録</h3>
-        <div class="btn-group"><button type="button" class="btn btn-outline-success" onclick="printDiv('side-effects-sheet')"><i class="fas fa-print"></i> 副作用チェック表 印刷</button><a href="{% url 'dashboard' %}" class="btn btn-secondary">戻る</a></div>
+        <div class="btn-group">
+            <button type="button" class="btn btn-outline-success" onclick="printDiv('side-effects-sheet')"><i class="fas fa-print"></i> 副作用チェック表 印刷</button>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary">戻る</a>
+        </div>
     </div>
+
+    <div class="alert alert-info no-print">
+        <strong>第{{ session_num }}回目</strong> (開始: {{ start_date|date:"Y/n/j" }} ～ 終了予定: {{ end_date_est|date:"Y/n/j" }})
+    </div>
+
     <form method="post">
         {% csrf_token %}
-        <div class="card mb-4 shadow-sm no-print"><div class="card-header bg-warning text-dark fw-bold">最新の位置決め情報 (Reference)</div><div class="card-body">{% if latest_mapping %}<div class="row"><div class="col-md-4"><strong>実施日:</strong> {{ latest_mapping.date }}</div><div class="col-md-4"><strong>安静時MT:</strong> {{ latest_mapping.resting_mt }} %</div><div class="col-md-4"><strong>刺激部位:</strong> {{ latest_mapping.stimulation_site }}</div></div>{% else %}<div class="text-danger">※位置決め記録がまだありません。初回治療前に位置決めを行ってください。</div>{% endif %}</div></div>
+        <div class="card mb-4 shadow-sm no-print"><div class="card-header bg-warning text-dark fw-bold">最新の位置決め情報</div><div class="card-body">{% if latest_mapping %}<div class="row"><div class="col-md-4"><strong>実施日:</strong> {{ latest_mapping.date }}</div><div class="col-md-4"><strong>安静時MT:</strong> {{ latest_mapping.resting_mt }} %</div><div class="col-md-4"><strong>刺激部位:</strong> {{ latest_mapping.stimulation_site }}</div></div>{% else %}<div class="text-danger">※位置決め記録がありません。</div>{% endif %}</div></div>
+        
         <div class="card mb-4 shadow-sm no-print"><div class="card-body"><h5 class="section-title">実施日時・安全確認</h5><div class="row mb-3"><div class="col-md-4">{{ form.date.label_tag }} {{ form.date }}</div></div><div class="row"><div class="col-md-4"><div class="form-check form-switch py-2">{{ form.safety_sleep }} <label class="form-check-label fw-bold">睡眠不足なし</label></div></div><div class="col-md-4"><div class="form-check form-switch py-2">{{ form.safety_alcohol }} <label class="form-check-label fw-bold">アルコール・カフェイン過剰なし</label></div></div><div class="col-md-4"><div class="form-check form-switch py-2">{{ form.safety_meds }} <label class="form-check-label fw-bold">服薬変更なし</label></div></div></div></div></div>
+        
         <div class="card mb-4 shadow-sm no-print"><div class="card-body"><h5 class="section-title">治療パラメータ</h5><div class="row g-3"><div class="col-md-4"><label class="form-label">当日のMT (%)</label>{{ form.motor_threshold }}</div><div class="col-md-4"><label class="form-label">刺激強度 (%)</label>{{ form.intensity }}<small class="text-muted">通常 120%</small></div><div class="col-md-4"><label class="form-label">総パルス数</label>{{ form.total_pulses }}</div></div></div></div>
+        
         <div id="side-effects-sheet" class="printable-area card mb-4 shadow-sm">
             <div class="card-body">
                 <div class="print-header d-none d-print-block"><h2>rTMS 副作用チェック表</h2><p style="text-align: right; font-size: 10px;">笠寺精治寮病院</p></div>
-                <div class="print-row d-none d-print-flex"><div style="width: 30%;">ID: <strong>{{ patient.card_id }}</strong></div><div style="width: 40%;">氏名: <strong>{{ patient.name }} 殿</strong></div><div style="width: 30%; text-align: right;">実施日: __________________</div></div>
+                <div class="print-row d-none d-print-flex">
+                    <div style="width: 30%;">ID: <strong>{{ patient.card_id }}</strong></div>
+                    <div style="width: 30%;">氏名: <strong>{{ patient.name }} 殿</strong></div>
+                    <div style="width: 40%; text-align: right;">
+                        第<strong>{{ session_num }}</strong>回 ({{ form.date.value|default:"本日" }})
+                    </div>
+                </div>
+                
                 <h5 class="section-title no-print">副作用チェック表</h5>
                 <p class="text-muted small no-print">治療中・治療後の自覚症状について確認してください。</p>
                 <table class="table table-hover table-bordered">
-                    <thead class="table-light"><tr><th style="vertical-align: middle;">症状</th><th width="80" class="text-center">なし<br><span style="font-size:0.8em; font-weight:normal;">(None)</span></th><th width="80" class="text-center">軽度<br><span style="font-size:0.8em; font-weight:normal;">(Mild)</span></th><th width="80" class="text-center">中等度<br><span style="font-size:0.8em; font-weight:normal;">(Moderate)</span></th><th width="80" class="text-center">重度<br><span style="font-size:0.8em; font-weight:normal;">(Severe)</span></th></tr></thead>
+                    <thead class="table-light"><tr><th style="vertical-align: middle;">症状</th><th width="80" class="text-center">なし<br>(None)</th><th width="80" class="text-center">軽度<br>(Mild)</th><th width="80" class="text-center">中等度<br>(Moderate)</th><th width="80" class="text-center">重度<br>(Severe)</th></tr></thead>
                     <tbody>
                         {% for key, label in side_effect_items %}
                         <tr class="check-row"><td>{{ label }}</td><td class="text-center"><input type="radio" name="se_{{ key }}" value="0" checked></td><td class="text-center"><input type="radio" name="se_{{ key }}" value="1"></td><td class="text-center"><input type="radio" name="se_{{ key }}" value="2"></td><td class="text-center"><input type="radio" name="se_{{ key }}" value="3"></td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
-                <div class="mt-3"><label class="form-label fw-bold">特記事項 (自由記載)</label><textarea name="se_note" class="form-control" rows="3" placeholder="けいれん発作の兆候やその他気になる点があれば記載"></textarea></div>
+                <div class="mt-3"><label class="form-label fw-bold">特記事項 (自由記載)</label><textarea name="se_note" class="form-control" rows="3"></textarea></div>
                 <div class="d-none d-print-block mt-5 text-end"><p>実施者署名: ___________________________</p></div>
             </div>
         </div>
