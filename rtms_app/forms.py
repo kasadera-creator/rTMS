@@ -55,8 +55,12 @@ class PatientFirstVisitForm(forms.ModelForm):
             'life_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'past_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'present_illness': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            # ★行数を増やしました
-            'medication_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 7}),
+            'medication_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 6}),
+            'dementia_detail': forms.TextInput(attrs={
+        'class': 'form-control form-control-sm',
+        'placeholder': '',
+        'style': 'display: inline-block; width: auto; margin-left: 10px;'
+    }),
             'admission_date': DateInput(attrs={'class': 'form-control'}),
             'mapping_date': DateInput(attrs={'class': 'form-control'}),
             'first_treatment_date': DateInput(attrs={'class': 'form-control'}),
