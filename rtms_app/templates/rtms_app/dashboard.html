@@ -2,7 +2,7 @@
 
 {% block extrastyle %}
 <style>
-    .date-nav { background: white; border-radius: 10px; padding: 10px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 25px; }
+    .date-nav { background: white; border-radius: 10px; padding: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 25px; }
     .card-task { border: none; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); height: 100%; transition: transform 0.2s; }
     .card-task:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
     .task-header { padding: 12px 15px; color: white; display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 1rem; border-radius: 10px 10px 0 0; }
@@ -18,7 +18,6 @@
     .list-group-item:hover { background-color: #f8f9fa; }
     .list-group-item a { text-decoration: none; color: inherit; display: block; }
     
-    /* ★修正: .status-診察済 を追加 */
     .status-badge { font-size: 0.7rem; padding: 3px 8px; border-radius: 12px; min-width: 60px; text-align: center; float: right; margin-left: 5px; }
     .status-success, .status-done, .status-手続済, .status-実施済, .status-登録済, .status-診察済 { background-color: #e6f9ed; color: #198754; border: 1px solid #c3e6cb; }
     .status-warning, .status-要対応, .status-要手続 { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
@@ -41,41 +40,48 @@
 
 {% block content %}
 <div class="container py-4">
-    <!-- 日付ナビゲーション -->
-    <div class="date-nav d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center">
-            <h4 class="mb-0 fw-bold me-3 d-none d-md-block"><i class="fas fa-tachometer-alt text-secondary"></i> ダッシュボード</h4>
+    <!-- 日付ナビゲーション (レスポンシブ対応: スマホは縦並び、PCは横並び) -->
+    <div class="date-nav d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
+        
+        <!-- 左側: タイトルと日付操作 -->
+        <div class="d-flex flex-wrap align-items-center justify-content-center gap-2 w-100 w-md-auto">
+            <h4 class="mb-0 fw-bold me-3 d-none d-lg-block text-nowrap"><i class="fas fa-tachometer-alt text-secondary"></i> ダッシュボード</h4>
             
-            <a href="?date={{ prev_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm me-2" title="前日">
-                <i class="fas fa-chevron-left"></i>
-            </a>
-            
-            <!-- 日付表示 + カレンダーピッカー -->
-            <div class="d-inline-flex align-items-center bg-light px-3 py-1 rounded border position-relative date-picker-wrapper">
-                <span class="fw-bold fs-5 me-2" onclick="document.getElementById('datePicker').showPicker()">{{ target_date_display }}</span>
-                <input type="date" id="datePicker" 
-                       class="date-picker-input"
-                       value="{{ today|date:'Y-m-d' }}" 
-                       onchange="location.href='?date='+this.value"
-                       onclick="this.showPicker()">
-                <i class="far fa-calendar-alt text-primary fs-5 pointer-events-none"></i>
+            <div class="d-flex align-items-center">
+                <a href="?date={{ prev_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm me-2" title="前日">
+                    <i class="fas fa-chevron-left"></i>
+                </a>
+                
+                <!-- 日付表示 + カレンダーピッカー -->
+                <div class="d-inline-flex align-items-center bg-light px-3 py-1 rounded border position-relative date-picker-wrapper">
+                    <!-- スマホでは文字サイズを少し小さく (fs-6), PCでは標準 (fs-5) -->
+                    <span class="fw-bold fs-6 fs-md-5 me-2 text-nowrap" onclick="document.getElementById('datePicker').showPicker()">
+                        {{ target_date_display }}
+                    </span>
+                    <input type="date" id="datePicker" 
+                           class="date-picker-input"
+                           value="{{ today|date:'Y-m-d' }}" 
+                           onchange="location.href='?date='+this.value"
+                           onclick="this.showPicker()">
+                    <i class="far fa-calendar-alt text-primary fs-5 pointer-events-none"></i>
+                </div>
+                
+                <a href="?date={{ next_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm ms-2" title="翌日">
+                    <i class="fas fa-chevron-right"></i>
+                </a>
             </div>
-            
-            <a href="?date={{ next_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm ms-2" title="翌日">
-                <i class="fas fa-chevron-right"></i>
-            </a>
-            
-            <a href="?date={{ today_raw|date:'Y-m-d' }}" class="btn btn-sm btn-outline-dark ms-3">
+
+            <a href="?date={{ today_raw|date:'Y-m-d' }}" class="btn btn-sm btn-outline-dark text-nowrap">
                 <i class="fas fa-calendar-day"></i> 今日
             </a>
         </div>
         
-        <!-- 右側アクションボタン -->
-        <div>
-            <a href="{% url 'patient_add' %}" class="btn btn-primary btn-sm fw-bold me-2 shadow-sm">
+        <!-- 右側: アクションボタン (スマホでは下段に配置) -->
+        <div class="d-flex gap-2 w-100 w-md-auto justify-content-center justify-content-md-end">
+            <a href="{% url 'patient_add' %}" class="btn btn-primary btn-sm fw-bold shadow-sm text-nowrap">
                 <i class="fas fa-user-plus me-1"></i> 新規患者登録
             </a>
-            <a href="{% url 'patient_list' %}?dashboard_date={{ today|date:'Y-m-d' }}" class="btn btn-outline-dark btn-sm fw-bold">
+            <a href="{% url 'patient_list' %}?dashboard_date={{ today|date:'Y-m-d' }}" class="btn btn-outline-dark btn-sm fw-bold text-nowrap">
                 <i class="fas fa-users me-1"></i> 患者一覧
             </a>
         </div>
@@ -138,7 +144,6 @@
                             <!-- 3. ID・担当医 (下) -->
                             <div class="task-meta">
                                 <span>ID: {{ item.obj.card_id }}</span>
-                                <!-- 担当医: 姓のみ表示 -->
                                 <span>担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
                             </div>
                         </a>
