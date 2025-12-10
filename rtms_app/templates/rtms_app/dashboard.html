@@ -83,16 +83,16 @@
     <!-- 3列 x 2行 のグリッドレイアウト -->
     <div class="row g-4">
         
-        <!-- 共通ループマクロ (DRYのため) -->
-        {% for task_list, title, color_class, icon in [(task_first_visit, "① 初診", "bg-g-1", "fa-user-plus"), (task_admission, "② 入院", "bg-g-2", "fa-procedures"), (task_mapping, "③ 位置決め", "bg-g-3", "fa-crosshairs"), (task_treatment, "④ 治療実施", "bg-g-4", "fa-bolt"), (task_assessment, "⑤ 尺度評価", "bg-g-5", "fa-clipboard-check"), (task_discharge, "⑥ 退院準備", "bg-g-6", "fa-file-export")] %}
+        <!-- views.py で作成した dashboard_tasks をループ -->
+        {% for task_group in dashboard_tasks %}
         <div class="col-md-6 col-lg-4">
             <div class="card-task bg-white">
-                <div class="task-header {{ color_class }}">
-                    <span><i class="fas {{ icon }} me-2"></i>{{ title }}</span>
-                    <span class="badge bg-white text-dark rounded-pill opacity-75">{{ task_list|length }}</span>
+                <div class="task-header {{ task_group.color }}">
+                    <span><i class="fas {{ task_group.icon }} me-2"></i>{{ task_group.title }}</span>
+                    <span class="badge bg-white text-dark rounded-pill opacity-75">{{ task_group.list|length }}</span>
                 </div>
                 <!-- 初診のみ新規登録ボタンを表示 -->
-                {% if title == "① 初診" %}
+                {% if task_group.title == "① 初診" %}
                 <div class="p-2 border-bottom text-center bg-light">
                     <a href="{% url 'patient_add' %}" class="btn btn-outline-primary btn-sm w-100 fw-bold border-0">
                         <i class="fas fa-plus-circle"></i> 新規患者登録
@@ -101,19 +101,19 @@
                 {% endif %}
                 
                 <div class="list-group list-group-flush">
-                    {% for item in task_list %}
+                    {% for item in task_group.list %}
                     <div class="list-group-item">
-                        {% if title == "① 初診" %}
+                        {% if task_group.title == "① 初診" %}
                             <a href="{% url 'patient_first_visit' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
-                        {% elif title == "② 入院" %}
+                        {% elif task_group.title == "② 入院" %}
                             <a href="{% url 'admission_procedure' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
-                        {% elif title == "③ 位置決め" %}
+                        {% elif task_group.title == "③ 位置決め" %}
                             <a href="{% url 'mapping_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
-                        {% elif title == "④ 治療実施" %}
+                        {% elif task_group.title == "④ 治療実施" %}
                             <a href="{% url 'treatment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
-                        {% elif title == "⑤ 尺度評価" %}
+                        {% elif task_group.title == "⑤ 尺度評価" %}
                             <a href="{% url 'assessment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&timing={{ item.timing_code }}&dashboard_date={{ today|date:'Y-m-d' }}">
-                        {% elif title == "⑥ 退院準備" %}
+                        {% elif task_group.title == "⑥ 退院準備" %}
                             <a href="{% url 'patient_summary' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
                         {% endif %}
                         

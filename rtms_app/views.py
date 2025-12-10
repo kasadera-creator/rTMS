@@ -117,22 +117,27 @@ def dashboard_view(request):
                     continue
             
             deadline_date = get_date_of_session(p.first_treatment_date, deadline_session)
-            deadline_str = f"期限: {deadline_date.strftime('%-m/%-d')}"
-            task_assessment.append({'obj': p, 'status': "実施未", 'color': "danger", 'timing_code': target_timing, 'todo': f"{todo_label} {deadline_str}"})
+            if deadline_date:
+                deadline_str = f"期限: {deadline_date.strftime('%-m/%-d')}"
+                task_assessment.append({'obj': p, 'status': "実施未", 'color': "danger", 'timing_code': target_timing, 'todo': f"{todo_label} {deadline_str}"})
+
+    # ★修正: テンプレート側でのループエラーを防ぐため、ここでリストを作成する
+    dashboard_tasks = [
+        {'list': task_first_visit, 'title': "① 初診", 'color': "bg-g-1", 'icon': "fa-user-plus"},
+        {'list': task_admission, 'title': "② 入院", 'color': "bg-g-2", 'icon': "fa-procedures"},
+        {'list': task_mapping, 'title': "③ 位置決め", 'color': "bg-g-3", 'icon': "fa-crosshairs"},
+        {'list': task_treatment, 'title': "④ 治療実施", 'color': "bg-g-4", 'icon': "fa-bolt"},
+        {'list': task_assessment, 'title': "⑤ 尺度評価", 'color': "bg-g-5", 'icon': "fa-clipboard-check"},
+        {'list': task_discharge, 'title': "⑥ 退院準備", 'color': "bg-g-6", 'icon': "fa-file-export"},
+    ]
 
     return render(request, 'rtms_app/dashboard.html', {
         'today': target_date, 'target_date_display': target_date_display, 
         'prev_day': prev_day, 'next_day': next_day,
         'today_raw': jst_now.date(),
-        'task_first_visit': task_first_visit,
-        'task_admission': task_admission,
-        'task_mapping': task_mapping,
-        'task_treatment': task_treatment,
-        'task_assessment': task_assessment,
-        'task_discharge': task_discharge,
+        'dashboard_tasks': dashboard_tasks, # まとめたデータを渡す
     })
 
-# --- ★新規登録（2クール目対応） ---
 @login_required
 def patient_add_view(request):
     referral_options = Patient.objects.values_list('referral_source', flat=True).distinct()
@@ -140,42 +145,27 @@ def patient_add_view(request):
 
     if request.method == 'POST':
         form = PatientRegistrationForm(request.POST)
-        # ID重複チェックを手動で行う
         card_id = request.POST.get('card_id')
         existing_patients = Patient.objects.filter(card_id=card_id).order_by('-course_number')
         
-        # "確認済み"フラグがあれば強制作成
         if 'confirm_create' in request.POST and existing_patients.exists():
             latest = existing_patients.first()
             new_course_num = latest.course_number + 1
-            
-            # 既存データからコピーして新規作成
             new_patient = Patient(
-                card_id=latest.card_id,
-                name=latest.name,
-                birth_date=latest.birth_date,
-                gender=latest.gender,
-                referral_source=request.POST.get('referral_source') or latest.referral_source,
-                referral_doctor=request.POST.get('referral_doctor') or latest.referral_doctor,
-                life_history=latest.life_history, # 生活歴は変わらないのでコピー
-                past_history=latest.past_history, # 既往歴もコピー
-                diagnosis=latest.diagnosis,       # 診断名もとりあえずコピー
+                card_id=latest.card_id, name=latest.name, birth_date=latest.birth_date, gender=latest.gender, 
+                referral_source=request.POST.get('referral_source') or latest.referral_source, 
+                referral_doctor=request.POST.get('referral_doctor') or latest.referral_doctor, 
+                life_history=latest.life_history, past_history=latest.past_history, diagnosis=latest.diagnosis, 
                 course_number=new_course_num
-                # 入院日などは空になる
             )
             new_patient.save()
             return redirect('dashboard')
 
-        # まだ確認していない場合
         if existing_patients.exists():
-            # フォーム自体はvalidでも、ID重複警告を出すためにテンプレートへ戻す
-            # 入力値を保持したフォームを渡す
             latest = existing_patients.first()
             return render(request, 'rtms_app/patient_add.html', {
-                'form': form,
-                'referral_options': referral_options,
-                'existing_patient': latest, # 警告表示用
-                'next_course_num': latest.course_number + 1
+                'form': form, 'referral_options': referral_options, 
+                'existing_patient': latest, 'next_course_num': latest.course_number + 1
             })
 
         if form.is_valid(): 
@@ -186,8 +176,7 @@ def patient_add_view(request):
         form = PatientRegistrationForm()
     
     return render(request, 'rtms_app/patient_add.html', {
-        'form': form,
-        'referral_options': referral_options
+        'form': form, 'referral_options': referral_options
     })
 
 @login_required
@@ -298,6 +287,12 @@ def assessment_add(request, patient_id):
     dashboard_date = request.GET.get('dashboard_date')
     history = Assessment.objects.filter(patient=patient).order_by('date')
     hamd_items = [('q1', '1. 抑うつ気分', 4, "0. なし..."), ('q2', '2. 罪責感', 4, "0. なし..."), ('q3', '3. 自殺', 4, "0. なし..."), ('q4', '4. 入眠障害', 2, "0. 入眠困難はない..."), ('q5', '5. 熟眠障害', 2, "0. 熟眠困難はない..."), ('q6', '6. 早朝睡眠障害', 2, "0. 早朝睡眠に困難はない..."), ('q7', '7. 仕事と活動', 4, "0. 困難なくできる..."), ('q8', '8. 精神運動抑制', 4, "0. 発話・思考は正常である..."), ('q9', '9. 精神運動激越', 4, "0. なし..."), ('q10', '10. 不安, 精神症状', 4, "0. 問題なし..."), ('q11', '11. 不安, 身体症状', 4, "0. なし..."), ('q12', '12. 身体症状, 消化器系', 2, "0. なし..."), ('q13', '13. 身体症状, 一般的', 2, "0. なし..."), ('q14', '14. 生殖器症状', 2, "0. なし..."), ('q15', '15. 心気症', 4, "0. なし..."), ('q16', '16. 体重減少', 2, "0. 体重減少なし..."), ('q17', '17. 病識', 2, "0. うつ状態であり病気であることを認める..."), ('q18', '18. 日内変動', 2, "<strong>A. 変動の有無</strong>..."), ('q19', '19. 現実感喪失, 離人症', 4, "0. なし..."), ('q20', '20. 妄想症状', 3, "0. なし..."), ('q21', '21. 強迫症状', 2, "0. なし...")]
+    
+    # ★修正: 項目を2分割する
+    mid_index = 11 # 11問目で分割
+    hamd_items_left = hamd_items[:mid_index]
+    hamd_items_right = hamd_items[mid_index:]
+
     target_date_str = request.GET.get('date') or timezone.now().strftime('%Y-%m-%d')
     timing = request.GET.get('timing', 'other')
     existing_assessment = Assessment.objects.filter(patient=patient, date=target_date_str, type='HAM-D').first()
@@ -322,7 +317,15 @@ def assessment_add(request, patient_id):
             assessment.save()
             return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'dashboard')
         except Exception as e: print(e)
-    return render(request, 'rtms_app/assessment_add.html', {'patient': patient, 'history': history, 'today': target_date_str, 'hamd_items': hamd_items, 'initial_timing': timing, 'existing_assessment': existing_assessment, 'recommendation': recommendation, 'dashboard_date': dashboard_date})
+        
+    return render(request, 'rtms_app/assessment_add.html', {
+        'patient': patient, 'history': history, 'today': target_date_str, 
+        # 分割したリストを渡す
+        'hamd_items_left': hamd_items_left,
+        'hamd_items_right': hamd_items_right,
+        'initial_timing': timing, 'existing_assessment': existing_assessment, 
+        'recommendation': recommendation, 'dashboard_date': dashboard_date
+    })
 
 @login_required
 def patient_summary_view(request, patient_id):
@@ -386,9 +389,14 @@ def patient_add_view(request):
 
 @login_required
 def export_treatment_csv(request):
-    response = HttpResponse(content_type='text/csv; charset=utf-8-sig'); response['Content-Disposition'] = 'attachment; filename="treatment_data.csv"'; writer = csv.writer(response); writer.writerow(['ID', '氏名', '実施日時', 'MT(%)', '強度(%)', 'パルス数', '実施者', '副作用'])
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+    response['Content-Disposition'] = 'attachment; filename="treatment_data.csv"'
+    writer = csv.writer(response)
+    writer.writerow(['ID', '氏名', '実施日時', 'MT(%)', '強度(%)', 'パルス数', '実施者', '副作用'])
     treatments = TreatmentSession.objects.all().select_related('patient', 'performer').order_by('date')
-    for t in treatments: se_str = json.dumps(t.side_effects, ensure_ascii=False) if t.side_effects else ""; writer.writerow([t.patient.card_id, t.patient.name, t.date.strftime('%Y-%m-%d %H:%M'), t.motor_threshold, t.intensity, t.total_pulses, t.performer.username if t.performer else "", se_str])
+    for t in treatments:
+        se_str = json.dumps(t.side_effects, ensure_ascii=False) if t.side_effects else ""
+        writer.writerow([t.patient.card_id, t.patient.name, t.date.strftime('%Y-%m-%d %H:%M'), t.motor_threshold, t.intensity, t.total_pulses, t.performer.username if t.performer else "", se_str])
     return response
 
 @login_required
@@ -399,5 +407,16 @@ def download_db(request):
     return HttpResponse("Not found", 404)
 
 def custom_logout_view(request): logout(request); return redirect('/admin/login/')
-def patient_print_preview(request, pk): patient = get_object_or_404(Patient, pk=pk); end_date_est = get_completion_date(patient.first_treatment_date); mode = request.GET.get('mode', 'summary'); context = { 'patient': patient, 'end_date_est': end_date_est, 'mode': mode }; return render(request, 'rtms_app/print_preview.html', context)
-def patient_print_summary(request, pk): patient = get_object_or_404(Patient, pk=pk); mode = request.GET.get('mode', 'summary'); test_scores = Assessment.objects.filter(patient=patient).order_by('date'); context = {'patient': patient, 'mode': mode, 'today': datetime.date.today(), 'test_scores': test_scores}; return render(request, 'rtms_app/print_summary.html', context)
+def patient_print_preview(request, pk): 
+    patient = get_object_or_404(Patient, pk=pk)
+    end_date_est = get_completion_date(patient.first_treatment_date)
+    mode = request.GET.get('mode', 'summary')
+    context = { 'patient': patient, 'end_date_est': end_date_est, 'mode': mode }
+    return render(request, 'rtms_app/print_preview.html', context)
+
+def patient_print_summary(request, pk): 
+    patient = get_object_or_404(Patient, pk=pk)
+    mode = request.GET.get('mode', 'summary')
+    test_scores = Assessment.objects.filter(patient=patient).order_by('date')
+    context = {'patient': patient, 'mode': mode, 'today': datetime.date.today(), 'test_scores': test_scores}
+    return render(request, 'rtms_app/print_summary.html', context)
