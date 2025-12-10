@@ -128,31 +128,40 @@ def admission_procedure(request, patient_id):
 @login_required
 def patient_first_visit(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
+    
+    # 紹介元の選択肢用リスト (既存のデータからユニークな値を取得)
+    referral_options = Patient.objects.values_list('referral_source', flat=True).distinct()
+    referral_options = [r for r in referral_options if r] # 空文字除去
+
     if request.method == 'POST':
         form = PatientFirstVisitForm(request.POST, instance=patient)
         if form.is_valid():
-            form.save()
+            # 診断名チェックボックスの処理
+            # フォームのsave(commit=False)で一旦インスタンスを作成
+            p = form.save(commit=False)
+            
+            # HTML側のチェックボックス(name="diag_list")を取得
+            diag_list = request.POST.getlist('diag_list')
+            diag_other = request.POST.get('diag_other', '').strip()
+            
+            # 結合して保存用文字列にする (例: "うつ病, パニック症, その他(睡眠障害)")
+            full_diagnosis = ", ".join(diag_list)
+            if diag_other:
+                full_diagnosis += f", その他({diag_other})"
+            
+            # 診断名を上書き
+            p.diagnosis = full_diagnosis
+            p.save()
             return redirect('dashboard')
     else:
         form = PatientFirstVisitForm(instance=patient)
-    return render(request, 'rtms_app/patient_first_visit.html', {'patient': patient, 'form': form})
-
-@login_required
-def mapping_add(request, patient_id):
-    patient = get_object_or_404(Patient, pk=patient_id)
-    history = MappingSession.objects.filter(patient=patient).order_by('date')
-    if request.method == 'POST':
-        form = MappingForm(request.POST)
-        if form.is_valid():
-            m = form.save(commit=False)
-            m.patient = patient
-            m.save()
-            return redirect('dashboard')
-    else:
-        initial_date = request.GET.get('date') or timezone.now().date()
-        form = MappingForm(initial={'date': initial_date, 'week_number': 1})
-    return render(request, 'rtms_app/mapping_add.html', {'patient': patient, 'form': form, 'history': history})
-
+    
+    return render(request, 'rtms_app/patient_first_visit.html', {
+        'patient': patient, 
+        'form': form,
+        'referral_options': referral_options # テンプレートへ渡す
+    })
+    
 @login_required
 def treatment_add(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
