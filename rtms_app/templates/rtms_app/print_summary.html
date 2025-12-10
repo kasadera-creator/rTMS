@@ -42,7 +42,7 @@
     .section-label { font-weight: bold; border-left: 4px solid #555; padding-left: 8px; margin-bottom: 6px; background-color: #eee; font-size: 10.5pt; }
     .text-content { font-size: 10pt; line-height: 1.5; white-space: pre-wrap; text-align: justify; }
 
-    .print-score-table { width: 70%; margin-top: 8px; border-collapse: collapse; font-size: 9.5pt; }
+    .print-score-table { width: 80%; margin-top: 8px; border-collapse: collapse; font-size: 9.5pt; }
     .print-score-table th, .print-score-table td { border: 1px solid #000; padding: 3px; text-align: center; }
     .print-score-table th { background-color: #f0f0f0 !important; -webkit-print-color-adjust: exact; }
 
@@ -104,7 +104,7 @@
             <th>患者ID</th>
             <td>{{ patient.card_id }}</td>
             <th>氏名</th>
-            <td>{{ patient.name }} 様</td>
+            <td>{{ patient.name }} 殿</td>
         </tr>
         <tr>
             <th>生年月日</th>
@@ -116,7 +116,7 @@
             <th>入院期間</th>
             <td colspan="3">
                 {{ patient.admission_date|date:"Y/n/j" }} 〜 
-                <!-- ★修正: 退院日があれば退院日を、なければ今日を表示 -->
+                <!-- 退院日を表示 -->
                 {% if patient.discharge_date %}
                     {{ patient.discharge_date|date:"Y/n/j" }} (退院)
                 {% else %}
@@ -140,7 +140,7 @@
             {{ patient.summary_text|linebreaksbr }}
         </div>
 
-        <!-- 心理検査経過表 -->
+        <!-- 心理検査経過表 (時期カラムを追加) -->
         {% if test_scores %}
         <div class="mt-2">
             <div style="font-weight: bold; font-size: 9pt; margin-bottom: 3px; border-bottom: 1px dashed #ccc; width: fit-content;">
@@ -148,13 +148,15 @@
             </div>
             <table class="print-score-table">
                 <tr>
-                    <th style="width: 30%;">実施日</th>
-                    <th style="width: 35%;">HAMD 17項目</th>
-                    <th style="width: 35%;">HAMD 21項目</th>
+                    <th style="width: 25%;">実施日</th>
+                    <th style="width: 25%;">時期</th>
+                    <th style="width: 25%;">HAMD 17項目</th>
+                    <th style="width: 25%;">HAMD 21項目</th>
                 </tr>
                 {% for score in test_scores %}
                 <tr>
                     <td>{{ score.date|date:"Y/n/j" }}</td>
+                    <td>{{ score.get_timing_display|default:"-" }}</td>
                     <td>{{ score.total_score_17 }}</td>
                     <td>{{ score.total_score_21 }}</td>
                 </tr>

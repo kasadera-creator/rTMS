@@ -4,186 +4,177 @@
 <style>
     /* 画面表示用（プレビュー背景） */
     body { background-color: #525659; }
-    .page-container {
-        background-color: white;
-        width: 210mm; /* A4幅 */
-        min-height: 297mm;
-        margin: 20px auto;
-        padding: 20mm; /* 余白 */
-        box-shadow: 0 0 10px rgba(0,0,0,0.5);
-        position: relative;
-        box-sizing: border-box;
+    .preview-container { width: 210mm; margin: 20px auto; }
+    .page-sheet {
+        background-color: white; width: 100%; min-height: 297mm; padding: 15mm;
+        box-shadow: 0 0 10px rgba(0,0,0,0.5); position: relative; box-sizing: border-box; margin-bottom: 20px;
+        font-family: "Hiragino Mincho ProN", "Yu Mincho", "MS PMincho", serif; color: #000; line-height: 1.4;
     }
-
-    /* 印刷時設定（重要） */
     @media print {
         @page { size: A4; margin: 0; }
         body { background-color: white; margin: 0; }
-        .page-container { width: 100%; margin: 0; padding: 15mm 20mm; box-shadow: none; border: none; }
+        .preview-container { width: 100%; margin: 0; }
+        .page-sheet { 
+            width: 100%; margin: 0; padding: 10mm 15mm; box-shadow: none; border: none; min-height: 297mm;
+        }
         .no-print { display: none !important; }
         a[href]:after { content: none !important; }
     }
 
-    /* 文書内スタイル */
-    h1.doc-title { text-align: center; font-size: 20pt; margin-bottom: 25px; font-family: "Hiragino Mincho ProN", serif; border-bottom: 2px solid #333; padding-bottom: 8px; }
+    /* サマリー用スタイル */
+    h1.summary-title { font-size: 18pt; text-align: center; border-bottom: 2px solid #000; margin-bottom: 15px; padding-bottom: 5px; }
+    .basic-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
+    .basic-info-item { font-size: 10pt; }
+    .basic-info-item label { font-weight: bold; margin-right: 8px; }
     
-    .referral-header { display: flex; justify-content: space-between; margin-bottom: 25px; font-size: 10.5pt; }
-    .referral-to { font-size: 13pt; text-decoration: underline; align-self: flex-start; margin-top: 15px; line-height: 1.4; }
-    .referral-from { text-align: right; line-height: 1.5; }
+    .summary-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10pt; }
+    .summary-table th, .summary-table td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
+    .summary-table th { background-color: #f0f0f0 !important; -webkit-print-color-adjust: exact; width: 100px; text-align: left; font-weight: normal; }
     
-    .summary-header { text-align: right; margin-bottom: 20px; font-size: 10.5pt; line-height: 1.5; }
+    .schedule-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 8px; }
+    .schedule-table th, .schedule-table td { border: 1px solid #000; padding: 4px; text-align: center; }
+    .schedule-table th { background-color: #e0e0e0 !important; -webkit-print-color-adjust: exact; }
 
-    .info-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 10.5pt; }
-    .info-table th, .info-table td { border-bottom: 1px solid #ccc; padding: 6px 4px; }
-    .info-table th { width: 90px; text-align: left; color: #555; font-weight: normal; }
-    .info-table td { font-weight: bold; }
-
-    .content-section { margin-bottom: 15px; }
-    .section-label { font-weight: bold; border-left: 4px solid #555; padding-left: 8px; margin-bottom: 6px; background-color: #eee; font-size: 10.5pt; }
-    .text-content { font-size: 10pt; line-height: 1.5; white-space: pre-wrap; text-align: justify; }
-
-    .print-score-table { width: 80%; margin-top: 8px; border-collapse: collapse; font-size: 9.5pt; }
-    .print-score-table th, .print-score-table td { border: 1px solid #000; padding: 3px; text-align: center; }
-    .print-score-table th { background-color: #f0f0f0 !important; -webkit-print-color-adjust: exact; }
-
-    .footer-area { margin-top: 40px; text-align: right; font-size: 10.5pt; }
-    .signature-line { display: inline-block; border-bottom: 1px solid #000; width: 220px; margin-left: 10px; }
+    /* 問診票用スタイル (修正) */
+    .q-header-sub { font-size: 9pt; margin-bottom: 0; }
+    .q-title-main { font-size: 16pt; text-align: center; font-weight: bold; margin: 5px 0 15px 0; letter-spacing: 1px; }
+    .q-intro { font-size: 10pt; margin-bottom: 15px; text-align: justify; }
+    
+    .q-section-title { font-size: 11pt; font-weight: bold; margin-top: 15px; margin-bottom: 8px; border-bottom: 1px solid #000; display: inline-block; }
+    
+    .q-form-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+    .q-form-table td { padding: 4px 0; border-bottom: 1px dotted #ccc; vertical-align: middle; }
+    
+    /* チェックボックス列 */
+    .q-check-col { width: 60px; white-space: nowrap; font-weight: bold; text-align: left; }
+    
+    /* 質問文列: 右寄せに変更 */
+    .q-text-col { text-align: right; padding-left: 10px; }
+    
+    .cb-mark { font-family: "Arial", sans-serif; font-size: 13pt; display: inline-block; width: 1.2em; vertical-align: -2px; }
+    
+    .q-details-box { border: 1px solid #000; min-height: 100px; margin-top: 8px; padding: 8px; font-size: 10pt; white-space: pre-wrap; }
+    
+    .signature-section { margin-top: 30px; display: flex; justify-content: flex-end; gap: 30px; }
+    .signature-block { width: 280px; }
+    .signature-line { border-bottom: 1px solid #000; margin-top: 30px; position: relative; }
+    .signature-label { margin-bottom: 5px; font-weight: bold; font-size: 10pt; }
+    .date-line { text-align: right; margin-top: 5px; font-size: 9pt; }
+    .hospital-footer { text-align: center; font-weight: bold; font-size: 12pt; margin-top: 40px; border-top: 3px double #000; padding-top: 8px; width: 60%; margin-left: auto; margin-right: auto; }
 </style>
 {% endblock %}
 
 {% block content %}
-<!-- 印刷操作バー -->
 <div class="container-fluid no-print bg-dark text-white p-2 fixed-top">
     <div class="container d-flex justify-content-between align-items-center">
         <span>
-            {% if mode == 'referral' %}診療情報提供書プレビュー{% else %}退院サマリープレビュー{% endif %}
+            {% if mode == 'summary' %}初診時サマリープレビュー{% else %}適正質問票プレビュー{% endif %}
         </span>
         <div>
-            <button onclick="window.print()" class="btn btn-primary btn-sm"><i class="fas fa-print"></i> 印刷</button>
+            <button onclick="window.print()" class="btn btn-primary btn-sm"><i class="fas fa-print"></i> 印刷する</button>
             <button onclick="window.close()" class="btn btn-secondary btn-sm">閉じる</button>
         </div>
     </div>
 </div>
 <div style="height: 50px;" class="no-print"></div>
 
-<div class="page-container">
+<div class="preview-container">
     
-    <!-- 1. ヘッダー部分 -->
-    {% if mode == 'referral' %}
-        <div class="referral-header">
-            <div class="referral-to">
-                {{ patient.referral_source|default:"紹介元医療機関" }} <br>
-                <span style="margin-left: 1em;">
-                    {% if patient.referral_doctor %}{{ patient.referral_doctor }} 先生{% else %}担当医 先生{% endif %} 御机下
-                </span>
+    <!-- 1. 初診時サマリー -->
+    {% if mode == 'summary' %}
+    <div class="page-sheet">
+        <div style="text-align: right; font-size: 9pt;">作成日: {% now "Y年n月j日" %}</div>
+        <h1 class="summary-title">rTMS 初診時サマリー</h1>
+
+        <div class="basic-info-grid">
+            <div class="basic-info-item"><label>ID:</label> {{ patient.card_id }}</div>
+            <div class="basic-info-item"><label>氏名:</label> {{ patient.name }} 殿</div>
+            <div class="basic-info-item"><label>生年月日:</label> {{ patient.birth_date|date:"Y年n月j日" }} ({{ patient.age }}歳)</div>
+            <div class="basic-info-item"><label>性別:</label> {{ patient.get_gender_display }}</div>
+            <div class="basic-info-item"><label>紹介元:</label> {{ patient.referral_source|default:"-" }}</div>
+            <div class="basic-info-item"><label>初診担当医:</label> {{ request.user.last_name }}</div>
+        </div>
+
+        <table class="summary-table">
+            <tr><th>診断名</th><td>{{ patient.diagnosis }}</td></tr>
+            <tr><th>主訴</th><td>{{ patient.chief_complaint|default:"-" }}</td></tr>
+            <tr><th>生活歴</th><td>{{ patient.life_history|linebreaksbr|default:"-" }}</td></tr>
+            <tr><th>既往歴</th><td>{{ patient.past_history|linebreaksbr|default:"-" }}</td></tr>
+            <tr><th>現病歴</th><td>{{ patient.present_illness|linebreaksbr|default:"-" }}</td></tr>
+            <tr><th>薬剤治療歴</th><td>{{ patient.medication_history|linebreaksbr|default:"-" }}</td></tr>
+        </table>
+
+        <div class="mt-4">
+            <h3 style="font-size: 11pt; font-weight: bold; border-bottom: 1px solid #000; margin-bottom: 8px;">今後の予定・スケジュール</h3>
+            <div style="margin-bottom: 8px; font-size: 10pt;">
+                <strong>主治医（担当医）：</strong> 
+                {% if patient.attending_physician %}{{ patient.attending_physician.last_name }}{% else %}<span style="color: #999;">（未定）</span>{% endif %}
             </div>
-            <div class="referral-from">
-                <div>{{ today|date:"Y年n月j日" }}</div>
-                <div style="font-weight: bold; font-size: 11pt; margin: 3px 0;">笠寺精治寮病院</div>
-                <div>〒457-0051 愛知県名古屋市南区笠寺町柚ノ木３</div>
-                <div>TEL: 052-821-9221</div>
-                <div style="margin-top: 8px;">担当医: {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}</div>
-            </div>
-        </div>
-        <h1 class="doc-title">診療情報提供書</h1>
-        <p class="mb-4" style="font-size: 10.5pt;">いつも大変お世話になっております。<br>下記患者様につきまして、当院でのrTMS治療経過をご報告申し上げます。</p>
-
-    {% else %}
-        <div class="summary-header">
-            <div>作成日: {{ today|date:"Y年n月j日" }}</div>
-            <div>笠寺精治寮病院</div>
-            <div>担当医: {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}</div>
-        </div>
-        <h1 class="doc-title">退院時サマリー</h1>
-    {% endif %}
-
-
-    <!-- 2. 患者情報 -->
-    <table class="info-table">
-        <tr>
-            <th>患者ID</th>
-            <td>{{ patient.card_id }}</td>
-            <th>氏名</th>
-            <td>{{ patient.name }} 殿</td>
-        </tr>
-        <tr>
-            <th>生年月日</th>
-            <td>{{ patient.birth_date|date:"Y年n月j日" }} ({{ patient.age }}歳)</td>
-            <th>性別</th>
-            <td>{{ patient.get_gender_display }}</td>
-        </tr>
-        <tr>
-            <th>入院期間</th>
-            <td colspan="3">
-                {{ patient.admission_date|date:"Y/n/j" }} 〜 
-                <!-- 退院日を表示 -->
-                {% if patient.discharge_date %}
-                    {{ patient.discharge_date|date:"Y/n/j" }} (退院)
-                {% else %}
-                    {{ today|date:"Y/n/j" }} (入院中)
-                {% endif %}
-            </td>
-        </tr>
-    </table>
-
-
-    <!-- 3. 本文エリア -->
-    <div class="content-section">
-        <div class="section-label">診断名・主訴</div>
-        <div class="text-content mb-3">
-            診断名：{{ patient.diagnosis }}<br>
-            主　訴：{{ patient.chief_complaint }}
-        </div>
-
-        <div class="section-label">入院経過・治療結果</div>
-        <div class="text-content" style="min-height: 200px; margin-bottom: 15px;">
-            {{ patient.summary_text|linebreaksbr }}
-        </div>
-
-        <!-- 心理検査経過表 (時期カラムを追加) -->
-        {% if test_scores %}
-        <div class="mt-2">
-            <div style="font-weight: bold; font-size: 9pt; margin-bottom: 3px; border-bottom: 1px dashed #ccc; width: fit-content;">
-                【参考】重症度評価推移 (HAMDスコア)
-            </div>
-            <table class="print-score-table">
+            <table class="schedule-table">
+                <tr><th>入院予定日</th><th>初回位置決め</th><th>初回治療日</th><th>治療終了予定 (30回)</th></tr>
                 <tr>
-                    <th style="width: 25%;">実施日</th>
-                    <th style="width: 25%;">時期</th>
-                    <th style="width: 25%;">HAMD 17項目</th>
-                    <th style="width: 25%;">HAMD 21項目</th>
+                    <td>{{ patient.admission_date|default:"-" }}</td>
+                    <td>{{ patient.mapping_date|default:"-" }}</td>
+                    <td>{{ patient.first_treatment_date|default:"-" }}</td>
+                    <td>{{ end_date_est|date:"Y-m-d"|default:"-" }}</td>
                 </tr>
-                {% for score in test_scores %}
-                <tr>
-                    <td>{{ score.date|date:"Y/n/j" }}</td>
-                    <td>{{ score.get_timing_display|default:"-" }}</td>
-                    <td>{{ score.total_score_17 }}</td>
-                    <td>{{ score.total_score_21 }}</td>
-                </tr>
-                {% endfor %}
             </table>
         </div>
-        {% endif %}
-    </div>
-    
-    <!-- 退院時処方 -->
-    <div class="content-section">
-        <div class="section-label">退院時処方</div>
-        <div class="text-content">
-            {{ patient.discharge_prescription|linebreaksbr|default:"（記載なし）" }}
-        </div>
-    </div>
-
-
-    <!-- 4. フッター署名 -->
-    {% if mode == 'referral' %}
-    <div class="footer-area">
-        <p>ご多忙の折、誠に恐縮ではございますが、<br>今後の加療を何卒よろしくお願い申し上げます。</p>
-        <div style="margin-top: 40px;">
-            医師署名：<span class="signature-line"></span>　印
-        </div>
+        <div style="position: absolute; bottom: 10mm; right: 15mm; font-size: 9pt;">笠寺精治寮病院</div>
     </div>
     {% endif %}
 
+    <!-- 2. 適正質問票 -->
+    {% if mode == 'questionnaire' %}
+    <div class="page-sheet">
+        <div class="q-header-sub">参考資料3 rTMS適正質問票および副作用チェック表</div>
+        <h2 class="q-title-main">反復経頭蓋磁気刺激療法(rTMS)の適正に関する質問票</h2>
+        <p class="q-intro">反復経頭蓋磁気刺激療法(rTMS) を安全に行うために以下の質問にわかる範囲でお答えください。後ほど本質問票と現在の処方内容に基づいて担当医より問診し、rTMS療法の適正を判断させていただきます。</p>
+
+        {% with q=patient.questionnaire_data %}
+        <div class="q-section-title">これまでに、以下のことがありましたか？</div>
+        <table class="q-form-table">
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_past_rtms == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_past_rtms == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">rTMS実施経験（治験、研究を問わない）</td></tr>
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_past_side_effect == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_past_side_effect == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">rTMSのあとに副作用などの不快な経験</td></tr>
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_past_ect == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_past_ect == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">電気けいれん療法（副作用の有無など）</td></tr>
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_past_seizure == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_past_seizure == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">けいれん発作（てんかんの診断の有無を問わない）</td></tr>
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_past_loc == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_past_loc == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">意識消失発作</td></tr>
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_past_stroke == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_past_stroke == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">脳卒中（脳梗塞や脳出血など）</td></tr>
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_past_trauma == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_past_trauma == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">頭部外傷（意識がなくなるなど重度なもの）</td></tr>
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_past_surgery == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_past_surgery == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">頭部の手術</td></tr>
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_past_neuro == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_past_neuro == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">脳外科もしくは神経内科の病気</td></tr>
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_past_internal == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_past_internal == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">脳障害をおこす可能性のある内科疾患</td></tr>
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_past_abuse == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_past_abuse == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">アルコールや薬物の乱用</td></tr>
+        </table>
+
+        <div class="q-section-title" style="margin-top: 20px;">現在、以下のことはありますか？</div>
+        <table class="q-form-table">
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_cur_headache == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_cur_headache == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">頻繁または重度な頭痛</td></tr>
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_cur_metal == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_cur_metal == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">頭の中に金属や磁性体（チタン製品かどうか要確認）</td></tr>
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_cur_device == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_cur_device == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">体内埋め込み式の医療機器（心臓ペースメーカーなど）</td></tr>
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_cur_abuse == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_cur_abuse == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">多量の飲酒や薬物の乱用</td></tr>
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_cur_preg == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_cur_preg == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">妊娠中、もしくは妊娠の可能性が否定されない</td></tr>
+            <tr><td class="q-check-col"><span class="cb-mark">{% if q.q_cur_family_epilepsy == 'はい' %}☑{% else %}□{% endif %}</span> はい</td><td class="q-check-col"><span class="cb-mark">{% if q.q_cur_family_epilepsy == 'いいえ' %}☑{% else %}□{% endif %}</span> いいえ</td><td class="q-text-col">家族内にてんかんを持っているかた</td></tr>
+        </table>
+
+        <div style="margin-top: 20px; font-weight: bold;">「はい」とチェックした項目について、より詳しく教えてください。</div>
+        <div class="q-details-box">{{ q.q_details|default:"" }}</div>
+        {% endwith %}
+
+        <div class="signature-section">
+            <div class="signature-block">
+                <div class="signature-label">患者署名：</div>
+                <div class="signature-line"><span style="font-size: 12pt;">&nbsp;</span></div>
+                <div class="date-line">（日付：　　　　年　　月　　日）</div>
+            </div>
+            <div class="signature-block">
+                <div class="signature-label">担当医署名：</div>
+                <div class="signature-line"><span style="font-size: 12pt; padding-left: 10px;">{{ request.user.last_name }}</span></div>
+                <div class="date-line">（日付：　　　　年　　月　　日）</div>
+            </div>
+        </div>
+        <div class="hospital-footer">笠寺精治寮病院</div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
