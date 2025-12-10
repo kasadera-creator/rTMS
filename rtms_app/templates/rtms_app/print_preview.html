@@ -85,7 +85,7 @@
 
         <div class="basic-info-grid">
             <div class="basic-info-item"><label>ID:</label> {{ patient.card_id }}</div>
-            <div class="basic-info-item"><label>氏名:</label> {{ patient.name }} 殿</div>
+            <div class="basic-info-item"><label>氏名:</label> {{ patient.name }} 様</div>
             <div class="basic-info-item"><label>生年月日:</label> {{ patient.birth_date|date:"Y年n月j日" }} ({{ patient.age }}歳)</div>
             <div class="basic-info-item"><label>性別:</label> {{ patient.get_gender_display }}</div>
             <div class="basic-info-item"><label>紹介元:</label> {{ patient.referral_source|default:"-" }}</div>
