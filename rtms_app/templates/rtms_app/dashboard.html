@@ -18,20 +18,22 @@
     .list-group-item:hover { background-color: #f8f9fa; }
     .list-group-item a { text-decoration: none; color: inherit; display: block; }
     
-    .task-meta { font-size: 0.85rem; color: #6c757d; margin-top: 4px; }
-    .task-meta i { width: 15px; text-align: center; margin-right: 4px; }
-    .todo-badge { font-size: 0.8rem; font-weight: bold; color: #495057; background-color: #e9ecef; padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 4px; }
-    
     .status-badge { font-size: 0.7rem; padding: 3px 8px; border-radius: 12px; min-width: 60px; text-align: center; float: right; margin-left: 5px; }
     .status-success, .status-done, .status-手続済, .status-実施済, .status-登録済 { background-color: #e6f9ed; color: #198754; border: 1px solid #c3e6cb; }
     .status-warning, .status-要対応, .status-要手続 { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
     .status-danger, .status-実施未 { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     .status-info, .status-退院準備 { background-color: #cff4fc; color: #055160; border: 1px solid #b6effb; }
+
+    /* レイアウト変更: Todoを上に */
+    .todo-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+    .todo-badge { font-size: 0.85rem; font-weight: bold; color: #495057; background-color: #e9ecef; padding: 3px 8px; border-radius: 4px; }
     
-    /* 日付ピッカー用スタイル調整 */
+    .name-row { margin-bottom: 5px; }
+    .task-meta { font-size: 0.8rem; color: #6c757d; display: flex; justify-content: space-between; border-top: 1px dashed #eee; padding-top: 4px; }
+    
+    /* 日付ピッカー用スタイル */
     .date-picker-wrapper { position: relative; cursor: pointer; transition: background 0.2s; }
     .date-picker-wrapper:hover { background-color: #e2e6ea !important; }
-    /* 透明なinputを前面に配置してクリックを吸わせる */
     .date-picker-input { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10; }
 </style>
 {% endblock %}
@@ -48,16 +50,14 @@
             </a>
             
             <!-- 日付表示 + カレンダーピッカー -->
-            <div class="d-inline-flex align-items-center bg-light px-3 py-1 rounded border date-picker-wrapper">
-                <span class="fw-bold fs-5 me-2">{{ target_date_display }}</span>
-                <i class="far fa-calendar-alt text-primary fs-5"></i>
-                
-                <!-- 透明なinputで全体をカバー -->
-                <input type="date" 
+            <div class="d-inline-flex align-items-center bg-light px-3 py-1 rounded border position-relative date-picker-wrapper">
+                <span class="fw-bold fs-5 me-2" onclick="document.getElementById('datePicker').showPicker()">{{ target_date_display }}</span>
+                <input type="date" id="datePicker" 
                        class="date-picker-input"
                        value="{{ today|date:'Y-m-d' }}" 
                        onchange="location.href='?date='+this.value"
                        onclick="this.showPicker()">
+                <i class="far fa-calendar-alt text-primary fs-5 pointer-events-none"></i>
             </div>
             
             <a href="?date={{ next_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm ms-2" title="翌日">
@@ -68,7 +68,12 @@
                 <i class="fas fa-calendar-day"></i> 今日
             </a>
         </div>
+        
+        <!-- 右側アクションボタン -->
         <div>
+            <a href="{% url 'patient_add' %}" class="btn btn-primary btn-sm fw-bold me-2 shadow-sm">
+                <i class="fas fa-user-plus me-1"></i> 新規患者登録
+            </a>
             <a href="{% url 'patient_list' %}?dashboard_date={{ today|date:'Y-m-d' }}" class="btn btn-outline-dark btn-sm fw-bold">
                 <i class="fas fa-users me-1"></i> 患者一覧
             </a>
@@ -78,85 +83,58 @@
     <!-- 3列 x 2行 のグリッドレイアウト -->
     <div class="row g-4">
         
-        <!-- 1. 初診 -->
+        <!-- 共通ループマクロ (DRYのため) -->
+        {% for task_list, title, color_class, icon in [(task_first_visit, "① 初診", "bg-g-1", "fa-user-plus"), (task_admission, "② 入院", "bg-g-2", "fa-procedures"), (task_mapping, "③ 位置決め", "bg-g-3", "fa-crosshairs"), (task_treatment, "④ 治療実施", "bg-g-4", "fa-bolt"), (task_assessment, "⑤ 尺度評価", "bg-g-5", "fa-clipboard-check"), (task_discharge, "⑥ 退院準備", "bg-g-6", "fa-file-export")] %}
         <div class="col-md-6 col-lg-4">
             <div class="card-task bg-white">
-                <div class="task-header bg-g-1">
-                    <span><i class="fas fa-user-plus me-2"></i>① 初診</span>
-                    <span class="badge bg-white text-dark rounded-pill opacity-75">{{ task_first_visit|length }}</span>
+                <div class="task-header {{ color_class }}">
+                    <span><i class="fas {{ icon }} me-2"></i>{{ title }}</span>
+                    <span class="badge bg-white text-dark rounded-pill opacity-75">{{ task_list|length }}</span>
                 </div>
+                <!-- 初診のみ新規登録ボタンを表示 -->
+                {% if title == "① 初診" %}
                 <div class="p-2 border-bottom text-center bg-light">
                     <a href="{% url 'patient_add' %}" class="btn btn-outline-primary btn-sm w-100 fw-bold border-0">
                         <i class="fas fa-plus-circle"></i> 新規患者登録
                     </a>
                 </div>
+                {% endif %}
+                
                 <div class="list-group list-group-flush">
-                    {% for item in task_first_visit %}
+                    {% for item in task_list %}
                     <div class="list-group-item">
-                        <a href="{% url 'patient_first_visit' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="fw-bold fs-5 text-primary">{{ item.obj.name }}</span>
-                                <span class="status-badge status-done">{{ item.status }}</span>
-                            </div>
-                            <div class="todo-badge"><i class="fas fa-check-circle me-1"></i>{{ item.todo }}</div>
-                            <div class="task-meta">
-                                <span>ID: {{ item.obj.card_id }}</span>
-                                <span>担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
-                            </div>
-                        </a>
-                    </div>
-                    {% empty %}
-                    <div class="text-center py-4 text-muted small">予定なし</div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-
-        <!-- 2. 入院 -->
-        <div class="col-md-6 col-lg-4">
-            <div class="card-task bg-white">
-                <div class="task-header bg-g-2">
-                    <span><i class="fas fa-procedures me-2"></i>② 入院</span>
-                    <span class="badge bg-white text-dark rounded-pill opacity-75">{{ task_admission|length }}</span>
-                </div>
-                <div class="list-group list-group-flush">
-                    {% for item in task_admission %}
-                    <div class="list-group-item">
-                        <a href="{% url 'admission_procedure' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="fw-bold fs-5 text-primary">{{ item.obj.name }}</span>
+                        {% if title == "① 初診" %}
+                            <a href="{% url 'patient_first_visit' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
+                        {% elif title == "② 入院" %}
+                            <a href="{% url 'admission_procedure' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
+                        {% elif title == "③ 位置決め" %}
+                            <a href="{% url 'mapping_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                        {% elif title == "④ 治療実施" %}
+                            <a href="{% url 'treatment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                        {% elif title == "⑤ 尺度評価" %}
+                            <a href="{% url 'assessment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&timing={{ item.timing_code }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                        {% elif title == "⑥ 退院準備" %}
+                            <a href="{% url 'patient_summary' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
+                        {% endif %}
+                        
+                            <!-- 1. やること (上) -->
+                            <div class="todo-row">
+                                <div class="todo-badge">
+                                    <i class="fas fa-check-circle me-1"></i>{{ item.todo }}
+                                    {% if item.note %}<span class="small ms-1">({{ item.note }})</span>{% endif %}
+                                </div>
                                 <span class="status-badge status-{{ item.color }}">{{ item.status }}</span>
                             </div>
-                            <div class="todo-badge"><i class="fas fa-tasks me-1"></i>{{ item.todo }}</div>
-                            <div class="task-meta">
-                                <span>ID: {{ item.obj.card_id }}</span>
-                                <span>担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
-                            </div>
-                        </a>
-                    </div>
-                    {% empty %}
-                    <div class="text-center py-4 text-muted small">予定なし</div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-
-        <!-- 3. 位置決め -->
-        <div class="col-md-6 col-lg-4">
-            <div class="card-task bg-white">
-                <div class="task-header bg-g-3">
-                    <span><i class="fas fa-crosshairs me-2"></i>③ 位置決め</span>
-                    <span class="badge bg-white text-dark rounded-pill opacity-75">{{ task_mapping|length }}</span>
-                </div>
-                <div class="list-group list-group-flush">
-                    {% for item in task_mapping %}
-                    <div class="list-group-item">
-                        <a href="{% url 'mapping_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
-                            <div class="d-flex justify-content-between align-items-center">
+                            
+                            <!-- 2. 名前 (中) -->
+                            <div class="name-row">
                                 <span class="fw-bold fs-5 text-primary">{{ item.obj.name }}</span>
-                                <span class="status-badge status-{{ item.color }}">{{ item.status }}</span>
+                                {% if item.obj.course_number > 1 %}
+                                    <span class="badge bg-secondary rounded-pill small ms-1">{{ item.obj.course_number }}クール</span>
+                                {% endif %}
                             </div>
-                            <div class="todo-badge"><i class="fas fa-ruler-combined me-1"></i>{{ item.todo }}</div>
+                            
+                            <!-- 3. ID・担当医 (下) -->
                             <div class="task-meta">
                                 <span>ID: {{ item.obj.card_id }}</span>
                                 <span>担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
@@ -169,106 +147,8 @@
                 </div>
             </div>
         </div>
-
-        <!-- 4. 治療実施 -->
-        <div class="col-md-6 col-lg-4">
-            <div class="card-task bg-white">
-                <div class="task-header bg-g-4">
-                    <span><i class="fas fa-bolt me-2"></i>④ 治療実施</span>
-                    <span class="badge bg-white text-dark rounded-pill opacity-75">{{ task_treatment|length }}</span>
-                </div>
-                <div class="list-group list-group-flush">
-                    {% for item in task_treatment %}
-                    <div class="list-group-item {% if item.status == '実施済' %}bg-light text-muted{% endif %}">
-                        <a href="{% url 'treatment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="fw-bold fs-5 text-primary">{{ item.obj.name }}</span>
-                                <span class="status-badge status-{{ item.color }}">{{ item.status }}</span>
-                            </div>
-                            <div class="todo-badge"><i class="fas fa-bolt me-1"></i>{{ item.todo }} ({{ item.note }})</div>
-                            <div class="task-meta">
-                                <span>ID: {{ item.obj.card_id }}</span>
-                                <span>担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
-                            </div>
-                        </a>
-                    </div>
-                    {% empty %}
-                    <div class="text-center py-4 text-muted small">予定なし</div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-
-        <!-- 5. 尺度評価 -->
-        <div class="col-md-6 col-lg-4">
-            <div class="card-task bg-white">
-                <div class="task-header bg-g-5">
-                    <span><i class="fas fa-clipboard-check me-2"></i>⑤ 尺度評価</span>
-                    <span class="badge bg-white text-dark rounded-pill opacity-75">{{ task_assessment|length }}</span>
-                </div>
-                <div class="list-group list-group-flush">
-                    {% for item in task_assessment %}
-                    <div class="list-group-item">
-                        <a href="{% url 'assessment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&timing={{ item.timing_code }}&dashboard_date={{ today|date:'Y-m-d' }}">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="fw-bold fs-5 text-primary">{{ item.obj.name }}</span>
-                                <span class="status-badge status-{{ item.color }}">{{ item.status }}</span>
-                            </div>
-                            <div class="todo-badge text-danger border-danger"><i class="fas fa-exclamation me-1"></i>{{ item.todo }}</div>
-                            <div class="task-meta">
-                                <span>ID: {{ item.obj.card_id }}</span>
-                                <span>担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
-                            </div>
-                        </a>
-                    </div>
-                    {% empty %}
-                    <div class="text-center py-4 text-muted small">予定なし</div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-
-        <!-- 6. 退院準備 -->
-        <div class="col-md-6 col-lg-4">
-            <div class="card-task bg-white">
-                <div class="task-header bg-g-6">
-                    <span><i class="fas fa-file-export me-2"></i>⑥ 退院準備</span>
-                    <span class="badge bg-white text-dark rounded-pill opacity-75">{{ task_discharge|length }}</span>
-                </div>
-                <div class="list-group list-group-flush">
-                    {% for item in task_discharge %}
-                    <div class="list-group-item">
-                        <a href="{% url 'patient_summary' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="fw-bold fs-5 text-primary">{{ item.obj.name }}</span>
-                                <span class="status-badge status-info">退院準備</span>
-                            </div>
-                            <div class="todo-badge"><i class="fas fa-file-signature me-1"></i>{{ item.todo }}</div>
-                            <div class="task-meta">
-                                <span>ID: {{ item.obj.card_id }}</span>
-                                <span>担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
-                            </div>
-                        </a>
-                    </div>
-                    {% empty %}
-                    <div class="text-center py-4 text-muted small">予定なし</div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
+        {% endfor %} <!-- end loop -->
 
     </div>
-    
-    {% if user.is_superuser %}
-    <div class="mt-5 text-end pt-3 border-top">
-        <small class="text-muted me-2">管理者メニュー:</small>
-        <a href="{% url 'export_csv' %}" class="btn btn-sm btn-outline-secondary me-1">
-            <i class="fas fa-file-csv"></i> CSV出力
-        </a>
-        <a href="{% url 'download_db' %}" class="btn btn-sm btn-outline-secondary">
-            <i class="fas fa-database"></i> DBバックアップ
-        </a>
-    </div>
-    {% endif %}
 </div>
 {% endblock %}

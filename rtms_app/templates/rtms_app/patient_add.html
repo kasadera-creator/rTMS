@@ -15,6 +15,41 @@
                     <h4 class="mb-0 fw-bold"><i class="fas fa-user-plus me-2"></i>新規患者登録</h4>
                 </div>
                 <div class="card-body p-4">
+                    
+                    <!-- 既存患者が見つかった場合の警告・確認エリア -->
+                    {% if existing_patient %}
+                    <div class="alert alert-warning border-warning shadow-sm">
+                        <h5 class="alert-heading fw-bold"><i class="fas fa-exclamation-triangle"></i> 登録済みの患者が見つかりました</h5>
+                        <p class="mb-1">カルテID <strong>{{ existing_patient.card_id }}</strong> は既に登録されています。</p>
+                        <p class="mb-3">氏名: <strong>{{ existing_patient.name }}</strong> 様 ({{ existing_patient.course_number }}クール目登録済)</p>
+                        <hr>
+                        <p class="mb-2 fw-bold">どうしますか？</p>
+                        <form method="post">
+                            {% csrf_token %}
+                            <!-- 隠しフィールドで入力値を再送 -->
+                            <input type="hidden" name="card_id" value="{{ form.card_id.value }}">
+                            <input type="hidden" name="name" value="{{ form.name.value }}">
+                            <input type="hidden" name="birth_date" value="{{ form.birth_date.value|date:'Y-m-d' }}">
+                            <input type="hidden" name="gender" value="{{ form.gender.value }}">
+                            <input type="hidden" name="referral_source" value="{{ form.referral_source.value }}">
+                            <input type="hidden" name="referral_doctor" value="{{ form.referral_doctor.value }}">
+                            
+                            <!-- 強制作成フラグ -->
+                            <input type="hidden" name="confirm_create" value="true">
+                            
+                            <div class="d-flex gap-3">
+                                <button type="submit" class="btn btn-success fw-bold">
+                                    <i class="fas fa-plus-circle"></i> {{ next_course_num }}クール目として新規登録する
+                                </button>
+                                <a href="{% url 'patient_add' %}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-undo"></i> IDを入力し直す
+                                </a>
+                            </div>
+                        </form>
+                    </div>
+                    {% else %}
+
+                    <!-- 通常の登録フォーム -->
                     <form method="post">
                         {% csrf_token %}
                         
@@ -71,9 +106,38 @@
                             </button>
                         </div>
                     </form>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
 </div>
 {% endblock %}
+```
+
+※ **注意:** `models.py` の `unique=True` 削除に伴い、**データベースのマイグレーションが必要**になります。
+前回同様、`rtms_app/migrations/0003_alter_patient_card_id.py` のようなファイルを作成するか、データベースをリセットしてください。今回は「ID重複チェック」を自前実装するため、`db.sqlite3` を削除して `create_initial_users.py` を再実行するのが一番安全で確実です。
+
+**migrationファイルの例 (手動で適用する場合):**
+`rtms_app/migrations/0003_alter_patient_card_id_add_course.py`
+```python
+from django.db import migrations, models
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('rtms_app', '0002_patient_discharge_date'), # 直前のマイグレーション
+    ]
+
+    operations = [
+        migrations.AlterField(
+            model_name='patient',
+            name='card_id',
+            field=models.CharField(max_length=20, verbose_name='カルテ番号'), # unique=Trueを削除
+        ),
+        migrations.AddField(
+            model_name='patient',
+            name='course_number',
+            field=models.IntegerField(default=1, verbose_name='クール数'),
+        ),
+    ]

@@ -8,33 +8,26 @@ class DateInput(forms.DateInput):
 class DateTimeInput(forms.DateTimeInput):
     input_type = 'datetime-local'
 
-# 担当医の表示名を日本語にするためのカスタムフィールド
 class PhysicianChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, obj):
         name = f"{obj.last_name} {obj.first_name}" if obj.last_name else obj.username
         return f"{name}"
 
-# --- 1. 新規登録フォーム (修正) ---
+# --- 1. 新規登録フォーム ---
 class PatientRegistrationForm(forms.ModelForm):
     class Meta:
         model = Patient
-        # ★フィールドを追加
         fields = ['card_id', 'name', 'birth_date', 'gender', 'referral_source', 'referral_doctor']
         widgets = {
             'card_id': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '例: 12345'}),
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '例: 笠寺 太郎'}),
             'birth_date': DateInput(attrs={'class': 'form-control'}),
             'gender': forms.Select(attrs={'class': 'form-select'}),
-            # 紹介元はdatalistを使うためlist属性を追加
             'referral_source': forms.TextInput(attrs={'class': 'form-control', 'list': 'referral-options', 'placeholder': '医療機関名 (任意)'}),
             'referral_doctor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '医師名 (任意)'}),
         }
-        
-    def clean_card_id(self):
-        card_id = self.cleaned_data['card_id']
-        if Patient.objects.filter(card_id=card_id).exists(): 
-            raise forms.ValidationError("このカルテ番号は既に登録されています")
-        return card_id
+    
+    # ★変更: clean_card_id を削除し、重複チェックはView側で行う
 
 # --- 2. 初診フォーム ---
 class PatientFirstVisitForm(forms.ModelForm):
@@ -90,21 +83,18 @@ class PatientFirstVisitForm(forms.ModelForm):
             self.instance.medication_history = default_medication_text
             self.initial['medication_history'] = default_medication_text
 
-# --- 3. 位置決めフォーム ---
 class MappingForm(forms.ModelForm):
     class Meta:
         model = MappingSession
         fields = ['date', 'week_number', 'resting_mt', 'stimulation_site', 'notes']
         widgets = {'date': DateInput(attrs={'class': 'form-control'}), 'week_number': forms.Select(attrs={'class': 'form-select'}), 'resting_mt': forms.NumberInput(attrs={'class': 'form-control'}), 'stimulation_site': forms.TextInput(attrs={'class': 'form-control'}), 'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2})}
 
-# --- 4. 治療実施フォーム ---
 class TreatmentForm(forms.ModelForm):
     class Meta:
         model = TreatmentSession
         fields = ['date', 'safety_sleep', 'safety_alcohol', 'safety_meds', 'motor_threshold', 'intensity', 'total_pulses']
         widgets = {'date': DateTimeInput(attrs={'class': 'form-control'}), 'motor_threshold': forms.NumberInput(attrs={'class': 'form-control'}), 'intensity': forms.NumberInput(attrs={'class': 'form-control'}), 'total_pulses': forms.NumberInput(attrs={'class': 'form-control'})}
 
-# --- 5. 入院手続きフォーム ---
 class AdmissionProcedureForm(forms.ModelForm):
     class Meta:
         model = Patient

@@ -6,7 +6,11 @@ class Patient(models.Model):
     GENDER_CHOICES = [('M', '男性'), ('F', '女性'), ('O', 'その他')]
     ADMISSION_TYPES = [('voluntary', '任意入院'), ('medical_protection', '医療保護入院'), ('emergency', '緊急措置入院'), ('measure', '措置入院')]
     
-    card_id = models.CharField("カルテ番号", max_length=20, unique=True)
+    # ★変更: unique=True を削除（複数クール対応のため）
+    card_id = models.CharField("カルテ番号", max_length=20) 
+    # ★追加: 何クール目か
+    course_number = models.IntegerField("クール数", default=1)
+    
     name = models.CharField("氏名", max_length=100)
     birth_date = models.DateField("生年月日")
     gender = models.CharField("性別", max_length=1, choices=GENDER_CHOICES, default='M')
@@ -25,7 +29,7 @@ class Patient(models.Model):
     
     summary_text = models.TextField("サマリー本文", blank=True)
     discharge_prescription = models.TextField("退院時処方", blank=True)
-    discharge_date = models.DateField("退院日", null=True, blank=True) # ★新規追加
+    discharge_date = models.DateField("退院日", null=True, blank=True)
 
     mapping_notes = models.TextField("位置決め記録メモ", blank=True)
     
@@ -38,7 +42,7 @@ class Patient(models.Model):
     questionnaire_data = models.JSONField("適正質問票", default=dict, blank=True, null=True)
     created_at = models.DateTimeField("登録日", auto_now_add=True)
 
-    def __str__(self): return f"{self.name} ({self.card_id})"
+    def __str__(self): return f"{self.name} ({self.card_id} - {self.course_number}クール)"
     @property
     def age(self):
         today = timezone.now().date()
