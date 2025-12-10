@@ -134,14 +134,6 @@
                     {{ form.admission_date }}
                 </div>
                 
-                <div class="col-md-8">
-                    <label class="form-label fw-bold">今後の担当医</label>
-                    <div class="d-flex align-items-center">
-                        {{ form.attending_physician }}
-                        <span class="form-text ms-2 mb-0">※診察結果に基づき、決定した担当医を入力</span>
-                    </div>
-                </div>
-
                 <div class="col-md-4">
                     <label class="form-label text-warning fw-bold">初回位置決め日</label>
                     {{ form.mapping_date }}
@@ -149,6 +141,14 @@
                 <div class="col-md-4">
                     <label class="form-label text-success fw-bold">初回治療日</label>
                     {{ form.first_treatment_date }}
+                </div>
+				
+                <div class="col-md-8">
+                    <label class="form-label fw-bold">今後の担当医</label>
+                    <div class="d-flex align-items-center">
+                        {{ form.attending_physician }}
+                        <span class="form-text ms-2 mb-0">※診察結果に基づき、決定した担当医を入力</span>
+                    </div>
                 </div>
             </div>
         </div>

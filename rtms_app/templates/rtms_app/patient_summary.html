@@ -11,6 +11,7 @@
 
 {% block content %}
 <div class="container py-4">
+    <!-- ヘッダー -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3><i class="fas fa-file-alt"></i> サマリー・紹介状作成</h3>
         <div class="btn-group">
@@ -24,61 +25,38 @@
         </div>
     </div>
 
+    <!-- メインエリア -->
     <div class="bg-white p-4 shadow-sm rounded">
+        <!-- 1. 患者情報ヘッダー -->
         <div class="alert alert-light border mb-4">
             <div class="row">
                 <div class="col-md-3"><strong>ID:</strong> {{ patient.card_id }}</div>
                 <div class="col-md-3"><strong>氏名:</strong> {{ patient.name }}</div>
-                <div class="col-md-3"><strong>担当医:</strong> {{ patient.attending_physician }}</div>
+                <div class="col-md-3">
+                    <strong>担当医:</strong> 
+                    <!-- 修正: 名前を明示的に表示 -->
+                    {% if patient.attending_physician %}
+                        {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}
+                    {% else %}
+                        未定
+                    {% endif %}
+                </div>
                 <div class="col-md-3"><strong>入院:</strong> {{ patient.admission_date|default:"-" }}</div>
             </div>
         </div>
 
-        <div class="row mb-4">
-            <div class="col-lg-8">
-                <div class="mb-3">
-                    <label class="form-label fw-bold">入院経過・治療結果（サマリー本文）</label>
-                    <textarea name="summary_text" rows="12" class="form-control">{{ summary_text }}</textarea>
-                    <div class="form-text text-muted">
-                        ※現在は自動生成されたテキストが表示されています。
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-lg-4">
-                <label class="form-label fw-bold text-success"><i class="fas fa-chart-line"></i> 心理検査推移 (HAMD)</label>
-                <div class="card border-success mb-3">
-                    <div class="card-body p-0">
-                        <table class="table table-sm table-striped score-table mb-0">
-                            <thead>
-                                <tr>
-                                    <th>実施日</th>
-                                    <th>17項</th>
-                                    <th>21項</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for score in test_scores %}
-                                <tr>
-                                    <td>{{ score.date|date:"n/j" }}</td>
-                                    <td class="fw-bold">{{ score.total_score_17 }}</td>
-                                    <td>{{ score.total_score_21 }}</td>
-                                </tr>
-                                {% empty %}
-                                <tr><td colspan="3" class="text-muted py-3">データなし</td></tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="text-muted small">
-                    <i class="fas fa-info-circle"></i> 最新の評価結果を参照してサマリーを作成してください。
-                </div>
+        <!-- 2. サマリー入力 (全幅に戻しました) -->
+        <div class="mb-4">
+            <label class="form-label fw-bold">入院経過・治療結果（サマリー本文）</label>
+            <textarea name="summary_text" rows="10" class="form-control">{{ summary_text }}</textarea>
+            <div class="form-text text-muted">
+                ※現在は自動生成されたテキストが表示されています。
             </div>
         </div>
 
         <hr>
 
+        <!-- 3. 治療実施履歴 -->
         <div class="mt-4">
             <h6 class="fw-bold border-bottom pb-2">rTMS 治療実施記録</h6>
             <div style="max-height: 300px; overflow-y: auto;">
@@ -100,6 +78,36 @@
                 </table>
             </div>
         </div>
+
+        <!-- 4. 心理検査推移 (実施記録の下に配置) -->
+        <div class="mt-4">
+            <h6 class="fw-bold border-bottom pb-2 text-success"><i class="fas fa-chart-line"></i> 心理検査推移 (HAMD)</h6>
+            <div style="overflow-x: auto;">
+                <table class="table table-sm table-striped score-table w-auto">
+                    <thead>
+                        <tr>
+                            <th style="min-width:120px;">実施日</th>
+                            <th style="min-width:100px;">HAMD 17項</th>
+                            <th style="min-width:100px;">HAMD 21項</th>
+                            <th style="min-width:100px;">時期</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for score in test_scores %}
+                        <tr>
+                            <td>{{ score.date|date:"Y/n/j" }}</td>
+                            <td class="fw-bold">{{ score.total_score_17 }}</td>
+                            <td>{{ score.total_score_21 }}</td>
+                            <td>{{ score.get_timing_display|default:"-" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-muted py-3">データなし</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
     </div>
 </div>
 {% endblock %}

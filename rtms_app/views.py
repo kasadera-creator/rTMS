@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from datetime import timedelta
+import datetime # ★ここを追加（エラーの修正）
 from django.http import HttpResponse, FileResponse
 from django.conf import settings
 from django.contrib.auth import logout
@@ -112,7 +113,6 @@ def dashboard_view(request):
         'assessments_due': assessments_due,
     })
 
-# ... (patient_list_view, admission_procedure, mapping_add は変更なし) ...
 @login_required
 def patient_list_view(request):
     patients = Patient.objects.all().order_by('card_id')
@@ -147,16 +147,12 @@ def mapping_add(request, patient_id):
         form = MappingForm(initial={'date': initial_date, 'week_number': 1})
     return render(request, 'rtms_app/mapping_add.html', {'patient': patient, 'form': form, 'history': history})
 
-# ------------------------------------------------------------------
-# 4. 初診入力 (修正: 診断名処理)
-# ------------------------------------------------------------------
 @login_required
 def patient_first_visit(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     referral_options = Patient.objects.values_list('referral_source', flat=True).distinct()
     referral_options = [r for r in referral_options if r]
     
-    # 終了予定日の計算
     end_date_est = get_completion_date(patient.first_treatment_date)
 
     if request.method == 'POST':
@@ -165,8 +161,12 @@ def patient_first_visit(request, patient_id):
             p = form.save(commit=False)
             diag_list = request.POST.getlist('diag_list')
             diag_other = request.POST.get('diag_other', '').strip()
+            # 診断名の保存処理 (リスト結合)
+            # 既存のロジックに合わせて実装
             full_diagnosis = ", ".join(diag_list)
-            if diag_other: full_diagnosis += f", その他({diag_other})"
+            if diag_other: 
+                if full_diagnosis: full_diagnosis += f", その他({diag_other})"
+                else: full_diagnosis = f"その他({diag_other})"
             p.diagnosis = full_diagnosis
             p.save()
             return redirect('dashboard')
@@ -175,12 +175,9 @@ def patient_first_visit(request, patient_id):
         
     return render(request, 'rtms_app/patient_first_visit.html', {
         'patient': patient, 'form': form, 'referral_options': referral_options,
-        'end_date_est': end_date_est # 終了予定日をテンプレートへ
+        'end_date_est': end_date_est 
     })
 
-# ------------------------------------------------------------------
-# 6. 治療実施入力 (修正: 回数・日付表示)
-# ------------------------------------------------------------------
 @login_required
 def treatment_add(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
@@ -200,7 +197,6 @@ def treatment_add(request, patient_id):
         else: initial_date = now
     else: initial_date = now
     
-    # 回数と終了予定
     session_num = get_session_number(patient.first_treatment_date, initial_date.date())
     end_date_est = get_completion_date(patient.first_treatment_date)
 
@@ -229,19 +225,10 @@ def treatment_add(request, patient_id):
         'session_num': session_num, 'end_date_est': end_date_est, 'start_date': patient.first_treatment_date
     })
 
-# ------------------------------------------------------------------
-# 7. 状態評価入力 (修正: データの読み込み・保存・判定)
-# ------------------------------------------------------------------
 @login_required
 def assessment_add(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     history = Assessment.objects.filter(patient=patient).order_by('date')
-    hamd_items = [
-        ('q1', '1. 抑うつ気分', 4, "0. なし... (省略)"),
-        # ... (前回のリストをそのまま使ってください。長いので省略します) ...
-    ]
-    # ★簡易のため前回と同じリスト定義を使ってください。
-    # 実際はここに前回の全リストが入ります。
     hamd_items = [
         ('q1', '1. 抑うつ気分', 4, "0. なし<br>1. 質問をされた時のみ示される..."),
         ('q2', '2. 罪責感', 4, "0. なし<br>1. 自己非難..."),
@@ -266,29 +253,22 @@ def assessment_add(request, patient_id):
         ('q21', '21. 強迫症状', 2, "0. なし..."),
     ]
 
-    # パラメータ取得
     target_date_str = request.GET.get('date') or timezone.now().strftime('%Y-%m-%d')
     timing = request.GET.get('timing', 'other')
     
-    # ★重要: 既存データの取得（上書きモード）
     existing_assessment = Assessment.objects.filter(
         patient=patient, 
         date=target_date_str, 
         type='HAM-D'
     ).first()
 
-    # 治療判定メッセージ
     recommendation = ""
     if timing in ['week3', 'week6']:
-        # 前回のスコアと比較して改善率を出すなどのロジック
         baseline = Assessment.objects.filter(patient=patient, timing='baseline').first()
-        if baseline and baseline.total_score_21 > 0:
-            # まだ今回のスコアが確定していないので、Javascriptで計算するか、
-            # 保存後に表示するのが一般的ですが、ここでは保存済みのデータがあれば表示
-            if existing_assessment:
-                imp = (baseline.total_score_21 - existing_assessment.total_score_21) / baseline.total_score_21 * 100
-                if imp < 20: recommendation = "【判定】反応不良 (改善率20%未満)。刺激部位やプロトコルの変更を検討してください。"
-                else: recommendation = "【判定】治療継続 (順調に改善中)。"
+        if baseline and baseline.total_score_21 > 0 and existing_assessment:
+            imp = (baseline.total_score_21 - existing_assessment.total_score_21) / baseline.total_score_21 * 100
+            if imp < 20: recommendation = "【判定】反応不良 (改善率20%未満)。刺激部位やプロトコルの変更を検討してください。"
+            else: recommendation = "【判定】治療継続 (順調に改善中)。"
 
     if request.method == 'POST':
         try:
@@ -296,7 +276,6 @@ def assessment_add(request, patient_id):
             for key, label, max_score, text in hamd_items:
                 scores[key] = int(request.POST.get(key, 0))
             
-            # 既存があれば更新、なければ新規作成
             if existing_assessment:
                 assessment = existing_assessment
                 assessment.scores = scores
@@ -320,21 +299,16 @@ def assessment_add(request, patient_id):
     return render(request, 'rtms_app/assessment_add.html', {
         'patient': patient, 'history': history, 'today': target_date_str, 
         'hamd_items': hamd_items, 'initial_timing': timing,
-        'existing_assessment': existing_assessment, # ★テンプレートへ渡す
+        'existing_assessment': existing_assessment, 
         'recommendation': recommendation
     })
 
-
-# ------------------------------------------------------------------
-# サマリー入力・確認画面
-# ------------------------------------------------------------------
 @login_required
 def patient_summary_view(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     sessions = TreatmentSession.objects.filter(patient=patient).order_by('date')
     assessments = Assessment.objects.filter(patient=patient).order_by('date')
     
-    # ★追加：推移表表示用の全検査データ
     test_scores = assessments 
 
     score_admin = assessments.first()
@@ -362,7 +336,6 @@ def patient_summary_view(request, patient_id):
     admission_date_str = patient.admission_date.strftime('%Y年%m月%d日') if patient.admission_date else "不明"
     created_at_str = patient.created_at.strftime('%Y年%m月%d日')
     
-    # 自動生成テキスト（初期値として使用）
     summary_text = (
         f"{created_at_str}初診、{admission_date_str}任意入院。\n"
         f"入院時{fmt_score(score_admin)}、{start_date_str}から全{total_count}回のrTMS治療を実施した。\n"
@@ -371,16 +344,12 @@ def patient_summary_view(request, patient_id):
         f"{end_date_str}退院。紹介元へ逆紹介、抗うつ薬の治療継続を依頼した。"
     )
 
-    # ★注意: 現在の仕様では「保存」してもDBに保存するフィールドがないため、
-    # POST処理を追加する場合はPatientモデルに summary_text フィールド等が必要です。
-    # ここでは表示のみ行います。
-
     return render(request, 'rtms_app/patient_summary.html', {
         'patient': patient, 
         'summary_text': summary_text, 
         'history_list': history_list, 
         'today': timezone.now().date(),
-        'test_scores': test_scores, # ★追加
+        'test_scores': test_scores, 
     })
 
 @login_required
@@ -414,32 +383,28 @@ def custom_logout_view(request):
     logout(request)
     return redirect('/admin/login/')
     
-# 1. 初診・基本情報の印刷プレビュー (前回のエラー解消用)
 def patient_print_preview(request, pk):
     patient = get_object_or_404(Patient, pk=pk)
-    # 必要に応じて関連オブジェクトも取得
-    # first_visit = get_object_or_404(FirstVisit, patient=patient) 
     
+    # 終了予定日の計算
+    end_date_est = get_completion_date(patient.first_treatment_date)
+
     context = {
         'patient': patient,
-        # 'object': first_visit, # テンプレート内で object.xxx を使っている場合
+        'end_date_est': end_date_est
     }
     return render(request, 'rtms_app/print_preview.html', context)
 
-# ------------------------------------------------------------------
-# サマリー・紹介状 印刷用ビュー
-# ------------------------------------------------------------------
 def patient_print_summary(request, pk):
     patient = get_object_or_404(Patient, pk=pk)
     mode = request.GET.get('mode', 'summary')
     
-    # ★追加：心理検査データ
     test_scores = Assessment.objects.filter(patient=patient).order_by('date')
     
     context = {
         'patient': patient,
         'mode': mode,
-        'today': datetime.date.today(), # import datetimeが必要です
-        'test_scores': test_scores, # ★追加
+        'today': datetime.date.today(), # datetimeをimportしたので動きます
+        'test_scores': test_scores,
     }
     return render(request, 'rtms_app/print_summary.html', context)
