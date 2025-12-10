@@ -133,8 +133,9 @@ JAZZMIN_SETTINGS = {
     "welcome_sign": "rTMS 実施記録システム",
     "copyright": "Kasadera Seichiryo Hospital",
     "site_logo": "img/logo.jpg", 
+    # ★ここを変更: ダッシュボードへのリンク
     "topmenu_links": [
-        {"name": "◀ 業務メニューへ", "url": "dashboard", "permissions": ["auth.view_user"]},
+        {"name": "◀ ダッシュボードへ", "url": "dashboard", "permissions": ["auth.view_user"]},
     ],
 
     # サイドバーのメニュー順序制御

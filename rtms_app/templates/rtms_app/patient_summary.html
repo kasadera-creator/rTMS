@@ -6,7 +6,10 @@
     .history-table td { text-align: center; vertical-align: middle; }
     .score-table th { background-color: #e8f5e9; text-align: center; font-size: 0.9rem; }
     .score-table td { text-align: center; font-size: 0.9rem; }
-    .fixed-bottom-bar { background: rgba(255,255,255,0.9); border-top: 1px solid #ddd; padding: 15px; position: fixed; bottom: 0; left: 0; width: 100%; z-index: 1000; text-align: center; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); }
+    
+    /* 右下固定ボタンエリア */
+    .floating-actions { position: fixed; bottom: 20px; right: 20px; z-index: 1050; display: flex; gap: 10px; flex-direction: column; align-items: flex-end; }
+    .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; width: fit-content; }
 </style>
 {% endblock %}
 
@@ -15,19 +18,14 @@
     <!-- ヘッダー -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3><i class="fas fa-file-alt"></i> サマリー・紹介状作成</h3>
+        <!-- 上部ボタンは残しつつ、右下にも配置 -->
         <div class="btn-group">
-            <!-- 修正: ボタンタイプをbuttonにし、onclickで保存＆印刷を実行 -->
-            <button type="button" class="btn btn-outline-primary" onclick="saveAndPrint('summary')">
-                <i class="fas fa-print"></i> 退院サマリー印刷
-            </button>
-            <button type="button" class="btn btn-outline-success" onclick="saveAndPrint('referral')">
-                <i class="fas fa-envelope"></i> 紹介状形式で印刷
-            </button>
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary">戻る</a>
+            <button type="button" class="btn btn-outline-primary" onclick="saveAndPrint('summary')"><i class="fas fa-print"></i> 退院サマリー</button>
+            <button type="button" class="btn btn-outline-success" onclick="saveAndPrint('referral')"><i class="fas fa-envelope"></i> 紹介状</button>
+            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary">戻る</a>
         </div>
     </div>
 
-    <!-- メインエリア: フォームで囲む -->
     <form method="post" id="summaryForm" class="bg-white p-4 shadow-sm rounded">
         {% csrf_token %}
         
@@ -52,9 +50,7 @@
         <div class="mb-4">
             <label class="form-label fw-bold">入院経過・治療結果（サマリー本文）</label>
             <textarea name="summary_text" rows="10" class="form-control">{{ summary_text }}</textarea>
-            <div class="form-text text-muted">
-                ※内容は編集可能です。印刷ボタンを押すと自動保存されます。
-            </div>
+            <div class="form-text text-muted">※内容は編集可能です。印刷ボタンを押すと自動保存されます。</div>
         </div>
 
         <!-- 3. 退院時処方 -->
@@ -74,15 +70,11 @@
                     <tbody>
                         {% for item in history_list %}
                         <tr>
-                            <td>{{ item.count }}</td>
-                            <td>{{ item.date|date:"Y/n/j" }}</td>
-                            <td>{{ item.mt }}</td>
-                            <td>{{ item.intensity }}</td>
+                            <td>{{ item.count }}</td><td>{{ item.date|date:"Y/n/j" }}</td>
+                            <td>{{ item.mt }}</td><td>{{ item.intensity }}</td>
                             <td class="text-start">{{ item.se }}</td>
                         </tr>
-                        {% empty %}
-                        <tr><td colspan="5">記録がありません</td></tr>
-                        {% endfor %}
+                        {% empty %}<tr><td colspan="5">記録がありません</td></tr>{% endfor %}
                     </tbody>
                 </table>
             </div>
@@ -93,41 +85,39 @@
             <h6 class="fw-bold border-bottom pb-2 text-success"><i class="fas fa-chart-line"></i> 心理検査推移 (HAMD)</h6>
             <div style="overflow-x: auto;">
                 <table class="table table-sm table-striped score-table w-auto">
-                    <thead>
-                        <tr>
-                            <th style="min-width:120px;">実施日</th>
-                            <th style="min-width:100px;">時期</th>
-                            <th style="min-width:100px;">HAMD 17項</th>
-                            <th style="min-width:100px;">HAMD 21項</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th style="min-width:120px;">実施日</th><th style="min-width:100px;">時期</th><th style="min-width:100px;">HAMD 17項</th><th style="min-width:100px;">HAMD 21項</th></tr></thead>
                     <tbody>
                         {% for score in test_scores %}
                         <tr>
-                            <td>{{ score.date|date:"Y/n/j" }}</td>
-                            <td>{{ score.get_timing_display|default:"-" }}</td>
-                            <td class="fw-bold">{{ score.total_score_17 }}</td>
-                            <td>{{ score.total_score_21 }}</td>
+                            <td>{{ score.date|date:"Y/n/j" }}</td><td>{{ score.get_timing_display|default:"-" }}</td>
+                            <td class="fw-bold">{{ score.total_score_17 }}</td><td>{{ score.total_score_21 }}</td>
                         </tr>
-                        {% empty %}
-                        <tr><td colspan="4" class="text-muted py-3">データなし</td></tr>
-                        {% endfor %}
+                        {% empty %}<tr><td colspan="4" class="text-muted py-3">データなし</td></tr>{% endfor %}
                     </tbody>
                 </table>
-                <div class="mt-2 p-2 bg-light border rounded small text-muted">
-                    <strong>※HAMD17 参考基準:</strong> 
-                    0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23-:最重症
-                </div>
+                <div class="mt-2 p-2 bg-light border rounded small text-muted"><strong>※HAMD17 参考基準:</strong> 0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23-:最重症</div>
             </div>
         </div>
 
-        <!-- 固定フッター保存ボタン -->
-        <div class="fixed-bottom-bar">
-            <button type="submit" class="btn btn-primary px-5 fw-bold shadow">
-                <i class="fas fa-save"></i> 内容を保存する
-            </button>
-        </div>
         <div style="height: 50px;"></div>
+        
+        <!-- 右下固定ボタン -->
+        <div class="floating-actions">
+            <div class="btn-group-vertical">
+                <button type="button" class="btn btn-primary btn-fab mb-2" onclick="saveAndPrint('summary')">
+                    <i class="fas fa-print"></i> 退院サマリー
+                </button>
+                <button type="button" class="btn btn-success btn-fab mb-2" onclick="saveAndPrint('referral')">
+                    <i class="fas fa-envelope"></i> 紹介状印刷
+                </button>
+            </div>
+            <button type="submit" class="btn btn-dark btn-fab mb-2">
+                <i class="fas fa-save"></i> 保存
+            </button>
+            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab">
+                <i class="fas fa-undo"></i> 戻る
+            </a>
+        </div>
     </form>
 </div>
 
@@ -138,28 +128,18 @@
         const formData = new FormData(form);
         const url = window.location.href;
 
-        // 非同期で保存リクエスト送信
         fetch(url, {
             method: 'POST',
             body: formData,
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest', // Ajaxリクエストであることを示す
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-            }
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }
         })
         .then(response => {
             if (response.ok) {
-                // 保存成功後に印刷ウィンドウを開く
                 const printUrl = "{% url 'patient_print_summary' patient.id %}?mode=" + mode;
                 window.open(printUrl, '_blank');
-            } else {
-                alert('保存に失敗しました。');
-            }
+            } else { alert('保存に失敗しました。'); }
         })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('通信エラーが発生しました。');
-        });
+        .catch(error => { console.error('Error:', error); alert('通信エラーが発生しました。'); });
     }
 </script>
 {% endblock %}

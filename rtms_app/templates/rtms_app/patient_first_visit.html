@@ -5,30 +5,34 @@
     .form-section { background-color: #fff; padding: 25px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
     .section-title { border-left: 5px solid #0d6efd; padding-left: 10px; font-weight: bold; margin-bottom: 20px; color: #333; font-size: 1.2rem; }
     .diag-check-group { background-color: #f8f9fa; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6; }
-    
-    /* 質問票テーブル（入力用） */
     .q-table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
     .q-table th { background-color: #f8f9fa; padding: 10px; border-bottom: 2px solid #dee2e6; }
     .q-table td { padding: 8px 10px; border-bottom: 1px solid #dee2e6; vertical-align: middle; }
     .q-header-row { background-color: #e9ecef; font-weight: bold; }
+    
+    /* 右下固定ボタンエリア */
+    .floating-actions { position: fixed; bottom: 20px; right: 20px; z-index: 1050; display: flex; gap: 10px; }
+    .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<div class="container py-4 mb-5">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h3 class="fw-bold"><i class="fas fa-file-medical"></i> 初診・基本情報入力</h3>
         <div class="btn-group">
             <a href="{% url 'patient_print_preview' patient.id %}" target="_blank" class="btn btn-outline-primary">
-                <i class="fas fa-print"></i> 初診時サマリー・rTMS適正質問票 印刷
+                <i class="fas fa-print"></i> プレビュー
             </a>
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary">戻る</a>
+            <!-- 日付維持の戻るボタン -->
+            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary">戻る</a>
         </div>
     </div>
 
     <form method="post" id="mainForm">
         {% csrf_token %}
         
+        <!-- (中略: 入力フォーム部分は変更なし) -->
         {% if form.errors %}
         <div class="alert alert-danger">
             <strong>保存できませんでした。以下の項目を確認してください:</strong>
@@ -39,56 +43,27 @@
         <div class="form-section">
             <h5 class="section-title">基本情報・サマリー</h5>
             <div class="row g-3 mb-3">
-                <div class="col-md-3">
-                    <label class="form-label fw-bold">カルテID</label>
-                    {{ form.card_id }}
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-bold">氏名</label>
-                    {{ form.name }}
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-bold">生年月日</label>
-                    {{ form.birth_date }}
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-bold">性別</label>
-                    {{ form.gender }}
-                </div>
-                
-                <!-- 紹介元・紹介医の入力欄 (横並び) -->
+                <div class="col-md-3"><label class="form-label fw-bold">カルテID</label>{{ form.card_id }}</div>
+                <div class="col-md-3"><label class="form-label fw-bold">氏名</label>{{ form.name }}</div>
+                <div class="col-md-3"><label class="form-label fw-bold">生年月日</label>{{ form.birth_date }}</div>
+                <div class="col-md-3"><label class="form-label fw-bold">性別</label>{{ form.gender }}</div>
                 <div class="col-md-12">
                     <label class="form-label fw-bold">紹介元情報</label>
                     <div class="row g-2">
                         <div class="col-md-6">
-                            <div class="input-group">
-                                <span class="input-group-text bg-light">医療機関</span>
-                                {{ form.referral_source }}
-                            </div>
-                            <datalist id="referral-options">
-                                {% for opt in referral_options %}<option value="{{ opt }}">{% endfor %}
-                            </datalist>
+                            <div class="input-group"><span class="input-group-text bg-light">医療機関</span>{{ form.referral_source }}</div>
+                            <datalist id="referral-options">{% for opt in referral_options %}<option value="{{ opt }}">{% endfor %}</datalist>
                         </div>
                         <div class="col-md-6">
-                            <div class="input-group">
-                                <span class="input-group-text bg-light">医師名</span>
-                                {{ form.referral_doctor }}
-                                <span class="input-group-text bg-light">先生</span>
-                            </div>
+                            <div class="input-group"><span class="input-group-text bg-light">医師名</span>{{ form.referral_doctor }}<span class="input-group-text bg-light">先生</span></div>
                         </div>
                     </div>
                 </div>
             </div>
-
-            <div class="mb-3">
-                <label class="fw-bold">主訴</label>
-                {{ form.chief_complaint }}
-            </div>
-
+            <div class="mb-3"><label class="fw-bold">主訴</label>{{ form.chief_complaint }}</div>
             <div class="mb-3"><label class="fw-bold">生活歴</label><textarea name="{{ form.life_history.name }}" class="form-control" rows="3">{{ form.life_history.value|default_if_none:"" }}</textarea></div>
             <div class="mb-3"><label class="fw-bold">既往歴</label><textarea name="{{ form.past_history.name }}" class="form-control" rows="3">{{ form.past_history.value|default_if_none:"" }}</textarea></div>
             <div class="mb-3"><label class="fw-bold">現病歴</label><textarea name="{{ form.present_illness.name }}" class="form-control" rows="8">{{ form.present_illness.value|default_if_none:"" }}</textarea></div>
-            <!-- 薬剤治療歴: form.value にデフォルト値が入っているため、それを表示 -->
             <div class="mb-3"><label class="fw-bold">薬剤治療歴</label><textarea name="{{ form.medication_history.name }}" class="form-control" rows="6">{{ form.medication_history.value|default_if_none:"" }}</textarea></div>
             
             <div class="mb-3">
@@ -107,36 +82,11 @@
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="知的発達症" id="d_mr"><label class="form-check-label" for="d_mr">知的発達症</label></div></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="自閉スペクトラム症" id="d_asd"><label class="form-check-label" for="d_asd">自閉スペクトラム症</label></div></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="ADHD" id="d_adhd"><label class="form-check-label" for="d_adhd">ADHD</label></div></div>
-                        
                         <div class="col-12"><hr class="my-2"></div>
-                        
-                        <div class="col-md-4">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="diag_list" value="軽度認知障害(MCI)" id="d_mci">
-                                <label class="form-check-label" for="d_mci">軽度認知障害（MCI）</label>
-                            </div>
-                        </div>
-
-                        <div class="col-md-8">
-                            <div class="d-flex align-items-center">
-                                <div class="form-check me-2">
-                                    <input class="form-check-input" type="checkbox" name="diag_list" value="認知症" id="d_dementia">
-                                    <label class="form-check-label" for="d_dementia" style="white-space: nowrap;">認知症（詳細は下記へ）</label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-md-4">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="diag_list" value="パーキンソン病" id="d_parkinson">
-                                <label class="form-check-label" for="d_parkinson">パーキンソン病</label>
-                            </div>
-                        </div>
-
-                        <div class="col-12 mt-2">
-                            <label class="small text-muted fw-bold">詳細・その他の診断名 (認知症の型などもこちらへ)</label>
-                            <input type="text" name="diag_other" class="form-control form-control-sm" placeholder="例: アルツハイマー型認知症、レビー小体型認知症など">
-                        </div>
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="軽度認知障害(MCI)" id="d_mci"><label class="form-check-label" for="d_mci">軽度認知障害（MCI）</label></div></div>
+                        <div class="col-md-8"><div class="d-flex align-items-center"><div class="form-check me-2"><input class="form-check-input" type="checkbox" name="diag_list" value="認知症" id="d_dementia"><label class="form-check-label" for="d_dementia" style="white-space: nowrap;">認知症（詳細は下記へ）</label></div></div></div>
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="パーキンソン病" id="d_parkinson"><label class="form-check-label" for="d_parkinson">パーキンソン病</label></div></div>
+                        <div class="col-12 mt-2"><label class="small text-muted fw-bold">詳細・その他の診断名 (認知症の型などもこちらへ)</label><input type="text" name="diag_other" class="form-control form-control-sm" placeholder="例: アルツハイマー型認知症、レビー小体型認知症など"></div>
                     </div>
                 </div>
             </div>
@@ -145,35 +95,19 @@
         <div class="form-section">
             <h5 class="section-title">スケジュール・担当医設定</h5>
             <div class="row g-3">
-                <div class="col-md-4">
-                    <label class="form-label text-primary fw-bold">入院予定日</label>
-                    {{ form.admission_date }}
-                </div>
-                
-                <div class="col-md-4">
-                    <label class="form-label text-warning fw-bold">初回位置決め日</label>
-                    {{ form.mapping_date }}
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label text-success fw-bold">初回治療日</label>
-                    {{ form.first_treatment_date }}
-                </div>
-				
-                <div class="col-md-8">
-                    <label class="form-label fw-bold">今後の担当医</label>
-                    <div class="d-flex align-items-center">
-                        {{ form.attending_physician }}
-                        <span class="form-text ms-2 mb-0">※診察結果に基づき、決定した担当医を入力</span>
-                    </div>
-                </div>
+                <div class="col-md-4"><label class="form-label text-primary fw-bold">入院予定日</label>{{ form.admission_date }}</div>
+                <div class="col-md-4"><label class="form-label text-warning fw-bold">初回位置決め日</label>{{ form.mapping_date }}</div>
+                <div class="col-md-4"><label class="form-label text-success fw-bold">初回治療日</label>{{ form.first_treatment_date }}</div>
+                <div class="col-md-8"><label class="form-label fw-bold">今後の担当医</label><div class="d-flex align-items-center">{{ form.attending_physician }}<span class="form-text ms-2 mb-0">※診察結果に基づき、決定した担当医を入力</span></div></div>
             </div>
         </div>
 
         <div class="form-section">
             <h5 class="section-title">rTMS 適正に関する質問票</h5>
             <p class="text-muted small">※患者様への聴取結果を入力してください。</p>
-            
             <table class="q-table">
+                <!-- (質問票テーブル部分は長いので省略しますが、元のままでOKです) -->
+                <!-- 必要であればここも貼り付けますが、変更はないため割愛します -->
                 <thead class="table-light"><tr><th style="text-align: left;">質問項目</th><th width="80" class="text-center">はい</th><th width="80" class="text-center">いいえ</th></tr></thead>
                 <tbody>
                     <tr class="q-header-row"><td colspan="3">これまでに、以下のことがありましたか？</td></tr>
@@ -201,10 +135,19 @@
             <input type="hidden" name="questionnaire_data" id="questionnaire_json">
         </div>
 
-        <div class="fixed-bottom bg-white p-3 border-top shadow text-center">
-            <button type="submit" class="btn btn-primary px-5 fw-bold">保存して終了</button>
+        <!-- 以前の固定フッターは削除し、右下のフローティングボタンへ移行 -->
+        <div style="height: 50px;"></div>
+        
+        <!-- 右下固定ボタン -->
+        <div class="floating-actions">
+            <button type="submit" class="btn btn-primary btn-fab text-white">
+                <i class="fas fa-save"></i> 保存して終了
+            </button>
+            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab">
+                <i class="fas fa-undo"></i> 戻る
+            </a>
         </div>
-        <div style="height: 80px;"></div></form>
+    </form>
 </div>
 {% endblock %}
 
@@ -227,15 +170,12 @@
             diags.forEach(d => {
                 const el = document.querySelector(`input[name="diag_list"][value="${d}"]`);
                 if(el) el.checked = true;
-                
-                // その他入力欄の復元
                 const otherMatch = d.match(/^その他\((.+)\)$/);
                 if (otherMatch && otherMatch[1]) {
                     document.querySelector('input[name="diag_other"]').value = otherMatch[1];
                 }
             });
         } else {
-            // ★追加: 診断名が空の場合、デフォルトで「うつ病」をチェック
             const depEl = document.getElementById('d_dep');
             if(depEl) depEl.checked = true;
         }

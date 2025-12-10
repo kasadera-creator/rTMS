@@ -36,14 +36,22 @@
             <a href="?date={{ prev_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm me-2">
                 <i class="fas fa-chevron-left"></i> 前日
             </a>
-            <input type="date" class="form-control form-control-sm d-inline-block w-auto border-0 bg-light fw-bold fs-5 text-center" 
-                   value="{{ today|date:'Y-m-d' }}" onchange="location.href='?date='+this.value">
+            <!-- 曜日付き日付表示 -->
+            <div class="d-inline-block bg-light px-3 py-1 rounded fw-bold fs-5 border">
+                {{ target_date_display }}
+            </div>
+            
             <a href="?date={{ next_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm ms-2">
                 翌日 <i class="fas fa-chevron-right"></i>
             </a>
+            
+            <!-- 今日ボタン -->
+            <a href="?date={{ today_raw|date:'Y-m-d' }}" class="btn btn-sm btn-outline-dark ms-3">
+                <i class="fas fa-calendar-day"></i> 今日
+            </a>
         </div>
         <div>
-            <a href="{% url 'patient_list' %}" class="btn btn-outline-dark btn-sm fw-bold">
+            <a href="{% url 'patient_list' %}?dashboard_date={{ today|date:'Y-m-d' }}" class="btn btn-outline-dark btn-sm fw-bold">
                 <i class="fas fa-users me-1"></i> 患者一覧・検索
             </a>
         </div>
@@ -67,7 +75,7 @@
                 <div class="list-group list-group-flush">
                     {% for item in task_first_visit %}
                     <div class="list-group-item">
-                        <a href="{% url 'patient_first_visit' item.obj.id %}">
+                        <a href="{% url 'patient_first_visit' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
                             <div class="d-flex justify-content-between align-items-center">
                                 <span class="fw-bold">{{ item.obj.name }}</span>
                                 <span class="status-badge status-done">登録済</span>
@@ -92,7 +100,7 @@
                 <div class="list-group list-group-flush">
                     {% for item in task_admission %}
                     <div class="list-group-item">
-                        <a href="{% url 'admission_procedure' item.obj.id %}">
+                        <a href="{% url 'admission_procedure' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
                             <div class="d-flex justify-content-between align-items-center">
                                 <span class="fw-bold">{{ item.obj.name }}</span>
                                 <span class="status-badge status-{{ item.color }}">{{ item.status }}</span>
@@ -117,7 +125,7 @@
                 <div class="list-group list-group-flush">
                     {% for item in task_mapping %}
                     <div class="list-group-item">
-                        <a href="{% url 'mapping_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}">
+                        <a href="{% url 'mapping_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
                             <div class="d-flex justify-content-between align-items-center">
                                 <span class="fw-bold">{{ item.obj.name }}</span>
                                 <span class="status-badge status-{{ item.color }}">{{ item.status }}</span>
@@ -142,7 +150,7 @@
                 <div class="list-group list-group-flush">
                     {% for item in task_treatment %}
                     <div class="list-group-item {% if item.status == '実施済' %}bg-light text-muted{% endif %}">
-                        <a href="{% url 'treatment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}">
+                        <a href="{% url 'treatment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
                             <div class="d-flex justify-content-between align-items-center">
                                 <span class="fw-bold">{{ item.obj.name }}</span>
                                 <span class="status-badge status-{{ item.color }}">{{ item.status }}</span>
@@ -157,17 +165,17 @@
             </div>
         </div>
 
-        <!-- 5. 状態評価 -->
+        <!-- 5. 尺度評価 -->
         <div class="col-md-6 col-lg-4">
             <div class="card-task bg-white">
                 <div class="task-header bg-g-5">
-                    <span><i class="fas fa-clipboard-check me-2"></i>⑤ 状態評価</span>
+                    <span><i class="fas fa-clipboard-check me-2"></i>⑤ 尺度評価</span>
                     <span class="badge bg-white text-dark rounded-pill opacity-75">{{ task_assessment|length }}</span>
                 </div>
                 <div class="list-group list-group-flush">
                     {% for item in task_assessment %}
                     <div class="list-group-item">
-                        <a href="{% url 'assessment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&timing={{ item.timing_code }}">
+                        <a href="{% url 'assessment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&timing={{ item.timing_code }}&dashboard_date={{ today|date:'Y-m-d' }}">
                             <div class="d-flex justify-content-between align-items-center">
                                 <span class="fw-bold">{{ item.obj.name }}</span>
                                 <span class="status-badge status-{{ item.color }}">{{ item.status }}</span>
@@ -192,7 +200,7 @@
                 <div class="list-group list-group-flush">
                     {% for item in task_discharge %}
                     <div class="list-group-item">
-                        <a href="{% url 'patient_summary' item.obj.id %}">
+                        <a href="{% url 'patient_summary' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
                             <div class="d-flex justify-content-between align-items-center">
                                 <span class="fw-bold">{{ item.obj.name }}</span>
                                 <span class="status-badge status-info">退院準備</span>
