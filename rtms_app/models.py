@@ -12,14 +12,21 @@ class Patient(models.Model):
     gender = models.CharField("性別", max_length=1, choices=GENDER_CHOICES, default='M')
     attending_physician = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, verbose_name="担当医")
     
-    referral_source = models.CharField("紹介元", max_length=200, blank=True)
-    chief_complaint = models.CharField("主訴", max_length=200, blank=True) # ★新規追加
-    diagnosis = models.CharField("診断名", max_length=200, default="うつ病") # チェックリストの結果をここに結合して保存
+    referral_source = models.CharField("紹介元医療機関", max_length=200, blank=True)
+    referral_doctor = models.CharField("紹介医", max_length=100, blank=True)
+    
+    chief_complaint = models.CharField("主訴", max_length=200, blank=True)
+    diagnosis = models.CharField("診断名", max_length=200, default="うつ病")
     
     life_history = models.TextField("生活歴", blank=True)
     past_history = models.TextField("既往歴", blank=True)
     present_illness = models.TextField("現病歴", blank=True)
-    medication_history = models.TextField("薬剤治療歴", blank=True)
+    medication_history = models.TextField("薬剤治療歴", blank=True) # 入院時/紹介時の薬剤
+    
+    # ★新規追加: サマリー用フィールド
+    summary_text = models.TextField("サマリー本文", blank=True)
+    discharge_prescription = models.TextField("退院時処方", blank=True)
+
     mapping_notes = models.TextField("位置決め記録メモ", blank=True)
     
     admission_date = models.DateField("入院予定日", null=True, blank=True)
@@ -37,7 +44,6 @@ class Patient(models.Model):
         today = timezone.now().date()
         return today.year - self.birth_date.year - ((today.month, today.day) < (self.birth_date.month, self.birth_date.day))
 
-# --- 以下、MappingSession, TreatmentSession, Assessment は変更なし (省略) ---
 class MappingSession(models.Model):
     WEEK_CHOICES = [(1, '第1週'), (2, '第2週'), (3, '第3週'), (4, 'その他')]
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE)

@@ -55,12 +55,28 @@
                     <label class="form-label fw-bold">性別</label>
                     {{ form.gender }}
                 </div>
+                
+                <!-- 紹介元・紹介医の入力欄 (横並び) -->
                 <div class="col-md-12">
-                    <label class="form-label fw-bold">紹介元</label>
-                    {{ form.referral_source }}
-                    <datalist id="referral-options">
-                        {% for opt in referral_options %}<option value="{{ opt }}">{% endfor %}
-                    </datalist>
+                    <label class="form-label fw-bold">紹介元情報</label>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">医療機関</span>
+                                {{ form.referral_source }}
+                            </div>
+                            <datalist id="referral-options">
+                                {% for opt in referral_options %}<option value="{{ opt }}">{% endfor %}
+                            </datalist>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">医師名</span>
+                                {{ form.referral_doctor }}
+                                <span class="input-group-text bg-light">先生</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -100,7 +116,6 @@
                             </div>
                         </div>
 
-                        <!-- 修正: 認知症入力欄を統合 -->
                         <div class="col-md-8">
                             <div class="d-flex align-items-center">
                                 <div class="form-check me-2">

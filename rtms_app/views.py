@@ -42,10 +42,8 @@ def get_completion_date(start_date):
 @login_required
 def dashboard_view(request):
     jst_now = timezone.localtime(timezone.now())
-    # URLパラメータに日付がない場合、今日の日付でリダイレクト
     if 'date' not in request.GET:
         return redirect(f'{request.path}?date={jst_now.strftime("%Y-%m-%d")}')
-    
     try: target_date = parse_date(request.GET.get('date'))
     except: target_date = jst_now.date()
     if not target_date: target_date = jst_now.date()
@@ -53,42 +51,30 @@ def dashboard_view(request):
     prev_day = target_date - timedelta(days=1)
     next_day = target_date + timedelta(days=1)
 
-    # 1. 新規登録（初診）
     new_patients = [{'obj': p, 'status': "登録済"} for p in Patient.objects.filter(created_at__date=target_date)]
 
-    # 2. 入院予定
     admissions = []
     for p in Patient.objects.filter(admission_date=target_date):
         status = "手続済" if p.is_admission_procedure_done else "要手続"
         color = "success" if p.is_admission_procedure_done else "warning"
         admissions.append({'obj': p, 'status': status, 'color': color})
 
-    # 3. 位置決め (Mapping)
-    # mapping_date が target_date と一致する患者を表示
     mappings = []
     for p in Patient.objects.filter(mapping_date=target_date):
         is_done = MappingSession.objects.filter(patient=p, date=target_date).exists()
-        mappings.append({
-            'obj': p, 
-            'status': "実施済" if is_done else "実施未", 
-            'color': "success" if is_done else "danger"
-        })
+        mappings.append({'obj': p, 'status': "実施済" if is_done else "実施未", 'color': "success" if is_done else "danger"})
 
-    # 4. 治療実施 & 5. 評価
     treatments = []
     assessments_due = []
     
-    # 入院時評価のチェック
     for adm in admissions:
         is_done = Assessment.objects.filter(patient=adm['obj'], date=target_date).exists()
         assessments_due.append({'obj': adm['obj'], 'reason': "入院時評価 (治療前)", 'status': "実施済" if is_done else "実施未", 'color': "success" if is_done else "danger", 'timing_code': 'baseline'})
 
-    # 治療進行中の患者をチェック
     active_candidates = Patient.objects.filter(first_treatment_date__isnull=False).order_by('card_id')
     for p in active_candidates:
         session_num = get_session_number(p.first_treatment_date, target_date)
         
-        # 終了・評価タイミング
         if session_num == 30:
             assessments_due.append({
                 'obj': p, 'reason': "退院準備・サマリー作成", 
@@ -104,7 +90,6 @@ def dashboard_view(request):
 
         if session_num <= 0 or session_num > 35: continue
         
-        # 治療リストへの追加
         today_session = TreatmentSession.objects.filter(patient=p, date__date=target_date).first()
         is_done = today_session is not None
         
@@ -172,21 +157,12 @@ def patient_first_visit(request, patient_id):
         form = PatientFirstVisitForm(request.POST, instance=patient)
         if form.is_valid():
             p = form.save(commit=False)
-            
-            # --- 診断名の処理修正 ---
-            diag_list = request.POST.getlist('diag_list') # チェックされた項目のリスト
-            diag_other = request.POST.get('diag_other', '').strip() # 自由記述欄
-            
-            # リストを結合
+            diag_list = request.POST.getlist('diag_list')
+            diag_other = request.POST.get('diag_other', '').strip()
             full_diagnosis = ", ".join(diag_list)
-            
-            # 自由記述がある場合、「その他(内容)」として結合
             if diag_other: 
-                if full_diagnosis: 
-                    full_diagnosis += f", その他({diag_other})"
-                else: 
-                    full_diagnosis = f"その他({diag_other})"
-            
+                if full_diagnosis: full_diagnosis += f", その他({diag_other})"
+                else: full_diagnosis = f"その他({diag_other})"
             p.diagnosis = full_diagnosis
             p.save()
             return redirect('dashboard')
@@ -326,6 +302,14 @@ def assessment_add(request, patient_id):
 @login_required
 def patient_summary_view(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
+    
+    # POST処理: サマリーと退院時処方の保存
+    if request.method == 'POST':
+        patient.summary_text = request.POST.get('summary_text', '')
+        patient.discharge_prescription = request.POST.get('discharge_prescription', '')
+        patient.save()
+        return redirect('dashboard')
+
     sessions = TreatmentSession.objects.filter(patient=patient).order_by('date')
     assessments = Assessment.objects.filter(patient=patient).order_by('date')
     
@@ -356,13 +340,17 @@ def patient_summary_view(request, patient_id):
     admission_date_str = patient.admission_date.strftime('%Y年%m月%d日') if patient.admission_date else "不明"
     created_at_str = patient.created_at.strftime('%Y年%m月%d日')
     
-    summary_text = (
-        f"{created_at_str}初診、{admission_date_str}任意入院。\n"
-        f"入院時{fmt_score(score_admin)}、{start_date_str}から全{total_count}回のrTMS治療を実施した。\n"
-        f"3週時、{fmt_score(score_w3)}、6週時、{fmt_score(score_w6)}となった。\n"
-        f"治療中の合併症：{side_effects_summary}。\n"
-        f"{end_date_str}退院。紹介元へ逆紹介、抗うつ薬の治療継続を依頼した。"
-    )
+    # 保存されているサマリーがあればそれを使う、なければ自動生成
+    if patient.summary_text:
+        summary_text = patient.summary_text
+    else:
+        summary_text = (
+            f"{created_at_str}初診、{admission_date_str}任意入院。\n"
+            f"入院時{fmt_score(score_admin)}、{start_date_str}から全{total_count}回のrTMS治療を実施した。\n"
+            f"3週時、{fmt_score(score_w3)}、6週時、{fmt_score(score_w6)}となった。\n"
+            f"治療中の合併症：{side_effects_summary}。\n"
+            f"{end_date_str}退院。紹介元へ逆紹介、抗うつ薬の治療継続を依頼した。"
+        )
 
     return render(request, 'rtms_app/patient_summary.html', {
         'patient': patient, 
@@ -405,26 +393,19 @@ def custom_logout_view(request):
     
 def patient_print_preview(request, pk):
     patient = get_object_or_404(Patient, pk=pk)
-    
-    # 終了予定日の計算
     end_date_est = get_completion_date(patient.first_treatment_date)
-
-    context = {
-        'patient': patient,
-        'end_date_est': end_date_est
-    }
+    context = { 'patient': patient, 'end_date_est': end_date_est }
     return render(request, 'rtms_app/print_preview.html', context)
 
 def patient_print_summary(request, pk):
     patient = get_object_or_404(Patient, pk=pk)
     mode = request.GET.get('mode', 'summary')
-    
     test_scores = Assessment.objects.filter(patient=patient).order_by('date')
     
     context = {
         'patient': patient,
         'mode': mode,
-        'today': datetime.date.today(), # datetimeをimportしたので動きます
+        'today': datetime.date.today(),
         'test_scores': test_scores,
     }
     return render(request, 'rtms_app/print_summary.html', context)

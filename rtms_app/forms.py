@@ -40,7 +40,8 @@ class PatientFirstVisitForm(forms.ModelForm):
         model = Patient
         fields = [
             'card_id', 'name', 'birth_date', 'gender', 'attending_physician', 
-            'referral_source', 'chief_complaint', 'diagnosis', 
+            'referral_source', 'referral_doctor', # ★追加
+            'chief_complaint', 'diagnosis', 
             'life_history', 'past_history', 'present_illness', 'medication_history', 
             'admission_date', 'mapping_date', 'first_treatment_date'
         ]
@@ -49,7 +50,10 @@ class PatientFirstVisitForm(forms.ModelForm):
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'birth_date': DateInput(attrs={'class': 'form-control'}),
             'gender': forms.Select(attrs={'class': 'form-select'}),
-            'referral_source': forms.TextInput(attrs={'class': 'form-control', 'list': 'referral-options'}),
+            # 紹介元と紹介医のウィジェット設定
+            'referral_source': forms.TextInput(attrs={'class': 'form-control', 'list': 'referral-options', 'placeholder': '医療機関名'}),
+            'referral_doctor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '医師名 (姓のみ、またはフルネーム)'}), # ★追加
+            
             'chief_complaint': forms.TextInput(attrs={'class': 'form-control'}),
             'diagnosis': forms.HiddenInput(),
             'life_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
@@ -57,19 +61,17 @@ class PatientFirstVisitForm(forms.ModelForm):
             'present_illness': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'medication_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 6}),
             'dementia_detail': forms.TextInput(attrs={
-        'class': 'form-control form-control-sm',
-        'placeholder': '',
-        'style': 'display: inline-block; width: auto; margin-left: 10px;'
-    }),
+                'class': 'form-control form-control-sm',
+                'placeholder': '',
+                'style': 'display: inline-block; width: auto; margin-left: 10px;'
+            }),
             'admission_date': DateInput(attrs={'class': 'form-control'}),
             'mapping_date': DateInput(attrs={'class': 'form-control'}),
             'first_treatment_date': DateInput(attrs={'class': 'form-control'}),
         }
 
-    # ★追加: 初期値設定
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # 薬剤治療歴が空の場合、テンプレートをセット
         if not self.instance.medication_history:
             self.fields['medication_history'].initial = (
                 "抗うつ薬：\n"

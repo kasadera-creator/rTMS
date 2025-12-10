@@ -6,11 +6,12 @@
     .history-table td { text-align: center; vertical-align: middle; }
     .score-table th { background-color: #e8f5e9; text-align: center; font-size: 0.9rem; }
     .score-table td { text-align: center; font-size: 0.9rem; }
+    .fixed-bottom-bar { background: rgba(255,255,255,0.9); border-top: 1px solid #ddd; padding: 15px; position: fixed; bottom: 0; left: 0; width: 100%; z-index: 1000; text-align: center; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<div class="container py-4 mb-5">
     <!-- ヘッダー -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3><i class="fas fa-file-alt"></i> サマリー・紹介状作成</h3>
@@ -19,14 +20,16 @@
                 <i class="fas fa-print"></i> 退院サマリー印刷
             </a>
             <a href="{% url 'patient_print_summary' patient.id %}?mode=referral" target="_blank" class="btn btn-outline-success">
-                <i class="fas fa-envelope"></i> 紹介状形式で印刷
+                <i class="fas fa-envelope"></i> 紹介状印刷
             </a>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary">戻る</a>
         </div>
     </div>
 
-    <!-- メインエリア -->
-    <div class="bg-white p-4 shadow-sm rounded">
+    <!-- メインエリア: フォームで囲む -->
+    <form method="post" class="bg-white p-4 shadow-sm rounded">
+        {% csrf_token %}
+        
         <!-- 1. 患者情報ヘッダー -->
         <div class="alert alert-light border mb-4">
             <div class="row">
@@ -34,7 +37,6 @@
                 <div class="col-md-3"><strong>氏名:</strong> {{ patient.name }}</div>
                 <div class="col-md-3">
                     <strong>担当医:</strong> 
-                    <!-- 修正: 名前を明示的に表示 -->
                     {% if patient.attending_physician %}
                         {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}
                     {% else %}
@@ -45,18 +47,24 @@
             </div>
         </div>
 
-        <!-- 2. サマリー入力 (全幅に戻しました) -->
+        <!-- 2. サマリー入力 -->
         <div class="mb-4">
             <label class="form-label fw-bold">入院経過・治療結果（サマリー本文）</label>
             <textarea name="summary_text" rows="10" class="form-control">{{ summary_text }}</textarea>
             <div class="form-text text-muted">
-                ※現在は自動生成されたテキストが表示されています。
+                ※内容は編集可能です。下部の「保存」ボタンで保存してください。
             </div>
+        </div>
+
+        <!-- 3. 退院時処方 (新規追加) -->
+        <div class="mb-4">
+            <label class="form-label fw-bold text-primary">退院時処方</label>
+            <textarea name="discharge_prescription" rows="4" class="form-control" placeholder="退院時の処方内容を入力してください...">{{ patient.discharge_prescription }}</textarea>
         </div>
 
         <hr>
 
-        <!-- 3. 治療実施履歴 -->
+        <!-- 4. 治療実施履歴 -->
         <div class="mt-4">
             <h6 class="fw-bold border-bottom pb-2">rTMS 治療実施記録</h6>
             <div style="max-height: 300px; overflow-y: auto;">
@@ -79,7 +87,7 @@
             </div>
         </div>
 
-        <!-- 4. 心理検査推移 (実施記録の下に配置) -->
+        <!-- 5. 心理検査推移 -->
         <div class="mt-4">
             <h6 class="fw-bold border-bottom pb-2 text-success"><i class="fas fa-chart-line"></i> 心理検査推移 (HAMD)</h6>
             <div style="overflow-x: auto;">
@@ -108,6 +116,13 @@
             </div>
         </div>
 
-    </div>
+        <!-- 固定フッター保存ボタン -->
+        <div class="fixed-bottom-bar">
+            <button type="submit" class="btn btn-primary px-5 fw-bold shadow">
+                <i class="fas fa-save"></i> 内容を保存する
+            </button>
+        </div>
+        <div style="height: 50px;"></div>
+    </form>
 </div>
 {% endblock %}

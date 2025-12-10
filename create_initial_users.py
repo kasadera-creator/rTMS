@@ -23,13 +23,12 @@ def create_initial_data():
     # 2. ユーザーの作成 (姓名を分離・先生なし)
     # ---------------------------------------------------------
     # フォーマット: (username, password, last_name, first_name, is_staff, is_superuser, group_name)
-    # ※実在する先生のお名前に書き換えてください。ここでは仮の名を使用しています。
     users_data = [
-        ('admin', 'adminpassword123', '管理者', '太郎', True, True, '管理者'),
-        ('mori', 'password!', '森', '◯◯', True, False, '医師'),      # 仮名
-        ('kiya', 'password!', '木谷', '◯◯', True, False, '医師'),    # 仮名
-        ('furukawa', 'password!', '古川', '◯◯', True, False, '医師'), # 仮名
-        ('iwata', 'password!', '岩田', '◯◯', True, False, '医師'),    # 仮名
+        ('admin', 'adminpassword123', '管理者', '◯◯', True, True, '管理者'),
+        ('mori', 'password!', '森', '◯◯', True, False, '医師'),
+        ('kiya', 'password!', '木谷', '◯◯', True, False, '医師'),
+        ('furukawa', 'password!', '古川', '◯◯', True, False, '医師'),
+        ('iwata', 'password!', '岩田', '◯◯', True, False, '医師'),
         ('nurse', 'password!', '看護', '◯◯', True, False, '看護師'),
     ]
 
@@ -69,6 +68,7 @@ def create_initial_data():
         'birth_date': date(1999, 9, 9),
         'gender': 'M',
         'referral_source': '精治寮病院（荒畑）',
+        'referral_doctor': '山田 太郎', # ★紹介医追加
         'chief_complaint': 'うつが治らない',
         'life_history': '同胞１名中第１子として名古屋市にて出生。発育・発達に特記事項なし。大学を卒業後、現在の会社に就職。未婚、独居。',
         'past_history': '特になし',
