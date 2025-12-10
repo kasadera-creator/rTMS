@@ -82,7 +82,7 @@
                             <div class="col-12"><hr class="my-3"></div>
 
                             <!-- 紹介情報 (任意) -->
-                            <h6 class="text-secondary mb-3"><i class="fas fa-hospital me-1"></i> 紹介情報 (任意)</h6>
+                            <h6 class="text-secondary mb-3"><i class="fas fa-hospital me-1"></i> 紹介情報</h6>
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">紹介元医療機関</label>
                                 {{ form.referral_source }}
@@ -113,31 +113,3 @@
     </div>
 </div>
 {% endblock %}
-```
-
-※ **注意:** `models.py` の `unique=True` 削除に伴い、**データベースのマイグレーションが必要**になります。
-前回同様、`rtms_app/migrations/0003_alter_patient_card_id.py` のようなファイルを作成するか、データベースをリセットしてください。今回は「ID重複チェック」を自前実装するため、`db.sqlite3` を削除して `create_initial_users.py` を再実行するのが一番安全で確実です。
-
-**migrationファイルの例 (手動で適用する場合):**
-`rtms_app/migrations/0003_alter_patient_card_id_add_course.py`
-```python
-from django.db import migrations, models
-
-class Migration(migrations.Migration):
-
-    dependencies = [
-        ('rtms_app', '0002_patient_discharge_date'), # 直前のマイグレーション
-    ]
-
-    operations = [
-        migrations.AlterField(
-            model_name='patient',
-            name='card_id',
-            field=models.CharField(max_length=20, verbose_name='カルテ番号'), # unique=Trueを削除
-        ),
-        migrations.AddField(
-            model_name='patient',
-            name='course_number',
-            field=models.IntegerField(default=1, verbose_name='クール数'),
-        ),
-    ]

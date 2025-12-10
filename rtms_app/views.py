@@ -181,7 +181,7 @@ def patient_add_view(request):
 
 @login_required
 def patient_list_view(request):
-    patients = Patient.objects.all().order_by('card_id')
+    patients = Patient.objects.all().order_by('card_id', 'course_number')
     dashboard_date = request.GET.get('dashboard_date')
     return render(request, 'rtms_app/patient_list.html', {'patients': patients, 'dashboard_date': dashboard_date})
 
