@@ -1,20 +1,31 @@
 {% extends "admin/base_site.html" %}
 {% block extrastyle %}
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
-    .hamd-row { border-bottom: 1px solid #dee2e6; padding: 15px 0; }
+    .hamd-row { border-bottom: 1px solid #f0f0f0; padding: 12px 20px; transition: background 0.1s; }
     .hamd-row:hover { background-color: #f8f9fa; }
-    .criteria-text { font-size: 0.85rem; color: #666; margin-top: 5px; }
-    .score-input { width: 80px; font-size: 1.2rem; text-align: center; }
+    .score-input { width: 80px; text-align: center; font-weight: bold; font-size: 1.1rem; }
     .history-table th, .history-table td { text-align: center; vertical-align: middle; }
+    
+    /* ツールチップのスタイル調整 (幅を広げる) */
+    .tooltip-inner { max-width: 400px !important; text-align: left !important; white-space: pre-wrap; }
+    
+    /* ヘルプアイコン */
+    .help-icon { color: #0d6efd; cursor: pointer; margin-left: 5px; font-size: 1.1rem; }
+    .help-icon:hover { color: #0a58ca; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3><i class="fas fa-chart-bar"></i> 状態評価 (HAM-D): {{ patient.name }} 殿</h3>
-        <a href="{% url 'dashboard' %}" class="btn btn-secondary">戻る</a>
+        <h3><i class="fas fa-chart-bar text-danger"></i> 状態評価 (HAM-D)</h3>
+        <div class="text-end">
+            <span class="h5 fw-bold">{{ patient.name }} 殿</span>
+            <span class="text-muted ms-2 small">ID: {{ patient.card_id }}</span>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary ms-3">戻る</a>
+        </div>
     </div>
     
     <div class="card mb-4 shadow-sm">
@@ -25,19 +36,19 @@
                     <tr>
                         <th>項目</th>
                         {% for h in history %}
-                            <th>{{ h.get_timing_display }}<br><small>{{ h.date }}</small></th>
+                            <th>{{ h.get_timing_display }}<br><small class="text-muted">{{ h.date|date:"Y/n/j" }}</small></th>
                         {% endfor %}
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td class="fw-bold bg-light">HAM-D 17</td>
+                        <td class="fw-bold bg-white">HAM-D 17</td>
                         {% for h in history %}
                             <td class="fw-bold text-primary">{{ h.total_score_17 }}</td>
                         {% endfor %}
                     </tr>
                     <tr>
-                        <td class="fw-bold bg-light">HAM-D 21</td>
+                        <td class="fw-bold bg-white">HAM-D 21</td>
                         {% for h in history %}
                             <td class="fw-bold">{{ h.total_score_21 }}</td>
                         {% endfor %}
@@ -47,13 +58,14 @@
         </div>
     </div>
 
-    <form method="post" class="card shadow-sm">
+    <form method="post" class="card shadow-sm border-0">
         {% csrf_token %}
-        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">新規評価入力</h5>
-            <div class="d-flex gap-2">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center p-3">
+            <h5 class="mb-0"><i class="fas fa-pen"></i> 新規評価入力</h5>
+            <div class="d-flex gap-2 align-items-center">
+                <label class="text-white small me-1">実施日:</label>
                 <input type="date" name="date" class="form-control form-control-sm" value="{{ today }}">
-                <select name="timing" class="form-select form-select-sm" style="width: 150px;">
+                <select name="timing" class="form-select form-select-sm" style="width: 140px;">
                     <option value="baseline">治療前 (Base)</option>
                     <option value="week3">3週目</option>
                     <option value="week6">6週目</option>
@@ -63,16 +75,20 @@
         </div>
         
         <div class="card-body p-0">
-            {% for key, label, guide in hamd_items %}
-            <div class="hamd-row px-4">
+            {% for key, label, max_score, text in hamd_items %}
+            <div class="hamd-row">
                 <div class="row align-items-center">
-                    <div class="col-md-9">
-                        <h6 class="fw-bold mb-1">{{ forloop.counter }}. {{ label }}</h6>
-                        <div class="criteria-text">{{ guide }}</div>
+                    <div class="col-md-9 d-flex align-items-center">
+                        <span class="fw-bold me-2">{{ label }}</span>
+                        <i class="fas fa-info-circle help-icon" 
+                           data-bs-toggle="tooltip" 
+                           data-bs-html="true" 
+                           title="{{ text }}"></i>
                     </div>
-                    <div class="col-md-3 text-end">
-                        <input type="number" name="{{ key }}" class="form-control score-input d-inline-block" 
-                               min="0" max="4" required tabindex="{{ forloop.counter }}">
+                    <div class="col-md-3 text-end d-flex justify-content-end align-items-center">
+                        <span class="text-muted small me-2">(0 - {{ max_score }})</span>
+                        <input type="number" name="{{ key }}" class="form-control score-input" 
+                               min="0" max="{{ max_score }}" value="0" required tabindex="{{ forloop.counter }}">
                     </div>
                 </div>
             </div>
@@ -80,13 +96,24 @@
             
             <div class="p-4 bg-light border-top">
                 <label class="form-label fw-bold">コメント・判定</label>
-                <textarea name="note" class="form-control" rows="2" tabindex="22"></textarea>
+                <textarea name="note" class="form-control" rows="2" tabindex="22" placeholder="特記事項があれば記載してください"></textarea>
             </div>
         </div>
 
         <div class="card-footer text-center p-3">
-            <button type="submit" class="btn btn-primary btn-lg px-5 fw-bold" tabindex="23">保存する</button>
+            <button type="submit" class="btn btn-primary btn-lg px-5 fw-bold shadow-sm" tabindex="23">
+                <i class="fas fa-save"></i> 評価を保存する
+            </button>
         </div>
     </form>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // ツールチップの初期化
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    })
+</script>
 {% endblock %}

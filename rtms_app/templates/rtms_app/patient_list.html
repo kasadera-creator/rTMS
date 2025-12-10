@@ -1,0 +1,56 @@
+{% extends "admin/base_site.html" %}
+{% block extrastyle %}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3><i class="fas fa-users"></i> 患者一覧</h3>
+        <a href="{% url 'dashboard' %}" class="btn btn-secondary">ダッシュボードへ戻る</a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>ID</th>
+                        <th>氏名</th>
+                        <th>生年月日 (年齢)</th>
+                        <th>主治医</th>
+                        <th>診断名</th>
+                        <th class="text-center">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for patient in patients %}
+                    <tr>
+                        <td class="align-middle fw-bold">{{ patient.card_id }}</td>
+                        <td class="align-middle">{{ patient.name }}</td>
+                        <td class="align-middle">{{ patient.birth_date }} ({{ patient.age }}歳)</td>
+                        <td class="align-middle">
+                            {% if patient.attending_physician %}
+                                {{ patient.attending_physician.last_name }} 先生
+                            {% else %}-{% endif %}
+                        </td>
+                        <td class="align-middle">{{ patient.diagnosis }}</td>
+                        <td class="text-center">
+                            <a href="{% url 'patient_summary' patient.id %}" class="btn btn-sm btn-outline-info">
+                                <i class="fas fa-file-medical-alt"></i> サマリー
+                            </a>
+                            <a href="{% url 'patient_first_visit' patient.id %}" class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-edit"></i> 詳細
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center py-4 text-muted">登録患者はいません</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

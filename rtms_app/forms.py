@@ -159,3 +159,18 @@ class TreatmentForm(forms.ModelForm):
             'intensity': '刺激強度 (%)',
             'total_pulses': '総パルス数',
         }
+        
+# ------------------------------------------------------------------
+# 6. 入院手続きフォーム (★新規追加)
+# ------------------------------------------------------------------
+class AdmissionProcedureForm(forms.ModelForm):
+    class Meta:
+        model = Patient
+        fields = ['admission_type', 'is_admission_procedure_done']
+        widgets = {
+            'admission_type': forms.RadioSelect(attrs={'class': 'form-check-input'}),
+        }
+        labels = {
+            'admission_type': '入院形態を選択してください',
+            'is_admission_procedure_done': '入院手続きを完了としてマークする',
+        }

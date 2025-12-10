@@ -31,4 +31,7 @@ urlpatterns = [
     
     # ... 8. サマリー（データ出力）
     path('patient/<int:patient_id>/summary/', views.patient_summary_view, name='patient_summary'),
+    
+    path('patient/list/', views.patient_list_view, name='patient_list'),
+    path('patient/<int:patient_id>/admission/', views.admission_procedure, name='admission_procedure'),
 ]

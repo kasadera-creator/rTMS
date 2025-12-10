@@ -12,6 +12,16 @@ class Patient(models.Model):
     birth_date = models.DateField("生年月日")
     gender = models.CharField("性別", max_length=1, choices=GENDER_CHOICES, default='M')
     
+    # 入院形態
+    ADMISSION_TYPES = [
+        ('voluntary', '任意入院'),
+        ('medical_protection', '医療保護入院'),
+        ('emergency', '緊急措置入院'),
+        ('measure', '措置入院'),
+    ]
+    admission_type = models.CharField("入院形態", max_length=20, choices=ADMISSION_TYPES, default='voluntary')
+    is_admission_procedure_done = models.BooleanField("入院手続き完了", default=False)
+    
     # 診療情報
     attending_physician = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, verbose_name="担当医", related_name="patients")
     referral_source = models.CharField("紹介元", max_length=200, blank=True)
