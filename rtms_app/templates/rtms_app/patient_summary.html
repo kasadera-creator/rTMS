@@ -1,0 +1,137 @@
+{% extends "admin/base_site.html" %}
+{% block extrastyle %}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+    /* 画面表示用 */
+    textarea { width: 100%; border: 1px solid #ced4da; border-radius: 4px; padding: 10px; font-family: inherit; }
+
+    /* 印刷用スタイル */
+    @media print {
+        @page { size: A4; margin: 15mm; }
+        body * { visibility: hidden; }
+        .printable-area, .printable-area * { visibility: visible; }
+        .printable-area { position: absolute; left: 0; top: 0; width: 100%; color: #000; font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
+        .no-print { display: none !important; }
+        
+        /* モードによる切り替え */
+        body.mode-summary .referral-only { display: none !important; }
+        body.mode-referral .summary-only { display: none !important; }
+        
+        /* レイアウト */
+        .doc-header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+        .doc-header h1 { font-size: 24px; margin: 0; }
+        
+        .hospital-info { text-align: right; font-size: 11px; line-height: 1.4; margin-bottom: 20px; }
+        .referral-address { font-size: 16px; margin-bottom: 20px; text-decoration: underline; }
+        
+        .info-row { display: flex; justify-content: space-between; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 2px;}
+        .section-header { font-weight: bold; margin-top: 15px; margin-bottom: 5px; background-color: #eee; padding: 2px 5px; -webkit-print-color-adjust: exact;}
+        
+        /* テキストエリアの枠を消して中身だけ表示 */
+        textarea { border: none; resize: none; overflow: visible; height: auto; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 no-print">
+        <h3><i class="fas fa-file-alt"></i> サマリー・紹介状作成</h3>
+        <div class="btn-group">
+            <button type="button" class="btn btn-outline-primary" onclick="printMode('summary')">
+                <i class="fas fa-print"></i> 退院サマリー印刷
+            </button>
+            <button type="button" class="btn btn-outline-success" onclick="printMode('referral')">
+                <i class="fas fa-envelope"></i> 紹介状形式で印刷
+            </button>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary">戻る</a>
+        </div>
+    </div>
+
+    <div id="document-area" class="printable-area bg-white p-5 shadow-sm">
+        
+        <div class="referral-only">
+            <div class="hospital-info">
+                <strong>笠寺精治寮病院</strong><br>
+                〒457-0051 愛知県名古屋市南区笠寺町柚ノ木３<br>
+                TEL: 052-821-9221 FAX: 052-824-0286<br>
+                担当医: {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}
+            </div>
+            <div class="referral-address">
+                紹介元医療機関 御机下
+            </div>
+            <div class="doc-header">
+                <h1>診療情報提供書（逆紹介）</h1>
+            </div>
+            <p>下記の患者につきまして、当院でのrTMS治療が終了しましたのでご報告申し上げます。</p>
+        </div>
+
+        <div class="summary-only">
+            <div class="doc-header">
+                <h1>退院時要約 (Discharge Summary)</h1>
+                <p style="text-align: right; font-size: 12px; margin:0;">笠寺精治寮病院</p>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-6 info-row"><span>ID:</span> <strong>{{ patient.card_id }}</strong></div>
+            <div class="col-6 info-row"><span>氏名:</span> <strong>{{ patient.name }}</strong></div>
+            <div class="col-6 info-row"><span>生年月日:</span> {{ patient.birth_date }} ({{ patient.age }}歳)</div>
+            <div class="col-6 info-row"><span>性別:</span> {{ patient.get_gender_display }}</div>
+            <div class="col-6 info-row"><span>入院日:</span> {{ patient.admission_date|default:"-" }}</div>
+            <div class="col-6 info-row"><span>退院日:</span> {{ today }} (予定)</div>
+            <div class="col-6 info-row"><span>担当医:</span> {{ patient.attending_physician }}</div>
+            <div class="col-6 info-row"><span>主治医:</span> {{ patient.attending_physician }}</div> </div>
+
+        <div class="mb-3">
+            <div class="section-header">主訴または入院理由</div>
+            <p>rTMS (反復経頭蓋磁気刺激療法)</p>
+        </div>
+
+        <div class="mb-3">
+            <div class="section-header">紹介元</div>
+            <p>{{ patient.referral_source }}</p>
+        </div>
+
+        <div class="mb-3">
+            <div class="section-header">生活歴・既往歴・現病歴・薬剤歴</div>
+            <p style="white-space: pre-wrap;">{{ patient.life_history }}
+{{ patient.past_history }}
+{{ patient.present_illness }}
+{{ patient.medication_history }}</p>
+        </div>
+
+        <div class="mb-3">
+            <div class="section-header">入院経過・治療結果</div>
+            <textarea id="course-text" rows="10">{{ summary_text }}</textarea>
+        </div>
+        
+        <div class="referral-only mt-5">
+            <p>今後とも何卒よろしくお願い申し上げます。</p>
+            <div style="text-align: right; margin-top: 30px;">
+                記載日: {{ today }}<br>
+                医師署名: ____________________
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    function printMode(mode) {
+        // bodyにクラスをつけてCSSで表示/非表示を切り替える
+        document.body.className = ''; // リセット
+        document.body.classList.add('mode-' + mode);
+        
+        // テキストエリアの高さを内容に合わせる
+        const tx = document.getElementById('course-text');
+        tx.style.height = 'auto';
+        tx.style.height = (tx.scrollHeight) + 'px';
+        
+        window.print();
+        
+        // 元に戻す（必要なら）
+        // document.body.className = '';
+    }
+</script>
+{% endblock %}

@@ -28,4 +28,7 @@ urlpatterns = [
     # --- 7. 管理者機能 (データ出力) ---
     path('export/csv/', views.export_treatment_csv, name='export_csv'),
     path('backup/db/', views.download_db, name='download_db'),
+    
+    # ... 8. サマリー（データ出力）
+    path('patient/<int:patient_id>/summary/', views.patient_summary_view, name='patient_summary'),
 ]
