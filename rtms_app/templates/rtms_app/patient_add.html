@@ -16,7 +16,6 @@
                 </div>
                 <div class="card-body p-4">
                     
-                    <!-- 既存患者が見つかった場合の警告・確認エリア -->
                     {% if existing_patient %}
                     <div class="alert alert-warning border-warning shadow-sm">
                         <h5 class="alert-heading fw-bold"><i class="fas fa-exclamation-triangle"></i> 登録済みの患者が見つかりました</h5>
@@ -26,15 +25,12 @@
                         <p class="mb-2 fw-bold">どうしますか？</p>
                         <form method="post">
                             {% csrf_token %}
-                            <!-- 隠しフィールドで入力値を再送 -->
                             <input type="hidden" name="card_id" value="{{ form.card_id.value }}">
                             <input type="hidden" name="name" value="{{ form.name.value }}">
                             <input type="hidden" name="birth_date" value="{{ form.birth_date.value|date:'Y-m-d' }}">
                             <input type="hidden" name="gender" value="{{ form.gender.value }}">
                             <input type="hidden" name="referral_source" value="{{ form.referral_source.value }}">
                             <input type="hidden" name="referral_doctor" value="{{ form.referral_doctor.value }}">
-                            
-                            <!-- 強制作成フラグ -->
                             <input type="hidden" name="confirm_create" value="true">
                             
                             <div class="d-flex gap-3">
@@ -49,19 +45,13 @@
                     </div>
                     {% else %}
 
-                    <!-- 通常の登録フォーム -->
                     <form method="post">
                         {% csrf_token %}
-                        
                         {% if form.errors %}
-                        <div class="alert alert-danger">
-                            <strong>入力エラーがあります:</strong>
-                            {{ form.errors }}
-                        </div>
+                        <div class="alert alert-danger"><strong>入力エラーがあります:</strong> {{ form.errors }}</div>
                         {% endif %}
 
                         <div class="row g-3">
-                            <!-- 基本情報 -->
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">カルテID <span class="badge bg-danger">必須</span></label>
                                 {{ form.card_id }}
@@ -78,20 +68,12 @@
                                 <label class="form-label fw-bold">性別</label>
                                 {{ form.gender }}
                             </div>
-
                             <div class="col-12"><hr class="my-3"></div>
-
-                            <!-- 紹介情報 (任意) -->
-                            <h6 class="text-secondary mb-3"><i class="fas fa-hospital me-1"></i> 紹介情報</h6>
+                            <h6 class="text-secondary mb-3"><i class="fas fa-hospital me-1"></i> 紹介情報 (任意)</h6>
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">紹介元医療機関</label>
                                 {{ form.referral_source }}
-                                <!-- datalistで候補を表示 -->
-                                <datalist id="referral-options">
-                                    {% for opt in referral_options %}
-                                        <option value="{{ opt }}">
-                                    {% endfor %}
-                                </datalist>
+                                <datalist id="referral-options">{% for opt in referral_options %}<option value="{{ opt }}">{% endfor %}</datalist>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">紹介医</label>
@@ -101,8 +83,9 @@
 
                         <div class="d-grid gap-2 mt-5 d-md-flex justify-content-md-end">
                             <a href="{% url 'dashboard' %}" class="btn btn-secondary me-md-2 px-4">キャンセル</a>
+                            <!-- ★修正: 登録完了 -->
                             <button type="submit" class="btn btn-primary px-5 fw-bold">
-                                <i class="fas fa-check me-1"></i> 登録する
+                                <i class="fas fa-check me-1"></i> 登録完了
                             </button>
                         </div>
                     </form>

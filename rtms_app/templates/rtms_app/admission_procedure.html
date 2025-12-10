@@ -39,11 +39,12 @@
                 </div>
 
                 <div class="text-center mt-4">
+                    <!-- ★修正: 入力完了 -->
                     <button type="submit" class="btn btn-success btn-lg px-5 fw-bold" name="is_admission_procedure_done" value="True">
-                        <i class="fas fa-check"></i> 入院対応を終えました
+                        <i class="fas fa-check"></i> 入力完了
                     </button>
                     <br>
-                    <a href="{% url 'dashboard' %}" class="btn btn-link text-secondary mt-3">キャンセルして戻る</a>
+                    <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-link text-secondary mt-3">キャンセルして戻る</a>
                 </div>
             </form>
         </div>

@@ -26,7 +26,7 @@
         <h3><i class="fas fa-bolt"></i> 治療実施記録</h3>
         <div class="btn-group">
             <button type="button" class="btn btn-outline-success" onclick="printDiv('side-effects-sheet')"><i class="fas fa-print"></i> 副作用チェック表 印刷</button>
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary">戻る</a>
+            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary">戻る</a>
         </div>
     </div>
 
@@ -67,7 +67,8 @@
                 <div class="d-none d-print-block mt-5 text-end"><p>実施者署名: ___________________________</p></div>
             </div>
         </div>
-        <div class="text-center no-print"><button type="submit" class="btn btn-success btn-lg px-5">登録完了</button></div>
+        <!-- ★修正: 実施完了 -->
+        <div class="text-center no-print"><button type="submit" class="btn btn-success btn-lg px-5">実施完了</button></div>
     </form>
 </div>
 <script>function printDiv(divId) { var originalContents = document.body.innerHTML; var printContents = document.getElementById(divId).outerHTML; document.body.innerHTML = printContents; window.print(); document.body.innerHTML = originalContents; window.location.reload(); }</script>
