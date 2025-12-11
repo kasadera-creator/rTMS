@@ -2,82 +2,90 @@
 
 {% block extrastyle %}
 <style>
-    /* ブラウザ用カレンダースタイル */
-    .path-table { width: 100%; border-collapse: collapse; font-size: 14px; background: white; }
-    .path-table th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; text-align: center; }
-    .path-table td { border: 1px solid #dee2e6; padding: 10px; vertical-align: top; }
+    .calendar-container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
     
-    .date-col { width: 120px; text-align: center; font-weight: bold; background-color: #fff; }
-    .day-sat { background-color: #eaf6ff; color: #007bff; }
-    .day-sun { background-color: #fff0f0; color: #dc3545; }
-    .day-holiday { background-color: #ffe8e8; color: #dc3545; } /* 祝日 */
+    .calendar-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .calendar-table th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; text-align: center; color: #495057; }
+    .calendar-table td { border: 1px solid #dee2e6; padding: 5px; vertical-align: top; height: 100px; background-color: #fff; }
+    
+    .day-sat { color: #007bff; background-color: #f8fbff; }
+    .day-sun { color: #dc3545; background-color: #fff5f5; }
+    .day-holiday { background-color: #ffe8e8; color: #dc3545; }
+    
+    .date-num { font-weight: bold; margin-bottom: 5px; display: block; }
     
     /* イベントバッジ */
-    .badge-event { display: inline-block; padding: 5px 10px; border-radius: 4px; font-size: 0.9em; margin-bottom: 4px; margin-right: 4px; }
-    .bg-admission { background-color: #cff4fc; color: #055160; border: 1px solid #b6effb; }
-    .bg-mapping { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
-    .bg-treatment { background-color: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; }
-    .bg-assessment { background-color: #f8d7da; color: #842029; border: 1px solid #f5c6cb; font-weight: bold; }
-    .bg-discharge { background-color: #d63384; color: white; }
+    .event-item { font-size: 0.85rem; margin-bottom: 4px; padding: 3px 6px; border-radius: 4px; display: block; }
+    .evt-admission { background-color: #cff4fc; color: #055160; border: 1px solid #b6effb; }
+    .evt-mapping { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+    .evt-treatment { background-color: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; }
+    .evt-assessment { background-color: #f8d7da; color: #842029; border: 1px solid #f5c6cb; font-weight: bold; }
+    .evt-discharge { background-color: #0dcaf0; color: #fff; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+
+    /* 右下固定ボタン */
+    .floating-actions { position: fixed; bottom: 20px; right: 20px; z-index: 1050; display: flex; gap: 10px; }
+    .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<div class="container py-4 mb-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3><i class="fas fa-calendar-alt text-success"></i> 治療クリニカルパス</h3>
+        <h3><i class="fas fa-calendar-alt text-success"></i> 治療クリニカルパス (スケジュール)</h3>
         <div class="btn-group">
             <a href="{% url 'patient_print_path' patient.id %}" target="_blank" class="btn btn-primary">
-                <i class="fas fa-print"></i> 印刷する (A4横・表裏)
+                <i class="fas fa-print"></i> 印刷 (A4横)
             </a>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary">戻る</a>
         </div>
     </div>
 
-    <div class="card shadow-sm mb-4">
-        <div class="card-header bg-white">
-            <div class="row align-items-center">
-                <div class="col-md-4">
-                    <h5 class="mb-0 fw-bold">{{ patient.name }} 様</h5>
-                </div>
-                <div class="col-md-4">
-                    ID: {{ patient.card_id }}
-                </div>
-                <div class="col-md-4 text-end">
-                    担当医: {% if patient.attending_physician %}{{ patient.attending_physician.last_name }} 先生{% endif %}
-                </div>
+    <div class="calendar-container">
+        <div class="calendar-header">
+            <div>
+                <h5 class="fw-bold mb-0">{{ patient.name }} 様</h5>
+                <small class="text-muted">ID: {{ patient.card_id }} / 担当医: {% if patient.attending_physician %}{{ patient.attending_physician.last_name }} 先生{% endif %}</small>
+            </div>
+            <div class="text-end small">
+                入院日: {{ patient.admission_date|default:"未定" }}<br>
+                退院予定: {% if patient.discharge_date %}{{ patient.discharge_date }}{% else %}未定{% endif %}
             </div>
         </div>
-        <div class="card-body p-0">
-            <table class="path-table">
+
+        <div class="table-responsive">
+            <table class="calendar-table">
                 <thead>
                     <tr>
-                        <th style="width: 15%;">日付</th>
-                        <th style="width: 10%;">曜日</th>
-                        <th>治療スケジュール</th>
+                        <th style="width: 120px;">日付</th>
+                        <th style="width: 60px;">曜日</th>
+                        <th>予定・内容</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for day in calendar_days %}
                     <tr>
-                        <td class="date-col {% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %}">
-                            {{ day.date|date:"Y/n/j" }}
-                        </td>
                         <td class="text-center {% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %}">
+                            <span class="date-num">
+                                {{ day.date|date:"Y/n/j" }}
+                                {% if day.is_holiday %}<span class="badge bg-danger ms-1" style="font-size: 0.6em;">祝</span>{% endif %}
+                            </span>
+                        </td>
+                        <td class="text-center fw-bold {% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %}">
                             {{ day.weekday }}
                         </td>
-                        <td>
+                        <td class="{% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %}" style="height: auto; min-height: 60px;">
                             {% for event in day.events %}
                                 {% if event.type == 'admission' %}
-                                    <span class="badge-event bg-admission"><i class="fas fa-procedures"></i> {{ event.label }}</span>
+                                    <span class="event-item evt-admission"><i class="fas fa-procedures"></i> {{ event.label }}</span>
                                 {% elif event.type == 'mapping' %}
-                                    <span class="badge-event bg-mapping"><i class="fas fa-crosshairs"></i> {{ event.label }}</span>
+                                    <span class="event-item evt-mapping"><i class="fas fa-crosshairs"></i> {{ event.label }}</span>
                                 {% elif event.type == 'treatment' %}
-                                    <span class="badge-event bg-treatment"><i class="fas fa-bolt"></i> {{ event.label }}</span>
+                                    <span class="event-item evt-treatment"><i class="fas fa-bolt"></i> {{ event.label }}</span>
                                 {% elif event.type == 'assessment' %}
-                                    <span class="badge-event bg-assessment"><i class="fas fa-clipboard-check"></i> {{ event.label }}</span>
+                                    <span class="event-item evt-assessment"><i class="fas fa-clipboard-check"></i> {{ event.label }}</span>
                                 {% elif event.type == 'discharge' %}
-                                    <span class="badge-event bg-discharge"><i class="fas fa-home"></i> {{ event.label }}</span>
+                                    <span class="event-item evt-discharge"><i class="fas fa-home"></i> {{ event.label }}</span>
                                 {% endif %}
                             {% endfor %}
                         </td>
@@ -87,5 +95,12 @@
             </table>
         </div>
     </div>
+</div>
+
+<!-- 右下固定ボタン -->
+<div class="floating-actions">
+    <a href="{% url 'patient_print_path' patient.id %}" target="_blank" class="btn btn-primary btn-fab text-white">
+        <i class="fas fa-print"></i> 印刷する
+    </a>
 </div>
 {% endblock %}

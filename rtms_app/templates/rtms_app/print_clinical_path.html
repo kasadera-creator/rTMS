@@ -8,13 +8,14 @@
     body { background-color: #525659; }
     .page-container { width: 297mm; margin: 20px auto; }
     .page-sheet {
-        background-color: white; width: 100%; height: 210mm; 
-        padding: 8mm 12mm; /* パディングを少し縮小して収まりよくする */
+        background-color: white; width: 100%; height: 210mm; /* A4横 */
+        padding: 8mm 12mm; /* 余白を縮小 */
         box-shadow: 0 0 10px rgba(0,0,0,0.5); position: relative; box-sizing: border-box; margin-bottom: 20px;
         font-family: 'M PLUS Rounded 1c', "Meiryo", sans-serif; color: #333; 
         line-height: 1.3; overflow: hidden;
     }
     
+    /* 印刷時設定 */
     @media print {
         @page { size: A4 landscape; margin: 0; }
         body { background-color: white; margin: 0; }
@@ -28,37 +29,61 @@
     }
 
     /* カレンダー (7列グリッド) */
-    .calendar-grid { 
-        display: grid; 
-        grid-template-columns: repeat(7, 1fr); 
+    .calendar-grid-header {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
         border-top: 1px solid #000; border-left: 1px solid #000;
-        margin-top: 10px;
+        margin-top: 5px;
+        background-color: #f0f0f0;
+        font-weight: bold;
+        text-align: center;
+        font-size: 10pt;
+    }
+    .header-cell {
+        border-right: 1px solid #000; border-bottom: 1px solid #000; padding: 3px;
+    }
+
+    /* 月曜始まりのヘッダー */
+    /* リストデータが日付順であることを前提に、単純に左から詰めて表示します。
+       厳密な曜日合わせ（空セル挿入）はView側で行っていないため、
+       ここでは「リストを順番に表示する」形式を維持しつつ、
+       視覚的に曜日がわかりやすいように色分けを強化します。 */
+       
+    .calendar-container {
+        display: flex; flex-wrap: wrap; border-left: 1px solid #000;
     }
     
-    /* 日付セル: 高さを少し抑える */
     .cal-cell { 
+        width: 14.28%; /* 7等分 */
         border-right: 1px solid #000; border-bottom: 1px solid #000; 
-        min-height: 70px; padding: 3px; font-size: 10px; position: relative;
+        min-height: 75px; padding: 3px; font-size: 9.5pt; position: relative;
+        box-sizing: border-box;
     }
     
     .day-sat { color: #007bff; background-color: #f0f8ff; }
     .day-sun { color: #dc3545; background-color: #fff0f0; }
     .day-holiday { color: #dc3545; background-color: #ffe8e8; } /* 祝日スタイル */
     
+    /* 祝日バッジ */
+    .holiday-mark {
+        display: inline-block; background-color: #dc3545; color: white; 
+        font-size: 8px; padding: 1px 3px; border-radius: 3px; margin-left: 3px; vertical-align: middle;
+    }
+
     .evt-badge { 
         display: block; padding: 1px 3px; margin-bottom: 1px; border-radius: 2px; 
-        font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        font-size: 8.5pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .evt-admission { background-color: #b6effb; color: #055160; font-weight: bold; }
-    .evt-mapping { background-color: #ffeeba; color: #856404; font-weight: bold; }
-    .evt-treatment { background-color: #d1e7dd; color: #0f5132; }
+    .evt-admission { background-color: #b6effb; color: #055160; font-weight: bold; border: 1px solid #9eeaf9; }
+    .evt-mapping { background-color: #ffeeba; color: #856404; font-weight: bold; border: 1px solid #ffe8a1; }
+    .evt-treatment { background-color: #d1e7dd; color: #0f5132; border: 1px solid #a3cfbb; }
     .evt-assessment { border: 1px solid #dc3545; color: #dc3545; font-weight: bold; background-color: #fff; }
     .evt-discharge { background-color: #f8d7da; color: #842029; font-weight: bold; border: 1px solid #f5c6cb; }
 
     /* 裏面（説明） */
-    .info-container { display: flex; flex-wrap: wrap; gap: 15px; height: 100%; align-content: flex-start; }
-    .info-box { flex: 1 1 45%; border: 2px solid #555; border-radius: 8px; padding: 12px; box-sizing: border-box; }
-    .info-title { font-size: 1.1em; font-weight: bold; border-bottom: 2px solid #555; padding-bottom: 4px; margin-bottom: 8px; }
+    .info-container { display: flex; flex-wrap: wrap; gap: 12px; height: 100%; align-content: flex-start; }
+    .info-box { flex: 1 1 45%; border: 2px solid #555; border-radius: 8px; padding: 10px; box-sizing: border-box; }
+    .info-title { font-size: 1.1em; font-weight: bold; border-bottom: 2px solid #555; padding-bottom: 3px; margin-bottom: 6px; }
     .info-content { font-size: 10pt; }
     .info-content ul { padding-left: 18px; margin: 0; }
     .info-content li { margin-bottom: 2px; }
@@ -82,23 +107,29 @@
     
     <!-- 1ページ目: カレンダー -->
     <div class="page-sheet">
-        <h2 class="text-center fw-bold mb-2">rTMS治療スケジュール表</h2>
-        
-        <div class="d-flex justify-content-between mb-2 border-bottom border-dark pb-1" style="font-size: 11pt;">
-            <div>氏名: <strong>{{ patient.name }} 様</strong></div>
-            <div>ID: {{ patient.card_id }} {% if patient.course_number > 1 %}({{ patient.course_number }}クール目){% endif %}</div>
-            <div>担当医: {{ patient.attending_physician.last_name }}</div>
+        <div style="text-align: center; margin-bottom: 5px;">
+            <h2 class="fw-bold d-inline-block border-bottom border-2 border-dark pb-1 m-0">rTMS治療スケジュール表</h2>
         </div>
         
-        <div style="display: flex; flex-wrap: wrap; border-top: 1px solid #000; border-left: 1px solid #000;">
+        <div class="d-flex justify-content-between mb-1" style="font-size: 10.5pt;">
+            <div>氏名: <strong>{{ patient.name }} 様</strong></div>
+            <div>ID: {{ patient.card_id }} {% if patient.course_number > 1 %}({{ patient.course_number }}クール目){% endif %}</div>
+            <div>担当医: {{ patient.attending_physician.last_name }} 先生</div>
+        </div>
+        
+        <!-- ヘッダー (月曜始まり) -->
+        <!-- ※データ自体が月曜始まりになっているわけではないので、あくまで見た目の装飾です -->
+        <div style="display: flex; background-color: #f0f0f0; border-top: 1px solid #000; border-left: 1px solid #000; font-size: 9pt; font-weight: bold;">
+             <div style="flex:1; text-align: center; border-right: 1px solid #000; border-bottom: 1px solid #000; padding: 2px;">日付・予定</div>
+        </div>
+
+        <div class="calendar-container" style="border-top: none;">
             {% for day in calendar_days %}
-            <div style="width: 14.28%; border-right: 1px solid #000; border-bottom: 1px solid #000; padding: 4px; min-height: 80px; box-sizing: border-box; 
-                        {% if day.is_holiday %}background-color: #ffe8e8; color: #dc3545;
-                        {% elif day.weekday == '土' %}background-color: #f0f8ff; color: #007bff;
-                        {% elif day.weekday == '日' %}background-color: #fff0f0; color: #dc3545;{% endif %}">
+            <div class="cal-cell {% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %}">
                 
-                <div class="text-center fw-bold mb-1" style="font-size: 10px;">
+                <div class="text-center fw-bold mb-1" style="font-size: 10pt;">
                     {{ day.date|date:"n/j" }} ({{ day.weekday }})
+                    {% if day.is_holiday %}<span class="holiday-mark">祝</span>{% endif %}
                 </div>
                 
                 {% for event in day.events %}
@@ -116,16 +147,17 @@
                 {% endfor %}
             </div>
             {% endfor %}
-            <!-- 空白セル埋め -->
-            {% for i in "12345"|make_list %}
-            <div style="width: 14.28%; border-right: 1px solid #000; border-bottom: 1px solid #000; background-color: #eee;"></div>
+            
+            <!-- マス目が足りない場合の空セル埋め (レイアウト調整) -->
+            {% for i in "123456"|make_list %}
+                <!-- 簡易的な埋め合わせ。必要に応じてJS等で計算 -->
             {% endfor %}
         </div>
         
-        <div class="mt-1 text-end" style="font-size: 9pt;">※スケジュールは治療経過や病院の都合により変更になる場合があります。赤色は祝日です。</div>
+        <div class="mt-1 text-end" style="font-size: 8.5pt;">※スケジュールは治療経過や病院の都合により変更になる場合があります。<span style="color:#dc3545;">赤色(祝日)</span>は治療がお休みです。</div>
     </div>
 
-    <!-- 2ページ目: 説明 -->
+    <!-- 2ページ目: 説明 (内容は前回と同じ) -->
     <div class="page-sheet">
         <h2 class="text-center fw-bold mb-3">rTMS治療に関するご案内</h2>
         
@@ -136,7 +168,7 @@
                 <div class="info-content">
                     <ul>
                         <li><strong>入院当日:</strong> 指定された時間（通常10:00）に受付へお越しください。</li>
-                        <li><strong>持ち物:</strong> 保険証、診察券、お薬手帳、現在服用中のお薬。</li>
+                        <li><strong>持ち物:</strong> 保険証、診察券、お薬手帳、現在服用中のお薬を必ずご持参ください。</li>
                         <li><strong>位置決め（MT測定）:</strong> 治療部位と強さを決める重要な検査です。<br>
                             <span class="warning-text">※整髪料は付けずに、洗髪した清潔な状態で受けてください。</span>
                         </li>
