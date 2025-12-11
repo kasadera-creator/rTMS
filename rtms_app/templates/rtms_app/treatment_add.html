@@ -4,6 +4,8 @@
 <style>
     .section-title { background-color: #f8f9fa; padding: 10px; border-left: 5px solid #28a745; font-weight: bold; margin-bottom: 20px;}
     .check-row:hover { background-color: #f1f1f1; }
+    .instruction-box { background-color: #fff3cd; border: 1px solid #ffeeba; padding: 10px; border-radius: 5px; margin-bottom: 15px; }
+    
     @media print {
         @page { size: A4; margin: 15mm; }
         body * { visibility: hidden; }
@@ -30,7 +32,7 @@
         </div>
     </div>
 
-    <!-- アラートエリア -->
+    <!-- 漸減アラート -->
     {% if alert_msg %}
     <div class="alert alert-danger fw-bold shadow-sm no-print">
         <i class="fas fa-exclamation-triangle"></i> {{ alert_msg }}
@@ -51,20 +53,72 @@
 
     <form method="post">
         {% csrf_token %}
-        <div class="card mb-4 shadow-sm no-print"><div class="card-header bg-warning text-dark fw-bold">最新の位置決め情報</div><div class="card-body">{% if latest_mapping %}<div class="row"><div class="col-md-4"><strong>実施日:</strong> {{ latest_mapping.date }}</div><div class="col-md-4"><strong>安静時MT:</strong> {{ latest_mapping.resting_mt }} %</div><div class="col-md-4"><strong>刺激部位:</strong> {{ latest_mapping.stimulation_site }}</div></div>{% else %}<div class="text-danger">※位置決め記録がありません。</div>{% endif %}</div></div>
         
-        <div class="card mb-4 shadow-sm no-print"><div class="card-body"><h5 class="section-title">実施日時・安全確認</h5><div class="row mb-3"><div class="col-md-4">{{ form.date.label_tag }} {{ form.date }}</div></div><div class="row"><div class="col-md-4"><div class="form-check form-switch py-2">{{ form.safety_sleep }} <label class="form-check-label fw-bold">睡眠不足なし</label></div></div><div class="col-md-4"><div class="form-check form-switch py-2">{{ form.safety_alcohol }} <label class="form-check-label fw-bold">アルコール・カフェイン過剰なし</label></div></div><div class="col-md-4"><div class="form-check form-switch py-2">{{ form.safety_meds }} <label class="form-check-label fw-bold">服薬変更なし</label></div></div></div></div></div>
+        <!-- 治療パラメータ＆指示 -->
+        <div class="card mb-4 shadow-sm no-print">
+            <div class="card-header bg-warning text-dark fw-bold d-flex justify-content-between">
+                <span><i class="fas fa-sliders-h me-1"></i> 治療パラメータ・指示</span>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <!-- 位置決め情報 -->
+                    <div class="col-md-6 border-end">
+                        <h6 class="text-secondary small fw-bold">最新の位置決め ({{ latest_mapping.date|default:"-" }})</h6>
+                        <div class="row">
+                            <div class="col-6">安静時MT: <strong>{{ latest_mapping.resting_mt|default:"-" }} %</strong></div>
+                            <div class="col-6">部位: <strong>{{ latest_mapping.stimulation_site|default:"-" }}</strong></div>
+                        </div>
+                    </div>
+                    <!-- 判定・指示 -->
+                    <div class="col-md-6 ps-md-4">
+                        <h6 class="text-secondary small fw-bold">3週目評価判定</h6>
+                        {% if judgment_info %}
+                            <div class="fw-bold text-primary">{{ judgment_info }}</div>
+                            <div class="small text-danger mt-1">{{ instruction_msg }}</div>
+                        {% else %}
+                            <div class="text-muted small">まだ評価されていません</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
         
-        <div class="card mb-4 shadow-sm no-print"><div class="card-body"><h5 class="section-title">治療パラメータ</h5><div class="row g-3"><div class="col-md-4"><label class="form-label">当日のMT (%)</label>{{ form.motor_threshold }}</div><div class="col-md-4"><label class="form-label">刺激強度 (%)</label>{{ form.intensity }}<small class="text-muted">通常 120%</small></div><div class="col-md-4"><label class="form-label">総パルス数</label>{{ form.total_pulses }}</div></div></div></div>
+        <div class="card mb-4 shadow-sm no-print">
+            <div class="card-body">
+                <h5 class="section-title">実施日時・安全確認</h5>
+                <div class="row mb-3">
+                    <!-- 日付と時間を分離 -->
+                    <div class="col-md-3">
+                        <label class="form-label">実施日</label>
+                        {{ form.treatment_date }}
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">開始時間</label>
+                        {{ form.treatment_time }}
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4"><div class="form-check form-switch py-2">{{ form.safety_sleep }} <label class="form-check-label fw-bold">睡眠不足なし</label></div></div>
+                    <div class="col-md-4"><div class="form-check form-switch py-2">{{ form.safety_alcohol }} <label class="form-check-label fw-bold">アルコール・カフェイン過剰なし</label></div></div>
+                    <div class="col-md-4"><div class="form-check form-switch py-2">{{ form.safety_meds }} <label class="form-check-label fw-bold">服薬変更なし</label></div></div>
+                </div>
+                <div class="row g-3 mt-2">
+                    <div class="col-md-4"><label class="form-label">当日のMT (%)</label>{{ form.motor_threshold }}</div>
+                    <div class="col-md-4"><label class="form-label">刺激強度 (%)</label>{{ form.intensity }}<small class="text-muted ms-2">通常 120%</small></div>
+                    <div class="col-md-4"><label class="form-label">総パルス数</label>{{ form.total_pulses }}</div>
+                </div>
+            </div>
+        </div>
         
         <div id="side-effects-sheet" class="printable-area card mb-4 shadow-sm">
+            <!-- (副作用チェック表は既存のまま) -->
             <div class="card-body">
                 <div class="print-header d-none d-print-block"><h2>rTMS 副作用チェック表</h2><p style="text-align: right; font-size: 10px;">笠寺精治寮病院</p></div>
                 <div class="print-row d-none d-print-flex">
                     <div style="width: 30%;">ID: <strong>{{ patient.card_id }}</strong></div>
                     <div style="width: 30%;">氏名: <strong>{{ patient.name }} 様</strong></div>
                     <div style="width: 40%; text-align: right;">
-                        第<strong>{{ session_num }}</strong>回 ({{ form.date.value|default:"本日" }})
+                        第<strong>{{ session_num }}</strong>回 ({{ form.treatment_date.value|default:"本日" }})
                     </div>
                 </div>
                 

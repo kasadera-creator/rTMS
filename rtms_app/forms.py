@@ -1,12 +1,13 @@
 from django import forms
 from django.contrib.auth.models import User
 from .models import Patient, MappingSession, TreatmentSession, Assessment
+import datetime # 追加
 
 class DateInput(forms.DateInput):
     input_type = 'date'
 
-class DateTimeInput(forms.DateTimeInput):
-    input_type = 'datetime-local'
+class TimeInput(forms.TimeInput):
+    input_type = 'time'
 
 class PhysicianChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, obj):
@@ -26,8 +27,6 @@ class PatientRegistrationForm(forms.ModelForm):
             'referral_source': forms.TextInput(attrs={'class': 'form-control', 'list': 'referral-options', 'placeholder': '医療機関名 (任意)'}),
             'referral_doctor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '医師名 (任意)'}),
         }
-    
-    # ★変更: clean_card_id を削除し、重複チェックはView側で行う
 
 # --- 2. 初診フォーム ---
 class PatientFirstVisitForm(forms.ModelForm):
@@ -59,11 +58,7 @@ class PatientFirstVisitForm(forms.ModelForm):
             'past_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'present_illness': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'medication_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 6}),
-            'dementia_detail': forms.TextInput(attrs={
-                'class': 'form-control form-control-sm',
-                'placeholder': '',
-                'style': 'display: inline-block; width: auto; margin-left: 10px;'
-            }),
+            'dementia_detail': forms.TextInput(attrs={'class': 'form-control form-control-sm', 'placeholder': '', 'style': 'display: inline-block; width: auto; margin-left: 10px;'}),
             'admission_date': DateInput(attrs={'class': 'form-control'}),
             'mapping_date': DateInput(attrs={'class': 'form-control'}),
             'first_treatment_date': DateInput(attrs={'class': 'form-control'}),
@@ -71,30 +66,34 @@ class PatientFirstVisitForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        default_medication_text = (
-            "抗うつ薬：\n"
-            "抗精神病薬：\n"
-            "気分安定薬：\n"
-            "抗不安薬：\n"
-            "睡眠薬：\n"
-            "その他："
-        )
+        default_medication_text = ("抗うつ薬：\n抗精神病薬：\n気分安定薬：\n抗不安薬：\n睡眠薬：\nその他：")
         if not self.instance.medication_history:
             self.instance.medication_history = default_medication_text
             self.initial['medication_history'] = default_medication_text
 
+# --- 3. 位置決めフォーム ---
 class MappingForm(forms.ModelForm):
     class Meta:
         model = MappingSession
         fields = ['date', 'week_number', 'resting_mt', 'stimulation_site', 'notes']
         widgets = {'date': DateInput(attrs={'class': 'form-control'}), 'week_number': forms.Select(attrs={'class': 'form-select'}), 'resting_mt': forms.NumberInput(attrs={'class': 'form-control'}), 'stimulation_site': forms.TextInput(attrs={'class': 'form-control'}), 'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2})}
 
+# --- 4. 治療実施フォーム (修正: 日付と時間を分離) ---
 class TreatmentForm(forms.ModelForm):
+    # フォーム上だけのフィールドとして定義
+    treatment_date = forms.DateField(label='実施日', widget=DateInput(attrs={'class': 'form-control'}))
+    treatment_time = forms.TimeField(label='開始時間', widget=TimeInput(attrs={'class': 'form-control'}))
+
     class Meta:
         model = TreatmentSession
-        fields = ['date', 'safety_sleep', 'safety_alcohol', 'safety_meds', 'motor_threshold', 'intensity', 'total_pulses']
-        widgets = {'date': DateTimeInput(attrs={'class': 'form-control'}), 'motor_threshold': forms.NumberInput(attrs={'class': 'form-control'}), 'intensity': forms.NumberInput(attrs={'class': 'form-control'}), 'total_pulses': forms.NumberInput(attrs={'class': 'form-control'})}
+        fields = ['safety_sleep', 'safety_alcohol', 'safety_meds', 'motor_threshold', 'intensity', 'total_pulses']
+        widgets = {
+            'motor_threshold': forms.NumberInput(attrs={'class': 'form-control'}), 
+            'intensity': forms.NumberInput(attrs={'class': 'form-control'}), 
+            'total_pulses': forms.NumberInput(attrs={'class': 'form-control'})
+        }
 
+# --- 5. 入院手続きフォーム ---
 class AdmissionProcedureForm(forms.ModelForm):
     class Meta:
         model = Patient
