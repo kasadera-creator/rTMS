@@ -30,8 +30,23 @@
         </div>
     </div>
 
+    <!-- アラートエリア -->
+    {% if alert_msg %}
+    <div class="alert alert-danger fw-bold shadow-sm no-print">
+        <i class="fas fa-exclamation-triangle"></i> {{ alert_msg }}
+    </div>
+    {% endif %}
+
     <div class="alert alert-info no-print">
-        <strong>第{{ session_num }}回目</strong> (開始: {{ start_date|date:"Y/n/j" }} ～ 終了予定: {{ end_date_est|date:"Y/n/j" }})
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <strong>第{{ session_num }}回目</strong> 
+                <span class="badge bg-light text-dark border ms-2">治療 第{{ week_num }}週目</span>
+            </div>
+            <div class="small">
+                期間: {{ start_date|date:"Y/n/j" }} ～ {{ end_date_est|date:"Y/n/j" }}
+            </div>
+        </div>
     </div>
 
     <form method="post">
@@ -67,7 +82,6 @@
                 <div class="d-none d-print-block mt-5 text-end"><p>実施者署名: ___________________________</p></div>
             </div>
         </div>
-        <!-- ★修正: 実施完了 -->
         <div class="text-center no-print"><button type="submit" class="btn btn-success btn-lg px-5">実施完了</button></div>
     </form>
 </div>
