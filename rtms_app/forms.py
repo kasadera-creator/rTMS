@@ -28,7 +28,7 @@ class PatientRegistrationForm(forms.ModelForm):
             'referral_doctor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '医師名 (任意)'}),
         }
 
-# --- 2. 初診フォーム ---
+# --- 2. 初診フォーム (修正: バリデーション追加) ---
 class PatientFirstVisitForm(forms.ModelForm):
     attending_physician = PhysicianChoiceField(
         queryset=User.objects.filter(groups__name='医師'),
@@ -70,6 +70,25 @@ class PatientFirstVisitForm(forms.ModelForm):
         if not self.instance.medication_history:
             self.instance.medication_history = default_medication_text
             self.initial['medication_history'] = default_medication_text
+    
+    # ★追加: 保存時のバリデーション
+    def clean(self):
+        cleaned_data = super().clean()
+        
+        # 必須チェックを行う項目
+        required_fields = {
+            'admission_date': '入院予定日',
+            'mapping_date': '初回位置決め日',
+            'first_treatment_date': '初回治療日',
+            'attending_physician': '今後の担当医',
+        }
+        
+        errors = []
+        for field_name, label in required_fields.items():
+            if not cleaned_data.get(field_name):
+                self.add_error(field_name, f"{label}を入力してください。")
+        
+        return cleaned_data
 
 # --- 3. 位置決めフォーム ---
 class MappingForm(forms.ModelForm):

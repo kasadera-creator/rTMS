@@ -57,12 +57,9 @@ def get_date_of_session(start_date, target_session_num):
     if not start_date or target_session_num <= 0: return None
     current = start_date
     count = 1 if current.weekday() < 5 else 0
-    
-    # 簡易計算 (平日ループ)
     while count < target_session_num:
         current += timedelta(days=1)
-        if current.weekday() < 5: # Mon-Fri
-            count += 1
+        if current.weekday() < 5: count += 1
     return current
 
 
@@ -210,6 +207,7 @@ def mapping_add(request, patient_id):
 def patient_first_visit(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     dashboard_date = request.GET.get('dashboard_date')
+    
     all_patients = Patient.objects.all()
     referral_map = {}
     referral_sources_set = set()
@@ -230,6 +228,7 @@ def patient_first_visit(request, patient_id):
     baseline_assessment = Assessment.objects.filter(patient=patient, timing='baseline').first()
 
     if request.method == 'POST':
+        # HAM-DのAjax保存処理
         if 'hamd_ajax' in request.POST:
             try:
                 scores = {}
@@ -238,13 +237,25 @@ def patient_first_visit(request, patient_id):
                 else: assessment = Assessment(patient=patient, date=timezone.now().date(), type='HAM-D', scores=scores, timing='baseline')
                 assessment.calculate_scores()
                 assessment.save()
+                
                 total = assessment.total_score_17
                 msg = ""
                 severity = ""
-                if 14 <= total <= 18: severity = "中等症"; msg = "中等症と判定しました。rTMS適正質問票を確認してください。"
-                elif total >= 19: severity = "重症"; msg = "重症と判定しました。"
-                elif 8 <= total <= 13: severity = "軽症"
-                else: severity = "正常"
+                
+                # ★修正: 判定ロジック変更
+                if 14 <= total <= 18: 
+                    severity = "中等症"
+                    msg = "中等症と判定しました。rTMSの適応範囲です。rTMS適正質問票を確認してください。"
+                elif total >= 19:
+                    severity = "重症"
+                    msg = "重症と判定しました。rTMSの適応外です。"
+                elif 8 <= total <= 13:
+                    severity = "軽症"
+                    msg = "軽症と判定しました。rTMSの適応外です。"
+                else:
+                    severity = "正常"
+                    msg = "正常範囲です。rTMSの適応外です。"
+
                 return JsonResponse({'status': 'success', 'total_17': total, 'severity': severity, 'message': msg})
             except Exception as e: return JsonResponse({'status': 'error', 'message': str(e)})
 
@@ -275,10 +286,12 @@ def treatment_add(request, patient_id):
     dashboard_date = request.GET.get('dashboard_date')
     latest_mapping = MappingSession.objects.filter(patient=patient).order_by('-date').first()
     side_effect_items = [('headache', '頭痛'), ('scalp', '頭皮痛（刺激痛）'), ('discomfort', '刺激部位の不快感'), ('tooth', '歯痛'), ('twitch', '顔面のけいれん'), ('dizzy', 'めまい'), ('nausea', '吐き気'), ('tinnitus', '耳鳴り'), ('hearing', '聴力低下'), ('anxiety', '不安感・焦燥感'), ('other', 'その他')]
+    
     target_date_str = request.GET.get('date')
     now = timezone.localtime(timezone.now())
     if target_date_str: t = parse_date(target_date_str); initial_date = t
     else: initial_date = now.date()
+    
     session_num = get_session_count(patient, initial_date) + 1
     week_num = get_current_week_number(patient.first_treatment_date, initial_date)
     end_date_est = get_completion_date(patient.first_treatment_date)
@@ -286,6 +299,7 @@ def treatment_add(request, patient_id):
     alert_msg = ""
     instruction_msg = ""
     is_remission = False
+    
     last_assessment = Assessment.objects.filter(patient=patient, timing='week3').order_by('-date').first()
     baseline_assessment = Assessment.objects.filter(patient=patient, timing='baseline').order_by('-date').first()
     judgment_info = None
@@ -348,11 +362,9 @@ def treatment_add(request, patient_id):
         initial_data = {'treatment_date': initial_date, 'treatment_time': now.strftime('%H:%M'), 'total_pulses': 1980, 'intensity': 120}
         if latest_mapping: initial_data['motor_threshold'] = latest_mapping.resting_mt
         form = TreatmentForm(initial=initial_data)
+    return render(request, 'rtms_app/treatment_add.html', {'patient': patient, 'form': form, 'latest_mapping': latest_mapping, 'side_effect_items': side_effect_items, 'session_num': session_num, 'week_num': week_num, 'end_date_est': end_date_est, 'start_date': patient.first_treatment_date, 'dashboard_date': dashboard_date, 'alert_msg': alert_msg, 'instruction_msg': instruction_msg, 'judgment_info': judgment_info})
 
-    return render(request, 'rtms_app/treatment_add.html', {
-        'patient': patient, 'form': form, 'latest_mapping': latest_mapping, 'side_effect_items': side_effect_items, 'session_num': session_num, 'week_num': week_num, 'end_date_est': end_date_est, 'start_date': patient.first_treatment_date, 'dashboard_date': dashboard_date, 'alert_msg': alert_msg, 'instruction_msg': instruction_msg, 'judgment_info': judgment_info
-    })
-
+# ... (他のビューは変更なし、省略) ...
 @login_required
 def assessment_add(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
@@ -362,18 +374,25 @@ def assessment_add(request, patient_id):
     
     mid_index = 11
     hamd_items_left = hamd_items[:mid_index]
-    hamd_items_right = hamd_items[mid_index:]
+    hamd_items_right = hamd_items[11:]
 
     target_date_str = request.GET.get('date') or timezone.now().strftime('%Y-%m-%d')
     timing = request.GET.get('timing', 'other')
     existing_assessment = Assessment.objects.filter(patient=patient, date=target_date_str, type='HAM-D').first()
+    
     recommendation = ""
-    if timing in ['week3', 'week6']:
+    if timing == 'week3':
         baseline = Assessment.objects.filter(patient=patient, timing='baseline').first()
-        if baseline and baseline.total_score_21 > 0 and existing_assessment:
-            imp = (baseline.total_score_21 - existing_assessment.total_score_21) / baseline.total_score_21 * 100
-            if imp < 20: recommendation = "【判定】反応不良 (改善率20%未満)。刺激部位やプロトコルの変更を検討してください。"
-            else: recommendation = "【判定】治療継続 (順調に改善中)。"
+        if existing_assessment and baseline:
+            score_now = existing_assessment.total_score_17
+            score_base = baseline.total_score_17
+            if score_now <= 7:
+                recommendation = f"【判定: 寛解】HAM-D17が{score_now}点(7点以下)です。第4週以降は漸減プロトコルへ移行してください。"
+            elif score_base > 0:
+                imp = (score_base - score_now) / score_base
+                if imp >= 0.2: recommendation = f"【判定: 有効】改善率 {int(imp*100)}% (20%以上)。治療を継続してください。"
+                else: recommendation = f"【判定: 無効/反応不良】改善率 {int(imp*100)}% (20%未満)。中止を検討してください。"
+    
     if request.method == 'POST':
         try:
             scores = {}
@@ -388,6 +407,7 @@ def assessment_add(request, patient_id):
             assessment.save()
             return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'dashboard')
         except Exception as e: print(e)
+        
     return render(request, 'rtms_app/assessment_add.html', {'patient': patient, 'history': history, 'today': target_date_str, 'hamd_items_left': hamd_items_left, 'hamd_items_right': hamd_items_right, 'initial_timing': timing, 'existing_assessment': existing_assessment, 'recommendation': recommendation, 'dashboard_date': dashboard_date})
 
 @login_required

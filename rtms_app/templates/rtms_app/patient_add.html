@@ -1,142 +1,98 @@
 {% extends "rtms_app/base.html" %}
+
 {% block extrastyle %}
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <style>
-    .section-title { background-color: #f8f9fa; padding: 10px; border-left: 5px solid #28a745; font-weight: bold; margin-bottom: 20px;}
-    .check-row:hover { background-color: #f1f1f1; }
-    .instruction-box { background-color: #fff3cd; border: 1px solid #ffeeba; padding: 10px; border-radius: 5px; margin-bottom: 15px; }
-    
-    @media print {
-        @page { size: A4; margin: 15mm; }
-        body * { visibility: hidden; }
-        .printable-area, .printable-area * { visibility: visible; }
-        .printable-area { position: absolute; left: 0; top: 0; width: 100%; color: #000; }
-        .no-print, .btn, header, nav, footer { display: none !important; }
-        .print-header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 5px; }
-        .print-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 12px; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        th, td { border: 1px solid #000 !important; padding: 5px; }
-        th { background-color: #eee !important; -webkit-print-color-adjust: exact; text-align: center; }
-        textarea, input[type="text"], input[type="number"], select { border: none; background: transparent; resize: none; overflow: visible; }
-    }
+    /* 必要に応じてスタイルを追加 */
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container py-4 mb-5">
-    <div class="d-flex justify-content-between align-items-center mb-4 no-print">
-        <h3><i class="fas fa-bolt"></i> 治療実施記録</h3>
-        <div class="btn-group">
-            <button type="button" class="btn btn-outline-success" onclick="printDiv('side-effects-sheet')"><i class="fas fa-print"></i> 副作用チェック表 印刷</button>
-            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary">戻る</a>
-        </div>
-    </div>
-
-    <!-- 漸減アラート -->
-    {% if alert_msg %}
-    <div class="alert alert-danger fw-bold shadow-sm no-print">
-        <i class="fas fa-exclamation-triangle"></i> {{ alert_msg }}
-    </div>
-    {% endif %}
-
-    <div class="alert alert-info no-print">
-        <div class="d-flex justify-content-between align-items-center">
-            <div>
-                <strong>第{{ session_num }}回目</strong> 
-                <span class="badge bg-light text-dark border ms-2">治療 第{{ week_num }}週目</span>
-            </div>
-            <div class="small">
-                期間: {{ start_date|date:"Y/n/j" }} ～ {{ end_date_est|date:"Y/n/j" }}
-            </div>
-        </div>
-    </div>
-
-    <form method="post">
-        {% csrf_token %}
-        
-        <!-- 治療パラメータ＆指示 -->
-        <div class="card mb-4 shadow-sm no-print">
-            <div class="card-header bg-warning text-dark fw-bold d-flex justify-content-between">
-                <span><i class="fas fa-sliders-h me-1"></i> 治療パラメータ・指示</span>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <!-- 位置決め情報 -->
-                    <div class="col-md-6 border-end">
-                        <h6 class="text-secondary small fw-bold">最新の位置決め ({{ latest_mapping.date|default:"-" }})</h6>
-                        <div class="row">
-                            <div class="col-6">安静時MT: <strong>{{ latest_mapping.resting_mt|default:"-" }} %</strong></div>
-                            <div class="col-6">部位: <strong>{{ latest_mapping.stimulation_site|default:"-" }}</strong></div>
-                        </div>
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow border-0">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0 fw-bold"><i class="fas fa-user-plus me-2"></i>新規患者登録</h4>
+                </div>
+                <div class="card-body p-4">
+                    
+                    {% if existing_patient %}
+                    <div class="alert alert-warning border-warning shadow-sm">
+                        <h5 class="alert-heading fw-bold"><i class="fas fa-exclamation-triangle"></i> 登録済みの患者が見つかりました</h5>
+                        <p class="mb-1">カルテID <strong>{{ existing_patient.card_id }}</strong> は既に登録されています。</p>
+                        <p class="mb-3">氏名: <strong>{{ existing_patient.name }}</strong> 様 ({{ existing_patient.course_number }}クール目登録済)</p>
+                        <hr>
+                        <p class="mb-2 fw-bold">どうしますか？</p>
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="card_id" value="{{ form.card_id.value }}">
+                            <input type="hidden" name="name" value="{{ form.name.value }}">
+                            <input type="hidden" name="birth_date" value="{{ form.birth_date.value|date:'Y-m-d' }}">
+                            <input type="hidden" name="gender" value="{{ form.gender.value }}">
+                            <input type="hidden" name="referral_source" value="{{ form.referral_source.value }}">
+                            <input type="hidden" name="referral_doctor" value="{{ form.referral_doctor.value }}">
+                            <input type="hidden" name="confirm_create" value="true">
+                            
+                            <div class="d-flex gap-3">
+                                <button type="submit" class="btn btn-success fw-bold">
+                                    <i class="fas fa-plus-circle"></i> {{ next_course_num }}クール目として新規登録する
+                                </button>
+                                <a href="{% url 'patient_add' %}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-undo"></i> IDを入力し直す
+                                </a>
+                            </div>
+                        </form>
                     </div>
-                    <!-- 判定・指示 -->
-                    <div class="col-md-6 ps-md-4">
-                        <h6 class="text-secondary small fw-bold">3週目評価判定</h6>
-                        {% if judgment_info %}
-                            <div class="fw-bold text-primary">{{ judgment_info }}</div>
-                            <div class="small text-danger mt-1">{{ instruction_msg }}</div>
-                        {% else %}
-                            <div class="text-muted small">まだ評価されていません</div>
+                    {% else %}
+
+                    <form method="post">
+                        {% csrf_token %}
+                        {% if form.errors %}
+                        <div class="alert alert-danger"><strong>入力エラーがあります:</strong> {{ form.errors }}</div>
                         {% endif %}
-                    </div>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">カルテID <span class="badge bg-danger">必須</span></label>
+                                {{ form.card_id }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">氏名 <span class="badge bg-danger">必須</span></label>
+                                {{ form.name }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">生年月日 <span class="badge bg-danger">必須</span></label>
+                                {{ form.birth_date }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">性別</label>
+                                {{ form.gender }}
+                            </div>
+                            <div class="col-12"><hr class="my-3"></div>
+                            <h6 class="text-secondary mb-3"><i class="fas fa-hospital me-1"></i> 紹介情報 (任意)</h6>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">紹介元医療機関</label>
+                                {{ form.referral_source }}
+                                <datalist id="referral-options">{% for opt in referral_options %}<option value="{{ opt }}">{% endfor %}</datalist>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">紹介医</label>
+                                {{ form.referral_doctor }}
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 mt-5 d-md-flex justify-content-md-end">
+                            <a href="{% url 'dashboard' %}" class="btn btn-secondary me-md-2 px-4">キャンセル</a>
+                            <!-- ★修正: 登録完了 -->
+                            <button type="submit" class="btn btn-primary px-5 fw-bold">
+                                <i class="fas fa-check me-1"></i> 登録完了
+                            </button>
+                        </div>
+                    </form>
+                    {% endif %}
                 </div>
             </div>
         </div>
-        
-        <div class="card mb-4 shadow-sm no-print">
-            <div class="card-body">
-                <h5 class="section-title">実施日時・安全確認</h5>
-                <div class="row mb-3">
-                    <!-- 日付と時間を分離 -->
-                    <div class="col-md-3">
-                        <label class="form-label">実施日</label>
-                        {{ form.treatment_date }}
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">開始時間</label>
-                        {{ form.treatment_time }}
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="col-md-4"><div class="form-check form-switch py-2">{{ form.safety_sleep }} <label class="form-check-label fw-bold">睡眠不足なし</label></div></div>
-                    <div class="col-md-4"><div class="form-check form-switch py-2">{{ form.safety_alcohol }} <label class="form-check-label fw-bold">アルコール・カフェイン過剰なし</label></div></div>
-                    <div class="col-md-4"><div class="form-check form-switch py-2">{{ form.safety_meds }} <label class="form-check-label fw-bold">服薬変更なし</label></div></div>
-                </div>
-                <div class="row g-3 mt-2">
-                    <div class="col-md-4"><label class="form-label">当日のMT (%)</label>{{ form.motor_threshold }}</div>
-                    <div class="col-md-4"><label class="form-label">刺激強度 (%)</label>{{ form.intensity }}<small class="text-muted ms-2">通常 120%</small></div>
-                    <div class="col-md-4"><label class="form-label">総パルス数</label>{{ form.total_pulses }}</div>
-                </div>
-            </div>
-        </div>
-        
-        <div id="side-effects-sheet" class="printable-area card mb-4 shadow-sm">
-            <div class="card-body">
-                <div class="print-header d-none d-print-block"><h2>rTMS 副作用チェック表</h2><p style="text-align: right; font-size: 10px;">笠寺精治寮病院</p></div>
-                <div class="print-row d-none d-print-flex">
-                    <div style="width: 30%;">ID: <strong>{{ patient.card_id }}</strong></div>
-                    <div style="width: 30%;">氏名: <strong>{{ patient.name }} 様</strong></div>
-                    <div style="width: 40%; text-align: right;">
-                        第<strong>{{ session_num }}</strong>回 ({{ form.treatment_date.value|default:"本日" }})
-                    </div>
-                </div>
-                
-                <h5 class="section-title no-print">副作用チェック表</h5>
-                <p class="text-muted small no-print">治療中・治療後の自覚症状について確認してください。</p>
-                <table class="table table-hover table-bordered">
-                    <thead class="table-light"><tr><th style="vertical-align: middle;">症状</th><th width="80" class="text-center">なし<br>(None)</th><th width="80" class="text-center">軽度<br>(Mild)</th><th width="80" class="text-center">中等度<br>(Moderate)</th><th width="80" class="text-center">重度<br>(Severe)</th></tr></thead>
-                    <tbody>
-                        {% for key, label in side_effect_items %}
-                        <tr class="check-row"><td>{{ label }}</td><td class="text-center"><input type="radio" name="se_{{ key }}" value="0" checked></td><td class="text-center"><input type="radio" name="se_{{ key }}" value="1"></td><td class="text-center"><input type="radio" name="se_{{ key }}" value="2"></td><td class="text-center"><input type="radio" name="se_{{ key }}" value="3"></td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                <div class="mt-3"><label class="form-label fw-bold">特記事項 (自由記載)</label><textarea name="se_note" class="form-control" rows="3"></textarea></div>
-                <div class="d-none d-print-block mt-5 text-end"><p>実施者署名: ___________________________</p></div>
-            </div>
-        </div>
-        <div class="text-center no-print"><button type="submit" class="btn btn-success btn-lg px-5">実施完了</button></div>
-    </form>
+    </div>
 </div>
-<script>function printDiv(divId) { var originalContents = document.body.innerHTML; var printContents = document.getElementById(divId).outerHTML; document.body.innerHTML = printContents; window.print(); document.body.innerHTML = originalContents; window.location.reload(); }</script>
 {% endblock %}
