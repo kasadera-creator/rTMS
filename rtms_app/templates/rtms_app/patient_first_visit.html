@@ -41,9 +41,9 @@
         <div class="alert alert-danger"><strong>保存できませんでした:</strong> {{ form.errors }}</div>
         {% endif %}
 
+        <!-- 1. 基本情報・病歴 -->
         <div class="form-section">
             <h5 class="section-title">基本情報・サマリー</h5>
-            <!-- (中略: 基本情報フォーム) -->
             <div class="row g-3 mb-3">
                 <div class="col-md-3"><label class="form-label fw-bold">カルテID</label>{{ form.card_id }}</div>
                 <div class="col-md-3"><label class="form-label fw-bold">氏名</label>{{ form.name }}</div>
@@ -62,30 +62,86 @@
             <div class="mb-3"><label class="fw-bold">既往歴</label><textarea name="{{ form.past_history.name }}" class="form-control" rows="3">{{ form.past_history.value|default_if_none:"" }}</textarea></div>
             <div class="mb-3"><label class="fw-bold">現病歴</label><textarea name="{{ form.present_illness.name }}" class="form-control" rows="8">{{ form.present_illness.value|default_if_none:"" }}</textarea></div>
             <div class="mb-3"><label class="fw-bold">薬剤治療歴</label><textarea name="{{ form.medication_history.name }}" class="form-control" rows="6">{{ form.medication_history.value|default_if_none:"" }}</textarea></div>
-            
+        </div>
+
+        <!-- 2. 診断名 & HAM-D評価 -->
+        <div class="form-section">
+            <h5 class="section-title">診断名・重症度評価</h5>
             <div class="mb-3">
-                <label class="fw-bold">診断名</label>
+                <div class="d-flex align-items-center mb-2">
+                    <label class="fw-bold me-3">診断名</label>
+                    <!-- 治療前HAM-D評価ボタン -->
+                    <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#hamdModal">
+                        <i class="fas fa-chart-bar"></i> 治療前HAM-D評価
+                        {% if baseline_assessment %}<span class="badge bg-danger ms-1">{{ baseline_assessment.total_score_17 }}点 (済)</span>{% endif %}
+                    </button>
+                </div>
+                
                 {{ form.diagnosis }}
-                
-                <!-- ★追加: 治療前HAM-D評価ボタン -->
-                <button type="button" class="btn btn-outline-danger btn-sm ms-3" data-bs-toggle="modal" data-bs-target="#hamdModal">
-                    <i class="fas fa-chart-bar"></i> 治療前HAM-D評価
-                    {% if baseline_assessment %}<span class="badge bg-danger ms-1">{{ baseline_assessment.total_score_17 }}点 (済)</span>{% endif %}
-                </button>
-                
-                <div class="diag-check-group mt-2">
-                     <!-- (中略: 診断名チェックボックス群) -->
+                <div class="diag-check-group">
                     <div class="row g-2">
+                        <!-- 一般的な疾患 -->
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="うつ病" id="d_dep"><label class="form-check-label" for="d_dep">うつ病</label></div></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="双極症" id="d_bp"><label class="form-check-label" for="d_bp">双極症</label></div></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="統合失調症" id="d_sch"><label class="form-check-label" for="d_sch">統合失調症</label></div></div>
-                        <!-- ...他の診断名... -->
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="強迫症" id="d_ocd"><label class="form-check-label" for="d_ocd">強迫症</label></div></div>
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="社交不安症" id="d_sad"><label class="form-check-label" for="d_sad">社交不安症</label></div></div>
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="パニック症" id="d_pd"><label class="form-check-label" for="d_pd">パニック症</label></div></div>
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="広場恐怖症" id="d_ag"><label class="form-check-label" for="d_ag">広場恐怖症</label></div></div>
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="全般性不安症" id="d_gad"><label class="form-check-label" for="d_gad">全般性不安症</label></div></div>
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="心的外傷後ストレス症" id="d_ptsd"><label class="form-check-label" for="d_ptsd">心的外傷後ストレス症</label></div></div>
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="知的発達症" id="d_mr"><label class="form-check-label" for="d_mr">知的発達症</label></div></div>
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="自閉スペクトラム症" id="d_asd"><label class="form-check-label" for="d_asd">自閉スペクトラム症</label></div></div>
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="注意欠如多動症" id="d_adhd"><label class="form-check-label" for="d_adhd">注意欠如多動症</label></div></div>
+                        
+                        <div class="col-12"><hr class="my-2"></div>
+                        
+                        <!-- 認知症・パーキンソン病 -->
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="軽度認知障害(MCI)" id="d_mci"><label class="form-check-label" for="d_mci">軽度認知障害（MCI）</label></div></div>
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="認知症" id="d_dementia"><label class="form-check-label" for="d_dementia">認知症（詳細は下記へ）</label></div></div>
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="パーキンソン病" id="d_parkinson"><label class="form-check-label" for="d_parkinson">パーキンソン病</label></div></div>
+                        
+                        <!-- その他 -->
                         <div class="col-12 mt-2"><label class="small text-muted fw-bold">詳細・その他の診断名 (認知症の型などもこちらへ)</label><input type="text" name="diag_other" class="form-control form-control-sm" placeholder="例: アルツハイマー型認知症、レビー小体型認知症など"></div>
                     </div>
                 </div>
             </div>
         </div>
 
+        <!-- 3. rTMS適正質問票 (全項目表示) -->
+        <div class="form-section" id="q_section">
+            <h5 class="section-title">rTMS 適正に関する質問票</h5>
+            <p class="text-muted small">※患者様への聴取結果を入力してください。</p>
+            <table class="q-table">
+                <thead class="table-light"><tr><th style="text-align: left;">質問項目</th><th width="80" class="text-center">はい</th><th width="80" class="text-center">いいえ</th></tr></thead>
+                <tbody>
+                    <tr class="q-header-row"><td colspan="3">これまでに、以下のことがありましたか？</td></tr>
+                    <tr><td>rTMS実施経験（治験、研究を問わない）</td><td class="text-center"><input type="radio" name="q_past_rtms" value="はい"></td><td class="text-center"><input type="radio" name="q_past_rtms" value="いいえ" checked></td></tr>
+                    <tr><td>rTMSのあとに副作用などの不快な経験</td><td class="text-center"><input type="radio" name="q_past_side_effect" value="はい"></td><td class="text-center"><input type="radio" name="q_past_side_effect" value="いいえ" checked></td></tr>
+                    <tr><td>電気けいれん療法（副作用の有無など）</td><td class="text-center"><input type="radio" name="q_past_ect" value="はい"></td><td class="text-center"><input type="radio" name="q_past_ect" value="いいえ" checked></td></tr>
+                    <tr><td>けいれん発作（てんかんの診断の有無を問わない）</td><td class="text-center"><input type="radio" name="q_past_seizure" value="はい"></td><td class="text-center"><input type="radio" name="q_past_seizure" value="いいえ" checked></td></tr>
+                    <tr><td>意識消失発作</td><td class="text-center"><input type="radio" name="q_past_loc" value="はい"></td><td class="text-center"><input type="radio" name="q_past_loc" value="いいえ" checked></td></tr>
+                    <tr><td>脳卒中（脳梗塞や脳出血など）</td><td class="text-center"><input type="radio" name="q_past_stroke" value="はい"></td><td class="text-center"><input type="radio" name="q_past_stroke" value="いいえ" checked></td></tr>
+                    <tr><td>頭部外傷（意識がなくなるなど重度なもの）</td><td class="text-center"><input type="radio" name="q_past_trauma" value="はい"></td><td class="text-center"><input type="radio" name="q_past_trauma" value="いいえ" checked></td></tr>
+                    <tr><td>頭部の手術</td><td class="text-center"><input type="radio" name="q_past_surgery" value="はい"></td><td class="text-center"><input type="radio" name="q_past_surgery" value="いいえ" checked></td></tr>
+                    <tr><td>脳外科もしくは神経内科の病気</td><td class="text-center"><input type="radio" name="q_past_neuro" value="はい"></td><td class="text-center"><input type="radio" name="q_past_neuro" value="いいえ" checked></td></tr>
+                    <tr><td>脳障害をおこす可能性のある内科疾患</td><td class="text-center"><input type="radio" name="q_past_internal" value="はい"></td><td class="text-center"><input type="radio" name="q_past_internal" value="いいえ" checked></td></tr>
+                    <tr><td>アルコールや薬物の乱用</td><td class="text-center"><input type="radio" name="q_past_abuse" value="はい"></td><td class="text-center"><input type="radio" name="q_past_abuse" value="いいえ" checked></td></tr>
+                    
+                    <tr class="q-header-row"><td colspan="3">現在、以下のことはありますか？</td></tr>
+                    <tr><td>頻繁または重度な頭痛</td><td class="text-center"><input type="radio" name="q_cur_headache" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_headache" value="いいえ" checked></td></tr>
+                    <tr><td>頭の中に金属や磁性体（チタン製品かどうか要確認）</td><td class="text-center"><input type="radio" name="q_cur_metal" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_metal" value="いいえ" checked></td></tr>
+                    <tr><td>体内埋め込み式の医療機器（心臓ペースメーカーなど）</td><td class="text-center"><input type="radio" name="q_cur_device" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_device" value="いいえ" checked></td></tr>
+                    <tr><td>多量の飲酒や薬物の乱用</td><td class="text-center"><input type="radio" name="q_cur_abuse" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_abuse" value="いいえ" checked></td></tr>
+                    <tr><td>妊娠中、もしくは妊娠の可能性が否定されない</td><td class="text-center"><input type="radio" name="q_cur_preg" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_preg" value="いいえ" checked></td></tr>
+                    <tr><td>家族内にてんかんを持っているかた</td><td class="text-center"><input type="radio" name="q_cur_family_epilepsy" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_family_epilepsy" value="いいえ" checked></td></tr>
+                </tbody>
+            </table>
+            <div class="mt-3"><label class="form-label fw-bold small">「はい」とチェックした項目について、より詳しくおしえてください</label><textarea name="q_details" class="form-control" rows="4"></textarea></div>
+            <input type="hidden" name="questionnaire_data" id="questionnaire_json">
+        </div>
+
+        <!-- 4. スケジュール・担当医設定 (一番下へ移動) -->
         <div class="form-section">
             <h5 class="section-title">スケジュール・担当医設定</h5>
             <div class="row g-3">
@@ -94,22 +150,6 @@
                 <div class="col-md-4"><label class="form-label text-success fw-bold">初回治療日</label>{{ form.first_treatment_date }}</div>
                 <div class="col-md-8"><label class="form-label fw-bold">今後の担当医</label><div class="d-flex align-items-center">{{ form.attending_physician }}<span class="form-text ms-2 mb-0">※担当医を入力してください</span></div></div>
             </div>
-        </div>
-
-        <div class="form-section" id="q_section">
-            <h5 class="section-title">rTMS 適正に関する質問票</h5>
-            <p class="text-muted small">※患者様への聴取結果を入力してください。</p>
-            <!-- (質問票テーブル部分は変更なし) -->
-            <table class="q-table">
-                <!-- 中略 -->
-                <thead class="table-light"><tr><th style="text-align: left;">質問項目</th><th width="80" class="text-center">はい</th><th width="80" class="text-center">いいえ</th></tr></thead>
-                <tbody>
-                    <tr><td>rTMS実施経験</td><td class="text-center"><input type="radio" name="q_past_rtms" value="はい"></td><td class="text-center"><input type="radio" name="q_past_rtms" value="いいえ" checked></td></tr>
-                    <!-- ... 他の質問 ... -->
-                </tbody>
-            </table>
-            <div class="mt-3"><label class="form-label fw-bold small">「はい」とチェックした項目について、より詳しくおしえてください</label><textarea name="q_details" class="form-control" rows="4"></textarea></div>
-            <input type="hidden" name="questionnaire_data" id="questionnaire_json">
         </div>
 
         <div style="height: 50px;"></div>
@@ -121,7 +161,7 @@
     </form>
 </div>
 
-<!-- HAM-D モーダル -->
+<!-- HAM-D モーダル (ポップアップ) -->
 <div class="modal fade" id="hamdModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -164,7 +204,7 @@
 
 {% block scripts %}
 <script>
-    // 紹介元連携等は既存のまま
+    // 紹介元・紹介医の連携ロジック
     const referralMap = JSON.parse('{{ referral_map_json|safe }}');
     const sourceInput = document.querySelector('input[name="referral_source"]');
     const doctorInput = document.querySelector('input[name="referral_doctor"]');
@@ -192,7 +232,7 @@
         document.getElementById('questionnaire_json').value = JSON.stringify(data);
     });
 
-    // HAM-D Ajax保存
+    // HAM-D Ajax保存・判定
     function saveHamd() {
         const form = document.getElementById('hamdForm');
         const formData = new FormData(form);
@@ -211,14 +251,11 @@
                 const modal = bootstrap.Modal.getInstance(modalEl);
                 modal.hide();
 
-                // 判定メッセージ表示
-                alert(data.message + "\n(合計: " + data.total_17 + "点)");
-
-                // 質問票へスクロール
-                const qSection = document.getElementById('q_section');
-                qSection.scrollIntoView({ behavior: 'smooth' });
-                
-                // 必要ならリロードせずに画面上のバッジを更新する処理も可
+                // 判定メッセージ表示 (了解を押すと質問票へ移動)
+                if(confirm(data.message + "\n(合計: " + data.total_17 + "点)\n\nrTMS適正質問票へ移動しますか？")) {
+                    const qSection = document.getElementById('q_section');
+                    qSection.scrollIntoView({ behavior: 'smooth' });
+                }
             } else {
                 alert('エラーが発生しました: ' + data.message);
             }
@@ -226,7 +263,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-        // (診断名や質問票の復元処理は既存のまま)
+        // 診断名・その他欄の復元
         const diagStr = "{{ patient.diagnosis }}";
         if(diagStr) {
             const diags = diagStr.split(', ');
@@ -241,6 +278,7 @@
             if(depEl) depEl.checked = true;
         }
         
+        // 質問票の復元
         const raw = '{{ patient.questionnaire_data|safe }}';
         if(raw && raw !== '{}' && raw !== 'None' && raw !== 'null') {
             try {
