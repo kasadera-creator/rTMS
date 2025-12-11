@@ -25,10 +25,10 @@
         <h3 class="fw-bold"><i class="fas fa-file-medical"></i> 初診・基本情報入力</h3>
         <div class="btn-group">
             <a href="{% url 'patient_print_preview' patient.id %}?mode=summary" target="_blank" class="btn btn-outline-primary">
-                <i class="fas fa-print"></i> サマリー印刷
+                <i class="fas fa-print"></i> 初診時サマリー 印刷
             </a>
             <a href="{% url 'patient_print_preview' patient.id %}?mode=questionnaire" target="_blank" class="btn btn-outline-success">
-                <i class="fas fa-print"></i> 問診票印刷
+                <i class="fas fa-print"></i> rTMS適正質問票 印刷
             </a>
             <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary">戻る</a>
         </div>
@@ -60,14 +60,18 @@
             <div class="mb-3"><label class="fw-bold">既往歴</label><textarea name="{{ form.past_history.name }}" class="form-control" rows="3">{{ form.past_history.value|default_if_none:"" }}</textarea></div>
             <div class="mb-3"><label class="fw-bold">現病歴</label><textarea name="{{ form.present_illness.name }}" class="form-control" rows="8">{{ form.present_illness.value|default_if_none:"" }}</textarea></div>
             <div class="mb-3"><label class="fw-bold">薬剤治療歴</label><textarea name="{{ form.medication_history.name }}" class="form-control" rows="6">{{ form.medication_history.value|default_if_none:"" }}</textarea></div>
-            
+        </div>
+
+        <div class="form-section">
+            <h5 class="section-title">診断名・重症度評価</h5>
             <div class="mb-3">
-                <label class="fw-bold">診断名</label>
+                <div class="d-flex align-items-center mb-2">
+                    <label class="fw-bold me-3">診断名</label>
+                </div>
                 {{ form.diagnosis }}
                 
                 <div class="diag-check-group mt-1">
                     <div class="row g-2">
-                        <!-- ... (既存の診断名チェックボックス群をそのまま維持) ... -->
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="うつ病" id="d_dep"><label class="form-check-label" for="d_dep">うつ病</label></div></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="双極症" id="d_bp"><label class="form-check-label" for="d_bp">双極症</label></div></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="統合失調症" id="d_sch"><label class="form-check-label" for="d_sch">統合失調症</label></div></div>
@@ -107,21 +111,10 @@
             </div>
         </div>
 
-        <div class="form-section">
-            <h5 class="section-title">スケジュール・担当医設定</h5>
-            <div class="row g-3">
-                <div class="col-md-4"><label class="form-label text-primary fw-bold">入院予定日</label>{{ form.admission_date }}</div>
-                <div class="col-md-4"><label class="form-label text-warning fw-bold">初回位置決め日</label>{{ form.mapping_date }}</div>
-                <div class="col-md-4"><label class="form-label text-success fw-bold">初回治療日</label>{{ form.first_treatment_date }}</div>
-                <div class="col-md-8"><label class="form-label fw-bold">今後の担当医</label><div class="d-flex align-items-center">{{ form.attending_physician }}<span class="form-text ms-2 mb-0">※担当医を入力してください</span></div></div>
-            </div>
-        </div>
-
         <div class="form-section" id="q_section">
             <h5 class="section-title">rTMS 適正に関する質問票</h5>
             <p class="text-muted small">※患者様への聴取結果を入力してください。</p>
             <table class="q-table">
-                <!-- (質問票テーブル部分は変更なし) -->
                 <thead class="table-light"><tr><th style="text-align: left;">質問項目</th><th width="80" class="text-center">はい</th><th width="80" class="text-center">いいえ</th></tr></thead>
                 <tbody>
                     <tr><td>rTMS実施経験</td><td class="text-center"><input type="radio" name="q_past_rtms" value="はい"></td><td class="text-center"><input type="radio" name="q_past_rtms" value="いいえ" checked></td></tr>
@@ -148,6 +141,16 @@
             <input type="hidden" name="questionnaire_data" id="questionnaire_json">
         </div>
 
+        <div class="form-section">
+            <h5 class="section-title">スケジュール・担当医設定</h5>
+            <div class="row g-3">
+                <div class="col-md-4"><label class="form-label text-primary fw-bold">入院予定日</label>{{ form.admission_date }}</div>
+                <div class="col-md-4"><label class="form-label text-warning fw-bold">初回位置決め日</label>{{ form.mapping_date }}</div>
+                <div class="col-md-4"><label class="form-label text-success fw-bold">初回治療日</label>{{ form.first_treatment_date }}</div>
+                <div class="col-md-8"><label class="form-label fw-bold">今後の担当医</label><div class="d-flex align-items-center">{{ form.attending_physician }}<span class="form-text ms-2 mb-0">※担当医を入力してください</span></div></div>
+            </div>
+        </div>
+
         <div style="height: 50px;"></div>
         
         <div class="floating-actions">
@@ -157,7 +160,7 @@
     </form>
 </div>
 
-<!-- HAM-D モーダル (変更なし) -->
+<!-- HAM-D モーダル -->
 <div class="modal fade" id="hamdModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -228,7 +231,7 @@
         document.getElementById('questionnaire_json').value = JSON.stringify(data);
     });
 
-    // HAM-D Ajax保存・判定 (修正版: モーダル操作の堅牢化)
+    // HAM-D Ajax保存・判定
     function saveHamd() {
         const form = document.getElementById('hamdForm');
         const formData = new FormData(form);
@@ -243,7 +246,6 @@
         .then(response => response.json())
         .then(data => {
             if(data.status === 'success') {
-                // モーダルを閉じる (getOrCreateInstanceを使用)
                 const modalEl = document.getElementById('hamdModal');
                 const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
                 modal.hide();
@@ -270,7 +272,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-        // (診断名や質問票の復元処理は既存のまま)
+        // 診断名・その他欄の復元
         const diagStr = "{{ patient.diagnosis }}";
         if(diagStr) {
             const diags = diagStr.split(', ');
@@ -285,14 +287,12 @@
             if(depEl) depEl.checked = true;
         }
         
-        const raw = '{{ patient.questionnaire_data|safe }}';
-        // 安全なパース
-        if(raw && raw !== '{}' && raw !== 'None' && raw !== 'null') {
-            try {
-                // 文字列のエスケープ処理が必要な場合もあるが、Djangoのsafeフィルタを通しているため基本的にはOK
-                // ただし、もし問題が出る場合は json_script タグの使用を検討
-                const data = JSON.parse(raw);
-                for (const [key, value] of Object.entries(data)) {
+        // 質問票の復元
+        const questionnaire_data_element = document.getElementById('questionnaire_json');
+        if (questionnaire_data_element && '{{ patient.questionnaire_data|escapejs }}' ) {
+           try {
+              const data = JSON.parse('{{ patient.questionnaire_data|escapejs }}');
+               for (const [key, value] of Object.entries(data)) {
                     if (key === 'q_details') { 
                         const txt = document.querySelector('textarea[name="q_details"]'); 
                         if(txt) txt.value = value; 
@@ -301,7 +301,9 @@
                         if(el) el.checked = true; 
                     }
                 }
-            } catch(e) { console.log('JSON Parse skipped or empty'); }
+           } catch(e) {
+             console.log(e);
+           }
         }
         updateDoctorOptions();
     });

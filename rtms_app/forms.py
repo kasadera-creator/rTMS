@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth.models import User
 from .models import Patient, MappingSession, TreatmentSession, Assessment
-import datetime # 追加
+import datetime
 
 class DateInput(forms.DateInput):
     input_type = 'date'
@@ -78,9 +78,9 @@ class MappingForm(forms.ModelForm):
         fields = ['date', 'week_number', 'resting_mt', 'stimulation_site', 'notes']
         widgets = {'date': DateInput(attrs={'class': 'form-control'}), 'week_number': forms.Select(attrs={'class': 'form-select'}), 'resting_mt': forms.NumberInput(attrs={'class': 'form-control'}), 'stimulation_site': forms.TextInput(attrs={'class': 'form-control'}), 'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2})}
 
-# --- 4. 治療実施フォーム (修正: 日付と時間を分離) ---
+# --- 4. 治療実施フォーム ---
 class TreatmentForm(forms.ModelForm):
-    # フォーム上だけのフィールドとして定義
+    # ★修正: 日付と時間を分離
     treatment_date = forms.DateField(label='実施日', widget=DateInput(attrs={'class': 'form-control'}))
     treatment_time = forms.TimeField(label='開始時間', widget=TimeInput(attrs={'class': 'form-control'}))
 
