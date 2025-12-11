@@ -4,7 +4,6 @@ from django.views.generic import RedirectView
 from . import views
 
 urlpatterns = [
-    # トップページに来たらダッシュボードへ転送
     path('', RedirectView.as_view(url='/app/dashboard/', permanent=False)),
     
     path('dashboard/', views.dashboard_view, name='dashboard'),
@@ -17,8 +16,10 @@ urlpatterns = [
     path('patient/<int:patient_id>/assessment/add/', views.assessment_add, name='assessment_add'),
     path('patient/<int:patient_id>/summary/', views.patient_summary_view, name='patient_summary'),
     
-    # ★新規追加: クリニカルパス
+    # クリニカルパス (ブラウザ表示)
     path('patient/<int:patient_id>/path/', views.patient_clinical_path, name='patient_clinical_path'),
+    # ★新規追加: クリニカルパス (印刷用)
+    path('patient/<int:patient_id>/path/print/', views.patient_print_path, name='patient_print_path'),
 
     path('patient/<int:pk>/first_visit/print/', views.patient_print_preview, name='patient_print_preview'),
     path('patient/<int:pk>/summary/print/', views.patient_print_summary, name='patient_print_summary'),
