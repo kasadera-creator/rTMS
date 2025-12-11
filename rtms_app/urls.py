@@ -1,16 +1,11 @@
 from django.contrib import admin
 from django.urls import path, include
 from django.views.generic import RedirectView
-from . import views  # rtms_app.views をインポートしている前提ですが、include内で使う場合は rtms_app/urls.py 側を編集するのが一般的です。
-# プロジェクト構成上、ここが rtms_app/urls.py であると仮定して記述します。
+from . import views
 
 urlpatterns = [
     # トップページに来たらダッシュボードへ転送
     path('', RedirectView.as_view(url='/app/dashboard/', permanent=False)),
-    
-    # アプリのURLを '/app/' 以下に割り当て
-    # path('app/', include('rtms_app.urls')), # ←プロジェクトのurls.pyならこうなりますが、
-    # ここがアプリのurls.pyだと仮定して以下を展開します。
     
     path('dashboard/', views.dashboard_view, name='dashboard'),
     path('patient/list/', views.patient_list_view, name='patient_list'),
@@ -30,4 +25,6 @@ urlpatterns = [
     path('export/csv/', views.export_treatment_csv, name='export_csv'),
     path('backup/db/', views.download_db, name='download_db'),
     path('logout/', views.custom_logout_view, name='custom_logout'),
+    
+    path('admin/', admin.site.urls),
 ]
