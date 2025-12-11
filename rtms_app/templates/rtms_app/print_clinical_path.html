@@ -8,61 +8,70 @@
     body { background-color: #525659; }
     .page-container { width: 297mm; margin: 20px auto; }
     .page-sheet {
-        background-color: white; width: 100%; min-height: 210mm; /* A4横 */
-        padding: 10mm 15mm; 
+        background-color: white; width: 100%; height: 210mm; 
+        padding: 8mm 12mm; /* パディングを少し縮小して収まりよくする */
         box-shadow: 0 0 10px rgba(0,0,0,0.5); position: relative; box-sizing: border-box; margin-bottom: 20px;
         font-family: 'M PLUS Rounded 1c', "Meiryo", sans-serif; color: #333; 
-        line-height: 1.4;
+        line-height: 1.3; overflow: hidden;
     }
     
-    /* 印刷時設定 */
     @media print {
         @page { size: A4 landscape; margin: 0; }
         body { background-color: white; margin: 0; }
         .preview-container { width: 100%; margin: 0; }
         .page-sheet { 
-            width: 100%; margin: 0; padding: 10mm 15mm; box-shadow: none; border: none; min-height: 210mm;
-            page-break-after: always;
+            width: 100%; height: 210mm; margin: 0; padding: 8mm 12mm; 
+            box-shadow: none; border: none; page-break-after: always;
         }
         .page-sheet:last-child { page-break-after: auto; }
         .no-print { display: none !important; }
     }
 
-    /* カレンダースタイル */
-    .calendar-table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; }
-    .calendar-table th { background-color: #f8f9fa; border: 1px solid #000; padding: 5px; text-align: center; }
-    .calendar-table td { border: 1px solid #000; padding: 5px; vertical-align: top; height: 80px; position: relative; }
+    /* カレンダー (7列グリッド) */
+    .calendar-grid { 
+        display: grid; 
+        grid-template-columns: repeat(7, 1fr); 
+        border-top: 1px solid #000; border-left: 1px solid #000;
+        margin-top: 10px;
+    }
     
-    /* 日付・イベント */
-    .date-num { font-weight: bold; font-size: 1.1em; display: block; margin-bottom: 2px; }
+    /* 日付セル: 高さを少し抑える */
+    .cal-cell { 
+        border-right: 1px solid #000; border-bottom: 1px solid #000; 
+        min-height: 70px; padding: 3px; font-size: 10px; position: relative;
+    }
+    
     .day-sat { color: #007bff; background-color: #f0f8ff; }
     .day-sun { color: #dc3545; background-color: #fff0f0; }
+    .day-holiday { color: #dc3545; background-color: #ffe8e8; } /* 祝日スタイル */
     
-    .event-badge { 
-        display: block; font-size: 0.85em; padding: 1px 3px; margin-bottom: 2px; border-radius: 3px; 
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    .evt-badge { 
+        display: block; padding: 1px 3px; margin-bottom: 1px; border-radius: 2px; 
+        font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .evt-admission { background-color: #cff4fc; color: #055160; border: 1px solid #b6effb; font-weight: bold; }
-    .evt-mapping { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; font-weight: bold; }
+    .evt-admission { background-color: #b6effb; color: #055160; font-weight: bold; }
+    .evt-mapping { background-color: #ffeeba; color: #856404; font-weight: bold; }
     .evt-treatment { background-color: #d1e7dd; color: #0f5132; }
-    .evt-assessment { border: 2px solid #dc3545; color: #dc3545; font-weight: bold; background-color: #fff; }
-    .evt-discharge { background-color: #f8d7da; color: #842029; font-weight: bold; }
+    .evt-assessment { border: 1px solid #dc3545; color: #dc3545; font-weight: bold; background-color: #fff; }
+    .evt-discharge { background-color: #f8d7da; color: #842029; font-weight: bold; border: 1px solid #f5c6cb; }
 
-    /* 裏面（説明）スタイル */
-    .info-box { border: 2px solid #555; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
-    .info-title { font-size: 1.2em; font-weight: bold; border-bottom: 2px solid #555; padding-bottom: 5px; margin-bottom: 10px; }
-    .info-content { font-size: 0.95em; }
-    .info-content ul { padding-left: 20px; margin: 0; }
-    .info-content li { margin-bottom: 3px; }
+    /* 裏面（説明） */
+    .info-container { display: flex; flex-wrap: wrap; gap: 15px; height: 100%; align-content: flex-start; }
+    .info-box { flex: 1 1 45%; border: 2px solid #555; border-radius: 8px; padding: 12px; box-sizing: border-box; }
+    .info-title { font-size: 1.1em; font-weight: bold; border-bottom: 2px solid #555; padding-bottom: 4px; margin-bottom: 8px; }
+    .info-content { font-size: 10pt; }
+    .info-content ul { padding-left: 18px; margin: 0; }
+    .info-content li { margin-bottom: 2px; }
+    .warning-text { color: #d63384; font-weight: bold; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid no-print bg-dark text-white p-2 fixed-top">
     <div class="container d-flex justify-content-between align-items-center">
-        <span>クリニカルパス (患者用)</span>
+        <span>クリニカルパス印刷プレビュー (A4横)</span>
         <div>
-            <button onclick="window.print()" class="btn btn-primary btn-sm"><i class="fas fa-print"></i> 印刷 (表裏)</button>
+            <button onclick="window.print()" class="btn btn-primary btn-sm"><i class="fas fa-print"></i> 印刷</button>
             <button onclick="window.close()" class="btn btn-secondary btn-sm">閉じる</button>
         </div>
     </div>
@@ -73,104 +82,107 @@
     
     <!-- 1ページ目: カレンダー -->
     <div class="page-sheet">
-        <h2 class="text-center fw-bold mb-3">rTMS治療スケジュール表</h2>
+        <h2 class="text-center fw-bold mb-2">rTMS治療スケジュール表</h2>
         
-        <div class="d-flex justify-content-between mb-2 border-bottom border-dark pb-2">
-            <div class="fs-5">氏名: <strong>{{ patient.name }} 様</strong></div>
-            <div class="fs-5">ID: {{ patient.card_id }} 
-                {% if patient.course_number > 1 %}({{ patient.course_number }}クール目){% endif %}
-            </div>
-            <div class="fs-5">担当医: {{ patient.attending_physician.last_name }}</div>
+        <div class="d-flex justify-content-between mb-2 border-bottom border-dark pb-1" style="font-size: 11pt;">
+            <div>氏名: <strong>{{ patient.name }} 様</strong></div>
+            <div>ID: {{ patient.card_id }} {% if patient.course_number > 1 %}({{ patient.course_number }}クール目){% endif %}</div>
+            <div>担当医: {{ patient.attending_physician.last_name }}</div>
         </div>
         
-        <!-- カレンダー表示 -->
-        <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+        <div style="display: flex; flex-wrap: wrap; border-top: 1px solid #000; border-left: 1px solid #000;">
             {% for day in calendar_days %}
-            <div style="width: 13.5%; border: 1px solid #000; padding: 5px; min-height: 100px; box-sizing: border-box; 
-                        {% if day.weekday == '土' %}background-color: #f0f8ff;{% elif day.weekday == '日' %}background-color: #fff0f0;{% endif %}">
+            <div style="width: 14.28%; border-right: 1px solid #000; border-bottom: 1px solid #000; padding: 4px; min-height: 80px; box-sizing: border-box; 
+                        {% if day.is_holiday %}background-color: #ffe8e8; color: #dc3545;
+                        {% elif day.weekday == '土' %}background-color: #f0f8ff; color: #007bff;
+                        {% elif day.weekday == '日' %}background-color: #fff0f0; color: #dc3545;{% endif %}">
                 
-                <div class="text-center fw-bold border-bottom mb-1" style="font-size: 0.9em;">
+                <div class="text-center fw-bold mb-1" style="font-size: 10px;">
                     {{ day.date|date:"n/j" }} ({{ day.weekday }})
                 </div>
                 
                 {% for event in day.events %}
                     {% if event.type == 'admission' %}
-                        <div class="evt-admission event-badge">{{ event.label }}</div>
+                        <div class="evt-badge evt-admission">{{ event.label }}</div>
                     {% elif event.type == 'mapping' %}
-                        <div class="evt-mapping event-badge">{{ event.label }}</div>
+                        <div class="evt-badge evt-mapping">{{ event.label }}</div>
                     {% elif event.type == 'treatment' %}
-                        <div class="evt-treatment event-badge">{{ event.label }}</div>
+                        <div class="evt-badge evt-treatment">{{ event.label }}</div>
                     {% elif event.type == 'assessment' %}
-                        <div class="evt-assessment event-badge">{{ event.label }}</div>
+                        <div class="evt-badge evt-assessment">{{ event.label }}</div>
                     {% elif event.type == 'discharge' %}
-                        <div class="evt-discharge event-badge">{{ event.label }}</div>
+                        <div class="evt-badge evt-discharge">{{ event.label }}</div>
                     {% endif %}
                 {% endfor %}
             </div>
             {% endfor %}
+            <!-- 空白セル埋め -->
+            {% for i in "12345"|make_list %}
+            <div style="width: 14.28%; border-right: 1px solid #000; border-bottom: 1px solid #000; background-color: #eee;"></div>
+            {% endfor %}
         </div>
         
-        <div class="mt-2 text-end small">※スケジュールは治療経過や病院の都合により変更になる場合があります。</div>
+        <div class="mt-1 text-end" style="font-size: 9pt;">※スケジュールは治療経過や病院の都合により変更になる場合があります。赤色は祝日です。</div>
     </div>
 
     <!-- 2ページ目: 説明 -->
     <div class="page-sheet">
-        <h2 class="text-center fw-bold mb-4">rTMS治療に関するご案内</h2>
+        <h2 class="text-center fw-bold mb-3">rTMS治療に関するご案内</h2>
         
-        <div class="row">
-            <div class="col-6">
-                <div class="info-box">
-                    <div class="info-title">① 入院時</div>
-                    <div class="info-content">
-                        <ul>
-                            <li>指定された時間（午前10時頃）に受付へお越しください。</li>
-                            <li>保険証、診察券、お薬手帳、現在服用中のお薬を必ずご持参ください。</li>
-                            <li>病棟にて、入院生活についてのオリエンテーションがあります。</li>
-                            <li>入院当日に、治療前の最終確認とスケジュール調整を行います。</li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="info-box">
-                    <div class="info-title">② 位置決め（MT測定）</div>
-                    <div class="info-content">
-                        <ul>
-                            <li>最適な刺激部位と強さ（MT）を決める重要な検査です。</li>
-                            <li><strong>整髪料は付けずに</strong>、洗髪した清潔な状態で受けてください。</li>
-                            <li>専用のキャップを被り、約30分〜1時間かけて測定します。</li>
-                            <li>刺激により親指がピクッと動くか確認しますので、リラックスしてください。</li>
-                        </ul>
-                    </div>
+        <div class="info-container">
+            <!-- 1. 入院・検査 -->
+            <div class="info-box">
+                <div class="info-title">① 入院・検査について</div>
+                <div class="info-content">
+                    <ul>
+                        <li><strong>入院当日:</strong> 指定された時間（通常10:00）に受付へお越しください。</li>
+                        <li><strong>持ち物:</strong> 保険証、診察券、お薬手帳、現在服用中のお薬。</li>
+                        <li><strong>位置決め（MT測定）:</strong> 治療部位と強さを決める重要な検査です。<br>
+                            <span class="warning-text">※整髪料は付けずに、洗髪した清潔な状態で受けてください。</span>
+                        </li>
+                        <li>専用キャップを被り、約30分〜1時間かけて測定します。</li>
+                    </ul>
                 </div>
             </div>
-            
-            <div class="col-6">
-                <div class="info-box">
-                    <div class="info-title">③ 治療について</div>
-                    <div class="info-content">
-                        <ul>
-                            <li>1回の治療時間は約20分〜40分です。</li>
-                            <li>「カチカチ」という大きな音がしますので、<strong>耳栓（当院用意）を着用</strong>してください。</li>
-                            <li>頭皮を叩かれるような刺激感があります。痛みや不快感が強い場合は、我慢せずスタッフにお伝えください。</li>
-                            <li>治療後は普段どおりにお過ごしいただけます。</li>
-                            <li>週5回（月〜金）、計30回（約6週間）の実施が基本です。</li>
-                        </ul>
-                    </div>
+
+            <!-- 2. 治療 -->
+            <div class="info-box">
+                <div class="info-title">② 治療の進め方</div>
+                <div class="info-content">
+                    <ul>
+                        <li><strong>治療時間:</strong> 1回約20分〜40分です。</li>
+                        <li><strong>音と刺激:</strong> 「カチカチ」という大きな音がしますので、<span class="warning-text">必ず耳栓を着用</span>してください（当院で用意します）。頭皮を叩かれるような刺激があります。</li>
+                        <li><strong>スケジュール:</strong> 原則として週5回（月〜金）、計30回（約6週間）行います。</li>
+                        <li><strong>評価:</strong> 定期的に心理検査を行い、効果を判定します（中間評価・最終評価）。</li>
+                        <li><strong>祝日:</strong> 祝日は治療がお休みとなり、日程が後ろにずれます。</li>
+                    </ul>
                 </div>
-                 <div class="info-box" style="border-color: #dc3545;">
-                    <div class="info-title text-danger">ご注意・副作用</div>
-                    <div class="info-content">
-                        <ul>
-                            <li><strong>頭痛・刺激痛:</strong> 治療初期によく見られますが、慣れてくることが多いです。</li>
-                            <li><strong>けいれん発作:</strong> ごく稀（数万回に1回程度）ですが、リスクがあります。万が一の場合は迅速に対応します。</li>
-                            <li>前日の睡眠不足や、アルコール・カフェインの過剰摂取は、副作用のリスクを高めるため控えてください。</li>
-                        </ul>
+            </div>
+
+            <!-- 3. 注意事項 -->
+            <div class="info-box" style="flex-basis: 100%;">
+                <div class="info-title" style="border-color: #dc3545; color: #dc3545;">③ 副作用と注意事項</div>
+                <div class="info-content">
+                    <div class="row">
+                        <div class="col-6">
+                            <ul>
+                                <li><strong>頭痛・刺激痛:</strong> 治療初期によく見られますが、徐々に慣れてくることが多いです。痛みが強い場合はお知らせください。</li>
+                                <li><strong>けいれん発作:</strong> ごく稀（数万回に1回程度）ですがリスクがあります。万が一の場合は迅速に対応します。</li>
+                            </ul>
+                        </div>
+                        <div class="col-6">
+                            <ul>
+                                <li><strong>禁止事項:</strong> 治療期間中は、<span class="warning-text">飲酒</span>や<span class="warning-text">カフェインの過剰摂取</span>を控えてください（発作リスクが上がります）。</li>
+                                <li><strong>睡眠:</strong> 前日は十分な睡眠をとってください。睡眠不足は副作用のリスクを高めます。</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="mt-4 text-center fw-bold fs-5">
-            医療法人交正会 笠寺精治寮病院 rTMSセンター
+        <div class="text-center mt-3">
+            <p class="fw-bold fs-5">医療法人交正会 笠寺精治寮病院 rTMSセンター</p>
         </div>
     </div>
 </div>

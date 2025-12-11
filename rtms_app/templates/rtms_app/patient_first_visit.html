@@ -2,6 +2,7 @@
 
 {% block extrastyle %}
 <style>
+    /* 既存スタイル... */
     .form-section { background-color: #fff; padding: 25px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
     .section-title { border-left: 5px solid #0d6efd; padding-left: 10px; font-weight: bold; margin-bottom: 20px; color: #333; font-size: 1.2rem; }
     .diag-check-group { background-color: #f8f9fa; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6; }
@@ -9,10 +10,9 @@
     .q-table th { background-color: #f8f9fa; padding: 10px; border-bottom: 2px solid #dee2e6; }
     .q-table td { padding: 8px 10px; border-bottom: 1px solid #dee2e6; vertical-align: middle; }
     .q-header-row { background-color: #e9ecef; font-weight: bold; }
-    
     .floating-actions { position: fixed; bottom: 20px; right: 20px; z-index: 1050; display: flex; gap: 10px; }
     .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; }
-
+    
     .hamd-input-group { border-bottom: 1px solid #eee; padding: 5px 0; }
     .hamd-label { font-size: 0.9rem; font-weight: bold; }
     .hamd-input { width: 60px; text-align: center; }
@@ -26,8 +26,9 @@
         <h3 class="fw-bold"><i class="fas fa-file-medical"></i> 初診・基本情報入力</h3>
         <div class="btn-group">
             <a href="{% url 'patient_clinical_path' patient.id %}" target="_blank" class="btn btn-outline-success btn-sm">パス表示</a>
-            <a href="{% url 'patient_summary' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}" class="btn btn-outline-info btn-sm">サマリー</a>
-            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-sm">戻る</a>
+            <a href="{% url 'patient_print_preview' patient.id %}?mode=summary" target="_blank" class="btn btn-outline-primary">サマリー印刷</a>
+            <a href="{% url 'patient_print_preview' patient.id %}?mode=questionnaire" target="_blank" class="btn btn-outline-success">問診票印刷</a>
+            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary">戻る</a>
         </div>
     </div>
 
@@ -53,6 +54,7 @@
                     </div>
                 </div>
             </div>
+            <!-- (その他フィールドは省略せずに記述) -->
             <div class="mb-3"><label class="fw-bold">主訴</label>{{ form.chief_complaint }}</div>
             <div class="mb-3"><label class="fw-bold">生活歴</label><textarea name="{{ form.life_history.name }}" class="form-control" rows="3">{{ form.life_history.value|default_if_none:"" }}</textarea></div>
             <div class="mb-3"><label class="fw-bold">既往歴</label><textarea name="{{ form.past_history.name }}" class="form-control" rows="3">{{ form.past_history.value|default_if_none:"" }}</textarea></div>
@@ -90,7 +92,7 @@
                     <!-- (診断名リスト: 前回のまま) -->
                     <div class="row g-2">
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="うつ病" id="d_dep"><label class="form-check-label" for="d_dep">うつ病</label></div></div>
-                        <!-- ... (省略せずに記述が必要ですが、文字数制限のため既存のものを維持してください) ... -->
+                        <!-- ... (省略せず記述) ... -->
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="双極症" id="d_bp"><label class="form-check-label" for="d_bp">双極症</label></div></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="統合失調症" id="d_sch"><label class="form-check-label" for="d_sch">統合失調症</label></div></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="強迫症" id="d_ocd"><label class="form-check-label" for="d_ocd">強迫症</label></div></div>
@@ -114,12 +116,13 @@
 
         <div class="form-section" id="q_section">
             <h5 class="section-title">rTMS 適正に関する質問票</h5>
+            <p class="text-muted small">※患者様への聴取結果を入力してください。</p>
             <table class="q-table">
-                <!-- 中略 -->
+                <!-- (質問票テーブルも省略せずに記述) -->
                 <thead class="table-light"><tr><th style="text-align: left;">質問項目</th><th width="80" class="text-center">はい</th><th width="80" class="text-center">いいえ</th></tr></thead>
                 <tbody>
-                    <tr><td>rTMS実施経験（治験、研究を問わない）</td><td class="text-center"><input type="radio" name="q_past_rtms" value="はい"></td><td class="text-center"><input type="radio" name="q_past_rtms" value="いいえ" checked></td></tr>
-                     <tr><td>rTMSのあとに副作用などの不快な経験</td><td class="text-center"><input type="radio" name="q_past_side_effect" value="はい"></td><td class="text-center"><input type="radio" name="q_past_side_effect" value="いいえ" checked></td></tr>
+                    <tr><td>rTMS実施経験</td><td class="text-center"><input type="radio" name="q_past_rtms" value="はい"></td><td class="text-center"><input type="radio" name="q_past_rtms" value="いいえ" checked></td></tr>
+                    <tr><td>rTMSのあとに副作用などの不快な経験</td><td class="text-center"><input type="radio" name="q_past_side_effect" value="はい"></td><td class="text-center"><input type="radio" name="q_past_side_effect" value="いいえ" checked></td></tr>
                     <tr><td>電気けいれん療法（副作用の有無など）</td><td class="text-center"><input type="radio" name="q_past_ect" value="はい"></td><td class="text-center"><input type="radio" name="q_past_ect" value="いいえ" checked></td></tr>
                     <tr><td>けいれん発作（てんかんの診断の有無を問わない）</td><td class="text-center"><input type="radio" name="q_past_seizure" value="はい"></td><td class="text-center"><input type="radio" name="q_past_seizure" value="いいえ" checked></td></tr>
                     <tr><td>意識消失発作</td><td class="text-center"><input type="radio" name="q_past_loc" value="はい"></td><td class="text-center"><input type="radio" name="q_past_loc" value="いいえ" checked></td></tr>
@@ -152,23 +155,11 @@
             </div>
         </div>
 
-        <div style="height: 50px;"></div>
+        <div style="height: 60px;"></div>
         
         <div class="floating-actions">
-            <div class="btn-group-vertical mb-2">
-                <a href="{% url 'patient_print_preview' patient.id %}?mode=summary" target="_blank" class="btn btn-outline-primary btn-fab mb-1" style="background:white; color:#0d6efd;">
-                    <i class="fas fa-print"></i> 初診時サマリー 印刷
-                </a>
-                <a href="{% url 'patient_print_preview' patient.id %}?mode=questionnaire" target="_blank" class="btn btn-outline-success btn-fab" style="background:white; color:#198754;">
-                    <i class="fas fa-print"></i> rTMS適正質問票 印刷
-                </a>
-            </div>
-            <button type="submit" class="btn btn-primary btn-fab text-white mb-2">
-                <i class="fas fa-check"></i> 入力完了
-            </button>
-            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab">
-                <i class="fas fa-undo"></i> 戻る
-            </a>
+            <button type="submit" class="btn btn-primary btn-fab text-white"><i class="fas fa-check"></i> 入力完了</button>
+            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab"><i class="fas fa-undo"></i> 戻る</a>
         </div>
     </form>
 </div>
@@ -184,6 +175,7 @@
             <div class="modal-body">
                 <form id="hamdForm">
                     <div class="row">
+                        <!-- 左カラム -->
                         <div class="col-md-6">
                             {% for key, label, max, text in hamd_items_left %}
                             <div class="d-flex justify-content-between align-items-center hamd-input-group">
@@ -192,6 +184,7 @@
                             </div>
                             {% endfor %}
                         </div>
+                        <!-- 右カラム -->
                         <div class="col-md-6">
                             {% for key, label, max, text in hamd_items_right %}
                             <div class="d-flex justify-content-between align-items-center hamd-input-group">
@@ -214,7 +207,7 @@
 
 {% block scripts %}
 <script>
-    // 紹介元・紹介医 (変更なし)
+    // 紹介元・紹介医の連携ロジック
     const referralMap = JSON.parse('{{ referral_map_json|safe }}');
     const sourceInput = document.querySelector('input[name="referral_source"]');
     const doctorInput = document.querySelector('input[name="referral_doctor"]');
@@ -234,7 +227,7 @@
     sourceInput.addEventListener('change', updateDoctorOptions);
     doctorInput.setAttribute('list', 'doctor-options');
 
-    // 保存処理 (変更なし)
+    // 保存処理
     document.getElementById('mainForm').addEventListener('submit', function(e) {
         const data = {}; 
         document.querySelectorAll('input[type="radio"]:checked').forEach(r => { data[r.name] = r.value; });
@@ -242,7 +235,7 @@
         document.getElementById('questionnaire_json').value = JSON.stringify(data);
     });
 
-    // HAM-D Ajax保存・判定 (★修正: getOrCreateInstanceを使用)
+    // HAM-D Ajax保存・判定 (★修正: モーダル操作の堅牢化)
     function saveHamd() {
         const form = document.getElementById('hamdForm');
         const formData = new FormData(form);
@@ -263,16 +256,16 @@
                 modal.hide();
 
                 // 結果表示の更新
-                const displayEl = document.getElementById('hamd-result-display');
-                if(displayEl) {
-                    displayEl.innerHTML = `HAM-D17: <span class="fs-5">${data.total_17}</span> 点 (評価済)`;
-                }
+                document.getElementById('hamd-result-display').innerHTML = 
+                    `HAM-D17: <span class="fs-5">${data.total_17}</span> 点 判定: ${data.severity}`;
 
                 alert(data.message + "\n(合計: " + data.total_17 + "点)");
 
+                // 中等度(14-18)の場合、質問票へ誘導
                 if (data.total_17 >= 14 && data.total_17 <= 18) {
                     const qSection = document.getElementById('q_section');
                     qSection.scrollIntoView({ behavior: 'smooth' });
+                    // オプション: 質問票エリアを目立たせる
                     qSection.style.border = "2px solid #dc3545";
                     setTimeout(() => { qSection.style.border = "none"; }, 2000);
                 }

@@ -10,6 +10,7 @@
     .date-col { width: 120px; text-align: center; font-weight: bold; background-color: #fff; }
     .day-sat { background-color: #eaf6ff; color: #007bff; }
     .day-sun { background-color: #fff0f0; color: #dc3545; }
+    .day-holiday { background-color: #ffe8e8; color: #dc3545; } /* 祝日 */
     
     /* イベントバッジ */
     .badge-event { display: inline-block; padding: 5px 10px; border-radius: 4px; font-size: 0.9em; margin-bottom: 4px; margin-right: 4px; }
@@ -59,10 +60,10 @@
                 <tbody>
                     {% for day in calendar_days %}
                     <tr>
-                        <td class="date-col {% if day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %}">
+                        <td class="date-col {% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %}">
                             {{ day.date|date:"Y/n/j" }}
                         </td>
-                        <td class="text-center {% if day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %}">
+                        <td class="text-center {% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %}">
                             {{ day.weekday }}
                         </td>
                         <td>

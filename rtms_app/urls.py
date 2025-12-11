@@ -4,6 +4,7 @@ from django.views.generic import RedirectView
 from . import views
 
 urlpatterns = [
+    # トップページに来たらダッシュボードへ転送
     path('', RedirectView.as_view(url='/app/dashboard/', permanent=False)),
     
     path('dashboard/', views.dashboard_view, name='dashboard'),
