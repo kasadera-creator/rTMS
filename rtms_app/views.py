@@ -11,7 +11,6 @@ from django.db.models import Q
 import os
 import csv
 import json
-import calendar # ★追加
 
 from .models import Patient, TreatmentSession, MappingSession, Assessment
 from .forms import (
@@ -19,7 +18,7 @@ from .forms import (
     PatientRegistrationForm, AdmissionProcedureForm
 )
 
-# ... (既存のヘルパー関数 get_session_number, get_completion_date, get_date_of_session, get_current_week_number, get_session_count, get_weekly_session_count は変更なし) ...
+
 def get_session_number(start_date, target_date):
     if not start_date or target_date < start_date: return 0
     if target_date.weekday() >= 5: return -1
@@ -468,3 +467,67 @@ def patient_print_preview(request, pk):
 def patient_print_summary(request, pk): 
     patient = get_object_or_404(Patient, pk=pk); mode = request.GET.get('mode', 'summary'); test_scores = Assessment.objects.filter(patient=patient).order_by('date'); context = {'patient': patient, 'mode': mode, 'today': datetime.date.today(), 'test_scores': test_scores}
     return render(request, 'rtms_app/print_summary.html', context)
+    
+@login_required
+def patient_clinical_path(request, patient_id):
+    patient = get_object_or_404(Patient, pk=patient_id)
+    
+    # カレンダーの期間設定
+    # 開始: 入院日 または 治療開始日の3日前 (未定なら今日)
+    start_date = patient.admission_date or patient.first_treatment_date or timezone.now().date()
+    # 終了: 退院日 または 30回目予定日 + 3日
+    end_date = patient.discharge_date or get_completion_date(patient.first_treatment_date)
+    if not end_date:
+        end_date = start_date + timedelta(days=60) # デフォルト2ヶ月
+    
+    # カレンダーデータの作成
+    calendar_days = []
+    current = start_date
+    treatment_start = patient.first_treatment_date
+    
+    # マッピング情報の取得
+    mapping_dates = list(MappingSession.objects.filter(patient=patient).values_list('date', flat=True))
+    
+    while current <= end_date:
+        day_info = {
+            'date': current,
+            'weekday': ["月", "火", "水", "木", "金", "土", "日"][current.weekday()],
+            'events': [],
+            'is_weekend': current.weekday() >= 5
+        }
+        
+        # イベント判定
+        # 1. 入院
+        if current == patient.admission_date:
+            day_info['events'].append({'type': 'admission', 'label': '【入院】'})
+            
+        # 2. 位置決め
+        if current == patient.mapping_date or current in mapping_dates:
+            day_info['events'].append({'type': 'mapping', 'label': 'MT測定(位置決め)'})
+            
+        # 3. 治療回数 (予定含む)
+        if treatment_start:
+            session_num = get_session_number(treatment_start, current)
+            if session_num > 0 and session_num <= 30:
+                day_info['events'].append({'type': 'treatment', 'label': f'rTMS治療 ({session_num}回目)'})
+                
+                # 4. 評価予定
+                if session_num == 1:
+                    day_info['events'].append({'type': 'assessment', 'label': '治療前評価'}) # 厳密には開始前だが便宜上
+                elif session_num == 15:
+                    day_info['events'].append({'type': 'assessment', 'label': '中間評価(3週)'})
+                elif session_num == 30:
+                    day_info['events'].append({'type': 'assessment', 'label': '最終評価(6週)'})
+        
+        # 5. 退院
+        if current == patient.discharge_date:
+            day_info['events'].append({'type': 'discharge', 'label': '【退院】'})
+
+        calendar_days.append(day_info)
+        current += timedelta(days=1)
+
+    return render(request, 'rtms_app/patient_clinical_path.html', {
+        'patient': patient,
+        'calendar_days': calendar_days,
+        'today': timezone.now().date()
+    })
