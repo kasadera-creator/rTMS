@@ -1,28 +1,13 @@
 {% extends "rtms_app/base.html" %}
 {% block extrastyle %}
+<!-- (スタイルは既存と同じ) -->
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
-    /* コンパクトな入力欄 */
     .score-input { width: 60px; text-align: center; font-weight: bold; font-size: 1rem; }
-    .hamd-card { 
-        border: 1px solid #e0e0e0; 
-        border-radius: 6px; 
-        transition: 0.1s; 
-        height: 100%; 
-        background-color: #fff;
-    }
-    .hamd-card:hover { 
-        background-color: #f0f8ff; 
-        border-color: #0d6efd; 
-    }
-    .q-badge {
-        width: 24px; height: 24px; 
-        background-color: #e9ecef; color: #495057; 
-        border-radius: 50%; 
-        display: flex; align-items: center; justify-content: center; 
-        font-weight: bold; font-size: 0.75rem; flex-shrink: 0;
-    }
+    .hamd-card { border: 1px solid #e0e0e0; border-radius: 6px; transition: 0.1s; height: 100%; background-color: #fff; }
+    .hamd-card:hover { background-color: #f0f8ff; border-color: #0d6efd; }
+    .q-badge { width: 24px; height: 24px; background-color: #e9ecef; color: #495057; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.75rem; flex-shrink: 0; }
     .help-icon { color: #0d6efd; cursor: pointer; font-size: 0.9rem; margin-left: 5px; opacity: 0.7; }
     .help-icon:hover { opacity: 1; }
     .tooltip-inner { max-width: 350px !important; text-align: left !important; white-space: pre-wrap; font-size: 0.85rem; }
@@ -33,12 +18,18 @@
 
 {% block content %}
 <div class="container py-4">
+    <!-- ヘッダー: 患者メニュー -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3><i class="fas fa-chart-bar text-danger"></i> 尺度評価 (HAM-D)</h3>
-        <div class="text-end">
-            <span class="h5 fw-bold">{{ patient.name }} 様</span>
-            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary ms-3">戻る</a>
+        <div class="btn-group">
+            <a href="{% url 'patient_first_visit' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}" class="btn btn-outline-secondary btn-sm">基本情報</a>
+            <a href="{% url 'patient_clinical_path' patient.id %}" target="_blank" class="btn btn-outline-success btn-sm">パス表示</a>
+            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-sm">戻る</a>
         </div>
+    </div>
+    
+    <div class="mb-3">
+        <span class="h5 fw-bold">{{ patient.name }} 様</span>
     </div>
     
     {% if recommendation %}
@@ -48,6 +39,8 @@
     <form method="post">
         {% csrf_token %}
         <div class="card shadow-sm border-0 mb-4">
+            <!-- (カードヘッダー、ボディ、フッターは既存と同じ) -->
+            <!-- ... -->
             <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center p-3">
                 <h5 class="mb-0">
                     {% if existing_assessment %}
@@ -72,49 +65,39 @@
                 <div class="row g-3">
                     <div class="col-md-6">
                         <div class="d-flex flex-column gap-2">
-                            {% for key, label, max_score, text in hamd_items_left %}
+                            {% for key, label, max, text in hamd_items_left %}
                             <div class="hamd-card p-2 d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center flex-grow-1 me-2">
                                     <div class="q-badge me-2">Q{{ forloop.counter }}</div>
-                                    <div class="fw-bold small lh-sm" style="font-size: 0.9rem;">
-                                        {{ label|slice:"3:" }}
-                                    </div>
+                                    <div class="fw-bold small lh-sm" style="font-size: 0.9rem;">{{ label|slice:"3:" }}</div>
                                     <i class="fas fa-info-circle help-icon" data-bs-toggle="tooltip" data-bs-html="true" title="{{ text }}"></i>
                                 </div>
                                 <div class="d-flex flex-column align-items-end">
-                                    <input type="number" name="{{ key }}" id="id_{{ key }}" 
-                                           class="form-control form-control-sm score-input" 
-                                           min="0" max="{{ max_score }}" value="0" required>
-                                    <span class="text-muted" style="font-size: 0.65rem;">(0-{{ max_score }})</span>
+                                    <input type="number" name="{{ key }}" id="id_{{ key }}" class="form-control form-control-sm score-input" min="0" max="{{ max }}" value="0" required>
+                                    <span class="text-muted" style="font-size: 0.65rem;">(0-{{ max }})</span>
                                 </div>
                             </div>
                             {% endfor %}
                         </div>
                     </div>
-
                     <div class="col-md-6">
                         <div class="d-flex flex-column gap-2">
-                            {% for key, label, max_score, text in hamd_items_right %}
+                            {% for key, label, max, text in hamd_items_right %}
                             <div class="hamd-card p-2 d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center flex-grow-1 me-2">
                                     <div class="q-badge me-2">Q{{ forloop.counter|add:11 }}</div>
-                                    <div class="fw-bold small lh-sm" style="font-size: 0.9rem;">
-                                        {{ label|slice:"3:" }}
-                                    </div>
+                                    <div class="fw-bold small lh-sm" style="font-size: 0.9rem;">{{ label|slice:"3:" }}</div>
                                     <i class="fas fa-info-circle help-icon" data-bs-toggle="tooltip" data-bs-html="true" title="{{ text }}"></i>
                                 </div>
                                 <div class="d-flex flex-column align-items-end">
-                                    <input type="number" name="{{ key }}" id="id_{{ key }}" 
-                                           class="form-control form-control-sm score-input" 
-                                           min="0" max="{{ max_score }}" value="0" required>
-                                    <span class="text-muted" style="font-size: 0.65rem;">(0-{{ max_score }})</span>
+                                    <input type="number" name="{{ key }}" id="id_{{ key }}" class="form-control form-control-sm score-input" min="0" max="{{ max }}" value="0" required>
+                                    <span class="text-muted" style="font-size: 0.65rem;">(0-{{ max }})</span>
                                 </div>
                             </div>
                             {% endfor %}
                         </div>
                     </div>
                 </div>
-
                 <div class="mt-4 bg-white p-3 rounded border">
                     <label class="form-label fw-bold"><i class="fas fa-comment-dots me-1"></i>コメント・特記事項</label>
                     <textarea name="note" id="id_note" class="form-control" rows="3" placeholder="判定結果や特記事項があれば入力してください">{{ existing_assessment.note|default:"" }}</textarea>
@@ -122,10 +105,7 @@
             </div>
             
             <div class="card-footer text-center p-3 bg-white">
-                <!-- ★修正: 入力完了 -->
-                <button type="submit" class="btn btn-primary btn-lg px-5 fw-bold shadow-sm">
-                    <i class="fas fa-check me-2"></i> 入力完了
-                </button>
+                <button type="submit" class="btn btn-primary btn-lg px-5 fw-bold shadow-sm"><i class="fas fa-save me-2"></i> 評価を保存する</button>
             </div>
         </div>
     </form>
@@ -135,7 +115,6 @@
 <script>
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) { return new bootstrap.Tooltip(tooltipTriggerEl) });
-
     window.addEventListener('load', function() {
         {% if existing_assessment %}
             const scores = {{ existing_assessment.scores|safe }};

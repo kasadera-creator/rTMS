@@ -6,12 +6,16 @@
     .check-row:hover { background-color: #f1f1f1; }
     .instruction-box { background-color: #fff3cd; border: 1px solid #ffeeba; padding: 10px; border-radius: 5px; margin-bottom: 15px; }
     
+    /* 右下固定ボタンエリア */
+    .floating-actions { position: fixed; bottom: 20px; right: 20px; z-index: 1050; display: flex; gap: 10px; flex-direction: column; align-items: flex-end; }
+    .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; width: fit-content; }
+    
     @media print {
         @page { size: A4; margin: 15mm; }
         body * { visibility: hidden; }
         .printable-area, .printable-area * { visibility: visible; }
         .printable-area { position: absolute; left: 0; top: 0; width: 100%; color: #000; }
-        .no-print, .btn, header, nav, footer { display: none !important; }
+        .no-print, .btn, header, nav, footer, .floating-actions { display: none !important; }
         .print-header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 5px; }
         .print-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 12px; }
         table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -24,11 +28,14 @@
 
 {% block content %}
 <div class="container py-4 mb-5">
+    <!-- ヘッダー: 患者メニュー -->
     <div class="d-flex justify-content-between align-items-center mb-4 no-print">
         <h3><i class="fas fa-bolt"></i> 治療実施記録</h3>
         <div class="btn-group">
-            <button type="button" class="btn btn-outline-success" onclick="printDiv('side-effects-sheet')"><i class="fas fa-print"></i> 副作用チェック表 印刷</button>
-            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary">戻る</a>
+            <a href="{% url 'patient_first_visit' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}" class="btn btn-outline-secondary btn-sm">基本情報</a>
+            <a href="{% url 'patient_clinical_path' patient.id %}" target="_blank" class="btn btn-outline-success btn-sm">パス表示</a>
+            <a href="{% url 'patient_summary' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}" class="btn btn-outline-info btn-sm">サマリー</a>
+            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-sm">戻る</a>
         </div>
     </div>
 
@@ -42,8 +49,9 @@
     <div class="alert alert-info no-print">
         <div class="d-flex justify-content-between align-items-center">
             <div>
-                <strong>第{{ session_num }}回目</strong> 
-                <span class="badge bg-light text-dark border ms-2">治療 第{{ week_num }}週目</span>
+                <span class="fs-5 fw-bold me-2">{{ patient.name }} 様</span>
+                <span class="badge bg-primary">第{{ session_num }}回目</span> 
+                <span class="badge bg-light text-dark border ms-1">治療 第{{ week_num }}週目</span>
             </div>
             <div class="small">
                 期間: {{ start_date|date:"Y/n/j" }} ～ {{ end_date_est|date:"Y/n/j" }}
@@ -54,46 +62,17 @@
     <form method="post">
         {% csrf_token %}
         
-        <!-- 治療パラメータ＆指示 -->
-        <div class="card mb-4 shadow-sm no-print">
-            <div class="card-header bg-warning text-dark fw-bold d-flex justify-content-between">
-                <span><i class="fas fa-sliders-h me-1"></i> 治療パラメータ・指示</span>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <!-- 位置決め情報 -->
-                    <div class="col-md-6 border-end">
-                        <h6 class="text-secondary small fw-bold">最新の位置決め ({{ latest_mapping.date|default:"-" }})</h6>
-                        <div class="row">
-                            <div class="col-6">安静時MT: <strong>{{ latest_mapping.resting_mt|default:"-" }} %</strong></div>
-                            <div class="col-6">部位: <strong>{{ latest_mapping.stimulation_site|default:"-" }}</strong></div>
-                        </div>
-                    </div>
-                    <!-- 判定・指示 -->
-                    <div class="col-md-6 ps-md-4">
-                        <h6 class="text-secondary small fw-bold">3週目評価判定</h6>
-                        {% if judgment_info %}
-                            <div class="fw-bold text-primary">{{ judgment_info }}</div>
-                            <div class="small text-danger mt-1">{{ instruction_msg }}</div>
-                        {% else %}
-                            <div class="text-muted small">まだ評価されていません</div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-        
+        <!-- 1. 実施日時・安全確認 (先に配置) -->
         <div class="card mb-4 shadow-sm no-print">
             <div class="card-body">
                 <h5 class="section-title">実施日時・安全確認</h5>
                 <div class="row mb-3">
-                    <!-- 日付と時間を分離 -->
                     <div class="col-md-3">
-                        <label class="form-label">実施日</label>
+                        <label class="form-label fw-bold">実施日</label>
                         {{ form.treatment_date }}
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">開始時間</label>
+                        <label class="form-label fw-bold">開始時間</label>
                         {{ form.treatment_time }}
                     </div>
                 </div>
@@ -102,16 +81,61 @@
                     <div class="col-md-4"><div class="form-check form-switch py-2">{{ form.safety_alcohol }} <label class="form-check-label fw-bold">アルコール・カフェイン過剰なし</label></div></div>
                     <div class="col-md-4"><div class="form-check form-switch py-2">{{ form.safety_meds }} <label class="form-check-label fw-bold">服薬変更なし</label></div></div>
                 </div>
-                <div class="row g-3 mt-2">
-                    <div class="col-md-4"><label class="form-label">当日のMT (%)</label>{{ form.motor_threshold }}</div>
-                    <div class="col-md-4"><label class="form-label">刺激強度 (%)</label>{{ form.intensity }}<small class="text-muted ms-2">通常 120%</small></div>
-                    <div class="col-md-4"><label class="form-label">総パルス数</label>{{ form.total_pulses }}</div>
+            </div>
+        </div>
+
+        <!-- 2. 治療パラメータ・指示 (位置決め情報と判定指示を統合) -->
+        <div class="card mb-4 shadow-sm no-print">
+            <div class="card-header bg-warning text-dark fw-bold d-flex justify-content-between">
+                <span><i class="fas fa-sliders-h me-1"></i> 治療パラメータ・指示</span>
+            </div>
+            <div class="card-body">
+                <!-- 参照情報エリア -->
+                <div class="row mb-4 p-3 bg-light rounded border">
+                    <!-- 最新の位置決め -->
+                    <div class="col-md-6 border-end">
+                        <h6 class="text-secondary small fw-bold mb-2"><i class="fas fa-crosshairs me-1"></i> 最新の位置決め情報 ({{ latest_mapping.date|default:"-" }})</h6>
+                        <div class="row">
+                            <div class="col-6">安静時MT: <strong class="fs-5">{{ latest_mapping.resting_mt|default:"-" }} %</strong></div>
+                            <div class="col-6">部位: <strong>{{ latest_mapping.stimulation_site|default:"-" }}</strong></div>
+                        </div>
+                    </div>
+                    <!-- 3週目判定 -->
+                    <div class="col-md-6 ps-md-4">
+                        <h6 class="text-secondary small fw-bold mb-2"><i class="fas fa-chart-line me-1"></i> 3週目評価判定・指示</h6>
+                        {% if judgment_info %}
+                            <div class="fw-bold text-primary">{{ judgment_info }}</div>
+                            <div class="small text-danger mt-1 fw-bold">{{ instruction_msg }}</div>
+                        {% else %}
+                            <div class="text-muted small">※3週目の評価はまだ実施されていません</div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- 入力エリア -->
+                <h6 class="fw-bold border-bottom pb-2 mb-3">当日の刺激内容 (記録)</h6>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">当日のMT (%)</label>
+                        {{ form.motor_threshold }}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">刺激強度 (%)</label>
+                        <div class="input-group">
+                            {{ form.intensity }}
+                            <span class="input-group-text bg-light">通常 120%</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">総パルス数</label>
+                        {{ form.total_pulses }}
+                    </div>
                 </div>
             </div>
         </div>
         
+        <!-- 3. 副作用チェック表 (印刷対象) -->
         <div id="side-effects-sheet" class="printable-area card mb-4 shadow-sm">
-            <!-- (副作用チェック表は既存のまま) -->
             <div class="card-body">
                 <div class="print-header d-none d-print-block"><h2>rTMS 副作用チェック表</h2><p style="text-align: right; font-size: 10px;">笠寺精治寮病院</p></div>
                 <div class="print-row d-none d-print-flex">
@@ -136,7 +160,22 @@
                 <div class="d-none d-print-block mt-5 text-end"><p>実施者署名: ___________________________</p></div>
             </div>
         </div>
-        <div class="text-center no-print"><button type="submit" class="btn btn-success btn-lg px-5">実施完了</button></div>
+
+        <div style="height: 60px;"></div>
+
+        <!-- 右下固定ボタン -->
+        <div class="floating-actions no-print">
+            <button type="button" class="btn btn-outline-success btn-fab mb-2" onclick="printDiv('side-effects-sheet')" style="background: white;">
+                <i class="fas fa-print"></i> 副作用チェック表
+            </button>
+            <button type="submit" class="btn btn-success btn-fab text-white mb-2">
+                <i class="fas fa-check"></i> 実施完了
+            </button>
+            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab">
+                <i class="fas fa-undo"></i> 戻る
+            </a>
+        </div>
+
     </form>
 </div>
 <script>function printDiv(divId) { var originalContents = document.body.innerHTML; var printContents = document.getElementById(divId).outerHTML; document.body.innerHTML = printContents; window.print(); document.body.innerHTML = originalContents; window.location.reload(); }</script>

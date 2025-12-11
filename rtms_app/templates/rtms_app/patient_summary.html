@@ -9,25 +9,26 @@
     
     .floating-actions { position: fixed; bottom: 20px; right: 20px; z-index: 1050; display: flex; gap: 10px; flex-direction: column; align-items: flex-end; }
     .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; width: fit-content; }
-
     .discharge-date-card { border-left: 5px solid #17a2b8; background-color: #f0fdf4; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container py-4 mb-5">
+    <!-- ヘッダー: 患者メニュー -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3><i class="fas fa-file-alt"></i> サマリー・紹介状作成</h3>
         <div class="btn-group">
-            <button type="button" class="btn btn-outline-primary" onclick="saveAndPrint('summary')"><i class="fas fa-print"></i> 退院サマリー 印刷</button>
-            <button type="button" class="btn btn-outline-success" onclick="saveAndPrint('referral')"><i class="fas fa-envelope"></i> 紹介状 印刷</button>
-            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary">戻る</a>
+            <a href="{% url 'patient_first_visit' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}" class="btn btn-outline-secondary btn-sm">基本情報</a>
+            <a href="{% url 'patient_clinical_path' patient.id %}" target="_blank" class="btn btn-outline-success btn-sm">パス表示</a>
+            <!-- 印刷ボタンは別途フローティングにもあるが、ここにも配置可 -->
+            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-sm">戻る</a>
         </div>
     </div>
 
+    <!-- (以下、フォーム部分は既存と同じ) -->
     <form method="post" id="summaryForm" class="bg-white p-4 shadow-sm rounded">
         {% csrf_token %}
-        
         <div class="alert alert-light border mb-4">
             <div class="row align-items-center">
                 <div class="col-md-3"><strong>ID:</strong> {{ patient.card_id }}</div>
@@ -47,21 +48,9 @@
         <div class="card discharge-date-card mb-4 shadow-sm">
             <div class="card-body py-3">
                 <div class="row align-items-center">
-                    <div class="col-md-auto">
-                        <label class="fw-bold text-info mb-0" style="font-size: 1.1rem;">
-                            <i class="fas fa-calendar-check me-2"></i>退院日設定
-                        </label>
-                    </div>
-                    <div class="col-md-auto">
-                        <input type="date" name="discharge_date" id="dischargeDateInput" 
-                               class="form-control fw-bold" 
-                               value="{{ patient.discharge_date|date:'Y-m-d' }}">
-                    </div>
-                    <div class="col">
-                        <span class="text-muted small">
-                            ※退院日が決まったら設定してください。入力すると下のサマリー本文に自動反映されます。
-                        </span>
-                    </div>
+                    <div class="col-md-auto"><label class="fw-bold text-info mb-0" style="font-size: 1.1rem;"><i class="fas fa-calendar-check me-2"></i>退院日設定</label></div>
+                    <div class="col-md-auto"><input type="date" name="discharge_date" id="dischargeDateInput" class="form-control fw-bold" value="{{ patient.discharge_date|date:'Y-m-d' }}"></div>
+                    <div class="col"><span class="text-muted small">※退院日が決まったら設定してください。入力すると下のサマリー本文に自動反映されます。</span></div>
                 </div>
             </div>
         </div>
@@ -69,7 +58,7 @@
         <div class="mb-4">
             <label class="form-label fw-bold">入院経過・治療結果（サマリー本文）</label>
             <textarea name="summary_text" id="summaryText" rows="10" class="form-control">{{ summary_text }}</textarea>
-            <div class="form-text text-muted">※内容は編集可能です。</div>
+            <div class="form-text text-muted">※内容は編集可能です。印刷ボタンを押すと自動保存されます。</div>
         </div>
 
         <div class="mb-4">
@@ -119,20 +108,11 @@
         
         <div class="floating-actions">
             <div class="btn-group-vertical">
-                <button type="button" class="btn btn-primary btn-fab mb-2" onclick="saveAndPrint('summary')">
-                    <i class="fas fa-print"></i> 退院サマリー 印刷
-                </button>
-                <button type="button" class="btn btn-success btn-fab mb-2" onclick="saveAndPrint('referral')">
-                    <i class="fas fa-envelope"></i> 紹介状 印刷
-                </button>
+                <button type="button" class="btn btn-primary btn-fab mb-2" onclick="saveAndPrint('summary')"><i class="fas fa-print"></i> 退院サマリー 印刷</button>
+                <button type="button" class="btn btn-success btn-fab mb-2" onclick="saveAndPrint('referral')"><i class="fas fa-envelope"></i> 紹介状 印刷</button>
             </div>
-            <!-- ★修正: 保存して終了 -->
-            <button type="submit" class="btn btn-dark btn-fab mb-2">
-                <i class="fas fa-save"></i> 保存して終了
-            </button>
-            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab">
-                <i class="fas fa-undo"></i> 戻る
-            </a>
+            <button type="submit" class="btn btn-dark btn-fab mb-2"><i class="fas fa-save"></i> 保存して終了</button>
+            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab"><i class="fas fa-undo"></i> 戻る</a>
         </div>
     </form>
 </div>
@@ -143,11 +123,9 @@
         if (!dateVal) return;
         const d = new Date(dateVal);
         const formattedDate = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
-        
         const textarea = document.getElementById('summaryText');
         let text = textarea.value;
         const regex = /(\d{4}年\d{1,2}月\d{1,2}日|未定)退院/;
-        
         if (text.match(regex)) {
             const newText = text.replace(regex, `${formattedDate}退院`);
             textarea.value = newText;
