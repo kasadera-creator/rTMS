@@ -2,7 +2,7 @@
 
 {% block extrastyle %}
 <style>
-    /* 既存スタイル... */
+    /* 既存のスタイル */
     .form-section { background-color: #fff; padding: 25px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
     .section-title { border-left: 5px solid #0d6efd; padding-left: 10px; font-weight: bold; margin-bottom: 20px; color: #333; font-size: 1.2rem; }
     .diag-check-group { background-color: #f8f9fa; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6; }
@@ -10,8 +10,9 @@
     .q-table th { background-color: #f8f9fa; padding: 10px; border-bottom: 2px solid #dee2e6; }
     .q-table td { padding: 8px 10px; border-bottom: 1px solid #dee2e6; vertical-align: middle; }
     .q-header-row { background-color: #e9ecef; font-weight: bold; }
-    .floating-actions { position: fixed; bottom: 20px; right: 20px; z-index: 1050; display: flex; gap: 10px; }
-    .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; }
+    .floating-actions { position: fixed; bottom: 20px; right: 20px; z-index: 1050; display: flex; gap: 10px; flex-direction: column; align-items: flex-end; }
+    .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; width: fit-content; }
+    
     .hamd-input-group { border-bottom: 1px solid #eee; padding: 5px 0; }
     .hamd-label { font-size: 0.9rem; font-weight: bold; }
     .hamd-input { width: 60px; text-align: center; }
@@ -23,16 +24,13 @@
     <!-- ヘッダー -->
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h3 class="fw-bold"><i class="fas fa-file-medical"></i> 初診・基本情報入力</h3>
-        <div class="btn-group">
-            <a href="{% url 'patient_clinical_path' patient.id %}" target="_blank" class="btn btn-outline-success btn-sm">パス表示</a>
-            <a href="{% url 'patient_print_preview' patient.id %}?mode=summary" target="_blank" class="btn btn-outline-primary">サマリー印刷</a>
-            <a href="{% url 'patient_print_preview' patient.id %}?mode=questionnaire" target="_blank" class="btn btn-outline-success">問診票印刷</a>
-            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary">戻る</a>
-        </div>
+        <!-- ヘッダーボタンは削除または最小限に -->
+        <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-sm">戻る</a>
     </div>
 
     <form method="post" id="mainForm">
         {% csrf_token %}
+        <!-- Djangoのエラー表示は残しますが、JSで事前にキャッチします -->
         {% if form.errors %}
         <div class="alert alert-danger"><strong>保存できませんでした:</strong> {{ form.errors }}</div>
         {% endif %}
@@ -65,12 +63,10 @@
         <div class="form-section">
             <h5 class="section-title">診断名・重症度評価</h5>
             <div class="mb-3">
-                <div class="d-flex align-items-center mb-2">
-                    <label class="fw-bold me-3">診断名</label>
-                </div>
+                <label class="fw-bold me-3">診断名</label>
                 {{ form.diagnosis }}
                 
-                <!-- ★移動: 治療前HAM-D評価ボタン -->
+                <!-- ★移動: 治療前HAM-D評価ボタン (診断名の下) -->
                 <div class="my-3 p-3 bg-light border rounded">
                     <div class="d-flex align-items-center">
                         <button type="button" class="btn btn-outline-danger btn-sm me-3" data-bs-toggle="modal" data-bs-target="#hamdModal">
@@ -88,8 +84,8 @@
                 </div>
 
                 <div class="diag-check-group mt-1">
+                    <!-- 診断名リスト (全項目記述) -->
                     <div class="row g-2">
-                        <!-- 診断名リスト (省略せず記述) -->
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="うつ病" id="d_dep"><label class="form-check-label" for="d_dep">うつ病</label></div></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="双極症" id="d_bp"><label class="form-check-label" for="d_bp">双極症</label></div></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="統合失調症" id="d_sch"><label class="form-check-label" for="d_sch">統合失調症</label></div></div>
@@ -112,11 +108,12 @@
             </div>
         </div>
 
+        <!-- 3. rTMS適正質問票 -->
         <div class="form-section" id="q_section">
             <h5 class="section-title">rTMS 適正に関する質問票</h5>
             <p class="text-muted small">※患者様への聴取結果を入力してください。</p>
             <table class="q-table">
-                <!-- (質問票テーブルも省略せずに記述) -->
+                <!-- (質問票テーブル全項目) -->
                 <thead class="table-light"><tr><th style="text-align: left;">質問項目</th><th width="80" class="text-center">はい</th><th width="80" class="text-center">いいえ</th></tr></thead>
                 <tbody>
                     <tr><td>rTMS実施経験</td><td class="text-center"><input type="radio" name="q_past_rtms" value="はい"></td><td class="text-center"><input type="radio" name="q_past_rtms" value="いいえ" checked></td></tr>
@@ -143,6 +140,7 @@
             <input type="hidden" name="questionnaire_data" id="questionnaire_json">
         </div>
 
+        <!-- 4. スケジュール・担当医設定 (一番下) -->
         <div class="form-section">
             <h5 class="section-title">スケジュール・担当医設定</h5>
             <div class="row g-3">
@@ -155,9 +153,23 @@
 
         <div style="height: 60px;"></div>
         
+        <!-- 右下固定ボタン -->
         <div class="floating-actions">
-            <button type="submit" class="btn btn-primary btn-fab text-white"><i class="fas fa-check"></i> 入力完了</button>
-            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab"><i class="fas fa-undo"></i> 戻る</a>
+            <div class="btn-group-vertical mb-2">
+                <a href="{% url 'patient_print_preview' patient.id %}?mode=summary" target="_blank" class="btn btn-outline-primary btn-fab mb-1" style="background:white; color:#0d6efd;">
+                    <i class="fas fa-print"></i> サマリー印刷
+                </a>
+                <a href="{% url 'patient_print_preview' patient.id %}?mode=questionnaire" target="_blank" class="btn btn-outline-success btn-fab" style="background:white; color:#198754;">
+                    <i class="fas fa-print"></i> 問診票印刷
+                </a>
+            </div>
+            <!-- ★修正: type="button" にして onclick でJSチェックを呼ぶ -->
+            <button type="button" class="btn btn-primary btn-fab text-white mb-2" onclick="validateAndSubmit()">
+                <i class="fas fa-check"></i> 入力完了
+            </button>
+            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab">
+                <i class="fas fa-undo"></i> 戻る
+            </a>
         </div>
     </form>
 </div>
@@ -205,7 +217,7 @@
 
 {% block scripts %}
 <script>
-    // 紹介元・紹介医の連携ロジック
+    // ... (referralMap, saveHamd 等の既存関数) ...
     const referralMap = JSON.parse('{{ referral_map_json|safe }}');
     const sourceInput = document.querySelector('input[name="referral_source"]');
     const doctorInput = document.querySelector('input[name="referral_doctor"]');
@@ -225,15 +237,35 @@
     sourceInput.addEventListener('change', updateDoctorOptions);
     doctorInput.setAttribute('list', 'doctor-options');
 
-    // 保存処理
-    document.getElementById('mainForm').addEventListener('submit', function(e) {
+    // ★新規追加: 入力完了時のチェック処理
+    function validateAndSubmit() {
+        const admissionDate = document.querySelector('input[name="admission_date"]').value;
+        const mappingDate = document.querySelector('input[name="mapping_date"]').value;
+        const treatmentDate = document.querySelector('input[name="first_treatment_date"]').value;
+        
+        let msg = [];
+        if (!admissionDate) msg.push("・入院予定日");
+        if (!mappingDate) msg.push("・初回位置決め日");
+        if (!treatmentDate) msg.push("・初回治療日");
+        
+        if (msg.length > 0) {
+            const confirmMsg = "以下の項目が未入力です。\n" + msg.join("\n") + "\n\n予定が決まっている場合は入力してください。\nこのまま保存して終了しますか？";
+            if (!confirm(confirmMsg)) {
+                return; // キャンセルなら何もしない
+            }
+        }
+        
+        // 問題なければサブミット
+        // 質問票データをJSON化
         const data = {}; 
         document.querySelectorAll('input[type="radio"]:checked').forEach(r => { data[r.name] = r.value; });
         data['q_details'] = document.querySelector('textarea[name="q_details"]').value;
         document.getElementById('questionnaire_json').value = JSON.stringify(data);
-    });
+        
+        document.getElementById('mainForm').submit();
+    }
 
-    // HAM-D Ajax保存・判定 (★修正: モーダル操作の堅牢化)
+    // HAM-D Ajax保存
     function saveHamd() {
         const form = document.getElementById('hamdForm');
         const formData = new FormData(form);
@@ -248,22 +280,18 @@
         .then(response => response.json())
         .then(data => {
             if(data.status === 'success') {
-                // モーダルを閉じる
                 const modalEl = document.getElementById('hamdModal');
                 const modal = bootstrap.Modal.getOrCreateInstance(modalEl); 
                 modal.hide();
 
-                // 結果表示の更新
                 document.getElementById('hamd-result-display').innerHTML = 
                     `HAM-D17: <span class="fs-5">${data.total_17}</span> 点 判定: ${data.severity}`;
 
                 alert(data.message + "\n(合計: " + data.total_17 + "点)");
 
-                // 中等度(14-18)の場合、質問票へ誘導
                 if (data.total_17 >= 14 && data.total_17 <= 18) {
                     const qSection = document.getElementById('q_section');
                     qSection.scrollIntoView({ behavior: 'smooth' });
-                    // オプション: 質問票エリアを目立たせる
                     qSection.style.border = "2px solid #dc3545";
                     setTimeout(() => { qSection.style.border = "none"; }, 2000);
                 }
@@ -274,7 +302,6 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-        // (診断名や質問票の復元処理は変更なし)
         const diagStr = "{{ patient.diagnosis }}";
         if(diagStr) {
             const diags = diagStr.split(', ');

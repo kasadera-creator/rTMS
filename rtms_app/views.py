@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
-from django.utils.dateparse import parse_date, parse_time
+from django.utils.dateparse import parse_date
 from datetime import timedelta, date
 import datetime
 from django.http import HttpResponse, FileResponse, JsonResponse
@@ -19,9 +19,8 @@ from .forms import (
 )
 
 # ==========================================
-# 祝日定義 (2024-2030) ※オンプレミス環境用
+# 祝日定義 (2024-2030) + 年末年始 (12/29-1/3)
 # ==========================================
-# 春分・秋分の日は天文計算が必要ですが、ここでは確定/予測値を使用しています。
 JP_HOLIDAYS = {
     # 2024
     date(2024, 1, 1), date(2024, 1, 8), date(2024, 2, 11), date(2024, 2, 12),
@@ -68,30 +67,26 @@ JP_HOLIDAYS = {
 }
 
 def is_holiday(d):
-    """日付が祝日リストに含まれるか"""
-    return d in JP_HOLIDAYS
+    """日付が祝日リストまたは年末年始に含まれるか"""
+    if d in JP_HOLIDAYS: return True
+    # 年末年始 (12/29 - 1/3)
+    if d.month == 12 and d.day >= 29: return True
+    if d.month == 1 and d.day <= 3: return True
+    return False
 
 def is_treatment_day(d):
     """治療実施日か判定（平日かつ祝日でない）"""
     return d.weekday() < 5 and not is_holiday(d)
 
-# ==========================================
-# ヘルパー関数
-# ==========================================
+# --- ヘルパー関数 ---
 
 def get_session_number(start_date, target_date):
-    """
-    開始日からターゲット日までの治療回数（平日かつ非祝日）を計算。
-    ターゲット日が治療日でなければ -1 を返す。
-    """
+    """開始日からターゲット日までの治療回数（平日かつ非祝日）を計算"""
     if not start_date or target_date < start_date: return 0
-    
-    # 治療日（平日かつ非祝日）以外は回数としてカウントしない
     if not is_treatment_day(target_date): return -1
     
     current = start_date
     count = 0
-    # 開始日からターゲット日まで1日ずつループしてカウント
     while current <= target_date:
         if is_treatment_day(current):
             count += 1
@@ -102,10 +97,8 @@ def get_date_of_session(start_date, target_session_num):
     """指定した回数（平日かつ非祝日のみカウント）の日付を返す"""
     if not start_date or target_session_num <= 0: return None
     current = start_date
-    # 開始日が治療日なら1回目とカウント
     count = 1 if is_treatment_day(current) else 0
     
-    # 既に目標を超えている場合は考慮せず、未来へ探索
     while count < target_session_num:
         current += timedelta(days=1)
         if is_treatment_day(current):
@@ -118,35 +111,24 @@ def get_completion_date(start_date):
     return get_date_of_session(start_date, 30)
 
 def get_current_week_number(start_date, target_date):
-    """
-    開始日を起点として、ターゲット日が第何週目かを返す（暦週ではなく経過週数）。
-    例: 開始日〜開始日+6日 -> 第1週
-    """
+    """開始日を起点として、ターゲット日が第何週目かを返す"""
     if not start_date or target_date < start_date: return 0
     days_diff = (target_date - start_date).days
     return (days_diff // 7) + 1
 
 def get_session_count(patient, target_date=None):
-    """
-    DBに保存されている治療実施記録（TreatmentSession）の数を返す。
-    target_dateが指定されていれば、その日までの記録をカウント。
-    """
+    """DBに保存されている治療実施記録の数を返す"""
     query = TreatmentSession.objects.filter(patient=patient)
     if target_date:
         query = query.filter(date__date__lte=target_date)
     return query.count()
 
 def get_weekly_session_count(patient, target_date):
-    """
-    ターゲット日が含まれる週（開始日から起算した7日間区切り）の治療実施回数を取得。
-    漸減プロトコルの制限チェックに使用。
-    """
+    """ターゲット日が含まれる週の治療実施回数を取得"""
     if not patient.first_treatment_date: return 0
-    
     start_date = patient.first_treatment_date
     days_diff = (target_date - start_date).days
     week_start_offset = (days_diff // 7) * 7
-    
     week_start_date = start_date + timedelta(days=week_start_offset)
     week_end_date = week_start_date + timedelta(days=6)
     
@@ -161,7 +143,6 @@ def generate_calendar_data(patient):
     end_date = patient.discharge_date
     treatment_start = patient.first_treatment_date
 
-    # 終了日が未定の場合、30回目予定日の翌日、または開始から2ヶ月後を仮設定
     if not end_date:
         est_end = get_completion_date(treatment_start)
         if est_end:
@@ -171,7 +152,6 @@ def generate_calendar_data(patient):
 
     calendar_days = []
     current = start_date
-    
     mapping_dates = list(MappingSession.objects.filter(patient=patient).values_list('date', flat=True))
     treatments_done = {t.date.date(): t for t in TreatmentSession.objects.filter(patient=patient)}
 
@@ -185,39 +165,25 @@ def generate_calendar_data(patient):
             'is_holiday': is_hol
         }
         
-        # 1. 入院
         if current == patient.admission_date:
             day_info['events'].append({'type': 'admission', 'label': '入院'})
             
-        # 2. 位置決め
         if current == patient.mapping_date or current in mapping_dates:
             day_info['events'].append({'type': 'mapping', 'label': '位置決め'})
             
-        # 3. 治療予定・実績 (平日かつ非祝日のみ)
         session_num = 0
         if treatment_start and is_treatment_day(current):
             session_num = get_session_number(treatment_start, current)
-            
             if session_num > 0 and session_num <= 30:
-                status_label = ""
-                if current in treatments_done:
-                    status_label = " (済)"
-                
+                status_label = " (済)" if current in treatments_done else ""
                 day_info['events'].append({'type': 'treatment', 'label': f'治療 {session_num}回{status_label}'})
                 
-                # 評価タイミング
-                if session_num == 1:
-                    day_info['events'].append({'type': 'assessment', 'label': '治療前評価'})
-                elif session_num == 15:
-                    day_info['events'].append({'type': 'assessment', 'label': '中間評価'})
-                elif session_num == 30:
-                    day_info['events'].append({'type': 'assessment', 'label': '最終評価'})
+                if session_num == 1: day_info['events'].append({'type': 'assessment', 'label': '治療前評価'})
+                elif session_num == 15: day_info['events'].append({'type': 'assessment', 'label': '中間評価'})
+                elif session_num == 30: day_info['events'].append({'type': 'assessment', 'label': '最終評価'})
         
-        # 4. 退院
         if current == patient.discharge_date:
              day_info['events'].append({'type': 'discharge', 'label': '退院'})
-        
-        # 自動退院予定 (30回目翌日、かつ退院日が未設定の場合)
         elif not patient.discharge_date and treatment_start:
              est_end = get_completion_date(treatment_start)
              if est_end and current == est_end + timedelta(days=1):
@@ -264,7 +230,7 @@ def dashboard_view(request):
         is_done = MappingSession.objects.filter(patient=p, date=target_date).exists()
         task_mapping.append({'obj': p, 'status': "実施済" if is_done else "実施未", 'color': "success" if is_done else "danger", 'todo': "MT測定"})
 
-    # 4, 5, 6 (治療・評価・退院)
+    # 4, 5, 6
     task_treatment = []
     task_assessment = []
     task_discharge = []
@@ -286,23 +252,12 @@ def dashboard_view(request):
 
         if session_count_so_far >= 30: pass 
 
-        # 4. 治療 (祝日対応: is_treatment_dayを使用)
-        # 本日が治療実施日(平日かつ非祝日)の場合のみタスクとして表示
+        # 4. 治療
         if is_treatment_day(target_date) and session_count_so_far < 30:
             today_session = TreatmentSession.objects.filter(patient=p, date__date=target_date).first()
             is_done = today_session is not None
-            
-            # 完了していればその回数、未完了なら前日までの回数+1
             current_count = session_count_so_far if is_done else session_count_so_far + 1
-            
-            task_treatment.append({
-                'obj': p, 
-                'note': f"第{week_num}週 ({current_count}回目)", 
-                'status': "実施済" if is_done else "実施未", 
-                'color': "success" if is_done else "danger", 
-                'session_num': current_count, 
-                'todo': "rTMS治療"
-            })
+            task_treatment.append({'obj': p, 'note': f"第{week_num}週 ({current_count}回目)", 'status': "実施済" if is_done else "実施未", 'color': "success" if is_done else "danger", 'session_num': current_count, 'todo': "rTMS治療"})
 
         # 5. 評価 (第3週、第6週)
         target_timing = None
@@ -318,10 +273,7 @@ def dashboard_view(request):
             week_start_offset = (days_diff // 7) * 7
             ws = start_date + timedelta(days=week_start_offset)
             we = ws + timedelta(days=6)
-            
-            # 今週実施済みかチェック
             assessment = Assessment.objects.filter(patient=p, timing=target_timing, date__range=[ws, we]).first()
-            
             if assessment:
                 if assessment.date == target_date:
                     task_assessment.append({'obj': p, 'status': "実施済", 'color': "success", 'timing_code': target_timing, 'todo': f"{todo_label} (完了)"})
@@ -387,7 +339,6 @@ def mapping_add(request, patient_id):
 
 @login_required
 def patient_first_visit(request, patient_id):
-    # (既存のまま: 内容変更なし)
     patient = get_object_or_404(Patient, pk=patient_id)
     dashboard_date = request.GET.get('dashboard_date')
     
@@ -457,21 +408,13 @@ def treatment_add(request, patient_id):
     
     target_date_str = request.GET.get('date')
     now = timezone.localtime(timezone.now())
-    if target_date_str:
-        t_date = parse_date(target_date_str)
-        initial_date = t_date
-    else:
-        initial_date = now.date()
-
-    # 治療回数 (祝日考慮)
-    session_num = get_session_count(patient, initial_date)
-    if not TreatmentSession.objects.filter(patient=patient, date__date=initial_date).exists() and is_treatment_day(initial_date):
-        session_num += 1
-
+    if target_date_str: t = parse_date(target_date_str); initial_date = t
+    else: initial_date = now.date()
+    
+    session_num = get_session_count(patient, initial_date) + 1
     week_num = get_current_week_number(patient.first_treatment_date, initial_date)
     end_date_est = get_completion_date(patient.first_treatment_date)
-    
-    # ... (判定ロジック等は既存と同じ) ...
+
     alert_msg = ""; instruction_msg = ""; is_remission = False
     last_assessment = Assessment.objects.filter(patient=patient, timing='week3').order_by('-date').first()
     baseline_assessment = Assessment.objects.filter(patient=patient, timing='baseline').order_by('-date').first()
@@ -502,6 +445,8 @@ def treatment_add(request, patient_id):
             elif week_num == 6:
                 if current_weekly > 1: alert_msg = f"【制限超過】第6週(週1回まで)です。今回で週{current_weekly}回目になります。"
                 else: alert_msg = f"【漸減】第6週です。週1回まで (現在: 週{current_weekly}回目)"
+            elif week_num >= 7:
+                alert_msg = "【警告】第7週以降のため、原則として治療は算定できません。"
 
     if request.method == 'POST':
         form = TreatmentForm(request.POST)
@@ -532,38 +477,128 @@ def treatment_add(request, patient_id):
 
 @login_required
 def assessment_add(request, patient_id):
-    # (前回と同じ、省略)
-    # ...
+    patient = get_object_or_404(Patient, pk=patient_id)
+    dashboard_date = request.GET.get('dashboard_date')
+    history = Assessment.objects.filter(patient=patient).order_by('date')
+    hamd_items = [('q1', '1. 抑うつ気分', 4, "0. なし..."), ('q2', '2. 罪責感', 4, "0. なし..."), ('q3', '3. 自殺', 4, "0. なし..."), ('q4', '4. 入眠障害', 2, "0. 入眠困難はない..."), ('q5', '5. 熟眠障害', 2, "0. 熟眠困難はない..."), ('q6', '6. 早朝睡眠障害', 2, "0. 早朝睡眠に困難はない..."), ('q7', '7. 仕事と活動', 4, "0. 困難なくできる..."), ('q8', '8. 精神運動抑制', 4, "0. 発話・思考は正常である..."), ('q9', '9. 精神運動激越', 4, "0. なし..."), ('q10', '10. 不安, 精神症状', 4, "0. 問題なし..."), ('q11', '11. 不安, 身体症状', 4, "0. なし..."), ('q12', '12. 身体症状, 消化器系', 2, "0. なし..."), ('q13', '13. 身体症状, 一般的', 2, "0. なし..."), ('q14', '14. 生殖器症状', 2, "0. なし..."), ('q15', '15. 心気症', 4, "0. なし..."), ('q16', '16. 体重減少', 2, "0. 体重減少なし..."), ('q17', '17. 病識', 2, "0. うつ状態であり病気であることを認める..."), ('q18', '18. 日内変動', 2, "<strong>A. 変動の有無</strong>..."), ('q19', '19. 現実感喪失, 離人症', 4, "0. なし..."), ('q20', '20. 妄想症状', 3, "0. なし..."), ('q21', '21. 強迫症状', 2, "0. なし...")]
+    
+    mid_index = 11
+    hamd_items_left = hamd_items[:mid_index]
+    hamd_items_right = hamd_items[mid_index:]
+
+    target_date_str = request.GET.get('date') or timezone.now().strftime('%Y-%m-%d')
+    timing = request.GET.get('timing', 'other')
+    existing_assessment = Assessment.objects.filter(patient=patient, date=target_date_str, type='HAM-D').first()
+    recommendation = ""
+    if timing in ['week3', 'week6']:
+        baseline = Assessment.objects.filter(patient=patient, timing='baseline').first()
+        if baseline and baseline.total_score_21 > 0 and existing_assessment:
+            imp = (baseline.total_score_21 - existing_assessment.total_score_21) / baseline.total_score_21 * 100
+            if imp < 20: recommendation = "【判定】反応不良 (改善率20%未満)。刺激部位やプロトコルの変更を検討してください。"
+            else: recommendation = "【判定】治療継続 (順調に改善中)。"
+    if request.method == 'POST':
+        try:
+            scores = {}
+            for key, label, max_score, text in hamd_items:
+                scores[key] = int(request.POST.get(key, 0))
+            if existing_assessment:
+                assessment = existing_assessment
+                assessment.scores = scores; assessment.timing = request.POST.get('timing', 'other'); assessment.note = request.POST.get('note', '')
+            else:
+                assessment = Assessment(patient=patient, date=target_date_str, type='HAM-D', scores=scores, timing=request.POST.get('timing', 'other'), note=request.POST.get('note', ''))
+            assessment.calculate_scores()
+            assessment.save()
+            return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'dashboard')
+        except Exception as e: print(e)
     return render(request, 'rtms_app/assessment_add.html', {'patient': patient, 'history': history, 'today': target_date_str, 'hamd_items_left': hamd_items_left, 'hamd_items_right': hamd_items_right, 'initial_timing': timing, 'existing_assessment': existing_assessment, 'recommendation': recommendation, 'dashboard_date': dashboard_date})
 
 @login_required
 def patient_summary_view(request, patient_id):
-    # (前回と同じ、省略)
-    # ...
+    patient = get_object_or_404(Patient, pk=patient_id)
+    dashboard_date = request.GET.get('dashboard_date')
+    if request.method == 'POST':
+        patient.summary_text = request.POST.get('summary_text', '')
+        patient.discharge_prescription = request.POST.get('discharge_prescription', '')
+        d_date = request.POST.get('discharge_date')
+        if d_date: patient.discharge_date = parse_date(d_date)
+        else: patient.discharge_date = None
+        patient.save()
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest': return JsonResponse({'status': 'success'})
+        return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'dashboard')
+    sessions = TreatmentSession.objects.filter(patient=patient).order_by('date')
+    assessments = Assessment.objects.filter(patient=patient).order_by('date')
+    test_scores = assessments 
+    score_admin = assessments.first(); score_w3 = assessments.filter(timing='week3').first(); score_w6 = assessments.filter(timing='week6').first()
+    def fmt_score(obj): return f"HAMD17 {obj.total_score_17}点 HAMD21 {obj.total_score_21}点" if obj else "未評価"
+    side_effects_list_all = []
+    history_list = []
+    SE_MAP = {'headache': '頭痛', 'scalp': '頭皮痛', 'discomfort': '不快感', 'tooth': '歯痛', 'twitch': '攣縮', 'dizzy': 'めまい', 'nausea': '吐き気', 'tinnitus': '耳鳴り', 'hearing': '聴力低下', 'anxiety': '不安', 'other': 'その他'}
+    for i, s in enumerate(sessions, 1):
+        se_text = []
+        if s.side_effects:
+            for k, v in s.side_effects.items():
+                if k != 'note' and v and str(v) != '0': se_text.append(SE_MAP.get(k, k)); side_effects_list_all.append(SE_MAP.get(k, k))
+        history_list.append({'count': i, 'date': s.date, 'mt': s.motor_threshold, 'intensity': s.intensity, 'se': "、".join(se_text) if se_text else "なし"})
+    side_effects_summary = ", ".join(list(set(side_effects_list_all))) if side_effects_list_all else "特になし"
+    start_date_str = sessions.first().date.strftime('%Y年%m月%d日') if sessions.exists() else "未開始"
+    if patient.discharge_date: end_date_str = patient.discharge_date.strftime('%Y年%m月%d日')
+    elif sessions.exists(): end_date_str = sessions.last().date.strftime('%Y年%m月%d日')
+    else: end_date_str = "未定"
+    total_count = sessions.count()
+    admission_date_str = patient.admission_date.strftime('%Y年%m月%d日') if patient.admission_date else "不明"
+    created_at_str = patient.created_at.strftime('%Y年%m月%d日')
+    if patient.summary_text: summary_text = patient.summary_text
+    else: summary_text = (f"{created_at_str}初診、{admission_date_str}任意入院。\n" f"入院時{fmt_score(score_admin)}、{start_date_str}から全{total_count}回のrTMS治療を実施した。\n" f"3週時、{fmt_score(score_w3)}、6週時、{fmt_score(score_w6)}となった。\n" f"治療中の合併症：{side_effects_summary}。\n" f"{end_date_str}退院。紹介元へ逆紹介、抗うつ薬の治療継続を依頼した。")
     return render(request, 'rtms_app/patient_summary.html', {'patient': patient, 'summary_text': summary_text, 'history_list': history_list, 'today': timezone.now().date(), 'test_scores': test_scores, 'dashboard_date': dashboard_date})
 
 @login_required
 def patient_add_view(request):
-    # (前回と同じ、省略)
-    # ...
+    referral_options = Patient.objects.values_list('referral_source', flat=True).distinct()
+    referral_options = [r for r in referral_options if r]
+    if request.method == 'POST':
+        form = PatientRegistrationForm(request.POST)
+        card_id = request.POST.get('card_id')
+        existing_patients = Patient.objects.filter(card_id=card_id).order_by('-course_number')
+        if 'confirm_create' in request.POST and existing_patients.exists():
+            latest = existing_patients.first()
+            new_course_num = latest.course_number + 1
+            new_patient = Patient(card_id=latest.card_id, name=latest.name, birth_date=latest.birth_date, gender=latest.gender, referral_source=request.POST.get('referral_source') or latest.referral_source, referral_doctor=request.POST.get('referral_doctor') or latest.referral_doctor, life_history=latest.life_history, past_history=latest.past_history, diagnosis=latest.diagnosis, course_number=new_course_num)
+            new_patient.save()
+            return redirect('dashboard')
+        if existing_patients.exists():
+            latest = existing_patients.first()
+            return render(request, 'rtms_app/patient_add.html', {'form': form, 'referral_options': referral_options, 'existing_patient': latest, 'next_course_num': latest.course_number + 1})
+        if form.is_valid(): form.save(); return redirect('dashboard')
+    else: form = PatientRegistrationForm()
     return render(request, 'rtms_app/patient_add.html', {'form': form, 'referral_options': referral_options})
 
 @login_required
 def export_treatment_csv(request):
-    # (省略)
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig'); response['Content-Disposition'] = 'attachment; filename="treatment_data.csv"'; writer = csv.writer(response); writer.writerow(['ID', '氏名', '実施日時', 'MT(%)', '強度(%)', 'パルス数', '実施者', '副作用'])
+    treatments = TreatmentSession.objects.all().select_related('patient', 'performer').order_by('date')
+    for t in treatments: se_str = json.dumps(t.side_effects, ensure_ascii=False) if t.side_effects else ""; writer.writerow([t.patient.card_id, t.patient.name, t.date.strftime('%Y-%m-%d %H:%M'), t.motor_threshold, t.intensity, t.total_pulses, t.performer.username if t.performer else "", se_str])
     return response
 
 @login_required
 def download_db(request):
-    # (省略)
+    if not request.user.is_staff: return HttpResponse("Forbidden", 403)
+    db_path = settings.DATABASES['default']['NAME']
+    if os.path.exists(db_path): return FileResponse(open(db_path, 'rb'), as_attachment=True, filename='db.sqlite3')
     return HttpResponse("Not found", 404)
 
 def custom_logout_view(request): logout(request); return redirect('/admin/login/')
 def patient_print_preview(request, pk): 
-    # (省略)
+    patient = get_object_or_404(Patient, pk=pk)
+    end_date_est = get_completion_date(patient.first_treatment_date)
+    mode = request.GET.get('mode', 'summary')
+    context = { 'patient': patient, 'end_date_est': end_date_est, 'mode': mode }
     return render(request, 'rtms_app/print_preview.html', context)
+
 def patient_print_summary(request, pk): 
-    # (省略)
+    patient = get_object_or_404(Patient, pk=pk)
+    mode = request.GET.get('mode', 'summary')
+    test_scores = Assessment.objects.filter(patient=patient).order_by('date')
+    context = {'patient': patient, 'mode': mode, 'today': datetime.date.today(), 'test_scores': test_scores}
     return render(request, 'rtms_app/print_summary.html', context)
 
 @login_required
