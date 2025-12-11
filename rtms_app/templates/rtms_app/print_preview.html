@@ -47,13 +47,13 @@
     .q-form-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
     .q-form-table td { padding: 4px 0; border-bottom: 1px dotted #ccc; vertical-align: middle; }
     
-    /* チェックボックス列: 幅を広げて余裕を持たせる (65px -> 80px) */
-    .q-check-col { width: 80px; white-space: nowrap; font-weight: bold; text-align: left; }
+    /* チェックボックス列 */
+    .q-check-col { width: 60px; white-space: nowrap; font-weight: bold; text-align: left; }
     
-    /* 質問文列: 左揃え + 大きめのパディングで間隔を確保 */
+    /* ★修正: 質問文列の左パディングを大きくして右側に寄せる */
     .q-text-col { 
         text-align: left; 
-        padding-left: 40px; /* ここで間隔を調整 (30px -> 40px) */
+        padding-left: 60px !important; /* 40px -> 60px に増量 */
     }
     
     .cb-mark { font-family: "Arial", sans-serif; font-size: 13pt; display: inline-block; width: 1.2em; vertical-align: -1px; }
