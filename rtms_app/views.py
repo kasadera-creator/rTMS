@@ -469,12 +469,80 @@ def patient_print_preview(request, pk):
     context = { 'patient': patient, 'end_date_est': end_date_est, 'mode': mode }
     return render(request, 'rtms_app/print_preview.html', context)
 
-def patient_print_summary(request, pk): 
+def patient_print_summary(request, pk):
     patient = get_object_or_404(Patient, pk=pk)
     mode = request.GET.get('mode', 'summary')
     test_scores = Assessment.objects.filter(patient=patient).order_by('date')
     context = {'patient': patient, 'mode': mode, 'today': datetime.date.today(), 'test_scores': test_scores}
     return render(request, 'rtms_app/print_summary.html', context)
+
+
+@login_required
+def patient_print_bundle(request, patient_id):
+    patient = get_object_or_404(Patient, pk=patient_id)
+
+    allowed_docs = ["admission", "suitability", "consent"]
+    requested_docs = request.GET.getlist("docs")
+    if requested_docs:
+        selected_docs = [doc for doc in allowed_docs if doc in requested_docs]
+    else:
+        selected_docs = allowed_docs
+    if not selected_docs:
+        selected_docs = allowed_docs
+
+    assessments = Assessment.objects.filter(patient=patient).order_by('date')
+    sessions = TreatmentSession.objects.filter(patient=patient).order_by('date')
+
+    score_admin = assessments.first()
+    score_w3 = assessments.filter(timing='week3').first()
+    score_w6 = assessments.filter(timing='week6').first()
+
+    def fmt_score(obj):
+        return f"HAMD17 {obj.total_score_17}点 HAMD21 {obj.total_score_21}点" if obj else "未評価"
+
+    side_effects_list_all = []
+    SE_MAP = {'headache': '頭痛', 'scalp': '頭皮痛', 'discomfort': '不快感', 'tooth': '歯痛', 'twitch': '攣縮', 'dizzy': 'めまい', 'nausea': '吐き気', 'tinnitus': '耳鳴り', 'hearing': '聴力低下', 'anxiety': '不安', 'other': 'その他'}
+    for s in sessions:
+        if s.side_effects:
+            for k, v in s.side_effects.items():
+                if k != 'note' and v and str(v) != '0':
+                    side_effects_list_all.append(SE_MAP.get(k, k))
+
+    side_effects_summary = ", ".join(list(set(side_effects_list_all))) if side_effects_list_all else "特になし"
+    start_date_str = sessions.first().date.strftime('%Y年%m月%d日') if sessions.exists() else "未開始"
+    if patient.discharge_date:
+        end_date_str = patient.discharge_date.strftime('%Y年%m月%d日')
+    elif sessions.exists():
+        end_date_str = sessions.last().date.strftime('%Y年%m月%d日')
+    else:
+        end_date_str = "未定"
+    total_count = sessions.count()
+    admission_date_str = patient.admission_date.strftime('%Y年%m月%d日') if patient.admission_date else "不明"
+    created_at_str = patient.created_at.strftime('%Y年%m月%d日')
+
+    if patient.summary_text:
+        summary_text = patient.summary_text
+    else:
+        summary_text = (
+            f"{created_at_str}初診、{admission_date_str}任意入院。\n"
+            f"入院時{fmt_score(score_admin)}、{start_date_str}から全{total_count}回のrTMS治療を実施した。\n"
+            f"3週時、{fmt_score(score_w3)}、6週時、{fmt_score(score_w6)}となった。\n"
+            f"治療中の合併症：{side_effects_summary}。\n"
+            f"{end_date_str}退院。紹介元へ逆紹介、抗うつ薬の治療継続を依頼した。"
+        )
+
+    context = {
+        'patient': patient,
+        'selected_docs': selected_docs,
+        'summary_text': summary_text,
+        'discharge_prescription': patient.discharge_prescription,
+        'questionnaire': patient.questionnaire_data or {},
+        'assessments': assessments,
+        'treatment_sessions': sessions,
+        'end_date_est': get_completion_date(patient.first_treatment_date),
+    }
+
+    return render(request, 'rtms_app/print_bundle.html', context)
 
 @login_required
 def patient_clinical_path(request, patient_id):

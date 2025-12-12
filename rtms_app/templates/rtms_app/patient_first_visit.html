@@ -32,6 +32,31 @@
         </div>
     </div>
 
+    <div class="card mb-3">
+        <div class="card-header bg-light fw-bold">初診時 印刷</div>
+        <div class="card-body">
+            <form action="{% url 'patient_print_bundle' patient.id %}" method="get" class="row g-3 align-items-center">
+                <div class="col-md-8 col-lg-9">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="docAdmission" name="docs" value="admission" checked>
+                        <label class="form-check-label" for="docAdmission">入院時サマリ</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="docSuitability" name="docs" value="suitability" checked>
+                        <label class="form-check-label" for="docSuitability">rTMS適正質問票</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="docConsent" name="docs" value="consent" checked>
+                        <label class="form-check-label" for="docConsent">rTMS治療説明書・同意書</label>
+                    </div>
+                </div>
+                <div class="col-md-4 col-lg-3 text-md-end">
+                    <button type="submit" class="btn btn-primary">プレビュー（合本）</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <form method="post" id="mainForm">
         {% csrf_token %}
         {% if form.errors %}
@@ -71,23 +96,24 @@
                 </div>
                 {{ form.diagnosis }}
                 
-                <!-- ★移動: 治療前HAM-D評価ボタン -->
                 <div class="my-3 p-3 bg-light border rounded">
                     <div class="d-flex align-items-center">
                         <button type="button" class="btn btn-outline-danger btn-sm me-3" data-bs-toggle="modal" data-bs-target="#hamdModal">
                             <i class="fas fa-chart-bar"></i> 治療前HAM-D評価
                         </button>
-                        
+
                         <span id="hamd-result-display" class="fw-bold text-dark">
                             {% if baseline_assessment %}
                                 HAM-D17: <span class="fs-5">{{ baseline_assessment.total_score_17 }}</span> 点 (評価済)
                             {% else %}
-                                <span class="text-muted small">※未実施</span>
+                                未評価
                             {% endif %}
                         </span>
                     </div>
+                    <div class="text-muted small mt-1">
+                        評価済みの点数が表示されます。未評価の場合はモーダルから入力してください。
+                    </div>
                 </div>
-
                 <div class="diag-check-group mt-1">
                     <!-- 診断名リスト (省略せず記述) -->
                     <div class="row g-2">
@@ -154,13 +180,40 @@
             </div>
         </div>
 
+        <div class="card mb-3">
+            <div class="card-header bg-light fw-bold">初診時 印刷</div>
+            <div class="card-body">
+                <form action="{% url 'patient_print_bundle' patient.id %}" method="get" class="row g-3 align-items-center">
+                    <div class="col-md-8 col-lg-9">
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="docAdmissionBottom" name="docs" value="admission" checked>
+                            <label class="form-check-label" for="docAdmissionBottom">入院時サマリ</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="docSuitabilityBottom" name="docs" value="suitability" checked>
+                            <label class="form-check-label" for="docSuitabilityBottom">rTMS適正質問票</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="docConsentBottom" name="docs" value="consent" checked>
+                            <label class="form-check-label" for="docConsentBottom">rTMS治療説明書・同意書</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4 col-lg-3 text-md-end">
+                        <button type="submit" class="btn btn-primary">プレビュー（合本）</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <div style="height: 60px;"></div>
+
         
         <div class="floating-actions">
             <button type="submit" class="btn btn-primary btn-fab text-white"><i class="fas fa-check"></i> 入力完了</button>
             <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab"><i class="fas fa-undo"></i> 戻る</a>
         </div>
     </form>
+
 </div>
 
 <!-- HAM-D モーダル (変更なし) -->

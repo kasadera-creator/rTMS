@@ -7,7 +7,7 @@
     .score-table th { background-color: #e8f5e9; text-align: center; font-size: 0.9rem; }
     .score-table td { text-align: center; font-size: 0.9rem; }
     
-    .floating-actions { position: fixed; bottom: 20px; right: 20px; z-index: 1050; display: flex; gap: 10px; flex-direction: column; align-items: flex-end; }
+    .floating-actions { position: static; display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; margin-top: 24px; }
     .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; width: fit-content; }
     .discharge-date-card { border-left: 5px solid #17a2b8; background-color: #f0fdf4; }
 </style>
@@ -105,13 +105,13 @@
         </div>
 
         <div style="height: 50px;"></div>
-        
+
         <div class="floating-actions">
-            <div class="btn-group-vertical">
-                <button type="button" class="btn btn-primary btn-fab mb-2" onclick="saveAndPrint('summary')"><i class="fas fa-print"></i> 退院サマリー 印刷</button>
-                <button type="button" class="btn btn-success btn-fab mb-2" onclick="saveAndPrint('referral')"><i class="fas fa-envelope"></i> 紹介状 印刷</button>
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-primary btn-fab" onclick="saveAndPrint('summary')"><i class="fas fa-print"></i> 退院サマリー 印刷</button>
+                <button type="button" class="btn btn-success btn-fab" onclick="saveAndPrint('referral')"><i class="fas fa-envelope"></i> 紹介状 印刷</button>
             </div>
-            <button type="submit" class="btn btn-dark btn-fab mb-2"><i class="fas fa-save"></i> 保存して終了</button>
+            <button type="submit" class="btn btn-dark btn-fab"><i class="fas fa-save"></i> 保存して終了</button>
             <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab"><i class="fas fa-undo"></i> 戻る</a>
         </div>
     </form>
