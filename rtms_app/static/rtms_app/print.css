@@ -95,6 +95,24 @@ body {
     letter-spacing: 0.5px;
 }
 
+.consent-copy {
+    page-break-inside: avoid;
+    padding-bottom: 12px;
+}
+
+.copy-label {
+    text-align: right;
+    font-size: 12px;
+    color: #444;
+    margin-bottom: 4px;
+}
+
+.consent-subtitle {
+    text-align: center;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
 .info-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -106,6 +124,52 @@ body {
 .info-grid .label {
     font-weight: 700;
     margin-right: 4px;
+}
+
+.questionnaire-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 6px 12px;
+    font-size: 13px;
+    margin-bottom: 12px;
+}
+
+.questionnaire-table,
+.consent-table,
+.consent-agreement-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-bottom: 12px;
+}
+
+.questionnaire-table th,
+.questionnaire-table td,
+.consent-table th,
+.consent-table td,
+.consent-agreement-table td {
+    border: 1px solid #000;
+    padding: 6px 8px;
+    vertical-align: middle;
+}
+
+.questionnaire-table th,
+.consent-table th {
+    background: #f1f3f5;
+    -webkit-print-color-adjust: exact;
+}
+
+.questionnaire-table .col-no { width: 50px; text-align: center; }
+.questionnaire-table .col-check { width: 70px; text-align: center; }
+.questionnaire-table .section-row td { background: #f8f9fa; font-weight: 700; }
+
+.consent-table th { width: 18%; }
+.consent-table td { width: 32%; }
+
+.consent-agreement-table .check-cell,
+.questionnaire-table .check-cell {
+    text-align: center;
+    font-size: 16px;
 }
 
 .table-basic {
@@ -143,6 +207,14 @@ body {
     margin-bottom: 10px;
 }
 
+.bullet-list {
+    margin: 0 0 8px 18px;
+    padding: 0;
+    font-size: 13px;
+}
+
+.bullet-list li { margin-bottom: 4px; }
+
 .signature-row {
     display: flex;
     justify-content: flex-end;
@@ -159,6 +231,11 @@ body {
     border-bottom: 1px solid #000;
     padding-top: 16px;
     margin-top: 4px;
+}
+
+.signature-date {
+    margin-top: 4px;
+    font-size: 12px;
 }
 
 @media print {
