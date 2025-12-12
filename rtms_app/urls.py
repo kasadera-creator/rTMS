@@ -24,6 +24,7 @@ urlpatterns = [
 
     path('patient/<int:pk>/first_visit/print/', views.patient_print_preview, name='patient_print_preview'),
     path('patient/<int:pk>/summary/print/', views.patient_print_summary, name='patient_print_summary'),
+    path("patient/<int:patient_id>/print/bundle/", views.patient_print_bundle, name="patient_print_bundle"),
     path('export/csv/', views.export_treatment_csv, name='export_csv'),
     path('backup/db/', views.download_db, name='download_db'),
     path('logout/', views.custom_logout_view, name='custom_logout'),

@@ -1,0 +1,49 @@
+<div class="doc-title">rTMS 適正質問票</div>
+<div style="font-size: 13px; margin-bottom: 8px;">
+    安全にrTMS治療を実施するため、以下の質問にお答えください。
+</div>
+
+{% with q=questionnaire %}
+<div class="section-heading">これまでに、以下のことがありましたか？</div>
+<table class="table-basic">
+    <tr><th style="width: 120px;">回答</th><th>内容</th></tr>
+    <tr><td>{% if q.q_past_rtms == 'はい' %}はい{% elif q.q_past_rtms == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>rTMS実施経験（治験、研究を問わない）</td></tr>
+    <tr><td>{% if q.q_past_side_effect == 'はい' %}はい{% elif q.q_past_side_effect == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>rTMSのあとに副作用などの不快な経験</td></tr>
+    <tr><td>{% if q.q_past_ect == 'はい' %}はい{% elif q.q_past_ect == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>電気けいれん療法（副作用の有無など）</td></tr>
+    <tr><td>{% if q.q_past_seizure == 'はい' %}はい{% elif q.q_past_seizure == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>けいれん発作（てんかんの診断の有無を問わない）</td></tr>
+    <tr><td>{% if q.q_past_loc == 'はい' %}はい{% elif q.q_past_loc == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>意識消失発作</td></tr>
+    <tr><td>{% if q.q_past_stroke == 'はい' %}はい{% elif q.q_past_stroke == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>脳卒中（脳梗塞や脳出血など）</td></tr>
+    <tr><td>{% if q.q_past_trauma == 'はい' %}はい{% elif q.q_past_trauma == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>頭部外傷（意識がなくなるなど重度なもの）</td></tr>
+    <tr><td>{% if q.q_past_surgery == 'はい' %}はい{% elif q.q_past_surgery == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>頭部の手術</td></tr>
+    <tr><td>{% if q.q_past_neuro == 'はい' %}はい{% elif q.q_past_neuro == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>脳外科もしくは神経内科の病気</td></tr>
+    <tr><td>{% if q.q_past_internal == 'はい' %}はい{% elif q.q_past_internal == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>脳障害をおこす可能性のある内科疾患</td></tr>
+    <tr><td>{% if q.q_past_abuse == 'はい' %}はい{% elif q.q_past_abuse == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>アルコールや薬物の乱用</td></tr>
+</table>
+
+<div class="section-heading">現在、以下のことはありますか？</div>
+<table class="table-basic">
+    <tr><th style="width: 120px;">回答</th><th>内容</th></tr>
+    <tr><td>{% if q.q_cur_headache == 'はい' %}はい{% elif q.q_cur_headache == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>頻繁または重度な頭痛</td></tr>
+    <tr><td>{% if q.q_cur_metal == 'はい' %}はい{% elif q.q_cur_metal == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>頭の中に金属や磁性体（チタン製品かどうか要確認）</td></tr>
+    <tr><td>{% if q.q_cur_device == 'はい' %}はい{% elif q.q_cur_device == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>体内埋め込み式の医療機器（心臓ペースメーカーなど）</td></tr>
+    <tr><td>{% if q.q_cur_abuse == 'はい' %}はい{% elif q.q_cur_abuse == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>多量の飲酒や薬物の乱用</td></tr>
+    <tr><td>{% if q.q_cur_preg == 'はい' %}はい{% elif q.q_cur_preg == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>妊娠中、もしくは妊娠の可能性が否定されない</td></tr>
+    <tr><td>{% if q.q_cur_family_epilepsy == 'はい' %}はい{% elif q.q_cur_family_epilepsy == 'いいえ' %}いいえ{% else %}-{% endif %}</td><td>家族内にてんかんを持っているかた</td></tr>
+</table>
+
+<div class="section-heading">自由記載</div>
+<div class="note-box">{{ q.q_details|default:"" }}</div>
+{% endwith %}
+
+<div class="signature-row">
+    <div class="signature-box">
+        <div>患者署名：</div>
+        <div class="signature-line">&nbsp;</div>
+        <div style="margin-top: 4px;">日付：　　年　　月　　日</div>
+    </div>
+    <div class="signature-box">
+        <div>担当医署名：</div>
+        <div class="signature-line">{{ patient.attending_physician.last_name|default:"　　　" }}</div>
+        <div style="margin-top: 4px;">日付：　　年　　月　　日</div>
+    </div>
+</div>
