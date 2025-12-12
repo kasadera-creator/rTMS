@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
-# exit on error
 set -o errexit
 
 pip install -r requirements.txt
 
-# 静的ファイルの収集
 python manage.py collectstatic --no-input
-
-# データベースの構築（マイグレーション）
 python manage.py migrate
 
-# ★追加: 管理者ユーザー、初期ユーザー作成スクリプトを実行
-python create_superuser.py
-python create_initial_users.py
+# 初期ユーザー作成は “必要なときだけ”
+if [ "${RUN_BOOTSTRAP:-0}" = "1" ]; then
+  python create_superuser.py
+  python create_initial_users.py
+fi
