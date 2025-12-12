@@ -102,7 +102,6 @@ def get_date_of_session(start_date, target_session_num):
     return current
 
 def get_completion_date(start_date):
-    """30回目（終了予定日）を計算"""
     if not start_date: return None
     return get_date_of_session(start_date, 30)
 
