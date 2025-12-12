@@ -7,7 +7,6 @@
     
     .calendar-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .calendar-table th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; text-align: center; color: #495057; width: 14.28%; }
-    /* セルをクリック可能に */
     .calendar-table td { 
         border: 1px solid #dee2e6; padding: 5px; vertical-align: top; height: 100px; 
         background-color: #fff; cursor: default; transition: background 0.1s;
@@ -22,7 +21,7 @@
     .date-num { font-weight: bold; margin-bottom: 5px; display: block; font-size: 0.9rem; }
     
     /* イベントバッジ */
-    .event-item { font-size: 0.75rem; margin-bottom: 4px; padding: 3px 6px; border-radius: 4px; display: block; line-height: 1.2; text-decoration: none; color: inherit; }
+    .event-item { font-size: 0.75rem; margin-bottom: 2px; padding: 2px 4px; border-radius: 3px; display: block; line-height: 1.2; text-decoration: none; color: inherit; }
     .evt-admission { background-color: #cff4fc; color: #055160; border: 1px solid #b6effb; }
     .evt-mapping { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
     .evt-treatment { background-color: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; }
@@ -78,10 +77,10 @@
                         <td class="{% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %} {% if day.url %}clickable{% endif %}"
                             {% if day.url %}onclick="window.location.href='{{ day.url }}'"{% endif %}>
                             
-                            <div class="date-num">
+                            <span class="date-num">
                                 {{ day.date|date:"n/j" }}
                                 {% if day.is_holiday %}<span class="badge bg-danger ms-1" style="font-size: 0.6em;">祝</span>{% endif %}
-                            </div>
+                            </span>
                             
                             {% for event in day.events %}
                                 {% if event.type == 'admission' %}
