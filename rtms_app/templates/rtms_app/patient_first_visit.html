@@ -2,6 +2,7 @@
 
 {% block extrastyle %}
 <style>
+    /* 既存のスタイル */
     .form-section { background-color: #fff; padding: 25px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
     .section-title { border-left: 5px solid #0d6efd; padding-left: 10px; font-weight: bold; margin-bottom: 20px; color: #333; font-size: 1.2rem; }
     .diag-check-group { background-color: #f8f9fa; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6; }
@@ -11,7 +12,7 @@
     .q-header-row { background-color: #e9ecef; font-weight: bold; }
     .floating-actions { position: fixed; bottom: 20px; right: 20px; z-index: 1050; display: flex; gap: 10px; }
     .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; }
-
+    
     .hamd-input-group { border-bottom: 1px solid #eee; padding: 5px 0; }
     .hamd-label { font-size: 0.9rem; font-weight: bold; }
     .hamd-input { width: 60px; text-align: center; }
@@ -20,6 +21,7 @@
 
 {% block content %}
 <div class="container py-4 mb-5">
+    <!-- ヘッダー -->
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h3 class="fw-bold"><i class="fas fa-file-medical"></i> 初診・基本情報入力</h3>
         <div class="btn-group">
@@ -39,6 +41,7 @@
         <!-- 1. 基本情報 -->
         <div class="form-section">
             <h5 class="section-title">基本情報・サマリー</h5>
+            <!-- (省略なしで記述) -->
             <div class="row g-3 mb-3">
                 <div class="col-md-3"><label class="form-label fw-bold">カルテID</label>{{ form.card_id }}</div>
                 <div class="col-md-3"><label class="form-label fw-bold">氏名</label>{{ form.name }}</div>
@@ -52,7 +55,6 @@
                     </div>
                 </div>
             </div>
-            <!-- (その他フィールドは省略せずに記述) -->
             <div class="mb-3"><label class="fw-bold">主訴</label>{{ form.chief_complaint }}</div>
             <div class="mb-3"><label class="fw-bold">生活歴</label><textarea name="{{ form.life_history.name }}" class="form-control" rows="3">{{ form.life_history.value|default_if_none:"" }}</textarea></div>
             <div class="mb-3"><label class="fw-bold">既往歴</label><textarea name="{{ form.past_history.name }}" class="form-control" rows="3">{{ form.past_history.value|default_if_none:"" }}</textarea></div>
@@ -152,10 +154,10 @@
             </div>
         </div>
 
-        <div style="height: 50px;"></div>
+        <div style="height: 60px;"></div>
         
         <div class="floating-actions">
-            <button type="button" class="btn btn-primary btn-fab text-white" onclick="validateAndSubmit()"><i class="fas fa-check"></i> 入力完了</button>
+            <button type="submit" class="btn btn-primary btn-fab text-white"><i class="fas fa-check"></i> 入力完了</button>
             <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab"><i class="fas fa-undo"></i> 戻る</a>
         </div>
     </form>
@@ -204,7 +206,7 @@
 
 {% block scripts %}
 <script>
-    // ... (referralMap, saveHamd 等の既存関数) ...
+    // 紹介元・紹介医の連携ロジック
     const referralMap = JSON.parse('{{ referral_map_json|safe }}');
     const sourceInput = document.querySelector('input[name="referral_source"]');
     const doctorInput = document.querySelector('input[name="referral_doctor"]');
@@ -224,35 +226,14 @@
     sourceInput.addEventListener('change', updateDoctorOptions);
     doctorInput.setAttribute('list', 'doctor-options');
 
-    // ★新規追加: 入力完了時のチェック処理
-    function validateAndSubmit() {
-        const admissionDate = document.querySelector('input[name="admission_date"]').value;
-        const mappingDate = document.querySelector('input[name="mapping_date"]').value;
-        const treatmentDate = document.querySelector('input[name="first_treatment_date"]').value;
-        
-        let msg = [];
-        if (!admissionDate) msg.push("・入院予定日");
-        if (!mappingDate) msg.push("・初回位置決め日");
-        if (!treatmentDate) msg.push("・初回治療日");
-        
-        if (msg.length > 0) {
-            const confirmMsg = "以下の項目が未入力です。\n" + msg.join("\n") + "\n\n予定が決まっている場合は入力してください。\nこのまま保存して終了しますか？";
-            if (!confirm(confirmMsg)) {
-                return; // キャンセルなら何もしない
-            }
-        }
-        
-        // 問題なければサブミット
-        // 質問票データをJSON化
+    document.getElementById('mainForm').addEventListener('submit', function(e) {
         const data = {}; 
         document.querySelectorAll('input[type="radio"]:checked').forEach(r => { data[r.name] = r.value; });
         data['q_details'] = document.querySelector('textarea[name="q_details"]').value;
         document.getElementById('questionnaire_json').value = JSON.stringify(data);
-        
-        document.getElementById('mainForm').submit();
-    }
+    });
 
-    // HAM-D Ajax保存
+    // HAM-D Ajax保存 (修正: モーダル操作の堅牢化)
     function saveHamd() {
         const form = document.getElementById('hamdForm');
         const formData = new FormData(form);
@@ -267,18 +248,22 @@
         .then(response => response.json())
         .then(data => {
             if(data.status === 'success') {
+                // モーダルを閉じる
                 const modalEl = document.getElementById('hamdModal');
                 const modal = bootstrap.Modal.getOrCreateInstance(modalEl); 
                 modal.hide();
 
+                // 結果表示の更新
                 document.getElementById('hamd-result-display').innerHTML = 
                     `HAM-D17: <span class="fs-5">${data.total_17}</span> 点 判定: ${data.severity}`;
 
                 alert(data.message + "\n(合計: " + data.total_17 + "点)");
 
+                // 中等度(14-18)の場合、質問票へ誘導
                 if (data.total_17 >= 14 && data.total_17 <= 18) {
                     const qSection = document.getElementById('q_section');
                     qSection.scrollIntoView({ behavior: 'smooth' });
+                    // オプション: 質問票エリアを目立たせる
                     qSection.style.border = "2px solid #dc3545";
                     setTimeout(() => { qSection.style.border = "none"; }, 2000);
                 }
@@ -289,6 +274,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
+        // (診断名や質問票の復元処理は変更なし)
         const diagStr = "{{ patient.diagnosis }}";
         if(diagStr) {
             const diags = diagStr.split(', ');

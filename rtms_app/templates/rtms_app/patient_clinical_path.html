@@ -8,7 +8,7 @@
     .calendar-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .calendar-table th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; text-align: center; color: #495057; width: 14.28%; }
     .calendar-table td { 
-        border: 1px solid #dee2e6; padding: 5px; vertical-align: top; height: 100px; 
+        border: 1px solid #dee2e6; padding: 5px; vertical-align: top; height: auto; min-height: 60px; 
         background-color: #fff; cursor: default; transition: background 0.1s;
     }
     .calendar-table td.clickable { cursor: pointer; }
@@ -18,7 +18,7 @@
     .day-sun { color: #dc3545; background-color: #fff5f5 !important; }
     .day-holiday { color: #dc3545; background-color: #ffe8e8 !important; }
     
-    .date-num { font-weight: bold; margin-bottom: 5px; display: block; font-size: 0.9rem; }
+    .date-num { font-weight: bold; margin-bottom: 2px; display: block; font-size: 0.9rem; }
     
     /* イベントバッジ */
     .event-item { font-size: 0.75rem; margin-bottom: 2px; padding: 2px 4px; border-radius: 3px; display: block; line-height: 1.2; text-decoration: none; color: inherit; }
@@ -28,6 +28,7 @@
     .evt-assessment { background-color: #f8d7da; color: #842029; border: 1px solid #f5c6cb; font-weight: bold; }
     .evt-discharge { background-color: #0dcaf0; color: #fff; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
 
+    /* 右下固定ボタン */
     .floating-actions { position: fixed; bottom: 20px; right: 20px; z-index: 1050; display: flex; gap: 10px; }
     .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; }
 </style>
