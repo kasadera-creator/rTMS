@@ -481,14 +481,13 @@ def patient_print_summary(request, pk):
 def patient_print_bundle(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
 
-    allowed_docs = ["admission", "suitability", "consent"]
-    requested_docs = request.GET.getlist("docs")
-    if requested_docs:
-        selected_docs = [doc for doc in allowed_docs if doc in requested_docs]
-    else:
-        selected_docs = allowed_docs
+    DOC_ORDER = ["admission", "suitability", "consent"]
+    docs_req = request.GET.getlist("docs") or []
+    docs_req = [d.strip() for d in docs_req if isinstance(d, str)]
+
+    selected_docs = [d for d in DOC_ORDER if d in set(docs_req)]
     if not selected_docs:
-        selected_docs = allowed_docs
+        selected_docs = DOC_ORDER[:]
 
     assessments = Assessment.objects.filter(patient=patient).order_by('date')
     sessions = TreatmentSession.objects.filter(patient=patient).order_by('date')
