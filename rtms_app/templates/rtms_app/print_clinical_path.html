@@ -8,14 +8,13 @@
     body { background-color: #525659; }
     .page-container { width: 297mm; margin: 20px auto; }
     .page-sheet {
-        background-color: white; width: 100%; height: 210mm; /* A4横 */
-        padding: 8mm 12mm; /* 余白を縮小 */
+        background-color: white; width: 100%; height: 210mm; 
+        padding: 8mm 12mm; 
         box-shadow: 0 0 10px rgba(0,0,0,0.5); position: relative; box-sizing: border-box; margin-bottom: 20px;
         font-family: 'M PLUS Rounded 1c', "Meiryo", sans-serif; color: #333; 
         line-height: 1.3; overflow: hidden;
     }
     
-    /* 印刷時設定 */
     @media print {
         @page { size: A4 landscape; margin: 0; }
         body { background-color: white; margin: 0; }
@@ -29,42 +28,21 @@
     }
 
     /* カレンダー (7列グリッド) */
-    .calendar-grid-header {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
-        border-top: 1px solid #000; border-left: 1px solid #000;
-        margin-top: 5px;
-        background-color: #f0f0f0;
-        font-weight: bold;
-        text-align: center;
-        font-size: 10pt;
-    }
-    .header-cell {
-        border-right: 1px solid #000; border-bottom: 1px solid #000; padding: 3px;
-    }
-
-    /* 月曜始まりのヘッダー */
-    /* リストデータが日付順であることを前提に、単純に左から詰めて表示します。
-       厳密な曜日合わせ（空セル挿入）はView側で行っていないため、
-       ここでは「リストを順番に表示する」形式を維持しつつ、
-       視覚的に曜日がわかりやすいように色分けを強化します。 */
-       
     .calendar-container {
-        display: flex; flex-wrap: wrap; border-left: 1px solid #000;
+        display: flex; flex-wrap: wrap; border-top: 1px solid #000; border-left: 1px solid #000;
     }
     
     .cal-cell { 
-        width: 14.28%; /* 7等分 */
+        width: 14.28%; 
         border-right: 1px solid #000; border-bottom: 1px solid #000; 
-        min-height: 75px; padding: 3px; font-size: 9.5pt; position: relative;
+        min-height: 70px; padding: 3px; font-size: 10px; position: relative;
         box-sizing: border-box;
     }
     
     .day-sat { color: #007bff; background-color: #f0f8ff; }
     .day-sun { color: #dc3545; background-color: #fff0f0; }
-    .day-holiday { color: #dc3545; background-color: #ffe8e8; } /* 祝日スタイル */
+    .day-holiday { color: #dc3545; background-color: #ffe8e8; }
     
-    /* 祝日バッジ */
     .holiday-mark {
         display: inline-block; background-color: #dc3545; color: white; 
         font-size: 8px; padding: 1px 3px; border-radius: 3px; margin-left: 3px; vertical-align: middle;
@@ -118,7 +96,6 @@
         </div>
         
         <!-- ヘッダー (月曜始まり) -->
-        <!-- ※データ自体が月曜始まりになっているわけではないので、あくまで見た目の装飾です -->
         <div style="display: flex; background-color: #f0f0f0; border-top: 1px solid #000; border-left: 1px solid #000; font-size: 9pt; font-weight: bold;">
              <div style="flex:1; text-align: center; border-right: 1px solid #000; border-bottom: 1px solid #000; padding: 2px;">日付・予定</div>
         </div>
@@ -148,16 +125,15 @@
             </div>
             {% endfor %}
             
-            <!-- マス目が足りない場合の空セル埋め (レイアウト調整) -->
             {% for i in "123456"|make_list %}
-                <!-- 簡易的な埋め合わせ。必要に応じてJS等で計算 -->
+            <!-- 空白セル (レイアウト調整用) -->
             {% endfor %}
         </div>
         
         <div class="mt-1 text-end" style="font-size: 8.5pt;">※スケジュールは治療経過や病院の都合により変更になる場合があります。<span style="color:#dc3545;">赤色(祝日)</span>は治療がお休みです。</div>
     </div>
 
-    <!-- 2ページ目: 説明 (内容は前回と同じ) -->
+    <!-- 2ページ目: 説明 -->
     <div class="page-sheet">
         <h2 class="text-center fw-bold mb-3">rTMS治療に関するご案内</h2>
         
