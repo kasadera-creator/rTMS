@@ -54,6 +54,7 @@
                 
                 <!-- 日付表示 + カレンダーピッカー -->
                 <div class="d-inline-flex align-items-center bg-light px-3 py-1 rounded border position-relative date-picker-wrapper">
+                    <!-- 文字サイズ調整 -->
                     <span class="fw-bold fs-6 fs-md-5 me-2 text-nowrap" onclick="document.getElementById('datePicker').showPicker()">
                         {{ target_date_display }}
                     </span>
@@ -112,7 +113,6 @@
                     {% for item in task_group.list %}
                     <div class="list-group-item">
                         {% if task_group.title == "① 初診" %}
-                            <!-- ★修正: リンク先を patient_first_visit に変更 -->
                             <a href="{% url 'patient_first_visit' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
                         {% elif task_group.title == "② 入院" %}
                             <a href="{% url 'admission_procedure' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
@@ -157,7 +157,7 @@
                 </div>
             </div>
         </div>
-        {% endfor %} <!-- end loop -->
+        {% endfor %}
 
     </div>
 </div>
