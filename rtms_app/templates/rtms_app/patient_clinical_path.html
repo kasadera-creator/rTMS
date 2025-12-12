@@ -7,16 +7,17 @@
     
     .calendar-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .calendar-table th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; text-align: center; color: #495057; }
-    .calendar-table td { border: 1px solid #dee2e6; padding: 5px; vertical-align: top; height: 100px; background-color: #fff; }
+    /* 高さを縮小: 100px -> 60px に変更し、min-heightも調整 */
+    .calendar-table td { border: 1px solid #dee2e6; padding: 4px; vertical-align: top; height: auto; min-height: 60px; background-color: #fff; }
     
     .day-sat { color: #007bff; background-color: #f8fbff; }
     .day-sun { color: #dc3545; background-color: #fff5f5; }
     .day-holiday { background-color: #ffe8e8; color: #dc3545; }
     
-    .date-num { font-weight: bold; margin-bottom: 5px; display: block; }
+    .date-num { font-weight: bold; margin-bottom: 2px; display: block; font-size: 0.9rem; }
     
     /* イベントバッジ */
-    .event-item { font-size: 0.85rem; margin-bottom: 4px; padding: 3px 6px; border-radius: 4px; display: block; }
+    .event-item { font-size: 0.75rem; margin-bottom: 2px; padding: 2px 4px; border-radius: 3px; display: block; line-height: 1.2; }
     .evt-admission { background-color: #cff4fc; color: #055160; border: 1px solid #b6effb; }
     .evt-mapping { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
     .evt-treatment { background-color: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; }
@@ -35,7 +36,7 @@
         <h3><i class="fas fa-calendar-alt text-success"></i> 治療クリニカルパス (スケジュール)</h3>
         <div class="btn-group">
             <a href="{% url 'patient_print_path' patient.id %}" target="_blank" class="btn btn-primary">
-                <i class="fas fa-print"></i> 印刷 (A4横)
+                <i class="fas fa-print"></i> 印刷する (A4横)
             </a>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary">戻る</a>
         </div>
@@ -57,8 +58,8 @@
             <table class="calendar-table">
                 <thead>
                     <tr>
-                        <th style="width: 120px;">日付</th>
-                        <th style="width: 60px;">曜日</th>
+                        <th style="width: 100px;">日付</th>
+                        <th style="width: 50px;">曜日</th>
                         <th>予定・内容</th>
                     </tr>
                 </thead>
@@ -74,7 +75,7 @@
                         <td class="text-center fw-bold {% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %}">
                             {{ day.weekday }}
                         </td>
-                        <td class="{% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %}" style="height: auto; min-height: 60px;">
+                        <td class="{% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %}">
                             {% for event in day.events %}
                                 {% if event.type == 'admission' %}
                                     <span class="event-item evt-admission"><i class="fas fa-procedures"></i> {{ event.label }}</span>
