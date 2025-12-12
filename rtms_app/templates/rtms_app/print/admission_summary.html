@@ -1,0 +1,44 @@
+<div class="doc-title">入院時サマリ</div>
+
+<div class="info-grid">
+    <div><span class="label">氏名:</span>{{ patient.name }} 様</div>
+    <div><span class="label">カルテID:</span>{{ patient.card_id }}</div>
+    <div><span class="label">生年月日:</span>{{ patient.birth_date|date:"Y年n月j日" }} ({{ patient.age }}歳)</div>
+    <div><span class="label">性別:</span>{{ patient.get_gender_display }}</div>
+    <div><span class="label">紹介元:</span>{{ patient.referral_source|default:"-" }}</div>
+    <div><span class="label">担当医:</span>{% if patient.attending_physician %}{{ patient.attending_physician.last_name }}{% else %}未定{% endif %}</div>
+</div>
+
+<div class="section-heading">スケジュール</div>
+<table class="table-basic">
+    <tr><th>入院日</th><th>初回位置決め</th><th>初回治療</th><th>治療終了予定 (30回)</th><th>退院日</th></tr>
+    <tr>
+        <td>{{ patient.admission_date|default:"-" }}</td>
+        <td>{{ patient.mapping_date|default:"-" }}</td>
+        <td>{{ patient.first_treatment_date|default:"-" }}</td>
+        <td>{{ end_date_est|date:"Y-m-d"|default:"-" }}</td>
+        <td>{{ patient.discharge_date|default:"-" }}</td>
+    </tr>
+</table>
+
+<div class="section-heading">治療経過・評価</div>
+<table class="table-basic">
+    <tr><th style="width: 120px;">日付</th><th style="width: 120px;">タイミング</th><th>HAM-D17</th><th>HAM-D21</th><th>備考</th></tr>
+    {% for score in assessments %}
+    <tr>
+        <td>{{ score.date|date:"Y-m-d" }}</td>
+        <td>{% if score.timing == 'baseline' %}治療前評価{% elif score.timing == 'week3' %}3週時{% elif score.timing == 'week6' %}6週時{% else %}その他{% endif %}</td>
+        <td>{{ score.total_score_17|default:"-" }}</td>
+        <td>{{ score.total_score_21|default:"-" }}</td>
+        <td>{{ score.note|linebreaksbr }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5">評価データは未入力です。</td></tr>
+    {% endfor %}
+</table>
+
+<div class="section-heading">サマリー</div>
+<div class="note-box">{{ summary_text|default:"" }}</div>
+
+<div class="section-heading">退院時処方</div>
+<div class="note-box">{{ discharge_prescription|default:"" }}</div>
