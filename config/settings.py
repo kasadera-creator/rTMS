@@ -147,7 +147,6 @@ LOGGING = {
             "level": "ERROR",
             "propagate": True,
         },
-        # ついでにDB系も
         "django.db.backends": {
             "handlers": ["console"],
             "level": "ERROR",
