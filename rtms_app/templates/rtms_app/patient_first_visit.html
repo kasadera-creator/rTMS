@@ -149,7 +149,9 @@
         <div style="height: 60px;"></div>
     </form>
 
-    {# {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" %} #}
+    {% url 'rtms_app:dashboard' as dashboard_url %}
+	{% if dashboard_date %}{% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}{% else %}{% with back_url=dashboard_url %}{% endif %}
+	{% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=back_url %}{% endwith %}
 
     <div class="form-section">
         <div class="card mb-3">
