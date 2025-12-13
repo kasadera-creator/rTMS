@@ -20,6 +20,13 @@ from .forms import (
     PatientRegistrationForm, AdmissionProcedureForm
 )
 
+def build_url(name, args=None, query=None):
+    """
+    reverse() でURLを作り、必要なら query dict を安全に付与する。
+    """
+    base = reverse(name, args=args)
+    return f"{base}?{urlencode(query)}" if query else base
+    
 # ==========================================
 # 祝日定義 (2024-2030) + 年末年始 (12/29-1/3)
 # ==========================================
@@ -157,7 +164,7 @@ def generate_calendar_weeks(patient):
         # 2. 位置決め
         if current == patient.mapping_date or current in mapping_dates:
             day_info['events'].append({'type': 'mapping', 'label': '位置決め'})
-            day_info['url'] = build_url('mapping_add', [patient.id], {'date': current})
+            day_info["url"] = build_url("mapping_add", args=[patient.id], query={"date": current.strftime("%Y-%m-%d")})
             
         # 3. 治療予定・実績
         session_num = 0
