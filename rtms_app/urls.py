@@ -22,8 +22,12 @@ urlpatterns = [
 
     # path
     path("patient/<int:patient_id>/path/", views.patient_clinical_path, name="patient_clinical_path"),
-    path("patient/<int:patient_id>/path/print/", views.print_clinical_path, name="print_clinical_path"),
-
+    path(
+    "patient/<int:patient_id>/path/print/",
+    views.patient_clinical_path,
+    name="print_clinical_path",
+    ),
+    
     # print
     path("patient/<int:patient_id>/print/bundle/", views.patient_print_bundle, name="patient_print_bundle"),
 ]
