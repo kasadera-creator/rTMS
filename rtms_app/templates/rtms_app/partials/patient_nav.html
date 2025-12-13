@@ -1,0 +1,21 @@
+<div class="d-flex gap-2 flex-wrap justify-content-end align-items-center">
+  <a class="btn btn-outline-secondary btn-sm"
+     href="{% url 'rtms_app:patient_first_visit' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+    初診・基本情報
+  </a>
+
+  <a class="btn btn-outline-success btn-sm"
+     href="{% url 'rtms_app:patient_clinical_path' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+    治療パス
+  </a>
+
+  <a class="btn btn-outline-info btn-sm"
+     href="{% url 'rtms_app:patient_home' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+    治療経過・退院準備
+  </a>
+
+  <a class="btn btn-secondary btn-sm"
+     href="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}">
+    ダッシュボードへ戻る
+  </a>
+</div>

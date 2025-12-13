@@ -24,12 +24,7 @@
     <!-- ヘッダー -->
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h3 class="fw-bold"><i class="fas fa-file-medical"></i> 初診・基本情報入力</h3>
-        <div class="btn-group">
-            <a href="{% url 'rtms_app:patient_clinical_path' patient.id %}" target="_blank" class="btn btn-outline-success btn-sm">パス表示</a>
-            <a href="{% url 'rtms_app:patient_print_bundle' patient.id %}?docs=admission" target="_blank" class="btn btn-outline-primary">サマリー印刷</a>
-			<a href="{% url 'rtms_app:patient_print_bundle' patient.id %}?docs=suitability" target="_blank" class="btn btn-outline-success">問診票印刷</a>
-			<a href="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary">戻る</a>
-        </div>
+        {% include "rtms_app/partials/patient_nav.html" %}
     </div>
 
     <form method="post" id="mainForm">
@@ -107,7 +102,7 @@
                         </span>
                     </div>
                     <div class="text-muted small mt-1">
-                        評価済みの点数が表示されます。未評価の場合はモーダルから入力してください。
+                        評価済みの点数が表示されます。未評価の場合は入力してください。
                     </div>
                 </div></div>
             </div>
