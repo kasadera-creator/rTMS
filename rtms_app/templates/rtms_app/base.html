@@ -16,11 +16,29 @@
         .app-footer { background-color: #343a40; color: #adb5bd; padding: 20px 0; font-size: 0.85rem; text-align: center; margin-top: auto; }
         .app-footer a { color: #adb5bd; text-decoration: none; }
         .app-footer a:hover { color: #fff; }
-        
+
+        .floating-actions {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1050;
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-fab {
+            border-radius: 30px;
+            padding: 10px 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
         @media print {
             .no-print { display: none !important; }
             body { background-color: white; }
             .app-footer { display: none; }
+            .floating-actions { display: none !important; }
         }
     </style>
     {% block extrastyle %}{% endblock %}

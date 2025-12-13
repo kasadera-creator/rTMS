@@ -6,21 +6,22 @@
     @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700&display=swap');
     
     body { background-color: #525659; }
-    .page-container { width: 297mm; margin: 20px auto; }
+    .page-container { width: 277mm; margin: 20px auto; }
     .page-sheet {
-        background-color: white; width: 100%; height: 210mm; /* A4横 */
-        padding: 8mm 12mm; /* 余白 */
+        background-color: white; width: 100%; min-height: 190mm; /* A4横 */
+        padding: 10mm; /* 余白 */
         box-shadow: 0 0 10px rgba(0,0,0,0.5); position: relative; box-sizing: border-box; margin-bottom: 20px;
-        font-family: 'M PLUS Rounded 1c', "Meiryo", sans-serif; color: #333; 
+        font-family: 'M PLUS Rounded 1c', "Meiryo", sans-serif; color: #333;
         line-height: 1.3; overflow: hidden;
     }
-    
+
     @media print {
-        @page { size: A4 landscape; margin: 0; }
+        @page { size: A4 landscape; margin: 10mm; }
         body { background-color: white; margin: 0; }
         .preview-container { width: 100%; margin: 0; }
-        .page-sheet { 
-            width: 100%; height: 210mm; margin: 0; padding: 8mm 12mm; 
+        .page-container { width: 277mm; margin: 0 auto; }
+        .page-sheet {
+            width: 100%; min-height: auto; margin: 0; padding: 0;
             box-shadow: none; border: none; page-break-after: always;
         }
         .page-sheet:last-child { page-break-after: auto; }

@@ -7,8 +7,6 @@
     .score-table th { background-color: #e8f5e9; text-align: center; font-size: 0.9rem; }
     .score-table td { text-align: center; font-size: 0.9rem; }
     
-    .floating-actions { position: static; display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; margin-top: 24px; }
-    .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; width: fit-content; }
     .discharge-date-card { border-left: 5px solid #17a2b8; background-color: #f0fdf4; }
 </style>
 {% endblock %}
@@ -17,12 +15,12 @@
 <div class="container py-4 mb-5">
     <!-- ヘッダー: 患者メニュー -->
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3><i class="fas fa-file-alt"></i> サマリー・紹介状作成</h3>
+        <h3><i class="fas fa-file-alt"></i> 治療経過・退院準備</h3>
         {% include "rtms_app/partials/patient_nav.html" %}
     </div>
 
     <!-- (以下、フォーム部分は既存と同じ) -->
-    <form method="post" id="summaryForm" class="bg-white p-4 shadow-sm rounded">
+    <form method="post" id="mainForm" class="bg-white p-4 shadow-sm rounded">
         {% csrf_token %}
         <div class="alert alert-light border mb-4">
             <div class="row align-items-center">
@@ -100,16 +98,17 @@
         </div>
 
         <div style="height: 50px;"></div>
-
-        <div class="floating-actions">
-            <div class="btn-group" role="group">
-                <button type="button" class="btn btn-primary btn-fab" onclick="saveAndPrint('discharge')"><i class="fas fa-print"></i> 退院サマリー 印刷</button>
-                <button type="button" class="btn btn-success btn-fab" onclick="saveAndPrint('referral')"><i class="fas fa-envelope"></i> 紹介状 印刷</button>
-            </div>
-            <button type="submit" class="btn btn-dark btn-fab"><i class="fas fa-save"></i> 保存して終了</button>
-            <a href="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab"><i class="fas fa-undo"></i> 戻る</a>
-        </div>
     </form>
+
+    {% url 'rtms_app:dashboard' as dashboard_url %}
+{% if dashboard_date %}
+  {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+    {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=back_url %}
+  {% endwith %}
+{% else %}
+  {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=dashboard_url %}
+{% endif %}
+
 </div>
 
 <script>
@@ -129,27 +128,64 @@
         }
     });
 
-    function saveAndPrint(mode) {
-        const form = document.getElementById('summaryForm');
-        const formData = new FormData(form);
-        const url = window.location.href;
-
-        fetch(url, {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }
-        })
-        .then(response => {
-            if (response.ok) {
-                const printUrls = {
-                    discharge: "{% url 'rtms_app:patient_print_discharge' patient.id %}",
-                    referral: "{% url 'rtms_app:patient_print_referral' patient.id %}",
-                };
-                const printUrl = printUrls[mode];
-                if (printUrl) { window.open(printUrl, '_blank'); }
-            } else { alert('保存に失敗しました。'); }
-        })
-        .catch(error => { console.error('Error:', error); alert('通信エラーが発生しました。'); });
-    }
 </script>
+
+<script>
+  async function saveThenPrint(btn) {
+    const formId = btn.dataset.formId || 'mainForm';
+    const action = btn.dataset.action || '';
+    const fallbackUrl = btn.dataset.printUrl || '';
+    const target = btn.dataset.target || '_blank';
+
+    if (!action) {
+      alert('印刷アクションが設定されていません。');
+      return;
+    }
+
+    const form = document.getElementById(formId);
+    if (!form) {
+      alert(`フォームが見つかりません: ${formId}`);
+      return;
+    }
+
+    const fd = new FormData(form);
+    fd.append('action', action);
+
+    const res = await fetch(window.location.href, {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      body: fd,
+      credentials: 'same-origin',
+    });
+
+    // 失敗時はここで止める
+    if (!res.ok) {
+      throw new Error(`save failed: HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    // view側で redirect_url を返す設計にしておくのがベスト
+    const url = data.redirect_url || fallbackUrl;
+
+    if (!url) {
+      alert('印刷URLが取得できませんでした。');
+      return;
+    }
+
+    window.open(url, target, 'noopener');
+  }
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.js-save-and-print');
+    if (!btn) return;
+
+    e.preventDefault();
+    saveThenPrint(btn).catch((err) => {
+      console.error(err);
+      alert('保存または印刷に失敗しました。');
+    });
+  });
+</script>
+
 {% endblock %}

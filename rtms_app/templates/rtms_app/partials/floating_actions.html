@@ -1,0 +1,68 @@
+{% comment %}
+Reusable floating action menu
+
+Context variables:
+- form_id: target form id (default: "mainForm")
+- print_options: list of dicts {label, value?, icon?, formaction?, formmethod?, formtarget?}
+- complete_action: value for input completion submit (default: "save")
+- complete_label: label for the completion button (default: "入力完了")
+- complete_url: if provided, renders completion as link instead of submit
+- back_url: destination for back button (required)
+{% endcomment %}
+
+{% with form_id=form_id|default:'mainForm' %}
+<div class="floating-actions no-print">
+  {% if print_options %}
+  <div class="btn-group dropup">
+    {% with primary=print_options|first %}
+    <button type="button"
+            class="btn btn-primary btn-fab text-white js-save-and-print"
+			data-form-id="{{ form_id }}"
+            data-action="{{ primary.value|default:'' }}"
+            data-print-url="{{ primary.formaction|default:'' }}"
+            data-target="{{ primary.formtarget|default:'_blank' }}">
+      <i class="fas {{ primary.icon|default:'fa-print' }}"></i> {{ primary.label|default:'印刷' }}
+    </button>
+    {% endwith %}
+
+    {% if print_options|length > 1 %}
+    <button type="button" class="btn btn-primary btn-fab dropdown-toggle dropdown-toggle-split text-white"
+            data-bs-toggle="dropdown" aria-expanded="false">
+      <span class="visually-hidden">印刷メニュー</span>
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end">
+      {% for opt in print_options|slice:'1:' %}
+      <li>
+        <button class="dropdown-item js-save-and-print"
+                type="button"
+                data-form-id="{{ form_id }}"
+                data-action="{{ opt.value|default:'' }}"
+                data-print-url="{{ opt.formaction|default:'' }}"
+                data-target="{{ opt.formtarget|default:'_blank' }}">
+          <i class="fas {{ opt.icon|default:'fa-print' }} me-2"></i>{{ opt.label|default:'印刷' }}
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if complete_url %}
+    <a href="{{ complete_url }}" class="btn btn-success btn-fab text-white">
+      <i class="fas fa-check"></i> {{ complete_label|default:'入力完了' }}
+    </a>
+  {% else %}
+    <button type="submit" class="btn btn-success btn-fab text-white"
+            form="{{ form_id }}"
+            name="action"
+            value="{{ complete_action|default:'save' }}">
+      <i class="fas fa-check"></i> {{ complete_label|default:'入力完了' }}
+    </button>
+  {% endif %}
+
+  <a href="{{ back_url }}" class="btn btn-secondary btn-fab">
+    <i class="fas fa-undo"></i> 戻る
+  </a>
+</div>
+{% endwith %}
