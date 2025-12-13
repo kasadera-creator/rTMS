@@ -2,12 +2,14 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
+from django.urls import reverse
 from datetime import timedelta, date
 import datetime
 from django.http import HttpResponse, FileResponse, JsonResponse
 from django.conf import settings
 from django.contrib.auth import logout
 from django.db.models import Q
+from urllib.parse import urlencode
 import os
 import csv
 import json
@@ -102,6 +104,10 @@ def get_weekly_session_count(patient, target_date):
 
 # ★修正: カレンダーデータ生成ロジック (週単位のリストを返す)
 def generate_calendar_weeks(patient):
+    def build_url(name, args=None, query=None):
+        base = reverse(name, args=args)
+        return f"{base}?{urlencode(query)}" if query else base
+
     # 基準となる開始日
     base_start = patient.admission_date or patient.first_treatment_date or timezone.now().date()
     
@@ -145,12 +151,12 @@ def generate_calendar_weeks(patient):
         # 1. 入院
         if current == patient.admission_date:
             day_info['events'].append({'type': 'admission', 'label': '入院'})
-            day_info['url'] = f"/app/patient/{patient.id}/admission/"
+            day_info['url'] = build_url('admission_procedure', [patient.id])
             
         # 2. 位置決め
         if current == patient.mapping_date or current in mapping_dates:
             day_info['events'].append({'type': 'mapping', 'label': '位置決め'})
-            day_info['url'] = f"/app/patient/{patient.id}/mapping/add/?date={current}"
+            day_info['url'] = build_url('mapping_add', [patient.id], {'date': current})
             
         # 3. 治療予定・実績
         session_num = 0
@@ -162,7 +168,7 @@ def generate_calendar_weeks(patient):
                 day_info['events'].append({'type': 'treatment', 'label': f'治療 {session_num}回{status_label}'})
                 
                 if not day_info['url']:
-                    day_info['url'] = f"/app/patient/{patient.id}/treatment/add/?date={current}"
+                    day_info['url'] = build_url('treatment_add', [patient.id], {'date': current})
                 
                 # 4. 評価予定
                 timing = None
@@ -174,16 +180,17 @@ def generate_calendar_weeks(patient):
                 if timing:
                     day_info['events'].append({'type': 'assessment', 'label': label})
                     # 評価日は評価入力へ誘導
-                    day_info['url'] = f"/app/patient/{patient.id}/assessment/add/?date={current}&timing={timing}"
+                    day_info['url'] = build_url('assessment_add', [patient.id], {'date': current, 'timing': timing})
         
         # 5. 退院
         if current == patient.discharge_date:
-             day_info['events'].append({'type': 'discharge', 'label': '退院'})
-             if not day_info['url']: day_info['url'] = f"/app/patient/{patient.id}/summary/"
-        
+            day_info['events'].append({'type': 'discharge', 'label': '退院'})
+            if not day_info['url']:
+                day_info['url'] = build_url('patient_summary', [patient.id])
+
         elif not patient.discharge_date and treatment_start:
-             if treatment_end_est and current == treatment_end_est + timedelta(days=1):
-                 day_info['events'].append({'type': 'discharge', 'label': '退院予定'})
+            if treatment_end_est and current == treatment_end_est + timedelta(days=1):
+                day_info['events'].append({'type': 'discharge', 'label': '退院予定'})
 
         current_week.append(day_info)
         

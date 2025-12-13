@@ -10,7 +10,7 @@ urlpatterns = [
     path("patient/add/", views.patient_add_view, name="patient_add"),
 
     # 患者ホーム（＝患者サマリーを流用）
-    path("patient/<int:patient_id>/", views.patient_summary_view, name="patient_home"),
+    path("patient/<int:patient_id>/", views.patient_summary_view, name="patient_summary"),
 
     # 初診・入院・位置決め・治療・尺度
     path("patient/<int:patient_id>/first_visit/", views.patient_first_visit, name="patient_first_visit"),
