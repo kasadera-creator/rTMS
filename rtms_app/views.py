@@ -433,9 +433,9 @@ def patient_summary_view(request, patient_id):
 
         action = request.POST.get('action')
         if action == 'print_discharge':
-            return redirect("rtms_app:patient_print_discharge", args=[patient.id])
+            return redirect(reverse("rtms_app:patient_print_discharge", args=[patient.id]))
         if action == 'print_referral':
-            return redirect("rtms_app:patient_print_referral", args=[patient.id])
+            return redirect(reverse("rtms_app:patient_print_referral", args=[patient.id]))
 
         return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
     sessions = TreatmentSession.objects.filter(patient=patient).order_by('date'); assessments = Assessment.objects.filter(patient=patient).order_by('date')
@@ -462,11 +462,11 @@ def patient_summary_view(request, patient_id):
     floating_print_options = [
     {
     "label": "退院サマリー（印刷）",
-    "url": reverse("rtms_app:patient_print_summary", args=[patient.id]) + "?mode=discharge",
+    "url": reverse("rtms_app:patient_print_discharge", args=[patient.id])",
     },
     {
     "label": "紹介状（印刷）",
-    "url": reverse("rtms_app:patient_print_summary", args=[patient.id]) + "?mode=referral",
+    "url": reverse("rtms_app:patient_print_referral", args=[patient.id])",
     },
     ]
     return render(request, 'rtms_app/patient_summary.html', {'patient': patient, 'summary_text': summary_text, 'history_list': history_list, 'today': timezone.now().date(), 'test_scores': test_scores, 'dashboard_date': dashboard_date, 'floating_print_options': floating_print_options})
