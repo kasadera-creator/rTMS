@@ -18,6 +18,7 @@ urlpatterns = [
     path("patient/<int:patient_id>/mapping/add/", views.mapping_add, name="mapping_add"),
     path("patient/<int:patient_id>/treatment/add/", views.treatment_add, name="treatment_add"),
     path("patient/<int:patient_id>/assessment/add/", views.assessment_add, name="assessment_add"),
+    path("patient/<int:patient_id>/print/bundle/", views.patient_print_bundle, name="patient_print_bundle"),
 
     # パス（表示・印刷）
     path("patient/<int:patient_id>/path/", views.patient_clinical_path, name="patient_clinical_path"),
@@ -31,4 +32,6 @@ urlpatterns = [
     path("export/csv/", views.export_treatment_csv, name="export_csv"),
     path("backup/db/", views.download_db, name="download_db"),
     path("logout/", views.custom_logout_view, name="custom_logout"),
+    
+
 ]
