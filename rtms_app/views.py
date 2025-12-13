@@ -429,8 +429,19 @@ def patient_summary_view(request, patient_id):
         if d_date: patient.discharge_date = parse_date(d_date)
         else: patient.discharge_date = None
         patient.save()
-        if request.headers.get('x-requested-with') == 'XMLHttpRequest': return JsonResponse({'status': 'success'})
-
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest': action = request.POST.get('action')
+        if action == 'print_discharge':
+        return JsonResponse({
+            'status': 'success',
+            'redirect_url': reverse("rtms_app:patient_print_discharge", args=[patient.id]),
+        })
+        if action == 'print_referral':
+        return JsonResponse({
+            'status': 'success',
+            'redirect_url': reverse("rtms_app:patient_print_referral", args=[patient.id]),
+        })
+        return JsonResponse({'status': 'success'})
+        
         action = request.POST.get('action')
         if action == 'print_discharge': return redirect(reverse("rtms_app:patient_print_discharge", args=[patient.id]))
         if action == 'print_referral': return redirect(reverse("rtms_app:patient_print_referral", args=[patient.id]))
@@ -459,11 +470,17 @@ def patient_summary_view(request, patient_id):
     floating_print_options = [
     {
         "label": "退院サマリー（印刷）",
-        "url": reverse("rtms_app:patient_print_discharge", args=[patient.id]),
+        "value": "print_discharge",
+        "icon": "fa-print",
+        "formaction": reverse("rtms_app:patient_print_discharge", args=[patient.id]),
+        "formtarget": "_blank",
     },
     {
         "label": "紹介状（印刷）",
-        "url": reverse("rtms_app:patient_print_referral", args=[patient.id]),
+        "value": "print_referral",
+        "icon": "fa-print",
+        "formaction": reverse("rtms_app:patient_print_referral", args=[patient.id]),
+        "formtarget": "_blank",
     },
     ]
     return render(request, 'rtms_app/patient_summary.html', {'patient': patient, 'summary_text': summary_text, 'history_list': history_list, 'today': timezone.now().date(), 'test_scores': test_scores, 'dashboard_date': dashboard_date, 'floating_print_options': floating_print_options})

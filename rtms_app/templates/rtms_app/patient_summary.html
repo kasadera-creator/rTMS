@@ -129,4 +129,63 @@
     });
 
 </script>
+
+<script>
+  async function saveThenPrint(btn) {
+    const formId = btn.dataset.formId || 'mainForm';
+    const action = btn.dataset.action || '';
+    const fallbackUrl = btn.dataset.printUrl || '';
+    const target = btn.dataset.target || '_blank';
+
+    if (!action) {
+      alert('印刷アクションが設定されていません。');
+      return;
+    }
+
+    const form = document.getElementById(formId);
+    if (!form) {
+      alert(`フォームが見つかりません: ${formId}`);
+      return;
+    }
+
+    const fd = new FormData(form);
+    fd.append('action', action);
+
+    const res = await fetch(window.location.href, {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      body: fd,
+      credentials: 'same-origin',
+    });
+
+    // 失敗時はここで止める
+    if (!res.ok) {
+      throw new Error(`save failed: HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    // view側で redirect_url を返す設計にしておくのがベスト
+    const url = data.redirect_url || fallbackUrl;
+
+    if (!url) {
+      alert('印刷URLが取得できませんでした。');
+      return;
+    }
+
+    window.open(url, target, 'noopener');
+  }
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.js-save-and-print');
+    if (!btn) return;
+
+    e.preventDefault();
+    saveThenPrint(btn).catch((err) => {
+      console.error(err);
+      alert('保存または印刷に失敗しました。');
+    });
+  });
+</script>
+
 {% endblock %}

@@ -15,14 +15,12 @@ Context variables:
   {% if print_options %}
   <div class="btn-group dropup">
     {% with primary=print_options|first %}
-    <button type="submit"
-            class="btn btn-primary btn-fab text-white"
-            form="{{ form_id }}"
-            name="action"
-            value="{{ primary.value|default:'' }}"
-            {% if primary.formaction %}formaction="{{ primary.formaction }}"{% endif %}
-            {% if primary.formmethod %}formmethod="{{ primary.formmethod }}"{% endif %}
-            {% if primary.formtarget %}formtarget="{{ primary.formtarget }}"{% endif %}>
+    <button type="button"
+            class="btn btn-primary btn-fab text-white js-save-and-print"
+			data-form-id="{{ form_id }}"
+            data-action="{{ primary.value|default:'' }}"
+            data-print-url="{{ primary.formaction|default:'' }}"
+            data-target="{{ primary.formtarget|default:'_blank' }}">
       <i class="fas {{ primary.icon|default:'fa-print' }}"></i> {{ primary.label|default:'印刷' }}
     </button>
     {% endwith %}
@@ -35,14 +33,12 @@ Context variables:
     <ul class="dropdown-menu dropdown-menu-end">
       {% for opt in print_options|slice:'1:' %}
       <li>
-        <button class="dropdown-item"
-                type="submit"
-                form="{{ form_id }}"
-                name="action"
-                value="{{ opt.value|default:'' }}"
-                {% if opt.formaction %}formaction="{{ opt.formaction }}"{% endif %}
-                {% if opt.formmethod %}formmethod="{{ opt.formmethod }}"{% endif %}
-                {% if opt.formtarget %}formtarget="{{ opt.formtarget }}"{% endif %}>
+        <button class="dropdown-item js-save-and-print"
+                type="button"
+                data-form-id="{{ form_id }}"
+                data-action="{{ opt.value|default:'' }}"
+                data-print-url="{{ opt.formaction|default:'' }}"
+                data-target="{{ opt.formtarget|default:'_blank' }}">
           <i class="fas {{ opt.icon|default:'fa-print' }} me-2"></i>{{ opt.label|default:'印刷' }}
         </button>
       </li>
