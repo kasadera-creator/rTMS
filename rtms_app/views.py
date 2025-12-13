@@ -478,6 +478,31 @@ def patient_print_summary(request, pk):
 
 
 @login_required
+def patient_print_bundle(request, patient_id):
+    patient = get_object_or_404(Patient, id=patient_id)
+
+    docs_req = request.GET.getlist("docs")
+    DOC_ORDER = ["admission", "suitability", "consent"]
+    selected_docs = [d for d in DOC_ORDER if d in docs_req] or DOC_ORDER
+
+    assessments = Assessment.objects.filter(
+        patient=patient
+    ).order_by("date")
+
+    context = {
+        "patient": patient,
+        "selected_docs": selected_docs,
+        "assessments": assessments,
+        "consent_copies": ["患者控え", "病院控え"],
+    }
+
+    return render(
+        request,
+        "rtms_app/print_bundle.html",
+        context,
+    )
+
+@login_required
 def patient_clinical_path(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     # ★修正: generate_calendar_weeks を使用
