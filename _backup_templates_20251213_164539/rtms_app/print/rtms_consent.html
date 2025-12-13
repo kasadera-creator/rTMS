@@ -1,0 +1,106 @@
+{% for copy_label in copies %}
+<div class="consent-copy">
+    <div class="copy-label">{{ copy_label }}</div>
+    <div class="doc-title">rTMS治療説明書・同意書</div>
+    <div class="consent-subtitle">反復経頭蓋磁気刺激療法（rTMS）について</div>
+
+    <table class="consent-table">
+        <tr>
+            <th>患者名</th>
+            <td>{{ patient.name|default:"" }} 様</td>
+            <th>生年月日</th>
+            <td>{{ patient.birth_date|date:"Y年n月j日"|default:"" }}</td>
+        </tr>
+        <tr>
+            <th>カルテID</th>
+            <td>{{ patient.card_id|default:"" }}</td>
+            <th>主治医</th>
+            <td>
+                {% if patient.attending_physician %}
+                    {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}
+                {% else %}
+                    ____________________
+                {% endif %}
+            </td>
+        </tr>
+    </table>
+
+    <div class="consent-section">
+        <div class="section-heading">1. 治療の目的と方法</div>
+        <p>反復経頭蓋磁気刺激療法（repetitive Transcranial Magnetic Stimulation: rTMS）は、頭部に装着したコイルから磁気を反復的に照射し、大脳皮質の活動を調整することで、気分や意欲の改善を図る治療法です。うつ病などに対して、薬物療法だけでは十分な改善が得られない場合に推奨される治療です。</p>
+        <ul class="bullet-list">
+            <li>1回あたりの治療時間は概ね20分程度です。</li>
+            <li>通常は週5回、計30回を目安に実施します（必要に応じて回数が調整されます）。</li>
+            <li>治療中は医師・看護師が状態を確認し、安全に配慮して進めます。</li>
+        </ul>
+    </div>
+
+    <div class="consent-section">
+        <div class="section-heading">2. 効果と限界</div>
+        <p>国内外の臨床研究で有効性が報告されており、抗うつ薬で十分な改善が得られない場合でも症状の軽減が期待されます。ただし、すべての方に効果が得られるとは限らず、改善の程度や発現時期には個人差があります。</p>
+    </div>
+
+    <div class="consent-section">
+        <div class="section-heading">3. 副作用・リスク</div>
+        <p>代表的な副作用・リスクは以下のとおりです。体調の変化を感じた際は、すぐにスタッフへお知らせください。</p>
+        <ul class="bullet-list">
+            <li>刺激部位の頭痛・頭皮痛、顔面のぴくつき、一過性の耳鳴り・聴覚過敏、まぶしさ。</li>
+            <li>まれにけいれん発作の報告があります。既往や体調を踏まえ、安全性を確認したうえで実施します。</li>
+            <li>体調不良やリスクが高いと判断した場合、治療を延期・中止することがあります。</li>
+        </ul>
+    </div>
+
+    <div class="consent-section">
+        <div class="section-heading">4. 禁忌・注意事項</div>
+        <ul class="bullet-list">
+            <li>頭蓋内・頭頸部に磁性体や電子機器（脳深部刺激装置、クリップ、シャント、人工内耳、心臓ペースメーカーなど）が埋め込まれている場合は原則実施できません。</li>
+            <li>妊娠中または妊娠の可能性が否定できない場合は、主治医と相談のうえ慎重に判断します。</li>
+            <li>治療期間中は、体調変化や服薬変更を必ずお知らせください。</li>
+        </ul>
+    </div>
+
+    <div class="consent-section">
+        <div class="section-heading">5. 代替となる治療</div>
+        <p>薬物療法の調整、心理社会的治療、電気けいれん療法（ECT）など、症状や希望に応じた他の選択肢もあります。主治医から説明を受け、十分に検討してください。</p>
+    </div>
+
+    <div class="consent-section">
+        <div class="section-heading">6. 個人情報の取扱い</div>
+        <p>診療情報は院内の医療チームで共有し、治療の評価・改善に利用します。学会・研究などで利用する際は個人が特定されない形で取り扱い、別途同意が必要な場合は改めて確認します。</p>
+    </div>
+
+    <div class="consent-section">
+        <div class="section-heading">7. 同意に関する確認</div>
+        <table class="consent-agreement-table">
+            <tr>
+                <td class="check-cell">☐</td>
+                <td>上記の説明を受け、内容を理解したうえでrTMS治療の実施に同意します。</td>
+            </tr>
+            <tr>
+                <td class="check-cell">☐</td>
+                <td>質問に対して十分な説明を受け、理解できました。</td>
+            </tr>
+            <tr>
+                <td class="check-cell">☐</td>
+                <td>治療の途中であっても、私の意思でいつでも中止できることを理解しました。</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="signature-row">
+        <div class="signature-box">
+            <div>患者氏名：</div>
+            <div class="signature-line">&nbsp;</div>
+            <div class="signature-date">日付：　　年　　月　　日</div>
+        </div>
+        <div class="signature-box">
+            <div>説明者（医師）：</div>
+            <div class="signature-line">{% if patient.attending_physician %}{{ patient.attending_physician.last_name }}{% else %}　　　{% endif %}</div>
+            <div class="signature-date">日付：　　年　　月　　日</div>
+        </div>
+    </div>
+</div>
+{% if not forloop.last %}
+<div class="page-break"></div>
+{% endif %}
+{% endfor %}

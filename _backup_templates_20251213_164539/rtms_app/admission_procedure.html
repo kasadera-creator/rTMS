@@ -51,7 +51,7 @@
                         <i class="fas fa-check"></i> 入力完了
                     </button>
                     <br>
-                    <a href="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-link text-secondary mt-3">キャンセルして戻る</a>
+                    <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-link text-secondary mt-3">キャンセルして戻る</a>
                 </div>
             </form>
         </div>

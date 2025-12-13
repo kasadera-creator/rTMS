@@ -9,7 +9,7 @@
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3><i class="fas fa-users"></i> 患者一覧</h3>
-        <a href="{% url 'rtms_app:dashboard' %}" class="btn btn-secondary">ダッシュボードへ戻る</a>
+        <a href="{% url 'dashboard' %}" class="btn btn-secondary">ダッシュボードへ戻る</a>
     </div>
     <div class="card shadow-sm">
         <div class="card-body p-0">
@@ -46,13 +46,13 @@
                         </td>
                         <td class="text-center">
                             <div class="btn-group" role="group">
-                                <a href="{% url 'rtms_app:patient_first_visit' patient.id %}" class="btn btn-sm btn-outline-primary">
+                                <a href="{% url 'patient_first_visit' patient.id %}" class="btn btn-sm btn-outline-primary">
                                     <i class="fas fa-user-edit"></i> 基本情報
                                 </a>
-                                <a href="{% url 'rtms_app:patient_clinical_path' patient.id %}" class="btn btn-sm btn-outline-success">
+                                <a href="{% url 'patient_clinical_path' patient.id %}" class="btn btn-sm btn-outline-success">
                                     <i class="fas fa-calendar-alt"></i> パス表示
                                 </a>
-                                <a href="{% url 'rtms_app:patient_home' patient.id %}" class="btn btn-sm btn-outline-info">
+                                <a href="{% url 'patient_home' patient.id %}" class="btn btn-sm btn-outline-info">
                                     <i class="fas fa-file-medical-alt"></i> サマリー
                                 </a>
                             </div>

@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
+from django.urls import reverse
 from datetime import timedelta, date
 import datetime
 from django.http import HttpResponse, FileResponse, JsonResponse
@@ -11,6 +12,7 @@ from django.db.models import Q
 import os
 import csv
 import json
+from urllib.parse import urlencode
 
 from .models import Patient, TreatmentSession, MappingSession, Assessment
 from .forms import (
@@ -18,6 +20,16 @@ from .forms import (
     PatientRegistrationForm, AdmissionProcedureForm
 )
 
+def build_url(name, args=None, query=None):
+    """
+    reverse() でURLを作り、必要なら query dict を安全に付与する。
+
+    名前空間が付いていない場合は rtms_app: を補完する。
+    """
+    resolved_name = name if ":" in name else f"rtms_app:{name}"
+    base = reverse(resolved_name, args=args)
+    return f"{base}?{urlencode(query)}" if query else base
+    
 # ==========================================
 # 祝日定義 (2024-2030) + 年末年始 (12/29-1/3)
 # ==========================================
@@ -52,6 +64,7 @@ def is_treatment_day(d):
     return d.weekday() < 5 and not is_holiday(d)
 
 # --- ヘルパー関数 ---
+
 def get_session_number(start_date, target_date):
     if not start_date or target_date < start_date: return 0
     if not is_treatment_day(target_date): return -1
@@ -145,12 +158,12 @@ def generate_calendar_weeks(patient):
         # 1. 入院
         if current == patient.admission_date:
             day_info['events'].append({'type': 'admission', 'label': '入院'})
-            day_info['url'] = f"/app/patient/{patient.id}/admission/"
+            day_info['url'] = build_url('admission_procedure', [patient.id])
             
         # 2. 位置決め
         if current == patient.mapping_date or current in mapping_dates:
             day_info['events'].append({'type': 'mapping', 'label': '位置決め'})
-            day_info['url'] = f"/app/patient/{patient.id}/mapping/add/?date={current}"
+            day_info["url"] = build_url("mapping_add", args=[patient.id], query={"date": current.strftime("%Y-%m-%d")})
             
         # 3. 治療予定・実績
         session_num = 0
@@ -162,7 +175,7 @@ def generate_calendar_weeks(patient):
                 day_info['events'].append({'type': 'treatment', 'label': f'治療 {session_num}回{status_label}'})
                 
                 if not day_info['url']:
-                    day_info['url'] = f"/app/patient/{patient.id}/treatment/add/?date={current}"
+                    day_info['url'] = build_url('treatment_add', [patient.id], {'date': current})
                 
                 # 4. 評価予定
                 timing = None
@@ -174,16 +187,17 @@ def generate_calendar_weeks(patient):
                 if timing:
                     day_info['events'].append({'type': 'assessment', 'label': label})
                     # 評価日は評価入力へ誘導
-                    day_info['url'] = f"/app/patient/{patient.id}/assessment/add/?date={current}&timing={timing}"
+                    day_info['url'] = build_url('assessment_add', [patient.id], {'date': current, 'timing': timing})
         
         # 5. 退院
         if current == patient.discharge_date:
-             day_info['events'].append({'type': 'discharge', 'label': '退院'})
-             if not day_info['url']: day_info['url'] = f"/app/patient/{patient.id}/summary/"
-        
+            day_info['events'].append({'type': 'discharge', 'label': '退院'})
+            if not day_info['url']:
+                day_info['url'] = build_url('patient_home', [patient.id])
+
         elif not patient.discharge_date and treatment_start:
-             if treatment_end_est and current == treatment_end_est + timedelta(days=1):
-                 day_info['events'].append({'type': 'discharge', 'label': '退院予定'})
+            if treatment_end_est and current == treatment_end_est + timedelta(days=1):
+                day_info['events'].append({'type': 'discharge', 'label': '退院予定'})
 
         current_week.append(day_info)
         
@@ -461,20 +475,40 @@ def download_db(request):
     if os.path.exists(db_path): return FileResponse(open(db_path, 'rb'), as_attachment=True, filename='db.sqlite3')
     return HttpResponse("Not found", 404)
 
-def custom_logout_view(request): logout(request); return redirect('/admin/login/')
-def patient_print_preview(request, pk): 
+def custom_logout(request):
+    logout(request)
+    return redirect("rtms_app:dashboard")
+
+def patient_print_preview(request, pk):
     patient = get_object_or_404(Patient, pk=pk)
     end_date_est = get_completion_date(patient.first_treatment_date)
     mode = request.GET.get('mode', 'summary')
     context = { 'patient': patient, 'end_date_est': end_date_est, 'mode': mode }
     return render(request, 'rtms_app/print_preview.html', context)
 
+def _render_patient_summary(request, patient, mode):
+    normalized_mode = 'discharge' if mode == 'summary' else mode
+    test_scores = Assessment.objects.filter(patient=patient).order_by('date')
+    context = {'patient': patient, 'mode': normalized_mode, 'today': datetime.date.today(), 'test_scores': test_scores}
+    return render(request, 'rtms_app/print_summary.html', context)
+
+
 def patient_print_summary(request, pk):
     patient = get_object_or_404(Patient, pk=pk)
-    mode = request.GET.get('mode', 'summary')
-    test_scores = Assessment.objects.filter(patient=patient).order_by('date')
-    context = {'patient': patient, 'mode': mode, 'today': datetime.date.today(), 'test_scores': test_scores}
-    return render(request, 'rtms_app/print_summary.html', context)
+    mode = request.GET.get('mode', 'discharge')
+    return _render_patient_summary(request, patient, mode)
+
+
+@login_required
+def patient_print_discharge(request, patient_id):
+    patient = get_object_or_404(Patient, id=patient_id)
+    return _render_patient_summary(request, patient, 'discharge')
+
+
+@login_required
+def patient_print_referral(request, patient_id):
+    patient = get_object_or_404(Patient, id=patient_id)
+    return _render_patient_summary(request, patient, 'referral')
 
 
 @login_required

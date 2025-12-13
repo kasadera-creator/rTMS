@@ -37,7 +37,7 @@
                                 <button type="submit" class="btn btn-success fw-bold">
                                     <i class="fas fa-plus-circle"></i> {{ next_course_num }}クール目として新規登録する
                                 </button>
-                                <a href="{% url 'rtms_app:patient_add' %}" class="btn btn-outline-secondary">
+                                <a href="{% url 'patient_add' %}" class="btn btn-outline-secondary">
                                     <i class="fas fa-undo"></i> IDを入力し直す
                                 </a>
                             </div>
@@ -82,7 +82,7 @@
                         </div>
 
                         <div class="d-grid gap-2 mt-5 d-md-flex justify-content-md-end">
-                            <a href="{% url 'rtms_app:dashboard' %}" class="btn btn-secondary me-md-2 px-4">キャンセル</a>
+                            <a href="{% url 'dashboard' %}" class="btn btn-secondary me-md-2 px-4">キャンセル</a>
                             <!-- ★修正: 登録完了 -->
                             <button type="submit" class="btn btn-primary px-5 fw-bold">
                                 <i class="fas fa-check me-1"></i> 登録完了

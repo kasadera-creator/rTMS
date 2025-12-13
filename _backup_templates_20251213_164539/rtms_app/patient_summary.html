@@ -19,10 +19,10 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3><i class="fas fa-file-alt"></i> サマリー・紹介状作成</h3>
         <div class="btn-group">
-            <a href="{% url 'rtms_app:patient_first_visit' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}" class="btn btn-outline-secondary btn-sm">基本情報</a>
-            <a href="{% url 'rtms_app:patient_clinical_path' patient.id %}" target="_blank" class="btn btn-outline-success btn-sm">パス表示</a>
+            <a href="{% url 'patient_first_visit' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}" class="btn btn-outline-secondary btn-sm">基本情報</a>
+            <a href="{% url 'patient_clinical_path' patient.id %}" target="_blank" class="btn btn-outline-success btn-sm">パス表示</a>
             <!-- 印刷ボタンは別途フローティングにもあるが、ここにも配置可 -->
-            <a href="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-sm">戻る</a>
+            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-sm">戻る</a>
         </div>
     </div>
 
@@ -108,11 +108,11 @@
 
         <div class="floating-actions">
             <div class="btn-group" role="group">
-                <button type="button" class="btn btn-primary btn-fab" onclick="saveAndPrint('discharge')"><i class="fas fa-print"></i> 退院サマリー 印刷</button>
+                <button type="button" class="btn btn-primary btn-fab" onclick="saveAndPrint('summary')"><i class="fas fa-print"></i> 退院サマリー 印刷</button>
                 <button type="button" class="btn btn-success btn-fab" onclick="saveAndPrint('referral')"><i class="fas fa-envelope"></i> 紹介状 印刷</button>
             </div>
             <button type="submit" class="btn btn-dark btn-fab"><i class="fas fa-save"></i> 保存して終了</button>
-            <a href="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab"><i class="fas fa-undo"></i> 戻る</a>
+            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab"><i class="fas fa-undo"></i> 戻る</a>
         </div>
     </form>
 </div>
@@ -146,12 +146,8 @@
         })
         .then(response => {
             if (response.ok) {
-                const printUrls = {
-                    discharge: "{% url 'rtms_app:patient_print_discharge' patient.id %}",
-                    referral: "{% url 'rtms_app:patient_print_referral' patient.id %}",
-                };
-                const printUrl = printUrls[mode];
-                if (printUrl) { window.open(printUrl, '_blank'); }
+                const printUrl = "{% url 'patient_print_summary' patient.id %}?mode=" + mode;
+                window.open(printUrl, '_blank');
             } else { alert('保存に失敗しました。'); }
         })
         .catch(error => { console.error('Error:', error); alert('通信エラーが発生しました。'); });
