@@ -476,7 +476,10 @@ def download_db(request):
     if os.path.exists(db_path): return FileResponse(open(db_path, 'rb'), as_attachment=True, filename='db.sqlite3')
     return HttpResponse("Not found", 404)
 
-def custom_logout_view(request): logout(request); return redirect('/admin/login/')
+def custom_logout(request):
+    logout(request)
+    return redirect("rtms_app:dashboard")
+
 def patient_print_preview(request, pk): 
     patient = get_object_or_404(Patient, pk=pk)
     end_date_est = get_completion_date(patient.first_treatment_date)

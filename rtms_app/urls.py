@@ -30,4 +30,7 @@ urlpatterns = [
     
     # print
     path("patient/<int:patient_id>/print/bundle/", views.patient_print_bundle, name="patient_print_bundle"),
+    
+    path("logout/", views.custom_logout, name="custom_logout"),
+
 ]
