@@ -433,9 +433,9 @@ def patient_summary_view(request, patient_id):
 
         action = request.POST.get('action')
         if action == 'print_discharge':
-            return redirect(reverse("rtms_app:patient_print_discharge", args=[patient.id]))
+            return redirect("rtms_app:patient_print_discharge", args=[patient.id])
         if action == 'print_referral':
-            return redirect(reverse("rtms_app:patient_print_referral", args=[patient.id]))
+            return redirect("rtms_app:patient_print_referral", args=[patient.id])
 
         return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
     sessions = TreatmentSession.objects.filter(patient=patient).order_by('date'); assessments = Assessment.objects.filter(patient=patient).order_by('date')
