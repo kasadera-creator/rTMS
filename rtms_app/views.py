@@ -460,11 +460,18 @@ def patient_summary_view(request, patient_id):
     if patient.summary_text: summary_text = patient.summary_text
     else: summary_text = (f"{created_at_str}初診、{admission_date_str}任意入院。\n" f"入院時{fmt_score(score_admin)}、{start_date_str}から全{total_count}回のrTMS治療を実施した。\n" f"3週時、{fmt_score(score_w3)}、6週時、{fmt_score(score_w6)}となった。\n" f"治療中の合併症：{side_effects_summary}。\n" f"{end_date_str}退院。紹介元へ逆紹介、抗うつ薬の治療継続を依頼した。")
     floating_print_options = [
-        {'label': '退院サマリー印刷', 'value': 'print_discharge', 'icon': 'fa-print'},
-        {'label': '紹介状印刷', 'value': 'print_referral', 'icon': 'fa-envelope'},
+    {
+    "label": "退院サマリー（印刷）",
+    "url": reverse("rtms_app:patient_print_summary", args=[patient.id]) + "?mode=discharge",
+    },
+    {
+    "label": "紹介状（印刷）",
+    "url": reverse("rtms_app:patient_print_summary", args=[patient.id]) + "?mode=referral",
+    },
     ]
+    context["floating_print_options"] = floating_print_options
     return render(request, 'rtms_app/patient_summary.html', {'patient': patient, 'summary_text': summary_text, 'history_list': history_list, 'today': timezone.now().date(), 'test_scores': test_scores, 'dashboard_date': dashboard_date, 'floating_print_options': floating_print_options})
-
+    
 @login_required
 def patient_add_view(request):
     referral_options = Patient.objects.values_list('referral_source', flat=True).distinct()
