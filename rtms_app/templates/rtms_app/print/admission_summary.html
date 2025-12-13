@@ -1,22 +1,30 @@
-<div class="doc-title">入院時サマリ（rTMS）</div>
+<h1 class="print-title">入院時サマリ（rTMS）</h1>
 
-<div class="info-grid">
-  <div><span class="label">氏名:</span> {{ patient.name }} 様</div>
-  <div><span class="label">カルテID:</span> {{ patient.card_id }}</div>
-  <div><span class="label">生年月日:</span> {{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）</div>
-  <div><span class="label">性別:</span> {{ patient.get_gender_display }}</div>
+<table class="print-kv">
+  <tr>
+    <th>カルテID</th><td>{{ patient.card_id }}</td>
+    <th>氏名</th><td>{{ patient.name }} 様</td>
+  </tr>
+  <tr>
+    <th>生年月日</th><td>{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）</td>
+    <th>性別</th><td>{{ patient.get_gender_display }}</td>
+  </tr>
+  <tr>
+    <th>紹介元</th><td>{{ patient.referral_source|default:"-" }}</td>
+    <th>紹介医</th><td>{{ patient.referral_doctor|default:"-" }}</td>
+  </tr>
+  <tr>
+    <th>担当医</th>
+    <td colspan="3">
+      {% if patient.attending_physician %}
+        {{ patient.attending_physician.last_name }}{{ patient.attending_physician.first_name|default:"" }}
+      {% else %}
+        未定
+      {% endif %}
+    </td>
+  </tr>
+</table>
 
-  <div><span class="label">紹介元:</span> {{ patient.referral_source|default:"-" }}</div>
-  <div><span class="label">紹介医:</span> {{ patient.referral_doctor|default:"-" }}</div>
-
-  <div><span class="label">担当医:</span>
-    {% if patient.attending_physician %}
-      {{ patient.attending_physician.last_name }}{{ patient.attending_physician.first_name|default:"" }}
-    {% else %}
-      未定
-    {% endif %}
-  </div>
-</div>
 
 <div class="section-heading">主訴</div>
 <div class="note-box">
