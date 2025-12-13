@@ -11,6 +11,7 @@ urlpatterns = [
     path("dashboard/", views.dashboard_view, name="dashboard"),
     path("patients/", views.patient_list_view, name="patient_list"),
     path("patients/add/", views.patient_add_view, name="patient_add"),
+    path("logout/", views.custom_logout, name="custom_logout"),
 
     # =========================
     # Patient main pages
