@@ -85,4 +85,6 @@ urlpatterns = [
         views.patient_print_bundle,
         name="patient_print_bundle",
     ),
+    path("patient/<int:patient_id>/path/print/", views.print_clinical_path, name="print_clinical_path"),
+
 ]

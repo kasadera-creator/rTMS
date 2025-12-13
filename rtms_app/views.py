@@ -433,9 +433,9 @@ def patient_summary_view(request, patient_id):
 
         action = request.POST.get('action')
         if action == 'print_discharge':
-            return redirect(reverse('rtms_app:patient_print_discharge', args=[patient.id]))
+            return redirect(reverse("rtms_app:patient_print_bundle", args=[patient.id]) + "?docs=discharge")
         if action == 'print_referral':
-            return redirect(reverse('rtms_app:patient_print_referral', args=[patient.id]))
+            return redirect(reverse("rtms_app:patient_print_bundle", args=[patient.id]) + "?docs=referral")
 
         return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
     sessions = TreatmentSession.objects.filter(patient=patient).order_by('date'); assessments = Assessment.objects.filter(patient=patient).order_by('date')
@@ -523,6 +523,14 @@ def patient_print_summary(request, pk):
     mode = request.GET.get('mode', 'discharge')
     return _render_patient_summary(request, patient, mode)
 
+@login_required
+def print_clinical_path(request, patient_id: int):
+    patient = get_object_or_404(Patient, id=patient_id)
+    calendar_weeks = generate_calendar_weeks(patient)
+    return render(request, "rtms_app/print_clinical_path.html", {
+        "patient": patient,
+        "calendar_weeks": calendar_weeks,
+    })
 
 @login_required
 def patient_print_discharge(request, patient_id):
