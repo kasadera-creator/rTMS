@@ -9,10 +9,10 @@ from django.http import HttpResponse, FileResponse, JsonResponse
 from django.conf import settings
 from django.contrib.auth import logout
 from django.db.models import Q
-from urllib.parse import urlencode
 import os
 import csv
 import json
+from urllib.parse import urlencode
 
 from .models import Patient, TreatmentSession, MappingSession, Assessment
 from .forms import (
@@ -54,6 +54,11 @@ def is_treatment_day(d):
     return d.weekday() < 5 and not is_holiday(d)
 
 # --- ヘルパー関数 ---
+def build_url(name, args=None, query=None):
+    base = reverse(name, args=args)
+    return f"{base}?{urlencode(query)}" if query else base
+
+
 def get_session_number(start_date, target_date):
     if not start_date or target_date < start_date: return 0
     if not is_treatment_day(target_date): return -1
@@ -104,10 +109,6 @@ def get_weekly_session_count(patient, target_date):
 
 # ★修正: カレンダーデータ生成ロジック (週単位のリストを返す)
 def generate_calendar_weeks(patient):
-    def build_url(name, args=None, query=None):
-        base = reverse(name, args=args)
-        return f"{base}?{urlencode(query)}" if query else base
-
     # 基準となる開始日
     base_start = patient.admission_date or patient.first_treatment_date or timezone.now().date()
     
@@ -186,7 +187,7 @@ def generate_calendar_weeks(patient):
         if current == patient.discharge_date:
             day_info['events'].append({'type': 'discharge', 'label': '退院'})
             if not day_info['url']:
-                day_info['url'] = build_url('patient_summary', [patient.id])
+                day_info['url'] = build_url('patient_home', [patient.id])
 
         elif not patient.discharge_date and treatment_start:
             if treatment_end_est and current == treatment_end_est + timedelta(days=1):

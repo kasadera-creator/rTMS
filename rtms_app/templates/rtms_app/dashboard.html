@@ -123,7 +123,7 @@
                         {% elif task_group.title == "⑤ 尺度評価" %}
                             <a href="{% url 'assessment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&timing={{ item.timing_code }}&dashboard_date={{ today|date:'Y-m-d' }}">
                         {% elif task_group.title == "⑥ 退院準備" %}
-                            <a href="{% url 'patient_summary' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
+                            <a href="{% url 'patient_home' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
                         {% endif %}
                         
                             <!-- 1. やること (上) -->
