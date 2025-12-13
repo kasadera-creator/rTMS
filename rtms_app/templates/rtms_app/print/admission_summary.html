@@ -25,36 +25,32 @@
   </tr>
 </table>
 
-
-<div class="section-heading">主訴</div>
-<div class="note-box">
-  {{ patient.chief_complaint|default:""|linebreaksbr }}
-</div>
-
-<div class="section-heading">生活歴</div>
-<div class="note-box">
-  {{ patient.life_history|default:""|linebreaksbr }}
-</div>
-
-<div class="section-heading">既往歴</div>
-<div class="note-box">
-  {{ patient.past_history|default:""|linebreaksbr }}
-</div>
-
-<div class="section-heading">現病歴</div>
-<div class="note-box">
-  {{ patient.present_illness|default:""|linebreaksbr }}
-</div>
-
-<div class="section-heading">薬物治療歴</div>
-<div class="note-box">
-  {{ patient.medication_history|default:""|linebreaksbr }}
-</div>
-
-<div class="section-heading">診断名</div>
-<div class="note-box">
-  {{ patient.diagnosis|default:"-" }}
-</div>
+<table class="print-kv longtext">
+  <tr>
+    <th>主訴</th>
+    <td>{{ patient.chief_complaint|default:""|linebreaksbr }}</td>
+  </tr>
+  <tr>
+    <th>生活歴</th>
+    <td>{{ patient.life_history|default:""|linebreaksbr }}</td>
+  </tr>
+  <tr>
+    <th>既往歴</th>
+    <td>{{ patient.past_history|default:""|linebreaksbr }}</td>
+  </tr>
+  <tr>
+    <th>現病歴</th>
+    <td>{{ patient.present_illness|default:""|linebreaksbr }}</td>
+  </tr>
+  <tr>
+    <th>薬物治療歴</th>
+    <td>{{ patient.medication_history|default:""|linebreaksbr }}</td>
+  </tr>
+  <tr>
+    <th>診断名</th>
+    <td>{{ patient.diagnosis|default:"-" }}</td>
+  </tr>
+</table>
 
 <div class="section-heading">治療前評価（HAM-D）</div>
 <table class="table-basic">
