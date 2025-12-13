@@ -20,6 +20,9 @@ from .forms import (
     PatientRegistrationForm, AdmissionProcedureForm
 )
 
+dashboard_url = reverse("rtms_app:dashboard")
+back_url = f"{dashboard_url}?date={dashboard_date}" if dashboard_date else dashboard_url
+
 def build_url(name, args=None, query=None):
     """
     reverse() でURLを作り、必要なら query dict を安全に付与する。

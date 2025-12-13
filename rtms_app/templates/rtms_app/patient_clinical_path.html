@@ -99,5 +99,5 @@
     </div>
 </div>
 
-{% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options complete_label="入力完了" complete_url="{% url 'rtms_app:patient_home' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}" back_url="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" %}
+{% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=back_url %}
 {% endblock %}

@@ -100,7 +100,7 @@
         <div style="height: 50px;"></div>
     </form>
 
-    {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options complete_label="入力完了" back_url="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" %}
+    {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=back_url %}
 </div>
 
 <script>
