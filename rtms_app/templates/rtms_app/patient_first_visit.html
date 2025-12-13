@@ -32,31 +32,6 @@
         </div>
     </div>
 
-    <div class="card mb-3">
-        <div class="card-header bg-light fw-bold">初診時 印刷</div>
-        <div class="card-body">
-            <form action="{% url 'rtms_app:patient_print_bundle' patient.id %}" method="get" class="row g-3 align-items-center">
-                <div class="col-md-8 col-lg-9">
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" id="docAdmission" name="docs" value="admission" checked>
-                        <label class="form-check-label" for="docAdmission">入院時サマリ</label>
-                    </div>
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" id="docSuitability" name="docs" value="suitability" checked>
-                        <label class="form-check-label" for="docSuitability">rTMS適正質問票</label>
-                    </div>
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" id="docConsent" name="docs" value="consent" checked>
-                        <label class="form-check-label" for="docConsent">rTMS治療説明書・同意書</label>
-                    </div>
-                </div>
-                <div class="col-md-4 col-lg-3 text-md-end">
-                    <button type="submit" class="btn btn-primary">プレビュー（合本）</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <form method="post" id="mainForm">
         {% csrf_token %}
         {% if form.errors %}
@@ -180,39 +155,30 @@
             </div>
         </div>
 
-       <div class="card mb-3">
-  <div class="card-header bg-light fw-bold">初診時 印刷</div>
-  <div class="card-body">
-    <form action="{% url 'rtms_app:patient_print_bundle' patient.id %}"
-          method="get"
-          target="_blank"
-          class="row g-3 align-items-center">
-      <div class="col-md-8 col-lg-9">
-        <div class="form-check form-check-inline">
-          <input class="form-check-input" type="checkbox" id="docAdmissionBottom" name="docs" value="admission" checked>
-          <label class="form-check-label" for="docAdmissionBottom">入院時サマリ</label>
+    <div class="card mb-3">
+        <div class="card-header bg-light fw-bold">初診時 印刷</div>
+        <div class="card-body">
+            <form action="{% url 'rtms_app:patient_print_bundle' patient.id %}" method="get" class="row g-3 align-items-center">
+                <div class="col-md-8 col-lg-9">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="docAdmission" name="docs" value="admission" checked>
+                        <label class="form-check-label" for="docAdmission">入院時サマリ</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="docSuitability" name="docs" value="suitability" checked>
+                        <label class="form-check-label" for="docSuitability">rTMS適正質問票</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="docConsent" name="docs" value="consent" checked>
+                        <label class="form-check-label" for="docConsent">rTMS治療説明書・同意書</label>
+                    </div>
+                </div>
+                <div class="col-md-4 col-lg-3 text-md-end">
+                    <button type="submit" class="btn btn-primary">プレビュー（合本）</button>
+                </div>
+            </form>
         </div>
-        <div class="form-check form-check-inline">
-          <input class="form-check-input" type="checkbox" id="docSuitabilityBottom" name="docs" value="suitability" checked>
-          <label class="form-check-label" for="docSuitabilityBottom">rTMS適正質問票</label>
-        </div>
-        <div class="form-check form-check-inline">
-          <input class="form-check-input" type="checkbox" id="docConsentBottom" name="docs" value="consent" checked>
-          <label class="form-check-label" for="docConsentBottom">rTMS治療説明書・同意書</label>
-        </div>
-      </div>
-
-      {% if dashboard_date %}
-        <input type="hidden" name="dashboard_date" value="{{ dashboard_date }}">
-      {% endif %}
-
-      <div class="col-md-4 col-lg-3 text-md-end">
-        <button type="submit" class="btn btn-primary">プレビュー（合本）</button>
-      </div>
-    </form>
-  </div>
-</div>
-
+    </div>
 
         <div style="height: 60px;"></div>
 
