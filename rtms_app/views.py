@@ -422,30 +422,46 @@ def assessment_add(request, patient_id):
 
 @login_required
 def patient_summary_view(request, patient_id):
-    patient = get_object_or_404(Patient, pk=patient_id); dashboard_date = request.GET.get('dashboard_date')
+    patient = get_object_or_404(Patient, pk=patient_id)
+    dashboard_date = request.GET.get('dashboard_date')
+
     if request.method == 'POST':
-        patient.summary_text = request.POST.get('summary_text', ''); patient.discharge_prescription = request.POST.get('discharge_prescription', '')
+        patient.summary_text = request.POST.get('summary_text', '')
+        patient.discharge_prescription = request.POST.get('discharge_prescription', '')
+
         d_date = request.POST.get('discharge_date')
-        if d_date: patient.discharge_date = parse_date(d_date)
-        else: patient.discharge_date = None
+        if d_date:
+            patient.discharge_date = parse_date(d_date)
+        else:
+            patient.discharge_date = None
+
         patient.save()
-        if request.headers.get('x-requested-with') == 'XMLHttpRequest': action = request.POST.get('action')
-        if action == 'print_discharge':
-        return JsonResponse({
-            'status': 'success',
-            'redirect_url': reverse("rtms_app:patient_print_discharge", args=[patient.id]),
-        })
-        if action == 'print_referral':
-        return JsonResponse({
-            'status': 'success',
-            'redirect_url': reverse("rtms_app:patient_print_referral", args=[patient.id]),
-        })
-        return JsonResponse({'status': 'success'})
-        
+
         action = request.POST.get('action')
-        if action == 'print_discharge': return redirect(reverse("rtms_app:patient_print_discharge", args=[patient.id]))
-        if action == 'print_referral': return redirect(reverse("rtms_app:patient_print_referral", args=[patient.id]))
+
+        # ★ AJAXの場合でも action を見て印刷URLを返す
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            if action == 'print_discharge':
+                return JsonResponse({
+                    'status': 'success',
+                    'redirect_url': reverse("rtms_app:patient_print_discharge", args=[patient.id]),
+                })
+            if action == 'print_referral':
+                return JsonResponse({
+                    'status': 'success',
+                    'redirect_url': reverse("rtms_app:patient_print_referral", args=[patient.id]),
+                })
+            return JsonResponse({'status': 'success'})
+
+        # ★ 通常POST（非AJAX）
+        if action == 'print_discharge':
+            return redirect(reverse("rtms_app:patient_print_discharge", args=[patient.id]))
+        if action == 'print_referral':
+            return redirect(reverse("rtms_app:patient_print_referral", args=[patient.id]))
+
         return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
+
+        
     sessions = TreatmentSession.objects.filter(patient=patient).order_by('date'); assessments = Assessment.objects.filter(patient=patient).order_by('date')
     test_scores = assessments; score_admin = assessments.first(); score_w3 = assessments.filter(timing='week3').first(); score_w6 = assessments.filter(timing='week6').first()
     def fmt_score(obj): return f"HAMD17 {obj.total_score_17}点 HAMD21 {obj.total_score_21}点" if obj else "未評価"
