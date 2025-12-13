@@ -155,7 +155,17 @@
             </div>
         </div>
 
-    <div class="card mb-3">
+        <div style="height: 60px;"></div>
+
+        
+        <div class="floating-actions">
+            <button type="submit" class="btn btn-primary btn-fab text-white"><i class="fas fa-check"></i> 入力完了</button>
+            <a href="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab"><i class="fas fa-undo"></i> 戻る</a>
+        </div>
+    </form>
+</div>
+
+<div class="card mb-3">
   <div class="card-header bg-light fw-bold">初診時 印刷</div>
   <div class="card-body">
     <form action="{% url 'rtms_app:patient_print_bundle' patient.id %}"
@@ -183,17 +193,6 @@
       </button>
     </form>
   </div>
-</div>
-
-        <div style="height: 60px;"></div>
-
-        
-        <div class="floating-actions">
-            <button type="submit" class="btn btn-primary btn-fab text-white"><i class="fas fa-check"></i> 入力完了</button>
-            <a href="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab"><i class="fas fa-undo"></i> 戻る</a>
-        </div>
-    </form>
-
 </div>
 
 <!-- HAM-D モーダル (変更なし) -->
