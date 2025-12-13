@@ -10,9 +10,6 @@
     .q-table th { background-color: #f8f9fa; padding: 10px; border-bottom: 2px solid #dee2e6; }
     .q-table td { padding: 8px 10px; border-bottom: 1px solid #dee2e6; vertical-align: middle; }
     .q-header-row { background-color: #e9ecef; font-weight: bold; }
-    .floating-actions { position: fixed; bottom: 20px; right: 20px; z-index: 1050; display: flex; gap: 10px; }
-    .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; }
-    
     .hamd-input-group { border-bottom: 1px solid #eee; padding: 5px 0; }
     .hamd-label { font-size: 0.9rem; font-weight: bold; }
     .hamd-input { width: 60px; text-align: center; }
@@ -150,16 +147,12 @@
         </div>
 
         <div style="height: 60px;"></div>
-
-        
-        <div class="floating-actions">
-            <button type="submit" class="btn btn-primary btn-fab text-white"><i class="fas fa-check"></i> 入力完了</button>
-            <a href="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab"><i class="fas fa-undo"></i> 戻る</a>
-        </div>
     </form>
-	
-	<div class="form-section">
-	<div class="card mb-3">
+
+    {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" %}
+
+    <div class="form-section">
+        <div class="card mb-3">
   <div class="card-header bg-light fw-bold">初診時 印刷</div>
   <div class="card-body">
     <form action="{% url 'rtms_app:patient_print_bundle' patient.id %}"
@@ -186,7 +179,9 @@
         プレビュー（合本）
       </button>
     </form>
-</div></div>
+
+  </div>
+</div>
 </div>
 	
 </div>

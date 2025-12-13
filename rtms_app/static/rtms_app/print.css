@@ -63,11 +63,14 @@ body {
     margin-left: 8px;
 }
 
+
 .bundle-container {
-    max-width: 900px;
-    margin: 20px auto 40px;
+    width: 190mm;
+    max-width: 100%;
+    margin: 12mm auto 20mm;
     background: #fff;
-    padding: 16px;
+    padding: 12mm;
+    box-sizing: border-box;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
@@ -80,11 +83,13 @@ body {
 }
 
 .doc-wrapper {
-    min-height: 297mm;
+    min-height: 0;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .doc-wrapper + .doc-wrapper {
-    margin-top: 24px;
+    margin-top: 16px;
 }
 
 .doc-title {
@@ -239,8 +244,8 @@ body {
 }
 
 @media print {
-    body { background: #fff; }
-    .bundle-container { box-shadow: none; margin: 0; padding: 0; max-width: 100%; }
+    body { background: #fff; margin: 0; }
+    .bundle-container { box-shadow: none; margin: 0 auto; padding: 0; width: 190mm; }
     .print-header, .screen-only { display: none !important; }
     a[href]:after { content: none !important; }
 }

@@ -7,8 +7,6 @@
     .score-table th { background-color: #e8f5e9; text-align: center; font-size: 0.9rem; }
     .score-table td { text-align: center; font-size: 0.9rem; }
     
-    .floating-actions { position: static; display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; margin-top: 24px; }
-    .btn-fab { border-radius: 30px; padding: 10px 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; width: fit-content; }
     .discharge-date-card { border-left: 5px solid #17a2b8; background-color: #f0fdf4; }
 </style>
 {% endblock %}
@@ -22,7 +20,7 @@
     </div>
 
     <!-- (以下、フォーム部分は既存と同じ) -->
-    <form method="post" id="summaryForm" class="bg-white p-4 shadow-sm rounded">
+    <form method="post" id="mainForm" class="bg-white p-4 shadow-sm rounded">
         {% csrf_token %}
         <div class="alert alert-light border mb-4">
             <div class="row align-items-center">
@@ -100,16 +98,9 @@
         </div>
 
         <div style="height: 50px;"></div>
-
-        <div class="floating-actions">
-            <div class="btn-group" role="group">
-                <button type="button" class="btn btn-primary btn-fab" onclick="saveAndPrint('discharge')"><i class="fas fa-print"></i> 退院サマリー 印刷</button>
-                <button type="button" class="btn btn-success btn-fab" onclick="saveAndPrint('referral')"><i class="fas fa-envelope"></i> 紹介状 印刷</button>
-            </div>
-            <button type="submit" class="btn btn-dark btn-fab"><i class="fas fa-save"></i> 保存して終了</button>
-            <a href="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab"><i class="fas fa-undo"></i> 戻る</a>
-        </div>
     </form>
+
+    {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options complete_label="入力完了" back_url="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" %}
 </div>
 
 <script>
@@ -129,27 +120,5 @@
         }
     });
 
-    function saveAndPrint(mode) {
-        const form = document.getElementById('summaryForm');
-        const formData = new FormData(form);
-        const url = window.location.href;
-
-        fetch(url, {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }
-        })
-        .then(response => {
-            if (response.ok) {
-                const printUrls = {
-                    discharge: "{% url 'rtms_app:patient_print_discharge' patient.id %}",
-                    referral: "{% url 'rtms_app:patient_print_referral' patient.id %}",
-                };
-                const printUrl = printUrls[mode];
-                if (printUrl) { window.open(printUrl, '_blank'); }
-            } else { alert('保存に失敗しました。'); }
-        })
-        .catch(error => { console.error('Error:', error); alert('通信エラーが発生しました。'); });
-    }
 </script>
 {% endblock %}

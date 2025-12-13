@@ -28,7 +28,7 @@ def build_url(name, args=None, query=None):
     """
     resolved_name = name if ":" in name else f"rtms_app:{name}"
     base = reverse(resolved_name, args=args)
-    return f"{base}?{urlencode(query)}" if query else base
+    return f"{base}?{urlencode(query, doseq=True)}" if query else base
     
 # ==========================================
 # 祝日定義 (2024-2030) + 年末年始 (12/29-1/3)
@@ -152,18 +152,20 @@ def generate_calendar_weeks(patient):
             'events': [],
             'is_weekend': current.weekday() >= 5,
             'is_holiday': is_hol,
-            'url': None
+            'url': build_url('dashboard', query={'date': current.strftime('%Y-%m-%d')})
         }
         
         # 1. 入院
         if current == patient.admission_date:
-            day_info['events'].append({'type': 'admission', 'label': '入院'})
-            day_info['url'] = build_url('admission_procedure', [patient.id])
+            day_info['events'].append({'type': 'admission', 'label': '入院', 'url': build_url('admission_procedure', [patient.id])})
             
         # 2. 位置決め
         if current == patient.mapping_date or current in mapping_dates:
-            day_info['events'].append({'type': 'mapping', 'label': '位置決め'})
-            day_info["url"] = build_url("mapping_add", args=[patient.id], query={"date": current.strftime("%Y-%m-%d")})
+            day_info['events'].append({
+                'type': 'mapping',
+                'label': '位置決め',
+                'url': build_url("mapping_add", args=[patient.id], query={"date": current.strftime("%Y-%m-%d")})
+            })
             
         # 3. 治療予定・実績
         session_num = 0
@@ -172,10 +174,11 @@ def generate_calendar_weeks(patient):
             if session_num > 0 and session_num <= 30:
                 status_label = ""
                 if current in treatments_done: status_label = " (済)"
-                day_info['events'].append({'type': 'treatment', 'label': f'治療 {session_num}回{status_label}'})
-                
-                if not day_info['url']:
-                    day_info['url'] = build_url('treatment_add', [patient.id], {'date': current})
+                day_info['events'].append({
+                    'type': 'treatment',
+                    'label': f'治療 {session_num}回{status_label}',
+                    'url': build_url('treatment_add', [patient.id], {'date': current})
+                })
                 
                 # 4. 評価予定
                 timing = None
@@ -185,15 +188,15 @@ def generate_calendar_weeks(patient):
                 elif session_num == 30: timing = 'week6'; label = '最終評価'
                 
                 if timing:
-                    day_info['events'].append({'type': 'assessment', 'label': label})
-                    # 評価日は評価入力へ誘導
-                    day_info['url'] = build_url('assessment_add', [patient.id], {'date': current, 'timing': timing})
+                    day_info['events'].append({
+                        'type': 'assessment',
+                        'label': label,
+                        'url': build_url('assessment_add', [patient.id], {'date': current, 'timing': timing})
+                    })
         
         # 5. 退院
         if current == patient.discharge_date:
-            day_info['events'].append({'type': 'discharge', 'label': '退院'})
-            if not day_info['url']:
-                day_info['url'] = build_url('patient_home', [patient.id])
+            day_info['events'].append({'type': 'discharge', 'label': '退院', 'url': build_url('patient_home', [patient.id])})
 
         elif not patient.discharge_date and treatment_start:
             if treatment_end_est and current == treatment_end_est + timedelta(days=1):
@@ -323,14 +326,23 @@ def patient_first_visit(request, patient_id):
         form = PatientFirstVisitForm(request.POST, instance=patient)
         if form.is_valid():
             p = form.save(commit=False); diag_list = request.POST.getlist('diag_list'); diag_other = request.POST.get('diag_other', '').strip()
-            full_diagnosis = ", ".join(diag_list); 
+            full_diagnosis = ", ".join(diag_list);
             if diag_other: full_diagnosis += f", その他({diag_other})"
             p.diagnosis = full_diagnosis; p.save()
+
+            action = request.POST.get('action')
+            if action == 'print_bundle':
+                query = {'docs': ['admission', 'suitability', 'consent']}
+                if dashboard_date:
+                    query['dashboard_date'] = dashboard_date
+                return redirect(build_url('patient_print_bundle', args=[patient.id], query=query))
+
             if dashboard_date:
                 return redirect(f"{reverse('rtms_app:dashboard')}?date={dashboard_date}")
             return redirect('rtms_app:dashboard')
     else: form = PatientFirstVisitForm(instance=patient)
-    return render(request, 'rtms_app/patient_first_visit.html', {'patient': patient, 'form': form, 'referral_options': referral_options, 'referral_map_json': json.dumps(referral_map_json, ensure_ascii=False), 'end_date_est': end_date_est, 'dashboard_date': dashboard_date, 'hamd_items_left': hamd_items_left, 'hamd_items_right': hamd_items_right, 'baseline_assessment': baseline_assessment})
+    floating_print_options = [{'label': '印刷プレビュー', 'value': 'print_bundle', 'icon': 'fa-print'}]
+    return render(request, 'rtms_app/patient_first_visit.html', {'patient': patient, 'form': form, 'referral_options': referral_options, 'referral_map_json': json.dumps(referral_map_json, ensure_ascii=False), 'end_date_est': end_date_est, 'dashboard_date': dashboard_date, 'hamd_items_left': hamd_items_left, 'hamd_items_right': hamd_items_right, 'baseline_assessment': baseline_assessment, 'floating_print_options': floating_print_options})
 
 @login_required
 def treatment_add(request, patient_id):
@@ -418,6 +430,13 @@ def patient_summary_view(request, patient_id):
         else: patient.discharge_date = None
         patient.save()
         if request.headers.get('x-requested-with') == 'XMLHttpRequest': return JsonResponse({'status': 'success'})
+
+        action = request.POST.get('action')
+        if action == 'print_discharge':
+            return redirect(reverse('rtms_app:patient_print_discharge', args=[patient.id]))
+        if action == 'print_referral':
+            return redirect(reverse('rtms_app:patient_print_referral', args=[patient.id]))
+
         return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
     sessions = TreatmentSession.objects.filter(patient=patient).order_by('date'); assessments = Assessment.objects.filter(patient=patient).order_by('date')
     test_scores = assessments; score_admin = assessments.first(); score_w3 = assessments.filter(timing='week3').first(); score_w6 = assessments.filter(timing='week6').first()
@@ -440,7 +459,11 @@ def patient_summary_view(request, patient_id):
     created_at_str = patient.created_at.strftime('%Y年%m月%d日')
     if patient.summary_text: summary_text = patient.summary_text
     else: summary_text = (f"{created_at_str}初診、{admission_date_str}任意入院。\n" f"入院時{fmt_score(score_admin)}、{start_date_str}から全{total_count}回のrTMS治療を実施した。\n" f"3週時、{fmt_score(score_w3)}、6週時、{fmt_score(score_w6)}となった。\n" f"治療中の合併症：{side_effects_summary}。\n" f"{end_date_str}退院。紹介元へ逆紹介、抗うつ薬の治療継続を依頼した。")
-    return render(request, 'rtms_app/patient_summary.html', {'patient': patient, 'summary_text': summary_text, 'history_list': history_list, 'today': timezone.now().date(), 'test_scores': test_scores, 'dashboard_date': dashboard_date})
+    floating_print_options = [
+        {'label': '退院サマリー印刷', 'value': 'print_discharge', 'icon': 'fa-print'},
+        {'label': '紹介状印刷', 'value': 'print_referral', 'icon': 'fa-envelope'},
+    ]
+    return render(request, 'rtms_app/patient_summary.html', {'patient': patient, 'summary_text': summary_text, 'history_list': history_list, 'today': timezone.now().date(), 'test_scores': test_scores, 'dashboard_date': dashboard_date, 'floating_print_options': floating_print_options})
 
 @login_required
 def patient_add_view(request):
@@ -525,11 +548,14 @@ def patient_print_bundle(request, patient_id):
         patient=patient
     ).order_by("date")
 
+    end_date_est = get_completion_date(patient.first_treatment_date)
+
     context = {
         "patient": patient,
         "selected_docs": selected_docs,
         "assessments": assessments,
         "consent_copies": ["患者控え", "病院控え"],
+        "end_date_est": end_date_est,
     }
 
     return render(
@@ -541,12 +567,23 @@ def patient_print_bundle(request, patient_id):
 @login_required
 def patient_clinical_path(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
+    dashboard_date = request.GET.get('dashboard_date')
     # ★修正: generate_calendar_weeks を使用
     calendar_weeks = generate_calendar_weeks(patient)
+    floating_print_options = [{
+        'label': '印刷プレビュー',
+        'icon': 'fa-print',
+        'value': 'print_path',
+        'formaction': reverse('rtms_app:print_clinical_path', args=[patient.id]),
+        'formmethod': 'get',
+        'formtarget': '_blank'
+    }]
     return render(request, 'rtms_app/patient_clinical_path.html', {
         'patient': patient,
         'calendar_weeks': calendar_weeks,
-        'today': timezone.now().date()
+        'today': timezone.now().date(),
+        'dashboard_date': dashboard_date,
+        'floating_print_options': floating_print_options
     })
 
 @login_required
