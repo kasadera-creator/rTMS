@@ -6,8 +6,18 @@
     .history-table td { text-align: center; vertical-align: middle; }
     .score-table th { background-color: #e8f5e9; text-align: center; font-size: 0.9rem; }
     .score-table td { text-align: center; font-size: 0.9rem; }
-    
+
     .discharge-date-card { border-left: 5px solid #17a2b8; background-color: #f0fdf4; }
+
+    .autosave-toast {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        min-width: 260px;
+        z-index: 1100;
+        display: none;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
 </style>
 {% endblock %}
 
@@ -106,14 +116,21 @@
     {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=back_url %}
   {% endwith %}
 {% else %}
-  {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=dashboard_url %}
-{% endif %}
+    {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=dashboard_url %}
+  {% endif %}
 
+</div>
+
+<div id="autosaveToast" class="toast align-items-center text-white bg-success autosave-toast" role="status" aria-live="polite">
+  <div class="d-flex">
+    <div class="toast-body" id="autosaveToastBody">✓ 自動保存しました</div>
+    <button type="button" class="btn-close btn-close-white me-2 m-auto" aria-label="Close" onclick="hideToast()"></button>
+  </div>
 </div>
 
 <script>
     document.getElementById('dischargeDateInput').addEventListener('change', function(e) {
-        const dateVal = e.target.value; 
+        const dateVal = e.target.value;
         if (!dateVal) return;
         const d = new Date(dateVal);
         const formattedDate = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
@@ -131,8 +148,63 @@
 </script>
 
 <script>
+  const autosaveToast = document.getElementById('autosaveToast');
+  const autosaveToastBody = document.getElementById('autosaveToastBody');
+  let autosaveTimer = null;
+  let savingPromise = Promise.resolve();
+
+  function showToast(message, variant = 'success') {
+    autosaveToastBody.textContent = message;
+    autosaveToast.classList.remove('bg-success', 'bg-danger');
+    autosaveToast.classList.add(variant === 'error' ? 'bg-danger' : 'bg-success');
+    autosaveToast.style.display = 'block';
+    const bsToast = bootstrap.Toast.getOrCreateInstance(autosaveToast, { delay: 2500 });
+    bsToast.show();
+  }
+
+  function hideToast() {
+    const bsToast = bootstrap.Toast.getOrCreateInstance(autosaveToast);
+    bsToast.hide();
+  }
+
+  async function performSave(action = '') {
+    const form = document.getElementById('mainForm');
+    const fd = new FormData(form);
+    if (action) {
+      fd.append('action', action);
+    }
+
+    const res = await fetch(window.location.href, {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      body: fd,
+      credentials: 'same-origin',
+    });
+
+    if (!res.ok) {
+      throw new Error(`save failed: HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    if (!action) {
+      showToast('✓ 自動保存しました');
+    }
+    return data;
+  }
+
+  function debounceSave() {
+    if (autosaveTimer) {
+      clearTimeout(autosaveTimer);
+    }
+    autosaveTimer = setTimeout(() => {
+      savingPromise = performSave().catch((err) => {
+        console.error(err);
+        showToast('保存に失敗しました', 'error');
+      });
+    }, 1000);
+  }
+
   async function saveThenPrint(btn) {
-    const formId = btn.dataset.formId || 'mainForm';
     const action = btn.dataset.action || '';
     const fallbackUrl = btn.dataset.printUrl || '';
     const target = btn.dataset.target || '_blank';
@@ -142,38 +214,20 @@
       return;
     }
 
-    const form = document.getElementById(formId);
-    if (!form) {
-      alert(`フォームが見つかりません: ${formId}`);
-      return;
+    try {
+      await savingPromise;
+      const data = await performSave(action);
+      const url = data.redirect_url || fallbackUrl;
+      if (!url) {
+        alert('印刷URLが取得できませんでした。');
+        return;
+      }
+      window.open(url, target, 'noopener');
+    } catch (err) {
+      console.error(err);
+      showToast('保存または印刷に失敗しました', 'error');
+      alert('保存または印刷に失敗しました。');
     }
-
-    const fd = new FormData(form);
-    fd.append('action', action);
-
-    const res = await fetch(window.location.href, {
-      method: 'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      body: fd,
-      credentials: 'same-origin',
-    });
-
-    // 失敗時はここで止める
-    if (!res.ok) {
-      throw new Error(`save failed: HTTP ${res.status}`);
-    }
-
-    const data = await res.json();
-
-    // view側で redirect_url を返す設計にしておくのがベスト
-    const url = data.redirect_url || fallbackUrl;
-
-    if (!url) {
-      alert('印刷URLが取得できませんでした。');
-      return;
-    }
-
-    window.open(url, target, 'noopener');
   }
 
   document.addEventListener('click', (e) => {
@@ -181,10 +235,12 @@
     if (!btn) return;
 
     e.preventDefault();
-    saveThenPrint(btn).catch((err) => {
-      console.error(err);
-      alert('保存または印刷に失敗しました。');
-    });
+    saveThenPrint(btn);
+  });
+
+  document.querySelectorAll('#mainForm input, #mainForm textarea').forEach((el) => {
+    el.addEventListener('input', debounceSave);
+    el.addEventListener('change', debounceSave);
   });
 </script>
 

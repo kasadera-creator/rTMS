@@ -581,6 +581,11 @@ def patient_print_referral(request, patient_id):
 
 
 @login_required
+def consent_latest(request):
+    return render(request, "rtms_app/consent_latest.html")
+
+
+@login_required
 def patient_print_bundle(request, patient_id):
     patient = get_object_or_404(Patient, id=patient_id)
 

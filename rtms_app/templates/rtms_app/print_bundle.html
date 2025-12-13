@@ -38,7 +38,13 @@
                     {% elif doc == 'suitability' %}
                         {% include "rtms_app/print/suitability_questionnaire.html" %}
                     {% elif doc == 'consent' %}
-                        {% include "rtms_app/print/rtms_consent.html" %}
+                        <div class="screen-only mb-3">
+                            <div class="fw-bold mb-1">説明同意文書（PDF）</div>
+                            <a class="btn btn-primary btn-sm" href="{% url 'rtms_app:consent_latest' %}" target="_blank" rel="noopener">PDFを別タブで開く</a>
+                        </div>
+                        <div class="small text-muted">
+                            同意書は別タブのPDFから印刷してください（合本には含まれません）。
+                        </div>
                     {% endif %}
                 </div>
             {% endfor %}

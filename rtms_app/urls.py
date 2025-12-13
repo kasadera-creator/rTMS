@@ -95,4 +95,6 @@ urlpatterns = [
     name="patient_print_referral",
     ),
 
+    path("consent/latest/", views.consent_latest, name="consent_latest"),
+
 ]
