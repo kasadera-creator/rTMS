@@ -32,10 +32,19 @@ body {
   position: relative;
 }
 
-.page-break,
+.page-break {
+  break-before: page;
+  page-break-before: always;
+}
+
 .page-break-after {
   break-after: page;
   page-break-after: always;
+}
+
+.page-break-after:last-child {
+  break-after: auto;
+  page-break-after: auto;
 }
 
 .page-container .page-sheet + .page-sheet {

@@ -1,6 +1,8 @@
 {% extends "rtms_app/base.html" %}
 
 {% block extrastyle %}
+{% load static %}
+<link rel="stylesheet" href="{% static 'rtms_app/print.css' %}">
 <style>
     @page {
         size: A4 landscape;
@@ -8,7 +10,7 @@
     }
 
     body {
-        font-family: "Meiryo", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+        font-family: "Meiryo", "Yu Gothic", "Hiragino Sans", sans-serif;
     }
 
     .page-container {
