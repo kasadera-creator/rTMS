@@ -462,11 +462,11 @@ def patient_summary_view(request, patient_id):
     floating_print_options = [
     {
     "label": "退院サマリー（印刷）",
-    "url": reverse("rtms_app:patient_print_discharge", args=[patient.id])",
+    "url": reverse("rtms_app:patient_print_discharge", args=[patient.id]),
     },
     {
     "label": "紹介状（印刷）",
-    "url": reverse("rtms_app:patient_print_referral", args=[patient.id])",
+    "url": reverse("rtms_app:patient_print_referral", args=[patient.id]),
     },
     ]
     return render(request, 'rtms_app/patient_summary.html', {'patient': patient, 'summary_text': summary_text, 'history_list': history_list, 'today': timezone.now().date(), 'test_scores': test_scores, 'dashboard_date': dashboard_date, 'floating_print_options': floating_print_options})
