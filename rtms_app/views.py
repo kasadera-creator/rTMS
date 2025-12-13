@@ -23,8 +23,11 @@ from .forms import (
 def build_url(name, args=None, query=None):
     """
     reverse() でURLを作り、必要なら query dict を安全に付与する。
+
+    名前空間が付いていない場合は rtms_app: を補完する。
     """
-    base = reverse(name, args=args)
+    resolved_name = name if ":" in name else f"rtms_app:{name}"
+    base = reverse(resolved_name, args=args)
     return f"{base}?{urlencode(query)}" if query else base
     
 # ==========================================
@@ -61,10 +64,6 @@ def is_treatment_day(d):
     return d.weekday() < 5 and not is_holiday(d)
 
 # --- ヘルパー関数 ---
-def build_url(name, args=None, query=None):
-    base = reverse(name, args=args)
-    return f"{base}?{urlencode(query)}" if query else base
-
 
 def get_session_number(start_date, target_date):
     if not start_date or target_date < start_date: return 0
@@ -480,19 +479,36 @@ def custom_logout(request):
     logout(request)
     return redirect("rtms_app:dashboard")
 
-def patient_print_preview(request, pk): 
+def patient_print_preview(request, pk):
     patient = get_object_or_404(Patient, pk=pk)
     end_date_est = get_completion_date(patient.first_treatment_date)
     mode = request.GET.get('mode', 'summary')
     context = { 'patient': patient, 'end_date_est': end_date_est, 'mode': mode }
     return render(request, 'rtms_app/print_preview.html', context)
 
+def _render_patient_summary(request, patient, mode):
+    normalized_mode = 'discharge' if mode == 'summary' else mode
+    test_scores = Assessment.objects.filter(patient=patient).order_by('date')
+    context = {'patient': patient, 'mode': normalized_mode, 'today': datetime.date.today(), 'test_scores': test_scores}
+    return render(request, 'rtms_app/print_summary.html', context)
+
+
 def patient_print_summary(request, pk):
     patient = get_object_or_404(Patient, pk=pk)
-    mode = request.GET.get('mode', 'summary')
-    test_scores = Assessment.objects.filter(patient=patient).order_by('date')
-    context = {'patient': patient, 'mode': mode, 'today': datetime.date.today(), 'test_scores': test_scores}
-    return render(request, 'rtms_app/print_summary.html', context)
+    mode = request.GET.get('mode', 'discharge')
+    return _render_patient_summary(request, patient, mode)
+
+
+@login_required
+def patient_print_discharge(request, patient_id):
+    patient = get_object_or_404(Patient, id=patient_id)
+    return _render_patient_summary(request, patient, 'discharge')
+
+
+@login_required
+def patient_print_referral(request, patient_id):
+    patient = get_object_or_404(Patient, id=patient_id)
+    return _render_patient_summary(request, patient, 'referral')
 
 
 @login_required
