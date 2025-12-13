@@ -71,25 +71,7 @@
                 </div>
                 {{ form.diagnosis }}
                 
-                <div class="my-3 p-3 bg-light border rounded">
-                    <div class="d-flex align-items-center">
-                        <button type="button" class="btn btn-outline-danger btn-sm me-3" data-bs-toggle="modal" data-bs-target="#hamdModal">
-                            <i class="fas fa-chart-bar"></i> 治療前HAM-D評価
-                        </button>
-
-                        <span id="hamd-result-display" class="fw-bold text-dark">
-                            {% if baseline_assessment %}
-                                HAM-D17: <span class="fs-5">{{ baseline_assessment.total_score_17 }}</span> 点 (評価済)
-                            {% else %}
-                                未評価
-                            {% endif %}
-                        </span>
-                    </div>
-                    <div class="text-muted small mt-1">
-                        評価済みの点数が表示されます。未評価の場合はモーダルから入力してください。
-                    </div>
-                </div>
-                <div class="diag-check-group mt-1">
+                                <div class="diag-check-group mt-1">
                     <!-- 診断名リスト (省略せず記述) -->
                     <div class="row g-2">
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="うつ病" id="d_dep"><label class="form-check-label" for="d_dep">うつ病</label></div></div>
@@ -110,7 +92,24 @@
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="パーキンソン病" id="d_parkinson"><label class="form-check-label" for="d_parkinson">パーキンソン病</label></div></div>
                         <div class="col-12 mt-2"><label class="small text-muted fw-bold">詳細・その他の診断名 (認知症の型などもこちらへ)</label><input type="text" name="diag_other" class="form-control form-control-sm" placeholder="例: アルツハイマー型認知症、レビー小体型認知症など"></div>
                     </div>
-                </div>
+                <div class="my-3 p-3 bg-light border rounded">
+                    <div class="d-flex align-items-center">
+                        <button type="button" class="btn btn-outline-danger btn-sm me-3" data-bs-toggle="modal" data-bs-target="#hamdModal">
+                            <i class="fas fa-chart-bar"></i> 治療前HAM-D評価
+                        </button>
+
+                        <span id="hamd-result-display" class="fw-bold text-dark">
+                            {% if baseline_assessment %}
+                                HAM-D17: <span class="fs-5">{{ baseline_assessment.total_score_17 }}</span> 点 (評価済)
+                            {% else %}
+                                未評価
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="text-muted small mt-1">
+                        評価済みの点数が表示されます。未評価の場合はモーダルから入力してください。
+                    </div>
+                </div></div>
             </div>
         </div>
 
