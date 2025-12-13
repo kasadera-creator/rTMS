@@ -488,6 +488,26 @@ def patient_print_bundle(request, patient_id):
     selected_docs = [d for d in DOC_ORDER if d in set(docs_req)]
     if not selected_docs:
         selected_docs = DOC_ORDER[:]
+        
+    baseline = (
+    Assessment.objects
+    .filter(patient=patient, type="HAM-D", timing="baseline")
+    .order_by("-date")
+    .first()
+)
+
+baseline_hamd17 = baseline.total_score_17 if baseline else None
+baseline_hamd_date = baseline.date if baseline else None
+
+end_date_est = None
+if patient.first_treatment_date:
+    end_date_est = patient.first_treatment_date + timedelta(weeks=6)
+
+context.update({
+    "baseline_hamd17": baseline_hamd17,
+    "baseline_hamd_date": baseline_hamd_date,
+    "end_date_est": end_date_est,
+})
 
     assessments = Assessment.objects.filter(patient=patient).order_by('date')
     sessions = TreatmentSession.objects.filter(patient=patient).order_by('date')
