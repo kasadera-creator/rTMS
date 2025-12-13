@@ -433,9 +433,9 @@ def patient_summary_view(request, patient_id):
 
         action = request.POST.get('action')
         if action == 'print_discharge':
-            return redirect(reverse("rtms_app:patient_print_bundle", args=[patient.id]) + "?docs=discharge")
+            return redirect(reverse("rtms_app:patient_print_summary", args=[patient.id]) + "?mode=discharge")
         if action == 'print_referral':
-            return redirect(reverse("rtms_app:patient_print_bundle", args=[patient.id]) + "?docs=referral")
+            return redirect(reverse("rtms_app:patient_print_summary", args=[patient.id]) + "?mode=referral")
 
         return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
     sessions = TreatmentSession.objects.filter(patient=patient).order_by('date'); assessments = Assessment.objects.filter(patient=patient).order_by('date')
@@ -469,7 +469,6 @@ def patient_summary_view(request, patient_id):
     "url": reverse("rtms_app:patient_print_summary", args=[patient.id]) + "?mode=referral",
     },
     ]
-    context["floating_print_options"] = floating_print_options
     return render(request, 'rtms_app/patient_summary.html', {'patient': patient, 'summary_text': summary_text, 'history_list': history_list, 'today': timezone.now().date(), 'test_scores': test_scores, 'dashboard_date': dashboard_date, 'floating_print_options': floating_print_options})
     
 @login_required
