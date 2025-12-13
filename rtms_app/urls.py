@@ -81,7 +81,8 @@ urlpatterns = [
         name="patient_print_bundle",
     ),
     
-    path("patient/<int:patient_id>/path/print/", views.print_clinical_path, name="print_clinical_path"),
+    path("patient/<int:patient_id>/print/path/", views.print_clinical_path, name="print_clinical_path"),
+    
     path(
     "patient/<int:patient_id>/print/discharge/",
     views.patient_print_discharge,
