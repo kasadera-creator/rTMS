@@ -99,5 +99,13 @@
     </div>
 </div>
 
-{% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=back_url %}
+{% url 'rtms_app:dashboard' as dashboard_url %}
+{% if dashboard_date %}
+  {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+    {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=back_url %}
+  {% endwith %}
+{% else %}
+  {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=dashboard_url %}
+{% endif %}
+
 {% endblock %}
