@@ -482,8 +482,8 @@ def patient_print_bundle(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
 
     DOC_ORDER = ["admission", "suitability", "consent"]
-    docs_req = request.GET.getlist("docs") or []
-    docs_req = [d.strip() for d in docs_req if isinstance(d, str)]
+    docs_req = request.GET.getlist("docs")
+    selected_docs = [d for d in DOC_ORDER if d in docs_req] or DOC_ORDER
 
     selected_docs = [d for d in DOC_ORDER if d in set(docs_req)]
     if not selected_docs:
@@ -530,9 +530,12 @@ def patient_print_bundle(request, patient_id):
             f"{end_date_str}退院。紹介元へ逆紹介、抗うつ薬の治療継続を依頼した。"
         )
 
+    consent_copies = ["患者控え", "病院控え"]
+
     context = {
         'patient': patient,
         'selected_docs': selected_docs,
+        'consent_copies': consent_copies,
         'summary_text': summary_text,
         'discharge_prescription': patient.discharge_prescription,
         'questionnaire': patient.questionnaire_data or {},
