@@ -142,7 +142,7 @@
                 <div class="col-md-4"><label class="form-label text-primary fw-bold">入院予定日</label>{{ form.admission_date }}</div>
                 <div class="col-md-4"><label class="form-label text-warning fw-bold">初回位置決め日</label>{{ form.mapping_date }}</div>
                 <div class="col-md-4"><label class="form-label text-success fw-bold">初回治療日</label>{{ form.first_treatment_date }}</div>
-                <div class="col-md-8"><label class="form-label fw-bold">今後の担当医</label><div class="d-flex align-items-center">{{ form.attending_physician }}<span class="form-text ms-2 mb-0">※担当医を入力してください</span></div></div>
+                <div class="col-md-8"><label class="form-label fw-bold">今後の担当医</label><div class="d-flex align-items-center">{{ form.attending_physician }}<span class="form-text ms-2 mb-0">※担当医を決めてください</span></div></div>
             </div>
         </div>
 
@@ -183,7 +183,7 @@
       {% endif %}
 
       <button type="submit" class="btn btn-primary mt-2">
-        プレビュー（合本）
+        印刷プレビュー
       </button>
     </form>
 
