@@ -276,7 +276,7 @@ def admission_procedure(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id); dashboard_date = request.GET.get('dashboard_date')
     if request.method == 'POST':
         form = AdmissionProcedureForm(request.POST, instance=patient)
-        if form.is_valid(): proc = form.save(commit=False); proc.is_admission_procedure_done = True; proc.save(); return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'dashboard')
+        if form.is_valid(): proc = form.save(commit=False); proc.is_admission_procedure_done = True; proc.save(); return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
     else: form = AdmissionProcedureForm(instance=patient)
     return render(request, 'rtms_app/admission_procedure.html', {'patient': patient, 'form': form, 'dashboard_date': dashboard_date})
 
@@ -286,7 +286,7 @@ def mapping_add(request, patient_id):
     history = MappingSession.objects.filter(patient=patient).order_by('date')
     if request.method == 'POST':
         form = MappingForm(request.POST)
-        if form.is_valid(): m = form.save(commit=False); m.patient = patient; m.save(); return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'dashboard')
+        if form.is_valid(): m = form.save(commit=False); m.patient = patient; m.save(); return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
     else: initial_date = request.GET.get('date') or timezone.now().date(); form = MappingForm(initial={'date': initial_date, 'week_number': 1})
     return render(request, 'rtms_app/mapping_add.html', {'patient': patient, 'form': form, 'history': history, 'dashboard_date': dashboard_date})
 
@@ -326,7 +326,9 @@ def patient_first_visit(request, patient_id):
             full_diagnosis = ", ".join(diag_list); 
             if diag_other: full_diagnosis += f", その他({diag_other})"
             p.diagnosis = full_diagnosis; p.save()
-            return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'dashboard')
+            if dashboard_date:
+                return redirect(f"{reverse('rtms_app:dashboard')}?date={dashboard_date}")
+            return redirect('rtms_app:dashboard')
     else: form = PatientFirstVisitForm(instance=patient)
     return render(request, 'rtms_app/patient_first_visit.html', {'patient': patient, 'form': form, 'referral_options': referral_options, 'referral_map_json': json.dumps(referral_map_json, ensure_ascii=False), 'end_date_est': end_date_est, 'dashboard_date': dashboard_date, 'hamd_items_left': hamd_items_left, 'hamd_items_right': hamd_items_right, 'baseline_assessment': baseline_assessment})
 
@@ -373,7 +375,7 @@ def treatment_add(request, patient_id):
             for key, label in side_effect_items: val = request.POST.get(f'se_{key}'); 
             if val: se_data[key] = val
             se_data['note'] = request.POST.get('se_note', ''); s.side_effects = se_data; s.save()
-            return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'dashboard')
+            return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
     else:
         initial_data = {'treatment_date': initial_date, 'treatment_time': now.strftime('%H:%M'), 'total_pulses': 1980, 'intensity': 120}
         if latest_mapping: initial_data['motor_threshold'] = latest_mapping.resting_mt
@@ -402,7 +404,7 @@ def assessment_add(request, patient_id):
             if existing_assessment: assessment = existing_assessment; assessment.scores = scores; assessment.timing = request.POST.get('timing', 'other'); assessment.note = request.POST.get('note', '')
             else: assessment = Assessment(patient=patient, date=target_date_str, type='HAM-D', scores=scores, timing=request.POST.get('timing', 'other'), note=request.POST.get('note', ''))
             assessment.calculate_scores(); assessment.save()
-            return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'dashboard')
+            return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
         except Exception as e: print(e)
     return render(request, 'rtms_app/assessment_add.html', {'patient': patient, 'history': history, 'today': target_date_str, 'hamd_items_left': hamd_items_left, 'hamd_items_right': hamd_items_right, 'initial_timing': timing, 'existing_assessment': existing_assessment, 'recommendation': recommendation, 'dashboard_date': dashboard_date})
 
@@ -416,7 +418,7 @@ def patient_summary_view(request, patient_id):
         else: patient.discharge_date = None
         patient.save()
         if request.headers.get('x-requested-with') == 'XMLHttpRequest': return JsonResponse({'status': 'success'})
-        return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'dashboard')
+        return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
     sessions = TreatmentSession.objects.filter(patient=patient).order_by('date'); assessments = Assessment.objects.filter(patient=patient).order_by('date')
     test_scores = assessments; score_admin = assessments.first(); score_w3 = assessments.filter(timing='week3').first(); score_w6 = assessments.filter(timing='week6').first()
     def fmt_score(obj): return f"HAMD17 {obj.total_score_17}点 HAMD21 {obj.total_score_21}点" if obj else "未評価"
@@ -453,11 +455,11 @@ def patient_add_view(request):
             new_course_num = latest.course_number + 1
             new_patient = Patient(card_id=latest.card_id, name=latest.name, birth_date=latest.birth_date, gender=latest.gender, referral_source=request.POST.get('referral_source') or latest.referral_source, referral_doctor=request.POST.get('referral_doctor') or latest.referral_doctor, life_history=latest.life_history, past_history=latest.past_history, diagnosis=latest.diagnosis, course_number=new_course_num)
             new_patient.save()
-            return redirect('dashboard')
+            return redirect('rtms_app:dashboard')
         if existing_patients.exists():
             latest = existing_patients.first()
             return render(request, 'rtms_app/patient_add.html', {'form': form, 'referral_options': referral_options, 'existing_patient': latest, 'next_course_num': latest.course_number + 1})
-        if form.is_valid(): form.save(); return redirect('dashboard')
+        if form.is_valid(): form.save(); return redirect('rtms_app:dashboard')
     else: form = PatientRegistrationForm()
     return render(request, 'rtms_app/patient_add.html', {'form': form, 'referral_options': referral_options})
 
