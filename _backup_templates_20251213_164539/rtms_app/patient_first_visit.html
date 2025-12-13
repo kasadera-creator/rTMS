@@ -210,7 +210,7 @@
         
         <div class="floating-actions">
             <button type="submit" class="btn btn-primary btn-fab text-white"><i class="fas fa-check"></i> 入力完了</button>
-            <a href="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab"><i class="fas fa-undo"></i> 戻る</a>
+            <a href="{% url 'dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-secondary btn-fab"><i class="fas fa-undo"></i> 戻る</a>
         </div>
     </form>
 

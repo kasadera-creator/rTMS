@@ -79,10 +79,10 @@
         <!-- 右側: アクションボタン -->
         <div class="w-100 w-md-auto">
             <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                <a href="{% url 'rtms_app:patient_add' %}" class="btn btn-primary btn-sm fw-bold shadow-sm text-nowrap">
+                <a href="{% url 'patient_add' %}" class="btn btn-primary btn-sm fw-bold shadow-sm text-nowrap">
                     <i class="fas fa-user-plus me-1"></i> 新規患者登録
                 </a>
-                <a href="{% url 'rtms_app:patient_list' %}?dashboard_date={{ today|date:'Y-m-d' }}" class="btn btn-outline-dark btn-sm fw-bold text-nowrap">
+                <a href="{% url 'patient_list' %}?dashboard_date={{ today|date:'Y-m-d' }}" class="btn btn-outline-dark btn-sm fw-bold text-nowrap">
                     <i class="fas fa-users me-1"></i> 患者一覧
                 </a>
             </div>
@@ -103,7 +103,7 @@
                 <!-- 初診のみ新規登録ボタンを表示 -->
                 {% if task_group.title == "① 初診" %}
                 <div class="p-2 border-bottom text-center bg-light">
-                    <a href="{% url 'rtms_app:patient_add' %}" class="btn btn-outline-primary btn-sm w-100 fw-bold border-0">
+                    <a href="{% url 'patient_add' %}" class="btn btn-outline-primary btn-sm w-100 fw-bold border-0">
                         <i class="fas fa-plus-circle"></i> 新規患者登録
                     </a>
                 </div>
@@ -113,17 +113,17 @@
                     {% for item in task_group.list %}
                     <div class="list-group-item">
                         {% if task_group.title == "① 初診" %}
-                            <a href="{% url 'rtms_app:patient_first_visit' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
+                            <a href="{% url 'patient_first_visit' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
                         {% elif task_group.title == "② 入院" %}
-                            <a href="{% url 'rtms_app:admission_procedure' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
+                            <a href="{% url 'admission_procedure' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
                         {% elif task_group.title == "③ 位置決め" %}
-                            <a href="{% url 'rtms_app:mapping_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                            <a href="{% url 'mapping_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
                         {% elif task_group.title == "④ 治療実施" %}
-                            <a href="{% url 'rtms_app:treatment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                            <a href="{% url 'treatment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
                         {% elif task_group.title == "⑤ 尺度評価" %}
-                            <a href="{% url 'rtms_app:assessment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&timing={{ item.timing_code }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                            <a href="{% url 'assessment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&timing={{ item.timing_code }}&dashboard_date={{ today|date:'Y-m-d' }}">
                         {% elif task_group.title == "⑥ 退院準備" %}
-                            <a href="{% url 'rtms_app:patient_home' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
+                            <a href="{% url 'patient_home' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
                         {% endif %}
                         
                             <!-- 1. やること (上) -->

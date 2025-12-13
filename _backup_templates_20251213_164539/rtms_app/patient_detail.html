@@ -39,11 +39,11 @@
         </div>
         
         <div class="d-flex gap-2">
-            <a href="{% url 'rtms_app:patient_home' patient.id %}" class="btn btn-primary btn-action shadow-sm">
+            <a href="{% url 'patient_home' patient.id %}" class="btn btn-primary btn-action shadow-sm">
                 <i class="fas fa-file-medical-alt me-1"></i> サマリー・紹介状作成
             </a>
             
-            <a href="{% url 'rtms_app:dashboard' %}" class="btn btn-outline-secondary btn-action">
+            <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary btn-action">
                 <i class="fas fa-arrow-left me-1"></i> ダッシュボードへ
             </a>
         </div>
@@ -55,7 +55,7 @@
             <div class="card-section">
                 <div class="card-header-custom">
                     <h5 class="card-title-text"><i class="fas fa-user-circle text-primary me-2"></i>基本情報</h5>
-                    <a href="{% url 'rtms_app:patient_first_visit' patient.id %}" class="btn btn-sm btn-outline-primary">
+                    <a href="{% url 'patient_first_visit' patient.id %}" class="btn btn-sm btn-outline-primary">
                         <i class="fas fa-edit"></i> 編集・詳細
                     </a>
                 </div>
@@ -96,7 +96,7 @@
             <div class="card-section">
                 <div class="card-header-custom">
                     <h5 class="card-title-text"><i class="fas fa-calendar-alt text-warning me-2"></i>スケジュール</h5>
-                    <a href="{% url 'rtms_app:patient_first_visit' patient.id %}" class="btn btn-sm btn-outline-warning text-dark">
+                    <a href="{% url 'patient_first_visit' patient.id %}" class="btn btn-sm btn-outline-warning text-dark">
                         <i class="fas fa-edit"></i> 管理
                     </a>
                 </div>
@@ -129,10 +129,10 @@
                 <div class="card-header-custom bg-dark text-white" style="border-radius: 10px 10px 0 0;">
                     <h5 class="card-title-text text-white"><i class="fas fa-history me-2"></i>治療・検査履歴</h5>
                     <div class="btn-group">
-                        <a href="{% url 'rtms_app:treatment_add' patient.id %}" class="btn btn-sm btn-light text-success fw-bold">
+                        <a href="{% url 'treatment_add' patient.id %}" class="btn btn-sm btn-light text-success fw-bold">
                             <i class="fas fa-plus"></i> 治療
                         </a>
-                        <a href="{% url 'rtms_app:assessment_add' patient.id %}" class="btn btn-sm btn-light text-danger fw-bold">
+                        <a href="{% url 'assessment_add' patient.id %}" class="btn btn-sm btn-light text-danger fw-bold">
                             <i class="fas fa-plus"></i> 評価
                         </a>
                     </div>
