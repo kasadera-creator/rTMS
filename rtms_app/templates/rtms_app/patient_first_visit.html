@@ -236,105 +236,149 @@
 
 {% block scripts %}
 <script>
-    // 紹介元・紹介医の連携ロジック
-    const referralMap = JSON.parse('{{ referral_map_json|safe }}');
-    const sourceInput = document.querySelector('input[name="referral_source"]');
-    const doctorInput = document.querySelector('input[name="referral_doctor"]');
-    const doctorDatalist = document.getElementById('doctor-options');
-    function updateDoctorOptions() {
-        const selectedSource = sourceInput.value;
-        doctorDatalist.innerHTML = '';
-        if (referralMap[selectedSource]) {
-            referralMap[selectedSource].forEach(docName => {
-                const option = document.createElement('option');
-                option.value = docName;
-                doctorDatalist.appendChild(option);
-            });
-        }
-    }
-    sourceInput.addEventListener('input', updateDoctorOptions);
-    sourceInput.addEventListener('change', updateDoctorOptions);
-    doctorInput.setAttribute('list', 'doctor-options');
+/* ================================
+ * 紹介元・紹介医の連携ロジック
+ * ================================ */
+const referralMap = JSON.parse('{{ referral_map_json|safe }}');
+const sourceInput = document.querySelector('input[name="referral_source"]');
+const doctorInput = document.querySelector('input[name="referral_doctor"]');
+const doctorDatalist = document.getElementById('doctor-options');
 
-    document.getElementById('mainForm').addEventListener('submit', function(e) {
-        const data = {}; 
-        document.querySelectorAll('input[type="radio"]:checked').forEach(r => { data[r.name] = r.value; });
-        data['q_details'] = document.querySelector('textarea[name="q_details"]').value;
-        document.getElementById('questionnaire_json').value = JSON.stringify(data);
-    });
-
-    // HAM-D Ajax保存 (修正: モーダル操作の堅牢化)
-    function saveHamd() {
-        const form = document.getElementById('hamdForm');
-        const formData = new FormData(form);
-        formData.append('hamd_ajax', 'true');
-        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-
-        fetch(window.location.href, {
-            method: 'POST',
-            body: formData,
-            headers: {'X-Requested-With': 'XMLHttpRequest'}
-        })
-        .then(response => response.json())
-        .then(data => {
-            if(data.status === 'success') {
-                // モーダルを閉じる
-                const modalEl = document.getElementById('hamdModal');
-                const modal = bootstrap.Modal.getOrCreateInstance(modalEl); 
-                modal.hide();
-
-                // 結果表示の更新
-                document.getElementById('hamd-result-display').innerHTML = 
-                    `HAM-D17: <span class="fs-5">${data.total_17}</span> 点 判定: ${data.severity}`;
-
-                alert(data.message + "\n(合計: " + data.total_17 + "点)");
-
-                // 中等度(14-18)の場合、質問票へ誘導
-                if (data.total_17 >= 14 && data.total_17 <= 18) {
-                    const qSection = document.getElementById('q_section');
-                    qSection.scrollIntoView({ behavior: 'smooth' });
-                    // オプション: 質問票エリアを目立たせる
-                    qSection.style.border = "2px solid #dc3545";
-                    setTimeout(() => { qSection.style.border = "none"; }, 2000);
-                }
-            } else {
-                alert('エラーが発生しました: ' + data.message);
-            }
+function updateDoctorOptions() {
+    const selectedSource = sourceInput.value;
+    doctorDatalist.innerHTML = '';
+    if (referralMap[selectedSource]) {
+        referralMap[selectedSource].forEach(docName => {
+            const option = document.createElement('option');
+            option.value = docName;
+            doctorDatalist.appendChild(option);
         });
     }
+}
+sourceInput.addEventListener('input', updateDoctorOptions);
+sourceInput.addEventListener('change', updateDoctorOptions);
+doctorInput.setAttribute('list', 'doctor-options');
 
-    document.addEventListener('DOMContentLoaded', function() {
-        // (診断名や質問票の復元処理は変更なし)
-        const diagStr = "{{ patient.diagnosis }}";
-        if(diagStr) {
-            const diags = diagStr.split(', ');
-            diags.forEach(d => {
-                const el = document.querySelector(`input[name="diag_list"][value="${d}"]`);
-                if(el) el.checked = true;
-                const otherMatch = d.match(/^その他\((.+)\)$/);
-                if (otherMatch && otherMatch[1]) { document.querySelector('input[name="diag_other"]').value = otherMatch[1]; }
-            });
-        } else {
-            const depEl = document.getElementById('d_dep');
-            if(depEl) depEl.checked = true;
-        }
-        
-        const raw = '{{ patient.questionnaire_data|safe }}';
-        if(raw && raw !== '{}' && raw !== 'None' && raw !== 'null') {
-            try {
-                const data = JSON.parse(raw);
-                for (const [key, value] of Object.entries(data)) {
-                    if (key === 'q_details') { 
-                        const txt = document.querySelector('textarea[name="q_details"]'); 
-                        if(txt) txt.value = value; 
-                    } else { 
-                        const el = document.querySelector(`input[name="${key}"][value="${value}"]`); 
-                        if(el) el.checked = true; 
-                    }
-                }
-            } catch(e) {}
-        }
-        updateDoctorOptions();
+
+/* ================================
+ * ★ 重要：質問票JSONの同期関数
+ * ================================ */
+function syncQuestionnaireJson() {
+    const hidden = document.getElementById('questionnaire_json');
+    if (!hidden) return;
+
+    const data = {};
+    document.querySelectorAll('input[type="radio"]:checked').forEach(r => {
+        data[r.name] = r.value;
     });
+
+    const details = document.querySelector('textarea[name="q_details"]');
+    if (details) data['q_details'] = details.value;
+
+    hidden.value = JSON.stringify(data);
+}
+
+
+/* submit 時（通常保存・非AJAX） */
+document.getElementById('mainForm').addEventListener('submit', function () {
+    syncQuestionnaireJson();
+});
+
+
+/* ★ フローティング印刷・AJAX保存対策（常時同期） */
+document.addEventListener('change', function (e) {
+    if (e.target.closest('#q_section')) {
+        syncQuestionnaireJson();
+    }
+});
+document.addEventListener('input', function (e) {
+    if (e.target.closest('#q_section')) {
+        syncQuestionnaireJson();
+    }
+});
+
+
+/* ================================
+ * HAM-D Ajax 保存
+ * ================================ */
+function saveHamd() {
+    const form = document.getElementById('hamdForm');
+    const formData = new FormData(form);
+    formData.append('hamd_ajax', 'true');
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    fetch(window.location.href, {
+        method: 'POST',
+        body: formData,
+        headers: {'X-Requested-With': 'XMLHttpRequest'}
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            const modalEl = document.getElementById('hamdModal');
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.hide();
+
+            document.getElementById('hamd-result-display').innerHTML =
+                `HAM-D17: <span class="fs-5">${data.total_17}</span> 点 判定: ${data.severity}`;
+
+            alert(data.message + "\n(合計: " + data.total_17 + "点)");
+
+            if (data.total_17 >= 14 && data.total_17 <= 18) {
+                const qSection = document.getElementById('q_section');
+                qSection.scrollIntoView({ behavior: 'smooth' });
+                qSection.style.border = "2px solid #dc3545";
+                setTimeout(() => { qSection.style.border = "none"; }, 2000);
+            }
+        } else {
+            alert('エラーが発生しました: ' + data.message);
+        }
+    });
+}
+
+
+/* ================================
+ * 初期化（復元処理など）
+ * ================================ */
+document.addEventListener('DOMContentLoaded', function () {
+
+    // 診断名の復元
+    const diagStr = "{{ patient.diagnosis }}";
+    if (diagStr) {
+        const diags = diagStr.split(', ');
+        diags.forEach(d => {
+            const el = document.querySelector(`input[name="diag_list"][value="${d}"]`);
+            if (el) el.checked = true;
+            const otherMatch = d.match(/^その他\((.+)\)$/);
+            if (otherMatch && otherMatch[1]) {
+                document.querySelector('input[name="diag_other"]').value = otherMatch[1];
+            }
+        });
+    } else {
+        const depEl = document.getElementById('d_dep');
+        if (depEl) depEl.checked = true;
+    }
+
+    // 質問票の復元
+    const raw = '{{ patient.questionnaire_data|safe }}';
+    if (raw && raw !== '{}' && raw !== 'None' && raw !== 'null') {
+        try {
+            const data = JSON.parse(raw);
+            for (const [key, value] of Object.entries(data)) {
+                if (key === 'q_details') {
+                    const txt = document.querySelector('textarea[name="q_details"]');
+                    if (txt) txt.value = value;
+                } else {
+                    const el = document.querySelector(`input[name="${key}"][value="${value}"]`);
+                    if (el) el.checked = true;
+                }
+            }
+        } catch (e) {}
+    }
+
+    // 初期同期（← これも重要）
+    syncQuestionnaireJson();
+    updateDoctorOptions();
+});
 </script>
 {% endblock %}
