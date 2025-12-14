@@ -1,35 +1,25 @@
-{% extends "rtms_app/base.html" %}
-
-{% block extrastyle %}
 {% load static %}
-<link rel="stylesheet" href="{% static 'rtms_app/print.css' %}">
-<style>
-    @page {
-        size: A4 landscape;
-        margin: 10mm;
-    }
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>クリニカルパス印刷</title>
 
-    body {
-        font-family: "Meiryo", "Yu Gothic", "Hiragino Sans", sans-serif;
-    }
+  <!-- 共通印刷CSS -->
+  <link rel="stylesheet" href="{% static 'rtms_app/print.css' %}">
 
-    .page-container {
-        width: 277mm;
-        margin: 20px auto;
-    }
+  <!-- clinical_path 専用（横＋メイリオ） -->
+  <style>
+    @page { size: A4 landscape; margin: 10mm; }
+    body { font-family: "Meiryo","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif; }
 
-    .page-sheet {
-        width: 100%;
-        min-height: calc(210mm - 20mm);
-        padding: 10mm;
-        box-sizing: border-box;
-        background: #fff;
-    }
+    .page-container { width: 277mm; margin: 20px auto; }
+    .page-sheet { width: 100%; min-height: calc(210mm - 20mm); padding: 10mm; box-sizing: border-box; background: #fff; }
+    .page-break-after { break-after: page; page-break-after: always; }
 
-    .page-break-after {
-        break-after: page;
-        page-break-after: always;
-    }
+    .page-title { text-align: center; font-weight: 700; margin: 0 0 8px; font-size: 20px; }
+    .patient-summary { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 10.5pt; }
+    .note-text { margin-top: 6px; text-align: right; font-size: 8.5pt; }
 
     .cal-table { width: 100%; border-collapse: collapse; margin-top: 5px; table-layout: fixed; }
     .cal-table th { background-color: #f0f0f0; border: 1px solid #000; padding: 3px; text-align: center; font-size: 10pt; font-weight: bold; }
@@ -55,133 +45,138 @@
     .info-content li { margin-bottom: 4px; }
     .warning-text { color: #d63384; font-weight: bold; }
 
+    /* プレビュー用（画面だけ） */
     @media screen {
-        body { background-color: #525659; }
-        .page-sheet { box-shadow: 0 0 12px rgba(0,0,0,0.35); }
-        .fixed-screen-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 20; }
+      body { background:#525659; }
+      .page-container { width: 277mm; margin: 20px auto; }
+      .page-sheet { box-shadow: 0 0 10px rgba(0,0,0,.5); margin-bottom: 20px; }
+      .fixed-topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 9999; }
+      .topbar-spacer { height: 52px; }
     }
 
+    /* 印刷時はプレビュー装飾を消す */
     @media print {
-        body { background: #fff; margin: 0; }
-        .screen-only { display: none !important; }
-        .page-container { margin: 0 auto; }
+      body { background:#fff; margin: 0; }
+      .page-container { width: 100%; margin: 0; }
+      .page-sheet { box-shadow:none; margin:0; }
+      .no-print { display:none !important; }
     }
-</style>
-{% endblock %}
-
-{% block content %}
-<div class="container-fluid screen-only bg-dark text-white p-2 fixed-screen-bar">
-    <div class="container d-flex justify-content-between align-items-center">
-        <span>クリニカルパス印刷プレビュー (A4横)</span>
-        <div>
-            <button onclick="window.print()" class="btn btn-primary btn-sm"><i class="fas fa-print"></i> 印刷</button>
-            <button onclick="window.close()" class="btn btn-secondary btn-sm">閉じる</button>
-        </div>
+  </style>
+</head>
+<body>
+  <!-- 印刷操作バー（画面だけ） -->
+  <div class="no-print fixed-topbar" style="background:#212529;color:#fff;padding:8px 12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;max-width:1100px;margin:0 auto;">
+      <span>クリニカルパス印刷プレビュー (A4横)</span>
+      <div>
+        <button onclick="window.print()" style="margin-right:8px;">印刷</button>
+        <button onclick="window.close()">閉じる</button>
+      </div>
     </div>
-</div>
-<div style="height: 50px;" class="screen-only"></div>
+  </div>
+  <div class="no-print topbar-spacer"></div>
 
-<div class="page-container">
-    <!-- 1ページ目 -->
+  <!-- 既存の2ページ構造をそのまま -->
+  <div class="page-container">
     <div class="page-sheet page-break-after">
-        <h2 class="text-center fw-bold mb-2">rTMS治療スケジュール</h2>
-        <div class="d-flex justify-content-between mb-2 border-bottom border-dark pb-1" style="font-size: 10.5pt;">
-            <div>氏名: <strong>{{ patient.name }} 様</strong></div>
-            <div>ID: {{ patient.card_id }} {% if patient.course_number > 1 %}({{ patient.course_number }}クール目){% endif %}</div>
-            <div>担当医: {{ patient.attending_physician.last_name }} 先生</div>
-        </div>
+      <h2 class="page-title">rTMS治療スケジュール</h2>
+      <div class="patient-summary">
+        <div>氏名: <strong>{{ patient.name }} 様</strong></div>
+        <div>ID: {{ patient.card_id }} {% if patient.course_number > 1 %}({{ patient.course_number }}クール目){% endif %}</div>
+        <div>担当医: {{ patient.attending_physician.last_name }} 先生</div>
+      </div>
 
-        <table class="cal-table">
-            <thead>
-                <tr>
-                    <th class="text-primary">月</th>
-                    <th class="text-primary">火</th>
-                    <th class="text-primary">水</th>
-                    <th class="text-primary">木</th>
-                    <th class="text-primary">金</th>
-                    <th class="text-primary">土</th>
-                    <th class="text-danger">日</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for week in calendar_weeks %}
-                <tr>
-                    {% for day in week %}
-                    <td class="{% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %}">
-                        <div class="date-num">
-                            {{ day.date|date:"n/j" }}
-                            {% if day.is_holiday %}<span class="holiday-mark">祝</span>{% endif %}
-                        </div>
+      <table class="cal-table">
+        <thead>
+          <tr>
+            <th style="color:#0d6efd;">月</th>
+            <th style="color:#0d6efd;">火</th>
+            <th style="color:#0d6efd;">水</th>
+            <th style="color:#0d6efd;">木</th>
+            <th style="color:#0d6efd;">金</th>
+            <th style="color:#0d6efd;">土</th>
+            <th style="color:#dc3545;">日</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for week in calendar_weeks %}
+          <tr>
+            {% for day in week %}
+            <td class="{% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %}">
+              <div class="date-num">
+                {{ day.date|date:"n/j" }}
+                {% if day.is_holiday %}<span class="holiday-mark">祝</span>{% endif %}
+              </div>
 
-                        {% for event in day.events %}
-                            {% if event.type == 'admission' %}
-                                <div class="evt-badge evt-admission">{{ event.label }}</div>
-                            {% elif event.type == 'mapping' %}
-                                <div class="evt-badge evt-mapping">{{ event.label }}</div>
-                            {% elif event.type == 'treatment' %}
-                                <div class="evt-badge evt-treatment">{{ event.label }}</div>
-                            {% elif event.type == 'assessment' %}
-                                <div class="evt-badge evt-assessment">{{ event.label }}</div>
-                            {% elif event.type == 'discharge' %}
-                                <div class="evt-badge evt-discharge">{{ event.label }}</div>
-                            {% endif %}
-                        {% endfor %}
-                    </td>
-                    {% endfor %}
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+              {% for event in day.events %}
+                {% if event.type == 'admission' %}
+                  <div class="evt-badge evt-admission">{{ event.label }}</div>
+                {% elif event.type == 'mapping' %}
+                  <div class="evt-badge evt-mapping">{{ event.label }}</div>
+                {% elif event.type == 'treatment' %}
+                  <div class="evt-badge evt-treatment">{{ event.label }}</div>
+                {% elif event.type == 'assessment' %}
+                  <div class="evt-badge evt-assessment">{{ event.label }}</div>
+                {% elif event.type == 'discharge' %}
+                  <div class="evt-badge evt-discharge">{{ event.label }}</div>
+                {% endif %}
+              {% endfor %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
 
-        <div class="mt-1 text-end" style="font-size: 8.5pt;">※スケジュールは治療経過や病院の都合により変更になる場合があります。<span style="color:#dc3545;">赤色(祝日)</span>は治療がお休みです。</div>
+      <div class="note-text">※スケジュールは治療経過や病院の都合により変更になる場合があります。<span style="color:#dc3545;">赤色(祝日)</span>は治療がお休みです。</div>
     </div>
 
-    <!-- 2ページ目 -->
     <div class="page-sheet">
-        <h2 class="text-center fw-bold mb-3">rTMS治療に関するご案内</h2>
+      <h2 class="page-title" style="margin-bottom: 12px;">rTMS治療に関するご案内</h2>
 
-        <div class="info-grid">
-            <div class="info-box">
-                <div class="info-title">① 入院・検査について</div>
-                <div class="info-content">
-                    <ul>
-                        <li><strong>入院当日:</strong> 指定された時間（通常10:00）に受付へお越しください。</li>
-                        <li><strong>持ち物:</strong> 保険証、診察券、お薬手帳、現在服用中のお薬を必ずご持参ください。</li>
-                        <li><strong>位置決め（MT測定）:</strong> 治療部位と強さを決める重要な検査です。<br><span class="warning-text">※整髪料は付けずに、洗髪した清潔な状態で受けてください。</span></li>
-                        <li>専用キャップを被り、約30分〜1時間かけて測定します。</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="info-box">
-                <div class="info-title">② 治療の進め方</div>
-                <div class="info-content">
-                    <ul>
-                        <li><strong>治療時間:</strong> 1回約20分〜40分です。</li>
-                        <li><strong>音と刺激:</strong> 「カチカチ」という大きな音がしますので、<span class="warning-text">必ず耳栓を着用</span>してください（当院で用意します）。頭皮を叩かれるような刺激があります。</li>
-                        <li><strong>スケジュール:</strong> 原則として週5回（月〜金）、計30回（約6週間）行います。</li>
-                        <li><strong>評価:</strong> 定期的に心理検査を行い、効果を判定します（中間評価・最終評価）。</li>
-                        <li><strong>祝日:</strong> 祝日は治療がお休みとなり、日程が後ろにずれます。</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="info-box info-grid-full" style="border-color: #dc3545;">
-                <div class="info-title" style="border-color: #dc3545; color: #dc3545;">③ 副作用と注意事項</div>
-                <div class="info-content">
-                    <ul>
-                        <li><strong>頭痛・刺激痛:</strong> 治療初期によく見られますが、徐々に慣れてくることが多いです。痛みが強い場合はお知らせください。</li>
-                        <li><strong>けいれん発作:</strong> ごく稀（数万回に1回程度）ですがリスクがあります。万が一の場合は迅速に対応します。</li>
-                        <li><strong>禁止事項:</strong> 治療期間中は、<span class="warning-text">飲酒</span>や<span class="warning-text">カフェインの過剰摂取</span>を控えてください（発作リスクが上がります）。</li>
-                        <li><strong>睡眠:</strong> 前日は十分な睡眠をとってください。睡眠不足は副作用のリスクを高めます。</li>
-                    </ul>
-                </div>
-            </div>
+      <div class="info-grid">
+        <div class="info-box">
+          <div class="info-title">① 入院・検査について</div>
+          <div class="info-content">
+            <ul>
+              <li><strong>入院当日:</strong> 指定された時間（通常10:00）に受付へお越しください。</li>
+              <li><strong>持ち物:</strong> 保険証、診察券、お薬手帳、現在服用中のお薬を必ずご持参ください。</li>
+              <li><strong>位置決め（MT測定）:</strong> 治療部位と強さを決める重要な検査です。<br><span class="warning-text">※整髪料は付けずに、洗髪した清潔な状態で受けてください。</span></li>
+              <li>専用キャップを被り、約30分〜1時間かけて測定します。</li>
+            </ul>
+          </div>
         </div>
 
-        <div class="text-center mt-3">
-            <p class="fw-bold fs-5">医療法人交正会 笠寺精治寮病院 rTMSセンター</p>
+        <div class="info-box">
+          <div class="info-title">② 治療の進め方</div>
+          <div class="info-content">
+            <ul>
+              <li><strong>治療時間:</strong> 1回約20分〜40分です。</li>
+              <li><strong>音と刺激:</strong> 「カチカチ」という大きな音がしますので、<span class="warning-text">必ず耳栓を着用</span>してください（当院で用意します）。頭皮を叩かれるような刺激があります。</li>
+              <li><strong>スケジュール:</strong> 原則として週5回（月〜金）、計30回（約6週間）行います。</li>
+              <li><strong>評価:</strong> 定期的に心理検査を行い、効果を判定します（中間評価・最終評価）。</li>
+              <li><strong>祝日:</strong> 祝日は治療がお休みとなり、日程が後ろにずれます。</li>
+            </ul>
+          </div>
         </div>
+
+        <div class="info-box info-grid-full" style="border-color: #dc3545;">
+          <div class="info-title" style="border-color: #dc3545; color: #dc3545;">③ 副作用と注意事項</div>
+          <div class="info-content">
+            <ul>
+              <li><strong>頭痛・刺激痛:</strong> 治療初期によく見られますが、徐々に慣れてくることが多いです。痛みが強い場合はお知らせください。</li>
+              <li><strong>けいれん発作:</strong> ごく稀（数万回に1回程度）ですがリスクがあります。万が一の場合は迅速に対応します。</li>
+              <li><strong>禁止事項:</strong> 治療期間中は、<span class="warning-text">飲酒</span>や<span class="warning-text">カフェインの過剰摂取</span>を控えてください（発作リスクが上がります）。</li>
+              <li><strong>睡眠:</strong> 前日は十分な睡眠をとってください。睡眠不足は副作用のリスクを高めます。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div style="text-align:center; margin-top: 18px;">
+        <p style="font-weight:700; font-size: 18px; margin: 0;">医療法人交正会 笠寺精治寮病院 rTMSセンター</p>
+      </div>
     </div>
-</div>
-{% endblock %}
+  </div>
+</body>
+</html>
