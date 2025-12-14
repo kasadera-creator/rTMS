@@ -15,10 +15,10 @@
         </div>
 
         <div class="print-toolbar-right d-flex align-items-center gap-2">
-            {% if back_url %}
-            <a class="btn btn-outline-primary btn-sm no-print" href="{{ back_url }}"><span aria-hidden="true">←</span> 戻る</a>
+			<button class="btn btn-light btn-sm no-print" onclick="window.print()">印刷</button>
+			{% if back_url %}
+            <a class="btn btn-outline-primary btn-sm no-print" href="{{ back_url }}">戻る</a>
             {% endif %}
-            <button class="btn btn-light btn-sm no-print" onclick="window.print()">印刷</button>
         </div>
     </div>
     <div class="print-main">
