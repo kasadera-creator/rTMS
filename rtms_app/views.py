@@ -302,18 +302,22 @@ def patient_first_visit(request, patient_id):
     if request.method != "POST":
         form = PatientFirstVisitForm(instance=patient)
         floating_print_options = [
-            {
-                "label": "初診 合本（印刷）",
-                "url": build_url(
-                    "patient_print_bundle",
-                    args=[patient.id],
-                    query={
-                        "docs": ["admission", "suitability", "consent"],
-                        **({"dashboard_date": dashboard_date} if dashboard_date else {}),
-                    },
-                ),
-            }
+        {
+        "label": "初診 合本（印刷）",
+        "value": "print_bundle",  # ← data-action になる
+        "icon": "fa-print",
+        "formaction": build_url(
+            "patient_print_bundle",
+            args=[patient.id],
+            query={
+                "docs": ["admission", "suitability", "consent"],
+                **({"dashboard_date": dashboard_date} if dashboard_date else {}),
+            },
+        ),  # ← data-print-url になる
+        "formtarget": "_blank",
+        }
         ]
+        
         return render(
             request,
             "rtms_app/patient_first_visit.html",
