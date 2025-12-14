@@ -557,16 +557,26 @@ def custom_logout(request):
 
 def patient_print_preview(request, pk):
     patient = get_object_or_404(Patient, pk=pk)
-    end_date_est = get_completion_date(patient.first_treatment_date)
     mode = request.GET.get('mode', 'summary')
-    context = { 'patient': patient, 'end_date_est': end_date_est, 'mode': mode }
-    return render(request, 'rtms_app/print_preview.html', context)
+    return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
+
+    doc_map = {
+        "summary": "admission",
+        "questionnaire": "suitability",
+    }
+    target_doc = doc_map.get(mode, "admission")
+    query = {"docs": [target_doc]}
+    if return_to:
+        query["return_to"] = return_to
+    return redirect(build_url("patient_print_bundle", args=[patient.id], query=query))
 
 def _render_patient_summary(request, patient, mode):
     normalized_mode = 'discharge' if mode == 'summary' else mode
-    test_scores = Assessment.objects.filter(patient=patient).order_by('date')
-    context = {'patient': patient, 'mode': normalized_mode, 'today': datetime.date.today(), 'test_scores': test_scores}
-    return render(request, 'rtms_app/print_summary.html', context)
+    query = {"docs": [normalized_mode]}
+    return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
+    if return_to:
+        query["return_to"] = return_to
+    return redirect(build_url("patient_print_bundle", args=[patient.id], query=query))
 
 
 def patient_print_summary(request, pk):
@@ -578,19 +588,23 @@ def patient_print_summary(request, pk):
 def print_clinical_path(request, patient_id: int):
     patient = get_object_or_404(Patient, id=patient_id)
     calendar_weeks = generate_calendar_weeks(patient)
+    return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
+    back_url = return_to or reverse("rtms_app:patient_clinical_path", args=[patient.id])
     return render(request, "rtms_app/print/path.html", {
         "patient": patient,
         "calendar_weeks": calendar_weeks,
+        "back_url": back_url,
     })
 
 @login_required
 def patient_print_discharge(request, patient_id):
     patient = get_object_or_404(Patient, id=patient_id)
+    return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
     return redirect(
         build_url(
             'patient_print_bundle',
             args=[patient.id],
-            query={'docs': ['discharge']},
+            query={'docs': ['discharge'], 'return_to': return_to} if return_to else {'docs': ['discharge']},
         )
     )
 
@@ -598,11 +612,12 @@ def patient_print_discharge(request, patient_id):
 @login_required
 def patient_print_referral(request, patient_id):
     patient = get_object_or_404(Patient, id=patient_id)
+    return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
     return redirect(
         build_url(
             'patient_print_bundle',
             args=[patient.id],
-            query={'docs': ['referral']},
+            query={'docs': ['referral'], 'return_to': return_to} if return_to else {'docs': ['referral']},
         )
     )
 
@@ -615,6 +630,8 @@ def consent_latest(request):
 @login_required
 def patient_print_bundle(request, patient_id):
     patient = get_object_or_404(Patient, id=patient_id)
+
+    return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
 
     raw_docs = request.GET.getlist("docs")
     if not raw_docs:
@@ -659,6 +676,7 @@ def patient_print_bundle(request, patient_id):
 
     end_date_est = get_completion_date(patient.first_treatment_date)
     today = timezone.now().date()
+    back_url = return_to or reverse("rtms_app:patient_first_visit", args=[patient.id])
 
     docs_to_render = []
     for key in selected_doc_keys:
@@ -678,6 +696,7 @@ def patient_print_bundle(request, patient_id):
         "consent_copies": ["患者控え", "病院控え"],
         "end_date_est": end_date_est,
         "today": today,
+        "back_url": back_url,
     }
 
     return render(
@@ -713,7 +732,10 @@ def patient_print_path(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     # ★修正: generate_calendar_weeks を使用
     calendar_weeks = generate_calendar_weeks(patient)
+    return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
+    back_url = return_to or reverse("rtms_app:patient_clinical_path", args=[patient.id])
     return render(request, 'rtms_app/print/path.html', {
         'patient': patient,
         'calendar_weeks': calendar_weeks,
+        'back_url': back_url,
     })

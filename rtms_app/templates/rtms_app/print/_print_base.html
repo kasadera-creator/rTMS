@@ -1,0 +1,32 @@
+{% load static %}
+{% if not include_mode %}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}印刷プレビュー{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'rtms_app/print.css' %}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="print-body">
+    <div class="print-toolbar screen-only">
+        <div class="print-toolbar-left">
+            {% if back_url %}
+            <a class="btn btn-outline-light btn-sm" href="{{ back_url }}">
+                <span aria-hidden="true">←</span> 戻る
+            </a>
+            {% endif %}
+            <span class="print-toolbar-title">{% block toolbar_title %}印刷プレビュー{% endblock %}</span>
+        </div>
+        <div class="print-toolbar-right">
+            <button class="btn btn-light btn-sm" onclick="window.print()">印刷</button>
+        </div>
+    </div>
+    <div class="print-main">
+{% endif %}
+        {% block print_content %}{% endblock %}
+{% if not include_mode %}
+    </div>
+</body>
+</html>
+{% endif %}
