@@ -1,75 +1,76 @@
 {% extends "rtms_app/base.html" %}
 
 {% block extrastyle %}
+{% load static %}
+<link rel="stylesheet" href="{% static 'rtms_app/print.css' %}">
 <style>
-    /* 印刷用CSS (A4横) */
-    @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700&display=swap');
-    
-    body { background-color: #525659; }
-    .page-container { width: 277mm; margin: 20px auto; }
+    @page {
+        size: A4 landscape;
+        margin: 10mm;
+    }
+
+    body {
+        font-family: "Meiryo", "Yu Gothic", "Hiragino Sans", sans-serif;
+    }
+
+    .page-container {
+        width: 277mm;
+        margin: 20px auto;
+    }
+
     .page-sheet {
-        background-color: white; width: 100%; min-height: 190mm; /* A4横 */
-        padding: 10mm; /* 余白 */
-        box-shadow: 0 0 10px rgba(0,0,0,0.5); position: relative; box-sizing: border-box; margin-bottom: 20px;
-        font-family: 'M PLUS Rounded 1c', "Meiryo", sans-serif; color: #333;
-        line-height: 1.3; overflow: hidden;
+        width: 100%;
+        min-height: calc(210mm - 20mm);
+        padding: 10mm;
+        box-sizing: border-box;
+        background: #fff;
     }
 
-    @media print {
-        @page { size: A4 landscape; margin: 10mm; }
-        body { background-color: white; margin: 0; }
-        .preview-container { width: 100%; margin: 0; }
-        .page-container { width: 277mm; margin: 0 auto; }
-        .page-sheet {
-            width: 100%; min-height: auto; margin: 0; padding: 0;
-            box-shadow: none; border: none; page-break-after: always;
-        }
-        .page-sheet:last-child { page-break-after: auto; }
-        .no-print { display: none !important; }
+    .page-break-after {
+        break-after: page;
+        page-break-after: always;
     }
 
-    /* カレンダー (テーブル形式) */
     .cal-table { width: 100%; border-collapse: collapse; margin-top: 5px; table-layout: fixed; }
-    .cal-table th { 
-        background-color: #f0f0f0; border: 1px solid #000; 
-        padding: 3px; text-align: center; font-size: 10pt; font-weight: bold;
-    }
-    .cal-table td { 
-        border: 1px solid #000; padding: 3px; vertical-align: top; 
-        height: 55px; /* 高さを抑える */
-        font-size: 9.5pt;
-    }
-    
+    .cal-table th { background-color: #f0f0f0; border: 1px solid #000; padding: 3px; text-align: center; font-size: 10pt; font-weight: bold; }
+    .cal-table td { border: 1px solid #000; padding: 3px; vertical-align: top; height: 55px; font-size: 9.5pt; }
     .day-sat { color: #007bff; background-color: #f0f8ff !important; }
     .day-sun { color: #dc3545; background-color: #fff0f0 !important; }
     .day-holiday { color: #dc3545; background-color: #ffe8e8 !important; }
-    
     .date-num { font-weight: bold; font-size: 10pt; display: block; margin-bottom: 1px; }
     .holiday-mark { font-size: 8pt; margin-left: 2px; }
-
-    .evt-badge { 
-        display: block; padding: 0 2px; margin-bottom: 1px; border-radius: 2px; 
-        font-size: 8pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;
-    }
+    .evt-badge { display: block; padding: 0 2px; margin-bottom: 1px; border-radius: 2px; font-size: 8pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
     .evt-admission { background-color: #b6effb; color: #055160; font-weight: bold; border: 1px solid #9eeaf9; }
     .evt-mapping { background-color: #ffeeba; color: #856404; font-weight: bold; border: 1px solid #ffe8a1; }
     .evt-treatment { background-color: #d1e7dd; color: #0f5132; }
     .evt-assessment { border: 1px solid #dc3545; color: #dc3545; font-weight: bold; background-color: #fff; }
     .evt-discharge { background-color: #f8d7da; color: #842029; font-weight: bold; border: 1px solid #f5c6cb; }
 
-    /* 裏面（説明） */
-    .info-container { display: flex; flex-wrap: wrap; gap: 15px; height: 100%; align-content: flex-start; }
-    .info-box { flex: 1 1 45%; border: 2px solid #555; border-radius: 8px; padding: 12px; box-sizing: border-box; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .info-grid-full { grid-column: 1 / -1; }
+    .info-box { border: 2px solid #555; border-radius: 6px; padding: 12px; box-sizing: border-box; background: #fff; }
     .info-title { font-size: 1.1em; font-weight: bold; border-bottom: 2px solid #555; padding-bottom: 3px; margin-bottom: 8px; }
     .info-content { font-size: 10pt; }
     .info-content ul { padding-left: 18px; margin: 0; }
-    .info-content li { margin-bottom: 2px; }
+    .info-content li { margin-bottom: 4px; }
     .warning-text { color: #d63384; font-weight: bold; }
+
+    @media screen {
+        body { background-color: #525659; }
+        .page-sheet { box-shadow: 0 0 12px rgba(0,0,0,0.35); }
+        .fixed-screen-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 20; }
+    }
+
+    @media print {
+        body { background: #fff; margin: 0; }
+        .screen-only { display: none !important; }
+        .page-container { margin: 0 auto; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid no-print bg-dark text-white p-2 fixed-top">
+<div class="container-fluid screen-only bg-dark text-white p-2 fixed-screen-bar">
     <div class="container d-flex justify-content-between align-items-center">
         <span>クリニカルパス印刷プレビュー (A4横)</span>
         <div>
@@ -78,20 +79,18 @@
         </div>
     </div>
 </div>
-<div style="height: 50px;" class="no-print"></div>
+<div style="height: 50px;" class="screen-only"></div>
 
 <div class="page-container">
-    
-    <!-- 1ページ目: カレンダー -->
-    <div class="page-sheet">
-        <h2 class="text-center fw-bold mb-2">rTMS治療スケジュール表</h2>
-        
+    <!-- 1ページ目 -->
+    <div class="page-sheet page-break-after">
+        <h2 class="text-center fw-bold mb-2">rTMS治療スケジュール</h2>
         <div class="d-flex justify-content-between mb-2 border-bottom border-dark pb-1" style="font-size: 10.5pt;">
             <div>氏名: <strong>{{ patient.name }} 様</strong></div>
             <div>ID: {{ patient.card_id }} {% if patient.course_number > 1 %}({{ patient.course_number }}クール目){% endif %}</div>
             <div>担当医: {{ patient.attending_physician.last_name }} 先生</div>
         </div>
-        
+
         <table class="cal-table">
             <thead>
                 <tr>
@@ -113,7 +112,7 @@
                             {{ day.date|date:"n/j" }}
                             {% if day.is_holiday %}<span class="holiday-mark">祝</span>{% endif %}
                         </div>
-                        
+
                         {% for event in day.events %}
                             {% if event.type == 'admission' %}
                                 <div class="evt-badge evt-admission">{{ event.label }}</div>
@@ -133,31 +132,27 @@
                 {% endfor %}
             </tbody>
         </table>
-        
+
         <div class="mt-1 text-end" style="font-size: 8.5pt;">※スケジュールは治療経過や病院の都合により変更になる場合があります。<span style="color:#dc3545;">赤色(祝日)</span>は治療がお休みです。</div>
     </div>
 
-    <!-- 2ページ目: 説明 -->
+    <!-- 2ページ目 -->
     <div class="page-sheet">
         <h2 class="text-center fw-bold mb-3">rTMS治療に関するご案内</h2>
-        
-        <div class="info-container">
-            <!-- 1. 入院・検査 -->
+
+        <div class="info-grid">
             <div class="info-box">
                 <div class="info-title">① 入院・検査について</div>
                 <div class="info-content">
                     <ul>
                         <li><strong>入院当日:</strong> 指定された時間（通常10:00）に受付へお越しください。</li>
                         <li><strong>持ち物:</strong> 保険証、診察券、お薬手帳、現在服用中のお薬を必ずご持参ください。</li>
-                        <li><strong>位置決め（MT測定）:</strong> 治療部位と強さを決める重要な検査です。<br>
-                            <span class="warning-text">※整髪料は付けずに、洗髪した清潔な状態で受けてください。</span>
-                        </li>
+                        <li><strong>位置決め（MT測定）:</strong> 治療部位と強さを決める重要な検査です。<br><span class="warning-text">※整髪料は付けずに、洗髪した清潔な状態で受けてください。</span></li>
                         <li>専用キャップを被り、約30分〜1時間かけて測定します。</li>
                     </ul>
                 </div>
             </div>
 
-            <!-- 2. 治療 -->
             <div class="info-box">
                 <div class="info-title">② 治療の進め方</div>
                 <div class="info-content">
@@ -171,24 +166,15 @@
                 </div>
             </div>
 
-            <!-- 3. 注意事項 -->
-            <div class="info-box" style="flex-basis: 100%;">
+            <div class="info-box info-grid-full" style="border-color: #dc3545;">
                 <div class="info-title" style="border-color: #dc3545; color: #dc3545;">③ 副作用と注意事項</div>
                 <div class="info-content">
-                    <div class="row">
-                        <div class="col-6">
-                            <ul>
-                                <li><strong>頭痛・刺激痛:</strong> 治療初期によく見られますが、徐々に慣れてくることが多いです。痛みが強い場合はお知らせください。</li>
-                                <li><strong>けいれん発作:</strong> ごく稀（数万回に1回程度）ですがリスクがあります。万が一の場合は迅速に対応します。</li>
-                            </ul>
-                        </div>
-                        <div class="col-6">
-                            <ul>
-                                <li><strong>禁止事項:</strong> 治療期間中は、<span class="warning-text">飲酒</span>や<span class="warning-text">カフェインの過剰摂取</span>を控えてください（発作リスクが上がります）。</li>
-                                <li><strong>睡眠:</strong> 前日は十分な睡眠をとってください。睡眠不足は副作用のリスクを高めます。</li>
-                            </ul>
-                        </div>
-                    </div>
+                    <ul>
+                        <li><strong>頭痛・刺激痛:</strong> 治療初期によく見られますが、徐々に慣れてくることが多いです。痛みが強い場合はお知らせください。</li>
+                        <li><strong>けいれん発作:</strong> ごく稀（数万回に1回程度）ですがリスクがあります。万が一の場合は迅速に対応します。</li>
+                        <li><strong>禁止事項:</strong> 治療期間中は、<span class="warning-text">飲酒</span>や<span class="warning-text">カフェインの過剰摂取</span>を控えてください（発作リスクが上がります）。</li>
+                        <li><strong>睡眠:</strong> 前日は十分な睡眠をとってください。睡眠不足は副作用のリスクを高めます。</li>
+                    </ul>
                 </div>
             </div>
         </div>

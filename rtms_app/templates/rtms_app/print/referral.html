@@ -1,0 +1,91 @@
+<div class="page-container">
+    <div class="page-sheet">
+        <div class="referral-header">
+            <div class="referral-to">
+                {{ patient.referral_source|default:"紹介元医療機関" }} <br>
+                <span style="margin-left: 1em;">
+                    {% if patient.referral_doctor %}{{ patient.referral_doctor }} 先生{% else %}担当医 先生{% endif %} 御机下
+                </span>
+            </div>
+            <div class="referral-from">
+                <div>{{ today|date:"Y年n月j日" }}</div>
+                <div style="font-weight: bold; font-size: 11pt; margin: 3px 0;">笠寺精治寮病院</div>
+                <div>〒457-0051 愛知県名古屋市南区笠寺町柚ノ木３</div>
+                <div>TEL: 052-821-9221</div>
+                <div style="margin-top: 8px;">担当医: {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}</div>
+            </div>
+        </div>
+        <h1 class="doc-title">診療情報提供書</h1>
+        <p class="mb-3" style="font-size: 10.5pt;">いつも大変お世話になっております。<br>記患者様につきまして、当院でのrTMS治療経過をご報告申し上げます。</p>
+
+        <table class="summary-info-table">
+            <tr>
+                <th>患者ID</th>
+                <td>{{ patient.card_id }}</td>
+                <th>氏名</th>
+                <td>{{ patient.name }} 様</td>
+            </tr>
+            <tr>
+                <th>生年月日</th>
+                <td>{{ patient.birth_date|date:"Y年n月j日" }} ({{ patient.age }}歳)</td>
+                <th>性別</th>
+                <td>{{ patient.get_gender_display }}</td>
+            </tr>
+            <tr>
+                <th>入院期間</th>
+                <td colspan="3">
+                    {{ patient.admission_date|date:"Y/n/j" }} 〜
+                    {% if patient.discharge_date %}
+                        {{ patient.discharge_date|date:"Y/n/j" }} (退院)
+                    {% else %}
+                        {{ today|date:"Y/n/j" }} (入院中)
+                    {% endif %}
+                </td>
+            </tr>
+        </table>
+
+        <div class="content-section">
+            <div class="section-label">診断名・主訴</div>
+            <div class="text-content mb-3">
+                診断名：{{ patient.diagnosis }}<br>
+                主　訴：{{ patient.chief_complaint }}
+            </div>
+
+            <div class="section-label">入院経過・治療結果</div>
+            <div class="text-content" style="min-height: 200px; margin-bottom: 12px;">
+                {{ patient.summary_text|linebreaksbr }}
+            </div>
+
+            {% if test_scores %}
+            <div class="mt-2">
+                <div style="font-weight: bold; font-size: 9pt; margin-bottom: 3px; border-bottom: 1px dashed #ccc; width: fit-content;">
+                    【参考】重症度評価推移 (HAMDスコア)
+                </div>
+                <table class="print-score-table">
+                    <tr>
+                        <th style="width: 25%;">実施日</th>
+                        <th style="width: 25%;">時期</th>
+                        <th style="width: 25%;">HAMD 17項目</th>
+                        <th style="width: 25%;">HAMD 21項目</th>
+                    </tr>
+                    {% for score in test_scores %}
+                    <tr>
+                        <td>{{ score.date|date:"Y/n/j" }}</td>
+                        <td>{{ score.get_timing_display|default:"-" }}</td>
+                        <td>{{ score.total_score_17 }}</td>
+                        <td>{{ score.total_score_21 }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="footer-area">
+            <p>ご多忙の折、誠に恐縮ではございますが、<br>今後の加療を何卒よろしくお願い申し上げます。</p>
+            <div style="margin-top: 30px;">
+                医師署名：<span class="signature-line"></span>　印
+            </div>
+        </div>
+    </div>
+</div>

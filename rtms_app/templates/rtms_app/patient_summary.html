@@ -6,8 +6,18 @@
     .history-table td { text-align: center; vertical-align: middle; }
     .score-table th { background-color: #e8f5e9; text-align: center; font-size: 0.9rem; }
     .score-table td { text-align: center; font-size: 0.9rem; }
-    
+
     .discharge-date-card { border-left: 5px solid #17a2b8; background-color: #f0fdf4; }
+
+    .autosave-toast {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        min-width: 260px;
+        z-index: 1100;
+        display: none;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
 </style>
 {% endblock %}
 
@@ -20,7 +30,7 @@
     </div>
 
     <!-- (以下、フォーム部分は既存と同じ) -->
-    <form method="post" id="mainForm" class="bg-white p-4 shadow-sm rounded">
+    <form method="post" id="mainForm" class="bg-white p-4 shadow-sm rounded" data-disable-floating-autosave="true">
         {% csrf_token %}
         <div class="alert alert-light border mb-4">
             <div class="row align-items-center">
@@ -100,20 +110,54 @@
         <div style="height: 50px;"></div>
     </form>
 
+    <div class="form-section">
+        <div class="card mb-3">
+            <div class="card-header bg-light fw-bold">退院時 印刷</div>
+            <div class="card-body">
+                <form id="bundlePrintFormDischarge"
+                      action="{% url 'rtms_app:patient_print_bundle' patient.id %}"
+                      method="get"
+                      target="_blank">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" name="docs" value="discharge" id="docDischarge" checked>
+                        <label class="form-check-label" for="docDischarge">退院時サマリー</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" name="docs" value="referral" id="docReferral" checked>
+                        <label class="form-check-label" for="docReferral">紹介状</label>
+                    </div>
+
+                    {% if dashboard_date %}
+                        <input type="hidden" name="dashboard_date" value="{{ dashboard_date }}">
+                    {% endif %}
+
+                    <button type="submit" class="btn btn-primary mt-2">印刷プレビュー</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
     {% url 'rtms_app:dashboard' as dashboard_url %}
 {% if dashboard_date %}
   {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
     {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=back_url %}
   {% endwith %}
 {% else %}
-  {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=dashboard_url %}
-{% endif %}
+    {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=dashboard_url %}
+  {% endif %}
 
+</div>
+
+<div id="autosaveToast" class="toast align-items-center text-white bg-success autosave-toast" role="status" aria-live="polite">
+  <div class="d-flex">
+    <div class="toast-body" id="autosaveToastBody">✓ 自動保存しました</div>
+    <button type="button" class="btn-close btn-close-white me-2 m-auto" aria-label="Close" onclick="hideToast()"></button>
+  </div>
 </div>
 
 <script>
     document.getElementById('dischargeDateInput').addEventListener('change', function(e) {
-        const dateVal = e.target.value; 
+        const dateVal = e.target.value;
         if (!dateVal) return;
         const d = new Date(dateVal);
         const formattedDate = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
@@ -131,25 +175,30 @@
 </script>
 
 <script>
-  async function saveThenPrint(btn) {
-    const formId = btn.dataset.formId || 'mainForm';
-    const action = btn.dataset.action || '';
-    const fallbackUrl = btn.dataset.printUrl || '';
-    const target = btn.dataset.target || '_blank';
+  const autosaveToast = document.getElementById('autosaveToast');
+  const autosaveToastBody = document.getElementById('autosaveToastBody');
+  let autosaveTimer = null;
 
-    if (!action) {
-      alert('印刷アクションが設定されていません。');
-      return;
-    }
+  function showToast(message, variant = 'success') {
+    autosaveToastBody.textContent = message;
+    autosaveToast.classList.remove('bg-success', 'bg-danger');
+    autosaveToast.classList.add(variant === 'error' ? 'bg-danger' : 'bg-success');
+    autosaveToast.style.display = 'block';
+    const bsToast = bootstrap.Toast.getOrCreateInstance(autosaveToast, { delay: 2500 });
+    bsToast.show();
+  }
 
-    const form = document.getElementById(formId);
-    if (!form) {
-      alert(`フォームが見つかりません: ${formId}`);
-      return;
-    }
+  function hideToast() {
+    const bsToast = bootstrap.Toast.getOrCreateInstance(autosaveToast);
+    bsToast.hide();
+  }
 
+  async function performSave(action = '') {
+    const form = document.getElementById('mainForm');
     const fd = new FormData(form);
-    fd.append('action', action);
+    if (action) {
+      fd.append('action', action);
+    }
 
     const res = await fetch(window.location.href, {
       method: 'POST',
@@ -158,33 +207,32 @@
       credentials: 'same-origin',
     });
 
-    // 失敗時はここで止める
     if (!res.ok) {
       throw new Error(`save failed: HTTP ${res.status}`);
     }
 
     const data = await res.json();
-
-    // view側で redirect_url を返す設計にしておくのがベスト
-    const url = data.redirect_url || fallbackUrl;
-
-    if (!url) {
-      alert('印刷URLが取得できませんでした。');
-      return;
+    if (!action) {
+      showToast('✓ 自動保存しました');
     }
-
-    window.open(url, target, 'noopener');
+    return data;
   }
 
-  document.addEventListener('click', (e) => {
-    const btn = e.target.closest('.js-save-and-print');
-    if (!btn) return;
+  function debounceSave() {
+    if (autosaveTimer) {
+      clearTimeout(autosaveTimer);
+    }
+    autosaveTimer = setTimeout(() => {
+      performSave().catch((err) => {
+        console.error(err);
+        showToast('保存に失敗しました', 'error');
+      });
+    }, 1000);
+  }
 
-    e.preventDefault();
-    saveThenPrint(btn).catch((err) => {
-      console.error(err);
-      alert('保存または印刷に失敗しました。');
-    });
+  document.querySelectorAll('#mainForm input, #mainForm textarea').forEach((el) => {
+    el.addEventListener('input', debounceSave);
+    el.addEventListener('change', debounceSave);
   });
 </script>
 
