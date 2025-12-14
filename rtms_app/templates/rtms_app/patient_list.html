@@ -15,7 +15,7 @@
 	<form method="get" class="card shadow-sm mb-3">
   <div class="card-body">
     <div class="row g-2 align-items-end">
-      <div class="col-md-3">
+      <div class="col-md-2">
   <label class="form-label mb-1">状態</label>
   <select name="status" class="form-select">
     <option value="">（すべて）</option>
@@ -26,7 +26,7 @@
 <input type="hidden" name="sort" value="{{ current_sort }}">
 <input type="hidden" name="dir" value="{{ current_dir }}">
 </div>
-	  <div class="col-md-2">
+	  <div class="col-md-2	">
         <label class="form-label mb-1">患者ID</label>
         <input type="text" name="card" value="{{ card|default:'' }}" class="form-control" placeholder="例：12345">
       </div>
@@ -40,7 +40,7 @@
       <input type="hidden" name="sort" value="{{ current_sort|default:'card_id' }}">
       <input type="hidden" name="dir" value="{{ current_dir|default:'asc' }}">
 
-      <div class="col-md-5 d-flex gap-2">
+      <div class="col-md-2 d-flex gap-2">
         <button class="btn btn-primary" type="submit">検索</button>
         <a class="btn btn-outline-secondary" href="{% url 'rtms_app:patient_list' %}">クリア</a>
       </div>
