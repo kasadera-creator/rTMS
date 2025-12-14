@@ -639,22 +639,27 @@ def consent_latest(request):
 def patient_print_bundle(request, patient_id):
     patient = get_object_or_404(Patient, id=patient_id)
 
-    docs = request.GET.getlist("docs")
-    if not docs:
-        raw = request.GET.get("docs", "")
-        docs = [d for d in raw.split(",") if d]
-    DOC_ORDER = ["admission", "suitability", "consent", "discharge", "referral"]
-    docs_req = request.GET.getlist("docs")
-    if not docs_req:
+    # --- bundle: docs の取得（複数docs対応） ---
+DOC_ORDER = ["admission", "suitability", "consent", "discharge", "referral"]
+
+docs_req = request.GET.getlist("docs")
+
+# 互換: ?docs=admission,suitability 形式も許容
+if not docs_req:
     raw = request.GET.get("docs", "")
     if raw:
         docs_req = [d.strip() for d in raw.split(",") if d.strip()]
 
-# 不正値を除外して順序を正規化（指定が無ければ既定セット）
 allowed = [d for d in docs_req if d in DOC_ORDER]
 selected_docs = [d for d in DOC_ORDER if d in allowed] if allowed else DOC_ORDER
 # --- /bundle docs ---
-
+    
+    if raw:
+        docs_req = [d.strip() for d in raw.split(",") if d.strip()]
+        # 不正値を除外して順序を正規化（指定が無ければ既定セット）
+        allowed = [d for d in docs_req if d in DOC_ORDER]
+        selected_docs = [d for d in DOC_ORDER if d in allowed] if allowed else DOC_ORDER
+        
     assessments = Assessment.objects.filter(
         patient=patient
     ).order_by("date")
