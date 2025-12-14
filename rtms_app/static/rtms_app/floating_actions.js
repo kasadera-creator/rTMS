@@ -45,6 +45,10 @@ function buildPrintUrl(btn) {
     }
   }
 
+  if (!url.searchParams.has('return_to')) {
+    url.searchParams.set('return_to', window.location.pathname);
+  }
+
   return url.toString();
 }
 

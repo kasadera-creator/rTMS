@@ -1,8 +1,9 @@
-{% extends "rtms_app/base.html" %}
+{% extends "rtms_app/print/_print_base.html" %}
 
-{% block extrastyle %}
-{% load static %}
-<link rel="stylesheet" href="{% static 'rtms_app/print.css' %}">
+{% block title %}クリニカルパス印刷{% endblock %}
+{% block toolbar_title %}クリニカルパス印刷 (A4横){% endblock %}
+
+{% block extra_head %}
 <style>
     @page {
         size: A4 landscape;
@@ -58,29 +59,16 @@
     @media screen {
         body { background-color: #525659; }
         .page-sheet { box-shadow: 0 0 12px rgba(0,0,0,0.35); }
-        .fixed-screen-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 20; }
     }
 
     @media print {
         body { background: #fff; margin: 0; }
-        .screen-only { display: none !important; }
         .page-container { margin: 0 auto; }
     }
 </style>
 {% endblock %}
 
-{% block content %}
-<div class="container-fluid screen-only bg-dark text-white p-2 fixed-screen-bar">
-    <div class="container d-flex justify-content-between align-items-center">
-        <span>クリニカルパス印刷プレビュー (A4横)</span>
-        <div>
-            <button onclick="window.print()" class="btn btn-primary btn-sm"><i class="fas fa-print"></i> 印刷</button>
-            <button onclick="window.close()" class="btn btn-secondary btn-sm">閉じる</button>
-        </div>
-    </div>
-</div>
-<div style="height: 50px;" class="screen-only"></div>
-
+{% block print_content %}
 <div class="page-container">
     <!-- 1ページ目 -->
     <div class="page-sheet page-break-after">

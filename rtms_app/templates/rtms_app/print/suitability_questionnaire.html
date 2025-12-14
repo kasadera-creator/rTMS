@@ -85,7 +85,6 @@
             <td class="check-cell">{% if q.q_past_abuse == 'はい' %}☑{% else %}☐{% endif %}</td>
             <td class="check-cell">{% if q.q_past_abuse == 'いいえ' %}☑{% else %}☐{% endif %}</td>
         </tr>
-
         <tr class="section-row"><td colspan="4">現在、以下のことはありますか？</td></tr>
         <tr>
             <td class="col-no">12</td>
@@ -101,7 +100,7 @@
         </tr>
         <tr>
             <td class="col-no">14</td>
-            <td>体内埋め込み式の医療機器（ペースメーカーなど）</td>
+            <td>体内埋め込み式の医療機器（心臓ペースメーカーなど）</td>
             <td class="check-cell">{% if q.q_cur_device == 'はい' %}☑{% else %}☐{% endif %}</td>
             <td class="check-cell">{% if q.q_cur_device == 'いいえ' %}☑{% else %}☐{% endif %}</td>
         </tr>
@@ -119,28 +118,21 @@
         </tr>
         <tr>
             <td class="col-no">17</td>
-            <td>家族内にてんかんを持っている方</td>
+            <td>家族内にてんかんを持っているかた</td>
             <td class="check-cell">{% if q.q_cur_family_epilepsy == 'はい' %}☑{% else %}☐{% endif %}</td>
             <td class="check-cell">{% if q.q_cur_family_epilepsy == 'いいえ' %}☑{% else %}☐{% endif %}</td>
         </tr>
     </tbody>
 </table>
-
-<div class="free-text-block">
-    <div class="section-heading">「はい」に該当する項目の詳細 / その他気になること</div>
-    <div class="note-box">{{ q.q_details|default:"" }}</div>
+<div class="note-box" style="margin-top: 10px;">「はい」と答えた項目の詳細: {{ q.q_details|default:"" }}</div>
+<div class="signature-row">
+    <div>
+        患者署名
+        <div class="signature-line" style="width: 160px;"></div>
+    </div>
+    <div>
+        日付
+        <div class="signature-date">{{ today|date:"Y年n月j日" }}</div>
+    </div>
 </div>
 {% endwith %}
-
-<div class="signature-row">
-    <div class="signature-box">
-        <div>患者署名：</div>
-        <div class="signature-line">&nbsp;</div>
-        <div class="signature-date">日付：　　年　　月　　日</div>
-    </div>
-    <div class="signature-box">
-        <div>担当医署名：</div>
-        <div class="signature-line">　　　</div>
-        <div class="signature-date">日付：　　年　　月　　日</div>
-    </div>
-</div>
