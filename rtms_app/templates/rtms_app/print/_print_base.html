@@ -10,8 +10,9 @@
 </head>
 <body class="print-body">
     {% if back_url %}
-    <a class="btn btn-secondary no-print print-back-btn" href="{{ back_url }}">
-        <span aria-hidden="true">←</span> 戻る
+    <a class="btn btn-secondary no-print print-back-btn d-inline-flex align-items-center gap-1" href="{{ back_url }}">
+        <span aria-hidden="true">←</span>
+        <span>戻る</span>
     </a>
     {% endif %}
     <div class="print-toolbar screen-only">

@@ -304,8 +304,11 @@ def patient_list_view(request):
     ordering = build_ordering(sort_param, direction)
     patients = Patient.objects.all().order_by(*ordering)
 
+    preserved_params = request.GET.copy()
+    preserved_params.pop('page', None)
+
     def build_sort_query(target_key: str):
-        params = request.GET.copy()
+        params = preserved_params.copy()
         params['sort'] = target_key
         params['dir'] = 'desc' if (sort_param == target_key and direction == 'asc') else 'asc'
         return params.urlencode()
