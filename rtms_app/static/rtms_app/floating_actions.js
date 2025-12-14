@@ -100,59 +100,52 @@
   // ----------------------------
   // Click handler: save and print
   // ----------------------------
-  document.addEventListener('click', async (e) => {
-    const btn = e.target.closest('.js-save-and-print');
-    if (!btn) return;
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.js-save-and-print');
+  if (!btn) return;
 
-    e.preventDefault();
+  e.preventDefault();
 
-    const formId = btn.dataset.formId || 'mainForm';
-    const action = btn.dataset.action || '';
-    const target = btn.dataset.target || '_blank';
-    const docsFormId = btn.dataset.docsFormId || '';
+  const formId = btn.dataset.formId || 'mainForm';
+  const action = btn.dataset.action || '';
+  const target = btn.dataset.target || '_blank';
+  const docsFormId = btn.dataset.docsFormId || '';
 
-    // print url (fallback)
-    let printUrl = btn.dataset.printUrl || '';
+  // ★ まずは data-print-url を絶対優先
+  let printUrl = (btn.dataset.printUrl || '').trim();
 
-    // If docsFormId is provided, reflect checkbox selections into printUrl
-    if (printUrl && docsFormId) {
-      printUrl = buildUrlWithDocs(printUrl, docsFormId);
-    }
+  // docsFormId があれば docs=... を反映（bundle用）
+  if (printUrl && docsFormId) {
+    printUrl = buildUrlWithDocs(printUrl, docsFormId);  // あなたが既に入れている関数
+  }
 
-    if (!action && !printUrl) {
-      showToast('印刷設定がありません', true);
-      return;
-    }
+  // ★ printUrl が無ければ推測しない（ここが重要）
+  if (!printUrl) {
+    showToast('印刷設定がありません', true);
+    return;
+  }
 
-    const form = document.getElementById(formId);
-    const method = form ? (form.getAttribute('method') || '').toLowerCase() : '';
+  const form = document.getElementById(formId);
+  const method = form ? (form.getAttribute('method') || '').toLowerCase() : '';
 
-    // Case 1: no form or GET form -> open printUrl directly
-    if (!form || method === 'get') {
-      if (!printUrl) {
-        showToast('印刷URLが取得できません', true);
-        return;
-      }
-      window.open(printUrl, target, 'noopener');
-      return;
-    }
+  // ★ GETフォーム/フォーム無しの画面は、保存せずに printUrl を開くだけ
+  if (!form || method === 'get') {
+    window.open(printUrl, target, 'noopener');
+    return;
+  }
 
-    // Case 2: POST form -> save (AJAX) then open redirect_url or printUrl
-    try {
-      const data = await ajaxSave(form, action);
-      showToast('✓ 自動保存しました');
+  // ★ POSTフォームのみ：保存してから印刷
+  try {
+    const data = await ajaxSave(form, action);  // あなたが既に入れている保存関数
+    showToast('✓ 自動保存しました');
 
-      const urlToOpen = (data && data.redirect_url) ? data.redirect_url : printUrl;
-      if (!urlToOpen) {
-        showToast('印刷URLが取得できません', true);
-        return;
-      }
-      window.open(urlToOpen, target, 'noopener');
-    } catch (err) {
-      console.error(err);
-      showToast('保存または印刷に失敗しました', true);
-    }
-  });
+    const urlToOpen = (data && data.redirect_url) ? data.redirect_url : printUrl;
+    window.open(urlToOpen, target, 'noopener');
+  } catch (err) {
+    console.error(err);
+    showToast('保存または印刷に失敗しました', true);
+  }
+});
 
   // ----------------------------
   // Auto-save (debounced) for POST form pages
