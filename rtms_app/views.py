@@ -273,9 +273,10 @@ def dashboard_view(request):
 def patient_list_view(request):
     dashboard_date = request.GET.get('dashboard_date')
 
-    # --- 追加：検索パラメータ（GET） ---
-    q = (request.GET.get('q') or '').strip()         # 氏名など自由検索
-    card = (request.GET.get('card') or '').strip()   # 患者ID検索
+    # ===== 検索/フィルタ（追加） =====
+    q = (request.GET.get('q') or '').strip()
+    card = (request.GET.get('card') or '').strip()
+    status = (request.GET.get('status') or '').strip()  # waiting/inpatient/discharged
 
     sort_param = request.GET.get('sort', 'card_id')
     dir_param = request.GET.get('dir', 'asc')
@@ -289,6 +290,8 @@ def patient_list_view(request):
         'attending': ['attending_physician__last_name', 'attending_physician__first_name'],
         'course': ['course_number'],
         'age': ['birth_date'],
+        # 追加してよければ：状態でもソート可能
+        'status': ['status'],
     }
 
     if sort_param not in sort_fields:
@@ -297,6 +300,7 @@ def patient_list_view(request):
 
     def build_ordering(key: str, dir_value: str):
         if key == 'age':
+            # 年齢昇順（若い→）＝ birth_date 降順
             base_fields = ['-birth_date'] if dir_value == 'asc' else ['birth_date']
         else:
             base_fields = [
@@ -307,19 +311,23 @@ def patient_list_view(request):
 
     ordering = build_ordering(sort_param, direction)
 
-    # --- 変更：queryset を作ってから検索filter ---
-    qs = Patient.objects.all()
+    # ===== QuerySet（ここがポイント） =====
+    qs = Patient.objects.select_related('attending_physician').all()
 
     if q:
-        # 「氏名」だけで良ければ name__icontains だけでOK。
-        # もしフリガナ等があるなら OR で足してください。
         qs = qs.filter(name__icontains=q)
 
     if card:
         qs = qs.filter(card_id__icontains=card)
 
+    if status:
+        # 予期しない値は無視（安全）
+        if status in {'waiting', 'inpatient', 'discharged'}:
+            qs = qs.filter(status=status)
+
     patients = qs.order_by(*ordering)
 
+    # ===== sort link 用：検索条件を保持 =====
     preserved_params = request.GET.copy()
     preserved_params.pop('page', None)
 
@@ -337,9 +345,11 @@ def patient_list_view(request):
         'current_sort': sort_param,
         'current_dir': direction,
         'sort_queries': sort_queries,
-        # --- 追加：テンプレで検索欄に値を戻す用 ---
+
+        # フォームに値を戻す
         'q': q,
         'card': card,
+        'status': status,
     }
 
     return render(request, 'rtms_app/patient_list.html', context)

@@ -23,6 +23,8 @@
     <option value="inpatient" {% if status == "inpatient" %}selected{% endif %}>入院中</option>
     <option value="discharged"{% if status == "discharged" %}selected{% endif %}>退院済</option>
   </select>
+<input type="hidden" name="sort" value="{{ current_sort }}">
+<input type="hidden" name="dir" value="{{ current_dir }}">
 </div>
 	  <div class="col-md-2">
         <label class="form-label mb-1">患者ID</label>
