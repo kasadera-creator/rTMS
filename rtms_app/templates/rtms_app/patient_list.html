@@ -16,12 +16,62 @@
             <table class="table table-hover mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th>ID</th>
-                        <th>氏名</th>
-                        <th>生年月日</th>
-                        <th>年齢・性別</th>
-                        <th>担当医</th>
-                        <th>クール</th>
+                        <th>
+                            <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.card_id }}">
+                                <span>ID</span>
+                                {% if current_sort == 'card_id' %}
+                                    <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </a>
+                        </th>
+                        <th>
+                            <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.name }}">
+                                <span>氏名</span>
+                                {% if current_sort == 'name' %}
+                                    <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </a>
+                        </th>
+                        <th>
+                            <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.birth_date }}">
+                                <span>生年月日</span>
+                                {% if current_sort == 'birth_date' %}
+                                    <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </a>
+                        </th>
+                        <th>
+                            <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.age }}">
+                                <span>年齢</span>
+                                {% if current_sort == 'age' %}
+                                    <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </a>
+                        </th>
+                        <th>
+                            <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.gender }}">
+                                <span>性別</span>
+                                {% if current_sort == 'gender' %}
+                                    <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </a>
+                        </th>
+                        <th>
+                            <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.attending }}">
+                                <span>担当医</span>
+                                {% if current_sort == 'attending' %}
+                                    <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </a>
+                        </th>
+                        <th>
+                            <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.course }}">
+                                <span>クール</span>
+                                {% if current_sort == 'course' %}
+                                    <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </a>
+                        </th>
                         <th class="text-center" style="min-width: 280px;">操作</th>
                     </tr>
                 </thead>
@@ -31,7 +81,8 @@
                         <td class="fw-bold">{{ patient.card_id }}</td>
                         <td>{{ patient.name }}</td>
                         <td>{{ patient.birth_date|date:"Y/n/j" }}</td>
-                        <td>{{ patient.age }}歳 / {{ patient.get_gender_display }}</td>
+                        <td>{{ patient.age }}歳</td>
+                        <td>{{ patient.get_gender_display }}</td>
                         <td>
                             {% if patient.attending_physician %}
                                 {{ patient.attending_physician.last_name }} 先生
@@ -59,7 +110,7 @@
                         </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="7" class="text-center py-4 text-muted">登録患者はいません</td></tr>
+                    <tr><td colspan="8" class="text-center py-4 text-muted">登録患者はいません</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

@@ -9,13 +9,13 @@
     {% block extra_head %}{% endblock %}
 </head>
 <body class="print-body">
+    {% if back_url %}
+    <a class="btn btn-secondary no-print print-back-btn" href="{{ back_url }}">
+        <span aria-hidden="true">←</span> 戻る
+    </a>
+    {% endif %}
     <div class="print-toolbar screen-only">
         <div class="print-toolbar-left">
-            {% if back_url %}
-            <a class="btn btn-outline-light btn-sm" href="{{ back_url }}">
-                <span aria-hidden="true">←</span> 戻る
-            </a>
-            {% endif %}
             <span class="print-toolbar-title">{% block toolbar_title %}印刷プレビュー{% endblock %}</span>
         </div>
         <div class="print-toolbar-right">

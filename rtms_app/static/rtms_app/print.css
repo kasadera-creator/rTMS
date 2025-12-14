@@ -15,6 +15,13 @@ body {
   background: #f5f6f8;
 }
 
+.print-back-btn {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 1050;
+}
+
 .screen-only {
   display: block;
 }
@@ -346,6 +353,7 @@ body {
   .bundle-container { box-shadow: none; margin: 0 auto; padding: 0; width: 190mm; }
   .print-main { padding: 0; }
   .print-toolbar,
-  .screen-only { display: none !important; }
+  .screen-only,
+  .no-print { display: none !important; }
   a[href]:after { content: none !important; }
 }
