@@ -9,18 +9,18 @@
     {% block extra_head %}{% endblock %}
 </head>
 <body class="print-body">
-    {% if back_url %}
-    <a class="btn btn-secondary no-print print-back-btn d-inline-flex align-items-center gap-1" href="{{ back_url }}">
-        <span aria-hidden="true">←</span>
-        <span>戻る</span>
-    </a>
-    {% endif %}
     <div class="print-toolbar screen-only">
         <div class="print-toolbar-left">
             <span class="print-toolbar-title">{% block toolbar_title %}印刷プレビュー{% endblock %}</span>
         </div>
-        <div class="print-toolbar-right">
-            <button class="btn btn-light btn-sm" onclick="window.print()">印刷</button>
+
+        <div class="print-toolbar-right d-flex align-items-center gap-2">
+            {% if back_url %}
+            <a class="btn btn-secondary btn-sm no-print" href="{{ back_url }}">
+                <span aria-hidden="true">←</span> 戻る
+            </a>
+            {% endif %}
+            <button class="btn btn-light btn-sm no-print" onclick="window.print()">印刷</button>
         </div>
     </div>
     <div class="print-main">
