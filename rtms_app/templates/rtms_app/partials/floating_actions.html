@@ -17,9 +17,10 @@ Context variables:
     {% with primary=print_options|first %}
     <button type="button"
             class="btn btn-primary btn-fab text-white js-save-and-print"
-			data-form-id="{{ form_id }}"
+                        data-form-id="{{ form_id }}"
             data-action="{{ primary.value|default:'' }}"
             data-print-url="{{ primary.formaction|default:'' }}"
+            data-docs-form-id="{{ primary.docs_form_id|default:'' }}"
             data-target="{{ primary.formtarget|default:'_blank' }}">
       <i class="fas {{ primary.icon|default:'fa-print' }}"></i> {{ primary.label|default:'印刷' }}
     </button>
@@ -38,6 +39,7 @@ Context variables:
                 data-form-id="{{ form_id }}"
                 data-action="{{ opt.value|default:'' }}"
                 data-print-url="{{ opt.formaction|default:'' }}"
+                data-docs-form-id="{{ opt.docs_form_id|default:'' }}"
                 data-target="{{ opt.formtarget|default:'_blank' }}">
           <i class="fas {{ opt.icon|default:'fa-print' }} me-2"></i>{{ opt.label|default:'印刷' }}
         </button>

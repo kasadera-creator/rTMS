@@ -1,0 +1,80 @@
+<div class="page-container">
+    <div class="page-sheet">
+        <div class="summary-header">
+            <div>作成日: {{ today|date:"Y年n月j日" }}</div>
+            <div>笠寺精治寮病院</div>
+            <div>担当医: {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}</div>
+        </div>
+        <h1 class="doc-title">退院時サマリー</h1>
+
+        <table class="summary-info-table">
+            <tr>
+                <th>患者ID</th>
+                <td>{{ patient.card_id }}</td>
+                <th>氏名</th>
+                <td>{{ patient.name }} 様</td>
+            </tr>
+            <tr>
+                <th>生年月日</th>
+                <td>{{ patient.birth_date|date:"Y年n月j日" }} ({{ patient.age }}歳)</td>
+                <th>性別</th>
+                <td>{{ patient.get_gender_display }}</td>
+            </tr>
+            <tr>
+                <th>入院期間</th>
+                <td colspan="3">
+                    {{ patient.admission_date|date:"Y/n/j" }} 〜
+                    {% if patient.discharge_date %}
+                        {{ patient.discharge_date|date:"Y/n/j" }} (退院)
+                    {% else %}
+                        {{ today|date:"Y/n/j" }} (入院中)
+                    {% endif %}
+                </td>
+            </tr>
+        </table>
+
+        <div class="content-section">
+            <div class="section-label">診断名・主訴</div>
+            <div class="text-content mb-3">
+                診断名：{{ patient.diagnosis }}<br>
+                主　訴：{{ patient.chief_complaint }}
+            </div>
+
+            <div class="section-label">入院経過・治療結果</div>
+            <div class="text-content" style="min-height: 200px; margin-bottom: 12px;">
+                {{ patient.summary_text|linebreaksbr }}
+            </div>
+
+            {% if test_scores %}
+            <div class="mt-2">
+                <div style="font-weight: bold; font-size: 9pt; margin-bottom: 3px; border-bottom: 1px dashed #ccc; width: fit-content;">
+                    【参考】重症度評価推移 (HAMDスコア)
+                </div>
+                <table class="print-score-table">
+                    <tr>
+                        <th style="width: 25%;">実施日</th>
+                        <th style="width: 25%;">時期</th>
+                        <th style="width: 25%;">HAMD 17項目</th>
+                        <th style="width: 25%;">HAMD 21項目</th>
+                    </tr>
+                    {% for score in test_scores %}
+                    <tr>
+                        <td>{{ score.date|date:"Y/n/j" }}</td>
+                        <td>{{ score.get_timing_display|default:"-" }}</td>
+                        <td>{{ score.total_score_17 }}</td>
+                        <td>{{ score.total_score_21 }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="content-section">
+            <div class="section-label">退院時処方</div>
+            <div class="text-content">
+                {{ patient.discharge_prescription|linebreaksbr|default:"（記載なし）" }}
+            </div>
+        </div>
+    </div>
+</div>

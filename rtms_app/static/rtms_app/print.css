@@ -69,10 +69,12 @@ body {
 }
 
 .doc-title {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
   text-align: center;
-  margin-bottom: 12px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #333;
+  padding-bottom: 8px;
 }
 
 .section-heading {
@@ -191,6 +193,102 @@ body {
 .print-actions button,
 .print-actions a {
   margin-left: 8px;
+}
+
+.summary-header {
+  text-align: right;
+  margin-bottom: 12px;
+  font-size: 10.5pt;
+  line-height: 1.5;
+}
+
+.referral-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  font-size: 10.5pt;
+}
+
+.referral-to {
+  font-size: 13pt;
+  text-decoration: underline;
+  align-self: flex-start;
+  margin-top: 15px;
+  line-height: 1.4;
+}
+
+.referral-from {
+  text-align: right;
+  line-height: 1.5;
+}
+
+.summary-info-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+  font-size: 10.5pt;
+}
+
+.summary-info-table th,
+.summary-info-table td {
+  border-bottom: 1px solid #ccc;
+  padding: 6px 4px;
+}
+
+.summary-info-table th {
+  width: 90px;
+  text-align: left;
+  color: #555;
+  font-weight: normal;
+}
+
+.summary-info-table td {
+  font-weight: bold;
+}
+
+.content-section {
+  margin-bottom: 14px;
+}
+
+.section-label {
+  font-weight: bold;
+  border-left: 4px solid #555;
+  padding-left: 8px;
+  margin-bottom: 6px;
+  background-color: #eee;
+  font-size: 10.5pt;
+}
+
+.text-content {
+  font-size: 10pt;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  text-align: justify;
+}
+
+.print-score-table {
+  width: 80%;
+  margin-top: 6px;
+  border-collapse: collapse;
+  font-size: 9.5pt;
+}
+
+.print-score-table th,
+.print-score-table td {
+  border: 1px solid #000;
+  padding: 3px;
+  text-align: center;
+}
+
+.print-score-table th {
+  background-color: #f0f0f0 !important;
+  -webkit-print-color-adjust: exact;
+}
+
+.footer-area {
+  margin-top: 30px;
+  text-align: right;
+  font-size: 10.5pt;
 }
 
 .table-print thead { display: table-header-group; }
