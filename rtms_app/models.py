@@ -41,6 +41,13 @@ class Patient(models.Model):
     is_admission_procedure_done = models.BooleanField("入院手続き完了", default=False)
     questionnaire_data = models.JSONField("適正質問票", default=dict, blank=True, null=True)
     created_at = models.DateTimeField("登録日", auto_now_add=True)
+    
+    STATUS_CHOICES = [
+        ("waiting", "入院待ち"),
+        ("inpatient", "入院中"),
+        ("discharged", "退院済"),
+    ]
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="waiting", db_index=True)
 
     def __str__(self): return f"{self.name} ({self.card_id} - {self.course_number}クール)"
     @property

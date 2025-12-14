@@ -102,11 +102,11 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 # JAZZMIN設定
 JAZZMIN_SETTINGS = {
-    "site_title": "rTMS 実施記録 DB",
-    "site_header": "笠寺精治寮病院 rTMS", 
-    "site_brand": "笠寺精治寮病院 rTMS", 
-    "welcome_sign": "rTMS 実施記録システム",
-    "copyright": "Kasadera Seichiryo Hospital",
+    "site_title": "笠寺精治寮病院 rTMS支援システム",
+    "site_header": "笠寺精治寮病院 rTMS支援システム", 
+    "site_brand": "笠寺精治寮病院 rTMS支援システム", 
+    "welcome_sign": "笠寺精治寮病院 rTMS支援システム",
+    "copyright": "K. Iwata @ Kasadera Seichiryo Hospital",
     "site_logo": "img/logo.jpg", 
     "topmenu_links": [
         {"name": "◀ ダッシュボードへ", "url": "dashboard", "permissions": ["auth.view_user"]},
