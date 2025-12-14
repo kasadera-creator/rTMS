@@ -18,6 +18,7 @@ Context variables:
     <button type="button"
         class="btn btn-primary btn-fab text-white js-save-and-print"
         data-form-id="{{ form_id }}"
+		data-docs-form-id="{{ primary.docs_form_id|default:'' }}"
         data-action="{{ primary.value|default:'' }}"
         data-print-url="{{ primary.formaction|default:'' }}"
         data-target="{{ primary.formtarget|default:'_blank' }}">
@@ -36,6 +37,7 @@ Context variables:
         <button class="dropdown-item js-save-and-print"
                 type="button"
                 data-form-id="{{ form_id }}"
+				data-docs-form-id="{{ opt.docs_form_id|default:'' }}"
                 data-action="{{ opt.value|default:'' }}"
                 data-print-url="{{ opt.formaction|default:'' }}"
                 data-target="{{ opt.formtarget|default:'_blank' }}">
