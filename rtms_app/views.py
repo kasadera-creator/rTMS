@@ -295,66 +295,112 @@ def mapping_add(request, patient_id):
 
 @login_required
 def patient_first_visit(request, patient_id):
-    patient = get_object_or_404(Patient, pk=patient_id); dashboard_date = request.GET.get('dashboard_date')
-    all_patients = Patient.objects.all(); referral_map = {}; referral_sources_set = set()
-    for p in all_patients:
-        if p.referral_source: referral_sources_set.add(p.referral_source); 
-        if p.referral_doctor:
-            if p.referral_source not in referral_map: referral_map[p.referral_source] = set()
-            referral_map[p.referral_source].add(p.referral_doctor)
-    referral_map_json = {k: sorted(list(v)) for k, v in referral_map.items()}; referral_options = sorted(list(referral_sources_set))
-    end_date_est = get_completion_date(patient.first_treatment_date)
-    hamd_items = [('q1', '1. 抑うつ気分', 4, ""), ('q2', '2. 罪責感', 4, ""), ('q3', '3. 自殺', 4, ""), ('q4', '4. 入眠障害', 2, ""), ('q5', '5. 熟眠障害', 2, ""), ('q6', '6. 早朝睡眠障害', 2, ""), ('q7', '7. 仕事と活動', 4, ""), ('q8', '8. 精神運動抑制', 4, ""), ('q9', '9. 精神運動激越', 4, ""), ('q10', '10. 不安, 精神症状', 4, ""), ('q11', '11. 不安, 身体症状', 4, ""), ('q12', '12. 身体症状, 消化器系', 2, ""), ('q13', '13. 身体症状, 一般的', 2, ""), ('q14', '14. 生殖器症状', 2, ""), ('q15', '15. 心気症', 4, ""), ('q16', '16. 体重減少', 2, ""), ('q17', '17. 病識', 2, ""), ('q18', '18. 日内変動', 2, ""), ('q19', '19. 現実感喪失, 離人症', 4, ""), ('q20', '20. 妄想症状', 3, ""), ('q21', '21. 強迫症状', 2, "")]
-    hamd_items_left = hamd_items[:11]; hamd_items_right = hamd_items[11:]
-    baseline_assessment = Assessment.objects.filter(patient=patient, timing='baseline').first()
+    patient = get_object_or_404(Patient, pk=patient_id)
+    dashboard_date = request.GET.get("dashboard_date")
 
-    if request.method == 'POST':
-        if 'hamd_ajax' in request.POST:
-            try:
-                scores = {}
-                for key, _, _, _ in hamd_items: scores[key] = int(request.POST.get(key, 0))
-                if baseline_assessment: assessment = baseline_assessment; assessment.scores = scores
-                else: assessment = Assessment(patient=patient, date=timezone.now().date(), type='HAM-D', scores=scores, timing='baseline')
-                assessment.calculate_scores(); assessment.save()
-                total = assessment.total_score_17; msg = ""; severity = ""
-                if 14 <= total <= 18: severity = "中等症"; msg = "中等症と判定しました。rTMS適正質問票を確認してください。"
-                elif total >= 19: severity = "重症"; msg = "重症と判定しました。"
-                elif 8 <= total <= 13: severity = "軽症"
-                else: severity = "正常"
-                return JsonResponse({'status': 'success', 'total_17': total, 'severity': severity, 'message': msg})
-            except Exception as e: return JsonResponse({'status': 'error', 'message': str(e)})
-        form = PatientFirstVisitForm(request.POST, instance=patient)
-        if form.is_valid():
-            p = form.save(commit=False); diag_list = request.POST.getlist('diag_list'); diag_other = request.POST.get('diag_other', '').strip()
-            full_diagnosis = ", ".join(diag_list);
-            if diag_other: full_diagnosis += f", その他({diag_other})"
-            p.diagnosis = full_diagnosis; p.save()
+    # GET: 既存データでフォーム表示
+    if request.method != "POST":
+        form = PatientFirstVisitForm(instance=patient)
+        floating_print_options = [
+            {
+                "label": "初診 合本（印刷）",
+                "url": build_url(
+                    "patient_print_bundle",
+                    args=[patient.id],
+                    query={
+                        "docs": ["admission", "suitability", "consent"],
+                        **({"dashboard_date": dashboard_date} if dashboard_date else {}),
+                    },
+                ),
+            }
+        ]
+        return render(
+            request,
+            "rtms_app/patient_first_visit.html",
+            {
+                "patient": patient,
+                "form": form,
+                "dashboard_date": dashboard_date,
+                "floating_print_options": floating_print_options,
+                # 既存で渡している context も必要ならここに残す
+            },
+        )
 
-            action = request.POST.get('action')
+    # POST: 保存
+    form = PatientFirstVisitForm(request.POST, instance=patient)
 
-# ★ AJAXの場合はJSONで返す（redirectは返さない）
-if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-    if action == 'print_bundle':
-        query = {'docs': ['admission', 'suitability', 'consent']}
-        if dashboard_date:
-            query['dashboard_date'] = dashboard_date
-        return JsonResponse({
-            'status': 'success',
-            'redirect_url': build_url('patient_print_bundle', args=[patient.id], query=query),
-        })
-    # 印刷以外（保存だけ）も success を返す
-    return JsonResponse({'status': 'success'})
+    if not form.is_valid():
+        # ★ AJAXなら必ずJSONで返す（HTMLを返さない）
+        if request.headers.get("x-requested-with") == "XMLHttpRequest":
+            return JsonResponse(
+                {"status": "error", "message": "validation error", "errors": form.errors},
+                status=400,
+            )
+        # 通常POSTは画面にエラー表示
+        floating_print_options = [
+            {
+                "label": "初診 合本（印刷）",
+                "url": build_url(
+                    "patient_print_bundle",
+                    args=[patient.id],
+                    query={
+                        "docs": ["admission", "suitability", "consent"],
+                        **({"dashboard_date": dashboard_date} if dashboard_date else {}),
+                    },
+                ),
+            }
+        ]
+        return render(
+            request,
+            "rtms_app/patient_first_visit.html",
+            {
+                "patient": patient,
+                "form": form,
+                "dashboard_date": dashboard_date,
+                "floating_print_options": floating_print_options,
+            },
+        )
 
-# ★ 通常POST（非AJAX）のときだけ redirect
-if action == 'print_bundle':
-    query = {'docs': ['admission', 'suitability', 'consent']}
+    # フォームがOKなら保存
+    form.save()
+
+    action = request.POST.get("action")
+
+    # ★ フロート印刷（AJAX）対策：redirectせずJSONで返す
+    if request.headers.get("x-requested-with") == "XMLHttpRequest":
+        if action == "print_bundle":
+            return JsonResponse(
+                {
+                    "status": "success",
+                    "redirect_url": build_url(
+                        "patient_print_bundle",
+                        args=[patient.id],
+                        query={
+                            "docs": ["admission", "suitability", "consent"],
+                            **({"dashboard_date": dashboard_date} if dashboard_date else {}),
+                        },
+                    ),
+                }
+            )
+        return JsonResponse({"status": "success"})
+
+    # 通常POST（保存ボタンなど）
+    if action == "print_bundle":
+        return redirect(
+            build_url(
+                "patient_print_bundle",
+                args=[patient.id],
+                query={
+                    "docs": ["admission", "suitability", "consent"],
+                    **({"dashboard_date": dashboard_date} if dashboard_date else {}),
+                },
+            )
+        )
+
+    # dashboard に戻す
     if dashboard_date:
-        query['dashboard_date'] = dashboard_date
-    return redirect(build_url('patient_print_bundle', args=[patient.id], query=query))
-
-if dashboard_date:
-    return redirect(f"{reverse('rtms_app:dashboard')}?date={dashboard_date}")
-return redirect('rtms_app:dashboard')
+        return redirect(f"{reverse('rtms_app:dashboard')}?date={dashboard_date}")
+    return redirect("rtms_app:dashboard")
 
     else: form = PatientFirstVisitForm(instance=patient)
     floating_print_options = [{'label': '印刷プレビュー', 'value': 'print_bundle', 'icon': 'fa-print'}]
