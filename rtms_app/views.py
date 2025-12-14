@@ -653,13 +653,7 @@ if not docs_req:
 allowed = [d for d in docs_req if d in DOC_ORDER]
 selected_docs = [d for d in DOC_ORDER if d in allowed] if allowed else DOC_ORDER
 # --- /bundle docs ---
-    
-    if raw:
-        docs_req = [d.strip() for d in raw.split(",") if d.strip()]
-        # 不正値を除外して順序を正規化（指定が無ければ既定セット）
-        allowed = [d for d in docs_req if d in DOC_ORDER]
-        selected_docs = [d for d in DOC_ORDER if d in allowed] if allowed else DOC_ORDER
-        
+
     assessments = Assessment.objects.filter(
         patient=patient
     ).order_by("date")
