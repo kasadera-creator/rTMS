@@ -331,8 +331,12 @@ def patient_first_visit(request, patient_id):
             p.diagnosis = full_diagnosis; p.save()
 
             action = request.POST.get('action')
+
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                return JsonResponse({'status': 'success'})
+
             if action == 'print_bundle':
-                query = {'docs': ['admission', 'suitability', 'consent']}
+                query = {'docs': ['admission', 'suitability', 'consent_pdf']}
                 if dashboard_date:
                     query['dashboard_date'] = dashboard_date
                 return redirect(build_url('patient_print_bundle', args=[patient.id], query=query))
@@ -341,7 +345,14 @@ def patient_first_visit(request, patient_id):
                 return redirect(f"{reverse('rtms_app:dashboard')}?date={dashboard_date}")
             return redirect('rtms_app:dashboard')
     else: form = PatientFirstVisitForm(instance=patient)
-    floating_print_options = [{'label': '印刷プレビュー', 'value': 'print_bundle', 'icon': 'fa-print'}]
+    floating_print_options = [{
+        'label': '印刷プレビュー',
+        'value': 'print_bundle',
+        'icon': 'fa-print',
+        'formaction': reverse('rtms_app:patient_print_bundle', args=[patient.id]),
+        'formtarget': '_blank',
+        'docs_form_id': 'bundlePrintFormFirstVisit',
+    }]
     return render(request, 'rtms_app/patient_first_visit.html', {'patient': patient, 'form': form, 'referral_options': referral_options, 'referral_map_json': json.dumps(referral_map_json, ensure_ascii=False), 'end_date_est': end_date_est, 'dashboard_date': dashboard_date, 'hamd_items_left': hamd_items_left, 'hamd_items_right': hamd_items_right, 'baseline_assessment': baseline_assessment, 'floating_print_options': floating_print_options})
 
 @login_required
@@ -441,6 +452,8 @@ def patient_summary_view(request, patient_id):
 
         # ★ AJAXの場合でも action を見て印刷URLを返す
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            if action == 'print_bundle':
+                return JsonResponse({'status': 'success'})
             if action == 'print_discharge':
                 return JsonResponse({
                     'status': 'success',
@@ -454,6 +467,14 @@ def patient_summary_view(request, patient_id):
             return JsonResponse({'status': 'success'})
 
         # ★ 通常POST（非AJAX）
+        if action == 'print_bundle':
+            return redirect(
+                build_url(
+                    'patient_print_bundle',
+                    args=[patient.id],
+                    query={'docs': ['discharge', 'referral']},
+                )
+            )
         if action == 'print_discharge':
             return redirect(reverse("rtms_app:patient_print_discharge", args=[patient.id]))
         if action == 'print_referral':
@@ -484,20 +505,14 @@ def patient_summary_view(request, patient_id):
     if patient.summary_text: summary_text = patient.summary_text
     else: summary_text = (f"{created_at_str}初診、{admission_date_str}任意入院。\n" f"入院時{fmt_score(score_admin)}、{start_date_str}から全{total_count}回のrTMS治療を実施した。\n" f"3週時、{fmt_score(score_w3)}、6週時、{fmt_score(score_w6)}となった。\n" f"治療中の合併症：{side_effects_summary}。\n" f"{end_date_str}退院。紹介元へ逆紹介、抗うつ薬の治療継続を依頼した。")
     floating_print_options = [
-    {
-        "label": "退院サマリー（印刷）",
-        "value": "print_discharge",
-        "icon": "fa-print",
-        "formaction": reverse("rtms_app:patient_print_discharge", args=[patient.id]),
-        "formtarget": "_blank",
-    },
-    {
-        "label": "紹介状（印刷）",
-        "value": "print_referral",
-        "icon": "fa-print",
-        "formaction": reverse("rtms_app:patient_print_referral", args=[patient.id]),
-        "formtarget": "_blank",
-    },
+        {
+            "label": "印刷プレビュー",
+            "value": "print_bundle",
+            "icon": "fa-print",
+            "formaction": reverse("rtms_app:patient_print_bundle", args=[patient.id]),
+            "formtarget": "_blank",
+            "docs_form_id": "bundlePrintFormDischarge",
+        },
     ]
     return render(request, 'rtms_app/patient_summary.html', {'patient': patient, 'summary_text': summary_text, 'history_list': history_list, 'today': timezone.now().date(), 'test_scores': test_scores, 'dashboard_date': dashboard_date, 'floating_print_options': floating_print_options})
     
@@ -563,7 +578,7 @@ def patient_print_summary(request, pk):
 def print_clinical_path(request, patient_id: int):
     patient = get_object_or_404(Patient, id=patient_id)
     calendar_weeks = generate_calendar_weeks(patient)
-    return render(request, "rtms_app/print_clinical_path.html", {
+    return render(request, "rtms_app/print/path.html", {
         "patient": patient,
         "calendar_weeks": calendar_weeks,
     })
@@ -571,13 +586,25 @@ def print_clinical_path(request, patient_id: int):
 @login_required
 def patient_print_discharge(request, patient_id):
     patient = get_object_or_404(Patient, id=patient_id)
-    return _render_patient_summary(request, patient, 'discharge')
+    return redirect(
+        build_url(
+            'patient_print_bundle',
+            args=[patient.id],
+            query={'docs': ['discharge']},
+        )
+    )
 
 
 @login_required
 def patient_print_referral(request, patient_id):
     patient = get_object_or_404(Patient, id=patient_id)
-    return _render_patient_summary(request, patient, 'referral')
+    return redirect(
+        build_url(
+            'patient_print_bundle',
+            args=[patient.id],
+            query={'docs': ['referral']},
+        )
+    )
 
 
 @login_required
@@ -589,27 +616,73 @@ def consent_latest(request):
 def patient_print_bundle(request, patient_id):
     patient = get_object_or_404(Patient, id=patient_id)
 
-    docs_req = request.GET.getlist("docs")
-    DOC_ORDER = ["admission", "suitability", "consent"]
-    selected_docs = [d for d in DOC_ORDER if d in docs_req] or DOC_ORDER
+    raw_docs = request.GET.getlist("docs")
+    if not raw_docs:
+        legacy_docs = request.GET.get("docs")
+        if legacy_docs:
+            raw_docs = legacy_docs.split(",")
+
+    legacy_map = {
+        "consent": "consent_pdf",
+    }
+    raw_docs = [legacy_map.get(doc, doc) for doc in raw_docs]
+
+    DOC_DEFINITIONS = {
+        "admission": {
+            "label": "初診時サマリー",
+            "template": "rtms_app/print/admission_summary.html",
+        },
+        "suitability": {
+            "label": "rTMS問診票",
+            "template": "rtms_app/print/suitability_questionnaire.html",
+        },
+        "consent_pdf": {
+            "label": "説明同意書（PDF）",
+            "pdf_static": "rtms_app/docs/rtms_consent_latest.pdf",
+        },
+        "discharge": {
+            "label": "退院時サマリー",
+            "template": "rtms_app/print/discharge_summary.html",
+        },
+        "referral": {
+            "label": "紹介状",
+            "template": "rtms_app/print/referral.html",
+        },
+    }
+    DOC_ORDER = ["admission", "suitability", "consent_pdf", "discharge", "referral"]
+
+    selected_doc_keys = [d for d in DOC_ORDER if d in raw_docs]
 
     assessments = Assessment.objects.filter(
         patient=patient
     ).order_by("date")
 
     end_date_est = get_completion_date(patient.first_treatment_date)
+    today = timezone.now().date()
+
+    docs_to_render = []
+    for key in selected_doc_keys:
+        if key not in DOC_DEFINITIONS:
+            continue
+        doc_info = DOC_DEFINITIONS[key].copy()
+        doc_info["key"] = key
+        docs_to_render.append(doc_info)
 
     context = {
         "patient": patient,
-        "selected_docs": selected_docs,
+        "docs_to_render": docs_to_render,
+        "doc_definitions": DOC_DEFINITIONS,
+        "selected_doc_keys": selected_doc_keys,
         "assessments": assessments,
+        "test_scores": assessments,
         "consent_copies": ["患者控え", "病院控え"],
         "end_date_est": end_date_est,
+        "today": today,
     }
 
     return render(
         request,
-        "rtms_app/print_bundle.html",
+        "rtms_app/print/bundle.html",
         context,
     )
 
@@ -640,7 +713,7 @@ def patient_print_path(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     # ★修正: generate_calendar_weeks を使用
     calendar_weeks = generate_calendar_weeks(patient)
-    return render(request, 'rtms_app/print_clinical_path.html', {
+    return render(request, 'rtms_app/print/path.html', {
         'patient': patient,
         'calendar_weeks': calendar_weeks,
     })
