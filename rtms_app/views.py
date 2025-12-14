@@ -643,8 +643,17 @@ def patient_print_bundle(request, patient_id):
     if not docs:
         raw = request.GET.get("docs", "")
         docs = [d for d in raw.split(",") if d]
-    DOC_ORDER = ["admission", "suitability", "consent"]
-    selected_docs = [d for d in DOC_ORDER if d in docs_req] or DOC_ORDER
+    DOC_ORDER = ["admission", "suitability", "consent", "discharge", "referral"]
+    docs_req = request.GET.getlist("docs")
+    if not docs_req:
+    raw = request.GET.get("docs", "")
+    if raw:
+        docs_req = [d.strip() for d in raw.split(",") if d.strip()]
+
+# 不正値を除外して順序を正規化（指定が無ければ既定セット）
+allowed = [d for d in docs_req if d in DOC_ORDER]
+selected_docs = [d for d in DOC_ORDER if d in allowed] if allowed else DOC_ORDER
+# --- /bundle docs ---
 
     assessments = Assessment.objects.filter(
         patient=patient
