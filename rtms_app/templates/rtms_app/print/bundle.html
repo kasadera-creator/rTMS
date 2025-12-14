@@ -1,58 +1,54 @@
+{% extends "rtms_app/print/_print_base.html" %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>印刷プレビュー（合本）</title>
-    <link rel="stylesheet" href="{% static 'rtms_app/print.css' %}">
-</head>
-<body>
-    <div class="print-header screen-only">
-        <div>
-            <strong>印刷プレビュー</strong>
-            <span class="ms-2">患者: {{ patient.name }} (ID: {{ patient.card_id }})</span>
-        </div>
-        <div class="print-actions">
-            <button class="btn btn-light btn-sm" onclick="window.print()">印刷</button>
-            <a class="btn btn-outline-light btn-sm" href="{% url 'rtms_app:patient_first_visit' patient.id %}">初診画面へ戻る</a>
-        </div>
-    </div>
 
-    <div class="bundle-container">
-        <div class="screen-only mb-3">
-            <div class="fw-bold">選択中の文書</div>
-            {% if docs_to_render %}
+{% block title %}印刷プレビュー（合本）{% endblock %}
+{% block toolbar_title %}印刷プレビュー（合本）{% endblock %}
+
+{% block print_content %}
+<div class="bundle-container">
+    <div class="screen-only mb-3">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
             <div>
-                {% for doc in docs_to_render %}
-                    <span class="badge bg-primary me-1">{{ doc.label }}</span>
-                {% endfor %}
+                <div class="fw-bold">患者: {{ patient.name }} (ID: {{ patient.card_id }})</div>
+                <div class="text-muted small">{{ today|date:"Y年n月j日" }} 時点</div>
             </div>
-            {% else %}
-            <div class="text-muted">表示する文書がありません。チェックボックスを選択してください。</div>
-            {% endif %}
-        </div>
-
-        <div class="bundle-section">
-            {% if docs_to_render %}
-                {% for doc in docs_to_render %}
-                    <div class="doc-wrapper{% if not forloop.first %} page-break{% endif %}">
-                        {% if doc.template %}
-                            {% include doc.template %}
-                        {% elif doc.pdf_static %}
-                            <div class="screen-only mb-3">
-                                <div class="fw-bold mb-1">{{ doc.label }}</div>
-                                <a class="btn btn-primary btn-sm" href="{% static doc.pdf_static %}" target="_blank" rel="noopener">PDFを別タブで開く</a>
-                            </div>
-                            <div class="small text-muted">
-                                同意書は別タブのPDFから印刷してください（合本には含まれません）。
-                            </div>
-                        {% endif %}
-                    </div>
-                {% endfor %}
-            {% else %}
-                <div class="text-muted">選択された文書がありません。画面下部で必要な書類を選択してください。</div>
-            {% endif %}
+            <div class="text-end">
+                <div class="fw-bold">選択中の文書</div>
+                {% if docs_to_render %}
+                <div>
+                    {% for doc in docs_to_render %}
+                        <span class="badge bg-primary me-1">{{ doc.label }}</span>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-muted">表示する文書がありません。チェックボックスを選択してください。</div>
+                {% endif %}
+            </div>
         </div>
     </div>
-</body>
-</html>
+
+    <div class="bundle-section">
+        {% if docs_to_render %}
+            {% for doc in docs_to_render %}
+                <div class="doc-wrapper{% if not forloop.first %} page-break{% endif %}">
+                    {% if doc.template %}
+                        {% with include_mode=True %}
+                            {% include doc.template %}
+                        {% endwith %}
+                    {% elif doc.pdf_static %}
+                        <div class="screen-only mb-3">
+                            <div class="fw-bold mb-1">{{ doc.label }}</div>
+                            <a class="btn btn-primary btn-sm" href="{% static doc.pdf_static %}" target="_blank" rel="noopener">PDFを別タブで開く</a>
+                        </div>
+                        <div class="small text-muted">
+                            同意書は別タブのPDFから印刷してください（合本には含まれません）。
+                        </div>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="text-muted">選択された文書がありません。画面下部で必要な書類を選択してください。</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,3 +1,8 @@
+{% extends "rtms_app/print/_print_base.html" %}
+
+{% block toolbar_title %}診療情報提供書{% endblock %}
+
+{% block print_content %}
 <div class="page-container">
     <div class="page-sheet">
         <div class="referral-header">
@@ -89,3 +94,4 @@
         </div>
     </div>
 </div>
+{% endblock %}
