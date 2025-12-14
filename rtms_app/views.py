@@ -402,7 +402,6 @@ def patient_first_visit(request, patient_id):
         return redirect(f"{reverse('rtms_app:dashboard')}?date={dashboard_date}")
     return redirect("rtms_app:dashboard")
 
-    else: form = PatientFirstVisitForm(instance=patient)
     floating_print_options = [{'label': '印刷プレビュー', 'value': 'print_bundle', 'icon': 'fa-print'}]
     return render(request, 'rtms_app/patient_first_visit.html', {'patient': patient, 'form': form, 'referral_options': referral_options, 'referral_map_json': json.dumps(referral_map_json, ensure_ascii=False), 'end_date_est': end_date_est, 'dashboard_date': dashboard_date, 'hamd_items_left': hamd_items_left, 'hamd_items_right': hamd_items_right, 'baseline_assessment': baseline_assessment, 'floating_print_options': floating_print_options})
 
