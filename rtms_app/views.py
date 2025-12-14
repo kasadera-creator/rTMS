@@ -540,12 +540,14 @@ def patient_summary_view(request, patient_id):
     created_at_str = patient.created_at.strftime('%Y年%m月%d日')
     if patient.summary_text: summary_text = patient.summary_text
     else: summary_text = (f"{created_at_str}初診、{admission_date_str}任意入院。\n" f"入院時{fmt_score(score_admin)}、{start_date_str}から全{total_count}回のrTMS治療を実施した。\n" f"3週時、{fmt_score(score_w3)}、6週時、{fmt_score(score_w6)}となった。\n" f"治療中の合併症：{side_effects_summary}。\n" f"{end_date_str}退院。紹介元へ逆紹介、抗うつ薬の治療継続を依頼した。")
-    floating_print_options = [{
-    "label": "印刷プレビュー",
-    "icon": "fa-print",
-    "formaction": reverse("rtms_app:patient_print_bundle", args=[patient.id]),
-    "formtarget": "_blank",
-    "docs_form_id": "bundlePrintFormDischarge",
+    floating_print_options = [
+    {
+        "label": "印刷プレビュー",
+        "icon": "fa-print",
+        "formaction": reverse("rtms_app:patient_print_bundle", args=[patient.id]),
+        "formtarget": "_blank",
+        "docs_form_id": "bundlePrintFormDischarge",  # ← ここが重要
+        # value(action) は不要（bundleはGETで開く）
     }]
     return render(request, 'rtms_app/patient_summary.html', {'patient': patient, 'summary_text': summary_text, 'history_list': history_list, 'today': timezone.now().date(), 'test_scores': test_scores, 'dashboard_date': dashboard_date, 'floating_print_options': floating_print_options})
     
@@ -637,7 +639,10 @@ def consent_latest(request):
 def patient_print_bundle(request, patient_id):
     patient = get_object_or_404(Patient, id=patient_id)
 
-    docs_req = request.GET.getlist("docs")
+    docs = request.GET.getlist("docs")
+    if not docs:
+        raw = request.GET.get("docs", "")
+        docs = [d for d in raw.split(",") if d]
     DOC_ORDER = ["admission", "suitability", "consent"]
     selected_docs = [d for d in DOC_ORDER if d in docs_req] or DOC_ORDER
 
@@ -670,7 +675,7 @@ def patient_clinical_path(request, patient_id):
     floating_print_options = [{
     "label": "クリニカルパス（印刷）",
     "icon": "fa-print",
-    "formaction": reverse("rtms_app:patient_print_path", args=[patient.id]),
+    "formaction": f"/app/patient/{patient.id}/print/path/",
     "formtarget": "_blank",
     }]
     return render(request, 'rtms_app/patient_clinical_path.html', {

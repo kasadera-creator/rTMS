@@ -173,12 +173,17 @@
 </script>
 
 <script>
+  // ===========================
+  // 退院準備ページ：自動保存トーストのみ
+  // ※印刷（.js-save-and-print）の処理は共通 floating_actions.js に委譲する
+  // ===========================
   const autosaveToast = document.getElementById('autosaveToast');
   const autosaveToastBody = document.getElementById('autosaveToastBody');
+
   let autosaveTimer = null;
-  let savingPromise = Promise.resolve();
 
   function showToast(message, variant = 'success') {
+    if (!autosaveToast || !autosaveToastBody) return;
     autosaveToastBody.textContent = message;
     autosaveToast.classList.remove('bg-success', 'bg-danger');
     autosaveToast.classList.add(variant === 'error' ? 'bg-danger' : 'bg-success');
@@ -188,16 +193,16 @@
   }
 
   function hideToast() {
+    if (!autosaveToast) return;
     const bsToast = bootstrap.Toast.getOrCreateInstance(autosaveToast);
     bsToast.hide();
   }
 
-  async function performSave(action = '') {
+  async function performSaveSilently() {
     const form = document.getElementById('mainForm');
+    if (!form) return;
+
     const fd = new FormData(form);
-    if (action) {
-      fd.append('action', action);
-    }
 
     const res = await fetch(window.location.href, {
       method: 'POST',
@@ -206,67 +211,36 @@
       credentials: 'same-origin',
     });
 
-    if (!res.ok) {
-      throw new Error(`save failed: HTTP ${res.status}`);
-    }
+    // 失敗時はトーストだけ（印刷フローは共通JSが面倒を見る）
+    if (!res.ok) throw new Error(`save failed: HTTP ${res.status}`);
 
+    // XHRのレスポンスはJSON前提（views側も統一）
     const data = await res.json();
-    if (!action) {
+    if (data && data.status === 'success') {
       showToast('✓ 自動保存しました');
+    } else {
+      throw new Error('save failed');
     }
-    return data;
   }
 
   function debounceSave() {
-    if (autosaveTimer) {
-      clearTimeout(autosaveTimer);
-    }
+    if (autosaveTimer) clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(() => {
-      savingPromise = performSave().catch((err) => {
+      performSaveSilently().catch((err) => {
         console.error(err);
         showToast('保存に失敗しました', 'error');
       });
     }, 1000);
   }
 
-  async function saveThenPrint(btn) {
-    const action = btn.dataset.action || '';
-    const fallbackUrl = btn.dataset.printUrl || '';
-    const target = btn.dataset.target || '_blank';
-
-    if (!action) {
-      alert('印刷アクションが設定されていません。');
-      return;
-    }
-
-    try {
-      await savingPromise;
-      const data = await performSave(action);
-      const url = data.redirect_url || fallbackUrl;
-      if (!url) {
-        alert('印刷URLが取得できませんでした。');
-        return;
-      }
-      window.open(url, target, 'noopener');
-    } catch (err) {
-      console.error(err);
-      showToast('保存または印刷に失敗しました', 'error');
-      alert('保存または印刷に失敗しました。');
-    }
-  }
-
-  document.addEventListener('click', (e) => {
-    const btn = e.target.closest('.js-save-and-print');
-    if (!btn) return;
-
-    e.preventDefault();
-    saveThenPrint(btn);
-  });
-
+  // mainForm の入力変更で自動保存
   document.querySelectorAll('#mainForm input, #mainForm textarea').forEach((el) => {
     el.addEventListener('input', debounceSave);
     el.addEventListener('change', debounceSave);
   });
+
+  // 閉じるボタン用（テンプレ内 onclick="hideToast()" があるためグローバルに出す）
+  window.hideToast = hideToast;
 </script>
 
 {% endblock %}
