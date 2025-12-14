@@ -271,8 +271,59 @@ def dashboard_view(request):
 
 @login_required
 def patient_list_view(request):
-    patients = Patient.objects.all().order_by('card_id'); dashboard_date = request.GET.get('dashboard_date')
-    return render(request, 'rtms_app/patient_list.html', {'patients': patients, 'dashboard_date': dashboard_date})
+    dashboard_date = request.GET.get('dashboard_date')
+
+    sort_param = request.GET.get('sort', 'card_id')
+    dir_param = request.GET.get('dir', 'asc')
+    direction = 'desc' if dir_param == 'desc' else 'asc'
+
+    sort_fields = {
+        'card_id': ['card_id'],
+        'name': ['name'],
+        'birth_date': ['birth_date'],
+        'gender': ['gender'],
+        'attending': ['attending_physician__last_name', 'attending_physician__first_name'],
+        'course': ['course_number'],
+        'age': ['birth_date'],
+    }
+
+    if sort_param not in sort_fields:
+        sort_param = 'card_id'
+        direction = 'asc'
+
+    def build_ordering(key: str, dir_value: str):
+        if key == 'age':
+            base_fields = ['-birth_date'] if dir_value == 'asc' else ['birth_date']
+        else:
+            base_fields = [
+                f"-{field}" if dir_value == 'desc' else field
+                for field in sort_fields.get(key, ['card_id'])
+            ]
+        return [*base_fields, 'id']
+
+    ordering = build_ordering(sort_param, direction)
+    patients = Patient.objects.all().order_by(*ordering)
+
+    preserved_params = request.GET.copy()
+    preserved_params.pop('page', None)
+
+    def build_sort_query(target_key: str):
+        params = preserved_params.copy()
+        params['sort'] = target_key
+        params['dir'] = 'desc' if (sort_param == target_key and direction == 'asc') else 'asc'
+        return params.urlencode()
+
+    sort_queries = {key: build_sort_query(key) for key in sort_fields.keys()}
+
+    context = {
+        'patients': patients,
+        'dashboard_date': dashboard_date,
+        'current_sort': sort_param,
+        'current_dir': direction,
+        'sort_queries': sort_queries,
+    }
+
+    return render(request, 'rtms_app/patient_list.html', context)
 
 @login_required
 def admission_procedure(request, patient_id):
