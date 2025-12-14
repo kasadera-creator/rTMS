@@ -16,13 +16,13 @@ Context variables:
   <div class="btn-group dropup">
     {% with primary=print_options|first %}
     <button type="button"
-            class="btn btn-primary btn-fab text-white js-save-and-print"
-			data-form-id="{{ form_id }}"
-            data-action="{{ primary.value|default:'' }}"
-            data-print-url="{{ primary.formaction|default:'' }}"
-            data-target="{{ primary.formtarget|default:'_blank' }}">
-      <i class="fas {{ primary.icon|default:'fa-print' }}"></i> {{ primary.label|default:'印刷' }}
-    </button>
+        class="btn btn-primary btn-fab text-white js-save-and-print"
+        data-form-id="{{ form_id }}"
+        data-action="{{ primary.value|default:'' }}"
+        data-print-url="{{ primary.formaction|default:'' }}"
+        data-target="{{ primary.formtarget|default:'_blank' }}">
+		<i class="fas {{ primary.icon|default:'fa-print' }}"></i> {{ primary.label|default:'印刷' }}
+	</button>
     {% endwith %}
 
     {% if print_options|length > 1 %}

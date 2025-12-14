@@ -44,8 +44,19 @@ document.addEventListener('click', async (e) => {
   }
 
   try {
-    // action がある場合は action も一緒に保存へ（保存→印刷URL返却が理想）
     const form = document.getElementById(formId);
+
+    // ★フォームが無い画面（例：クリニカルパス表示）では保存せず印刷だけ
+    if (!form) {
+      const url = fallbackUrl;
+      if (url) {
+        window.open(url, target, 'noopener');
+        return;
+      }
+      rtmsShowToast('印刷URLが取得できません', true);
+      return;
+    }
+
     const fd = new FormData(form);
     if (action) fd.append('action', action);
 
@@ -55,19 +66,6 @@ document.addEventListener('click', async (e) => {
       body: fd,
       credentials: 'same-origin',
     });
-    if (!res.ok) throw new Error(`save failed: HTTP ${res.status}`);
-    const data = await res.json();
-
-    rtmsShowToast('✓ 自動保存しました');
-
-    const url = data.redirect_url || fallbackUrl;
-    if (url) window.open(url, target, 'noopener');
-    else rtmsShowToast('印刷URLが取得できません', true);
-  } catch (err) {
-    console.error(err);
-    rtmsShowToast('保存または印刷に失敗しました', true);
-  }
-});
 
 // 自動保存（入力時デバウンス）
 let _t = null;

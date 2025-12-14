@@ -303,7 +303,7 @@ def patient_first_visit(request, patient_id):
         form = PatientFirstVisitForm(instance=patient)
         floating_print_options = [
         {
-        "label": "文書印刷",
+        "label": "印刷プレビュー",
         "value": "print_bundle",  # ← data-action になる
         "icon": "fa-print",
         "formaction": build_url(
