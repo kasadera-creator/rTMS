@@ -1,8 +1,3 @@
-{% extends "rtms_app/print/_print_base.html" %}
-
-{% block toolbar_title %}rTMS 適正質問票{% endblock %}
-
-{% block print_content %}
 <div class="doc-title">rTMS 適正質問票</div>
 <div class="questionnaire-meta">
     <div>患者名：{{ patient.name|default:"" }} 様</div>
@@ -141,4 +136,3 @@
     </div>
 </div>
 {% endwith %}
-{% endblock %}
