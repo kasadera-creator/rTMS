@@ -273,6 +273,10 @@ def dashboard_view(request):
 def patient_list_view(request):
     dashboard_date = request.GET.get('dashboard_date')
 
+    # --- 追加：検索パラメータ（GET） ---
+    q = (request.GET.get('q') or '').strip()         # 氏名など自由検索
+    card = (request.GET.get('card') or '').strip()   # 患者ID検索
+
     sort_param = request.GET.get('sort', 'card_id')
     dir_param = request.GET.get('dir', 'asc')
     direction = 'desc' if dir_param == 'desc' else 'asc'
@@ -302,7 +306,19 @@ def patient_list_view(request):
         return [*base_fields, 'id']
 
     ordering = build_ordering(sort_param, direction)
-    patients = Patient.objects.all().order_by(*ordering)
+
+    # --- 変更：queryset を作ってから検索filter ---
+    qs = Patient.objects.all()
+
+    if q:
+        # 「氏名」だけで良ければ name__icontains だけでOK。
+        # もしフリガナ等があるなら OR で足してください。
+        qs = qs.filter(name__icontains=q)
+
+    if card:
+        qs = qs.filter(card_id__icontains=card)
+
+    patients = qs.order_by(*ordering)
 
     preserved_params = request.GET.copy()
     preserved_params.pop('page', None)
@@ -321,6 +337,9 @@ def patient_list_view(request):
         'current_sort': sort_param,
         'current_dir': direction,
         'sort_queries': sort_queries,
+        # --- 追加：テンプレで検索欄に値を戻す用 ---
+        'q': q,
+        'card': card,
     }
 
     return render(request, 'rtms_app/patient_list.html', context)

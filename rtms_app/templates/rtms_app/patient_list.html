@@ -11,6 +11,31 @@
         <h3><i class="fas fa-users"></i> 患者一覧</h3>
         <a href="{% url 'rtms_app:dashboard' %}" class="btn btn-secondary">ダッシュボードへ戻る</a>
     </div>
+	
+	<form method="get" class="card shadow-sm mb-3">
+  <div class="card-body">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label mb-1">氏名</label>
+        <input type="text" name="q" value="{{ q|default:'' }}" class="form-control" placeholder="例：遠藤">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label mb-1">患者ID</label>
+        <input type="text" name="card" value="{{ card|default:'' }}" class="form-control" placeholder="例：A001">
+      </div>
+
+      <!-- ソート状態を維持したい場合は hidden で送る -->
+      <input type="hidden" name="sort" value="{{ current_sort|default:'card_id' }}">
+      <input type="hidden" name="dir" value="{{ current_dir|default:'asc' }}">
+
+      <div class="col-md-5 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">検索</button>
+        <a class="btn btn-outline-secondary" href="{% url 'rtms_app:patient_list' %}">クリア</a>
+      </div>
+    </div>
+  </div>
+</form>
+
     <div class="card shadow-sm">
         <div class="card-body p-0">
             <table class="table table-hover mb-0">
