@@ -509,7 +509,8 @@ def patient_first_visit(request, patient_id):
             action = request.POST.get('action')
 
             if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-                return JsonResponse({'status': 'success'})
+                redirect_url = f"{reverse('rtms_app:dashboard')}?date={dashboard_date}" if dashboard_date else reverse('rtms_app:dashboard')
+                return JsonResponse({'status': 'success', 'redirect_url': redirect_url})
 
             if action == 'print_bundle':
                 query = {'docs': ['admission', 'suitability', 'consent_pdf']}
@@ -673,7 +674,9 @@ def patient_summary_view(request, patient_id):
                     'status': 'success',
                     'redirect_url': reverse("rtms_app:patient_print_referral", args=[patient.id]),
                 })
-            return JsonResponse({'status': 'success'})
+            else:
+                redirect_url = f"{reverse('rtms_app:dashboard')}?date={dashboard_date}" if dashboard_date else reverse('rtms_app:dashboard')
+                return JsonResponse({'status': 'success', 'redirect_url': redirect_url})
 
         # ★ 通常POST（非AJAX）
         if action == 'print_bundle':
@@ -985,7 +988,7 @@ def audit_logs_view(request, patient_id):
         return HttpResponse("アクセス権限がありません。", status=403)
     
     patient = get_object_or_404(Patient, pk=patient_id)
-    logs = AuditLog.objects.filter(patient=patient).order_by('-timestamp')
+    logs = AuditLog.objects.filter(patient=patient).order_by('-created_at')
     
     return render(request, 'rtms_app/audit_logs.html', {
         'patient': patient,

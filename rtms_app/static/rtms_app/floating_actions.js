@@ -128,25 +128,26 @@ document.addEventListener('click', async (e) => {
   if (!form.reportValidity()) return;
 
   try {
-    // 送信前に action 値を hidden で追加（FormDataに含まれるように）
-    let actionInput = form.querySelector('input[name="action"]');
-    if (!actionInput) {
-      actionInput = document.createElement('input');
-      actionInput.type = 'hidden';
-      actionInput.name = 'action';
-      form.appendChild(actionInput);
-    }
-    actionInput.value = action;
-
-    // Ajax送信を試みる
-    const data = await rtmsAjaxSave(formId, false); // false = 手動保存
-
-    // 成功時の処理
     if (isPrintBtn) {
-      rtmsShowToast('✓ 保存しました。印刷を開きます');
-      const url = buildPrintUrl(btn) || data.redirect_url;
+      // 印刷ボタンの場合、保存をスキップして直接印刷
+      rtmsShowToast('✓ 印刷を開きます');
+      const url = buildPrintUrl(btn);
       if (url) window.open(url, target, 'noopener');
     } else {
+      // 送信前に action 値を hidden で追加（FormDataに含まれるように）
+      let actionInput = form.querySelector('input[name="action"]');
+      if (!actionInput) {
+        actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        form.appendChild(actionInput);
+      }
+      actionInput.value = action;
+
+      // Ajax送信を試みる
+      const data = await rtmsAjaxSave(formId, false); // false = 手動保存
+
+      // 成功時の処理
       rtmsShowToast('✓ 保存しました');
       if (data.redirect_url) {
         setTimeout(() => window.location.href = data.redirect_url, 500);
