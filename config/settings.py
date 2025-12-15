@@ -93,9 +93,10 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # Internationalization
-LANGUAGE_CODE = 'ja'
-TIME_ZONE = 'Asia/Tokyo'
+LANGUAGE_CODE = "ja"
+TIME_ZONE = "Asia/Tokyo"
 USE_I18N = True
+USE_L10N = True
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
@@ -111,6 +112,7 @@ JAZZMIN_SETTINGS = {
     "welcome_sign": "笠寺精治寮病院 rTMS支援システム",
     "copyright": "K. Iwata @ Kasadera Seichiryo Hospital",
     "site_logo": "img/logo.jpg", 
+    "navigation_expanded": True,
     "topmenu_links": [
         {
             "name": "◀ ダッシュボードへ",
