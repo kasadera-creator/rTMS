@@ -1,136 +1,123 @@
-{% if include_mode %}
-  <div class="doc-header mb-3">
-    <div class="h5 mb-1">入院時サマリー</div>
-    <div class="text-muted small">
-      {{ patient.name }}（{{ patient.card_id }}） / {{ today|date:"Y年n月j日" }}
+<div class="page-container">
+  <div class="page-sheet">
+    {# ヘッダーエリア #}
+    <div class="summary-header">
+      <div>作成日: {{ today|date:"Y年n月j日" }}</div>
+      <div>笠寺精治寮病院</div>
+      <div>担当医: {% if patient.attending_physician %}{{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}{% else %}-{% endif %}</div>
     </div>
-    <hr class="my-2">
-  </div>
-{% endif %}
+    
+    <h1 class="doc-title">入院時サマリー</h1>
 
-<table class="print-kv">
-  <tr>
-    <th>カルテID</th><td>{{ patient.card_id }}</td>
-    <th>氏名</th><td>{{ patient.name }} 様</td>
-  </tr>
-  <tr>
-    <th>生年月日</th><td>{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）</td>
-    <th>性別</th><td>{{ patient.get_gender_display }}</td>
-  </tr>
-  <tr>
-    <th>紹介元</th><td>{{ patient.referral_source|default:"-" }}</td>
-    <th>紹介医</th><td>{{ patient.referral_doctor|default:"-" }}</td>
-  </tr>
-  <tr>
-    <th>担当医</th>
-    <td colspan="3">
-      {% if patient.attending_physician %}
-        {{ patient.attending_physician.last_name }}{{ patient.attending_physician.first_name|default:"" }}
-      {% else %}
-        未定
-      {% endif %}
-    </td>
-  </tr>
-</table>
+    {# 患者基本情報 #}
+    <table class="summary-info-table">
+      <tr>
+        <th>カルテID</th><td>{{ patient.card_id }}</td>
+        <th>氏名</th><td>{{ patient.name }} 様</td>
+      </tr>
+      <tr>
+        <th>生年月日</th><td>{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）</td>
+        <th>性別</th><td>{{ patient.get_gender_display }}</td>
+      </tr>
+      <tr>
+        <th>紹介元</th><td>{{ patient.referral_source|default:"-" }}</td>
+        <th>紹介医</th><td>{{ patient.referral_doctor|default:"-" }}</td>
+      </tr>
+    </table>
 
-<table class="print-kv longtext">
-  <tr>
-    <th>主訴</th>
-    <td>{{ patient.chief_complaint|default:""|linebreaksbr }}</td>
-  </tr>
-  <tr>
-    <th>生活歴</th>
-    <td>{{ patient.life_history|default:""|linebreaksbr }}</td>
-  </tr>
-  <tr>
-    <th>既往歴</th>
-    <td>{{ patient.past_history|default:""|linebreaksbr }}</td>
-  </tr>
-  <tr>
-    <th>現病歴</th>
-    <td>{{ patient.present_illness|default:""|linebreaksbr }}</td>
-  </tr>
-  <tr>
-    <th>薬物治療歴</th>
-    <td>{{ patient.medication_history|default:""|linebreaksbr }}</td>
-  </tr>
-  <tr>
-    <th>診断名</th>
-    <td>{{ patient.diagnosis|default:"-" }}</td>
-  </tr>
-</table>
+    <div class="content-section">
+      <div class="section-label">診断名・主訴</div>
+      <div class="text-content mb-3">
+        診断名：{{ patient.diagnosis|default:"-" }}<br>
+        主　訴：{{ patient.chief_complaint|default:""|linebreaksbr }}
+      </div>
 
-<div class="section-heading">治療前評価（HAM-D）</div>
-<table class="table-basic">
-  <tr>
-    <th style="width: 160px;">日付</th>
-    <th style="width: 160px;">HAM-D17</th>
-    <th style="width: 160px;">HAM-D21</th>
-    <th>備考</th>
-  </tr>
+      <div class="section-label">病歴・背景</div>
+      <div class="text-content mb-3">
+        <strong>【生活歴】</strong><br>
+        {{ patient.life_history|default:"(記載なし)"|linebreaksbr }}<br><br>
+        <strong>【既往歴】</strong><br>
+        {{ patient.past_history|default:"(記載なし)"|linebreaksbr }}<br><br>
+        <strong>【現病歴】</strong><br>
+        {{ patient.present_illness|default:"(記載なし)"|linebreaksbr }}<br><br>
+        <strong>【薬物治療歴】</strong><br>
+        {{ patient.medication_history|default:"(記載なし)"|linebreaksbr }}
+      </div>
+    </div>
 
-  {# assessments の中から baseline を拾う：viewで baseline_assessment を渡しているならそれを優先してもOK #}
-  {% with baseline=None %}
-    {% for score in assessments %}
-      {% if score.timing == 'baseline' %}
+    <div class="content-section">
+      <div class="section-label">治療前評価（HAM-D）</div>
+      <table class="table-basic" style="margin-top: 8px;">
         <tr>
-          <td>{{ score.date|date:"Y-m-d" }}</td>
-          <td>{{ score.total_score_17|default:"-" }}</td>
-          <td>{{ score.total_score_21|default:"-" }}</td>
-          <td>{{ score.note|default:""|linebreaksbr }}</td>
+          <th style="width: 120px;">日付</th>
+          <th style="width: 100px;">HAM-D17</th>
+          <th style="width: 100px;">HAM-D21</th>
+          <th>備考</th>
         </tr>
-      {% endif %}
-    {% endfor %}
-  {% endwith %}
-
-  {# baselineが無い場合の表示（簡易） #}
-  {% if assessments|length == 0 %}
-    <tr><td colspan="4">評価データは未入力です。</td></tr>
-  {% endif %}
-</table>
-
-<div class="section-heading">治療予定（スケジュール）</div>
-<table class="table-basic">
-  <tr>
-    <th>入院日</th>
-    <th>位置決め日</th>
-    <th>治療開始日</th>
-    <th>治療終了予定（30回）</th>
-  </tr>
-  <tr>
-    <td>{{ patient.admission_date|default:"-" }}</td>
-    <td>{{ patient.mapping_date|default:"-" }}</td>
-    <td>{{ patient.first_treatment_date|default:"-" }}</td>
-    <td>{{ end_date_est|date:"Y-m-d"|default:"-" }}</td>
-  </tr>
-</table>
-
-<div class="section-heading">治療経過・評価（一覧）</div>
-<table class="table-basic">
-  <tr>
-    <th style="width: 120px;">日付</th>
-    <th style="width: 120px;">タイミング</th>
-    <th>HAM-D17</th>
-    <th>HAM-D21</th>
-    <th>備考</th>
-  </tr>
-  {% for score in assessments %}
-    <tr>
-      <td>{{ score.date|date:"Y-m-d" }}</td>
-      <td>
-        {% if score.timing == 'baseline' %}治療前評価
-        {% elif score.timing == 'week3' %}3週時
-        {% elif score.timing == 'week6' %}6週時
-        {% else %}その他
+        {% with baseline=None %}
+          {% for score in assessments %}
+            {% if score.timing == 'baseline' %}
+              <tr>
+                <td>{{ score.date|date:"Y-m-d" }}</td>
+                <td>{{ score.total_score_17|default:"-" }}</td>
+                <td>{{ score.total_score_21|default:"-" }}</td>
+                <td>{{ score.note|default:""|linebreaksbr }}</td>
+              </tr>
+            {% endif %}
+          {% endfor %}
+        {% endwith %}
+        {% if assessments|length == 0 %}
+          <tr><td colspan="4">評価データは未入力です。</td></tr>
         {% endif %}
-      </td>
-      <td>{{ score.total_score_17|default:"-" }}</td>
-      <td>{{ score.total_score_21|default:"-" }}</td>
-      <td>{{ score.note|default:""|linebreaksbr }}</td>
-    </tr>
-  {% empty %}
-    <tr><td colspan="5">評価データは未入力です。</td></tr>
-  {% endfor %}
-</table>
+      </table>
+    </div>
 
-{# ★重要：入院時サマリに「退院サマリ」「退院処方」を出さない #}
+    <div class="content-section">
+      <div class="section-label">治療予定（スケジュール）</div>
+      <table class="table-basic" style="margin-top: 8px;">
+        <tr>
+          <th>入院日</th>
+          <th>位置決め日</th>
+          <th>治療開始日</th>
+          <th>治療終了予定（30回）</th>
+        </tr>
+        <tr>
+          <td>{{ patient.admission_date|default:"-" }}</td>
+          <td>{{ patient.mapping_date|default:"-" }}</td>
+          <td>{{ patient.first_treatment_date|default:"-" }}</td>
+          <td>{{ end_date_est|date:"Y-m-d"|default:"-" }}</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="content-section">
+      <div class="section-label">治療経過・評価（一覧）</div>
+      <table class="table-basic" style="margin-top: 8px;">
+        <tr>
+          <th style="width: 120px;">日付</th>
+          <th style="width: 120px;">タイミング</th>
+          <th>HAM-D17</th>
+          <th>HAM-D21</th>
+          <th>備考</th>
+        </tr>
+        {% for score in assessments %}
+          <tr>
+            <td>{{ score.date|date:"Y-m-d" }}</td>
+            <td>
+              {% if score.timing == 'baseline' %}治療前評価
+              {% elif score.timing == 'week3' %}3週時
+              {% elif score.timing == 'week6' %}6週時
+              {% else %}その他
+              {% endif %}
+            </td>
+            <td>{{ score.total_score_17|default:"-" }}</td>
+            <td>{{ score.total_score_21|default:"-" }}</td>
+            <td>{{ score.note|default:""|linebreaksbr }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">評価データは未入力です。</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+</div>

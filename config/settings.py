@@ -115,7 +115,7 @@ JAZZMIN_SETTINGS = {
     "navigation_expanded": True,
     "topmenu_links": [
         {
-            "name": "◀ ダッシュボードへ",
+            "name": "◀ トップへ戻る",
             "url": "/app/dashboard/",
         },
     ],
