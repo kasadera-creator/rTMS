@@ -101,35 +101,4 @@
         </tr>
       </table>
     </div>
-
-    <div class="content-section">
-      <div class="section-label">治療経過・評価（一覧）</div>
-      <table class="table-basic" style="margin-top: 8px;">
-        <tr>
-          <th style="width: 120px;">日付</th>
-          <th style="width: 120px;">タイミング</th>
-          <th>HAM-D17</th>
-          <th>HAM-D21</th>
-          <th>備考</th>
-        </tr>
-        {% for score in assessments %}
-          <tr>
-            <td>{{ score.date|date:"Y-m-d" }}</td>
-            <td>
-              {% if score.timing == 'baseline' %}治療前評価
-              {% elif score.timing == 'week3' %}3週時
-              {% elif score.timing == 'week6' %}6週時
-              {% else %}その他
-              {% endif %}
-            </td>
-            <td>{{ score.total_score_17|default:"-" }}</td>
-            <td>{{ score.total_score_21|default:"-" }}</td>
-            <td>{{ score.note|default:""|linebreaksbr }}</td>
-          </tr>
-        {% empty %}
-          <tr><td colspan="5">評価データは未入力です。</td></tr>
-        {% endfor %}
-      </table>
-    </div>
-  </div>
 </div>
