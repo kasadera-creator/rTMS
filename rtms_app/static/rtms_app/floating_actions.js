@@ -67,16 +67,18 @@ async function rtmsAjaxSave(formId, isAutosave = false) {
 
 // トースト通知（右下のメッセージ）
 function rtmsShowToast(msg, isError=false) {
+  if (!document.body) return; // body が存在しない場合、無視
   let el = document.getElementById('toastSave');
   if (!el) {
     el = document.createElement('div');
     el.id = 'toastSave';
     el.className = 'toast align-items-center text-white border-0';
     el.style.cssText = 'position:fixed; bottom:20px; right:20px; z-index:1070; min-width:250px;';
-    el.innerHTML = `<div class="d-flex"><div class="toast-body" id="toastBody"></div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
     document.body.appendChild(el);
   }
+  el.innerHTML = `<div class="d-flex"><div class="toast-body" id="toastBody"></div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
   const body = el.querySelector('#toastBody');
+  if (!body) return;
   body.textContent = msg;
   el.className = `toast align-items-center text-white border-0 ${isError ? 'bg-danger' : 'bg-success'} show`;
   el.style.display = 'block';

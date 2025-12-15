@@ -138,12 +138,26 @@ def get_assessment_timing_for_date(patient, target_date):
     
     return None
 
+def get_nth_treatment_date(first_treatment_date, n):
+    """
+    治療開始日からn日目の治療日を返す（平日、祝日除く）
+    """
+    current = first_treatment_date
+    count = 0
+    while count < n:
+        if is_treatment_day(current):
+            count += 1
+            if count == n:
+                return current
+        current += timedelta(days=1)
+    return None
+
 def get_assessment_deadline(patient, timing):
     """
     指定 timing の評価期限最終日を返す。
     baseline: 治療開始日前日
-    week3: 第3週の最終日 (治療開始日 + 20日)
-    week6: 第6週の最終日 (治療開始日 + 41日)
+    week3: 第3週の最終日 (治療開始日から15日目の治療日)
+    week6: 第6週の最終日 (治療開始日から45日目の治療日)
     """
     if not patient.first_treatment_date:
         return None
@@ -151,9 +165,9 @@ def get_assessment_deadline(patient, timing):
     if timing == 'baseline':
         return patient.first_treatment_date - timedelta(days=1)
     elif timing == 'week3':
-        return patient.first_treatment_date + timedelta(days=20)
+        return get_nth_treatment_date(patient.first_treatment_date, 15)
     elif timing == 'week6':
-        return patient.first_treatment_date + timedelta(days=41)
+        return get_nth_treatment_date(patient.first_treatment_date, 45)
     return None
 
 # ★修正: カレンダーデータ生成ロジック (週単位のリストを返す)
