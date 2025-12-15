@@ -4,8 +4,7 @@
     <div class="summary-header">
       <div>作成日: {{ today|date:"Y年n月j日" }}</div>
       <div>笠寺精治寮病院</div>
-      <div>担当医: {% if patient.attending_physician %}{{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}{% else %}-{% endif %}</div>
-    </div>
+	</div>
     
     <h1 class="doc-title">入院時サマリー</h1>
 
@@ -25,28 +24,31 @@
       </tr>
     </table>
 
-    {# 診断名・主訴（枠付きボックス化） #}
     <div class="content-section">
       <div class="section-label">診断名・主訴</div>
-      <div class="text-content mb-3" style="border: 1px solid #000; padding: 10px; line-height: 1.5;">
+      <div class="text-content mb-3">
         <strong>【診断名】</strong> {{ patient.diagnosis|default:"-" }}<br>
         <strong>【主　訴】</strong> {{ patient.chief_complaint|default:""|linebreaksbr }}
       </div>
 
-      {# 病歴・背景（枠付きボックス化・インデントなし） #}
       <div class="section-label">病歴・背景</div>
-      <div class="text-content mb-3" style="border: 1px solid #000; padding: 10px; line-height: 1.5;">
-        <strong>【生活歴】</strong><br>
-        {{ patient.life_history|default:"(記載なし)"|linebreaksbr }}
-        <br><br>
-        <strong>【既往歴】</strong><br>
-        {{ patient.past_history|default:"(記載なし)"|linebreaksbr }}
-        <br><br>
-        <strong>【現病歴】</strong><br>
-        {{ patient.present_illness|default:"(記載なし)"|linebreaksbr }}
-        <br><br>
-        <strong>【薬物治療歴】</strong><br>
-        {{ patient.medication_history|default:"(記載なし)"|linebreaksbr }}
+      <div class="text-content mb-3">
+        <div class="mb-2">
+            <strong>【生活歴】</strong><br>
+            {{ patient.life_history|default:"(記載なし)"|linebreaksbr }}
+        </div>
+        <div class="mb-2">
+            <strong>【既往歴】</strong><br>
+            {{ patient.past_history|default:"(記載なし)"|linebreaksbr }}
+        </div>
+        <div class="mb-2">
+            <strong>【現病歴】</strong><br>
+            {{ patient.present_illness|default:"(記載なし)"|linebreaksbr }}
+        </div>
+        <div>
+            <strong>【薬物治療歴】</strong><br>
+            {{ patient.medication_history|default:"(記載なし)"|linebreaksbr }}
+        </div>
       </div>
     </div>
 
