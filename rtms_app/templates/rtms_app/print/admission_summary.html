@@ -26,13 +26,13 @@
 
     <div class="content-section">
       <div class="section-label">診断名・主訴</div>
-      <div class="text-content mb-3">
+      <div>
         <strong>【診断名】</strong> {{ patient.diagnosis|default:"-" }}<br>
         <strong>【主　訴】</strong> {{ patient.chief_complaint|default:""|linebreaksbr }}
       </div>
 
       <div class="section-label">病歴・背景</div>
-      <div class="text-content mb-3">
+      <div class="text-content mb-1">
         <div class="mb-2">
             <strong>【生活歴】</strong><br>
             {{ patient.life_history|default:"(記載なし)"|linebreaksbr }}
