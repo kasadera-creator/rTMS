@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
 from django.urls import reverse
+from django.templatetags.static import static
 from datetime import timedelta, date
 import datetime
 from django.http import HttpResponse, FileResponse, JsonResponse
