@@ -1,30 +1,28 @@
 // static/rtms_app/floating_actions.js
 
-// サーバーへデータを送信する関数
+/**
+ * サーバーへAjax送信を行う関数
+ * @param {string} formId 
+ * @param {boolean} isAutosave 自動保存かどうか
+ */
 async function rtmsAjaxSave(formId, isAutosave = false) {
   const form = document.getElementById(formId);
   if (!form) throw new Error(`form not found: ${formId}`);
 
-  // 自動保存の場合、ブラウザの簡易チェック(必須項目など)に通らなければ
-  // サーバーには送らず、エラーも出さずに終了する
+  // 自動保存の時、ブラウザ標準のチェックでNGなら送信しない（静かに終了）
   if (isAutosave && !form.checkValidity()) {
-    console.log('Autosave skipped: form is invalid yet.');
-    return { status: 'skipped' };
+    return { status: 'skipped_client_validation' };
   }
 
   const fd = new FormData(form);
   
-  // CSRFトークンの確保（もしフォーム内にない場合）
+  // CSRF対策
   if (!fd.has('csrfmiddlewaretoken')) {
-    const cookieValue = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('csrftoken='))
-      ?.split('=')[1];
-    if (cookieValue) {
-      fd.append('csrfmiddlewaretoken', cookieValue);
-    }
+    const cookieValue = document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+    if (cookieValue) fd.append('csrfmiddlewaretoken', cookieValue);
   }
 
+  // リクエスト送信
   const res = await fetch(window.location.href, {
     method: 'POST',
     headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -32,189 +30,153 @@ async function rtmsAjaxSave(formId, isAutosave = false) {
     credentials: 'same-origin',
   });
 
-  if (!res.ok) throw new Error(`通信エラー: HTTP ${res.status}`);
+  if (!res.ok) {
+    // サーバーエラー(500等)の場合
+    throw new Error(`Server Error: ${res.status}`);
+  }
 
+  // ▼ ここが修正ポイント: レスポンスがJSONかHTMLかを判定する ▼
+  const contentType = res.headers.get('content-type');
+  if (contentType && contentType.includes('text/html')) {
+    // HTMLが返ってきた = サーバー側でバリデーションエラーになり、画面が再レンダリングされた可能性大
+    if (isAutosave) {
+      // 自動保存なら、ユーザーの邪魔をしないよう無視する
+      return { status: 'skipped_html_response' };
+    } else {
+      // 手動保存なら、例外を投げて呼び出し元で「通常送信」に切り替えさせる
+      throw new Error('HTML_RESPONSE'); 
+    }
+  }
+
+  // JSONとしてパース
   const data = await res.json();
   
-  // サーバー側でバリデーションエラー（入力不備）があった場合
+  // サーバー側が明示的にエラーJSONを返してきた場合
   if (data.status === 'error') {
-    let errorMsg = '入力内容に不備があります。';
+    if (isAutosave) return { status: 'skipped_server_error' };
+    
+    let msg = '入力エラーがあります。';
     if (data.errors) {
-      // エラーメッセージを抽出して連結 (例: "MT(%): この項目は必須です")
-      const details = Object.entries(data.errors)
-        .map(([field, errs]) => `・${field}: ${errs.join(', ')}`)
-        .join('\n');
-      errorMsg += '\n' + details;
+      msg += '\n' + Object.entries(data.errors).map(([k, v]) => `・${k}: ${v}`).join('\n');
     }
-    // 自動保存なら静かに無視、手動保存ならエラーを投げる
-    if (isAutosave) {
-        return { status: 'skipped_server_validation' };
-    }
-    throw new Error(errorMsg);
+    throw new Error(msg);
   }
-  
-  if (data.status !== 'success') throw new Error('不明なエラーが発生しました');
   
   return data;
 }
 
-// トースト通知を表示する関数
+// トースト通知（右下のメッセージ）
 function rtmsShowToast(msg, isError=false) {
-  // トースト要素がなければ作成する
   let el = document.getElementById('toastSave');
   if (!el) {
-      el = document.createElement('div');
-      el.id = 'toastSave';
-      el.className = 'toast align-items-center text-white border-0';
-      el.style.position = 'fixed';
-      el.style.bottom = '20px';
-      el.style.right = '20px';
-      el.style.zIndex = '1070';
-      el.style.minWidth = '250px';
-      el.innerHTML = `<div class="d-flex"><div class="toast-body" id="toastBody"></div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
-      document.body.appendChild(el);
+    el = document.createElement('div');
+    el.id = 'toastSave';
+    el.className = 'toast align-items-center text-white border-0';
+    el.style.cssText = 'position:fixed; bottom:20px; right:20px; z-index:1070; min-width:250px;';
+    el.innerHTML = `<div class="d-flex"><div class="toast-body" id="toastBody"></div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
+    document.body.appendChild(el);
   }
-  
-  const toastBody = el.querySelector('#toastBody');
-  toastBody.innerText = msg;
-  
-  el.classList.remove('bg-success', 'bg-danger');
-  el.classList.add(isError ? 'bg-danger' : 'bg-success');
-  el.classList.add('show'); // Bootstrapを使わない簡易表示
+  const body = el.querySelector('#toastBody');
+  body.textContent = msg;
+  el.className = `toast align-items-center text-white border-0 ${isError ? 'bg-danger' : 'bg-success'} show`;
   el.style.display = 'block';
-
-  // BootstrapのToast機能があれば使う、なければCSSで制御
   if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
-      const bsToast = bootstrap.Toast.getOrCreateInstance(el);
-      bsToast.show();
+    bootstrap.Toast.getOrCreateInstance(el).show();
   } else {
-      setTimeout(() => { el.style.display = 'none'; }, 3000);
+    setTimeout(() => { el.style.display = 'none'; }, 3000);
   }
 }
 
-// 印刷用URL生成ヘルパー
+// 印刷URL生成
 function buildPrintUrl(btn) {
   const base = btn.dataset.printUrl || '';
   if (!base) return '';
-
   const url = new URL(base, window.location.origin);
   const docsFormId = btn.dataset.docsFormId;
-
   if (docsFormId) {
     const docsForm = document.getElementById(docsFormId);
     if (docsForm) {
-      const fd = new FormData(docsForm);
-      for (const [key, value] of fd.entries()) {
-        if (value === null || value === undefined || value === '') continue;
-        url.searchParams.append(key, value);
-      }
+      new FormData(docsForm).forEach((v, k) => {
+        if (v) url.searchParams.append(k, v);
+      });
     }
   }
-
   if (!url.searchParams.has('return_to')) {
     url.searchParams.set('return_to', window.location.pathname);
   }
-
   return url.toString();
 }
 
-// ボタンクリック（保存・印刷・完了）のイベントリスナー
+// ▼ ボタンクリック時の処理 ▼
 document.addEventListener('click', async (e) => {
-  // .js-save-and-print クラスを持つボタン、または type="submit" ボタンを対象にする
   const btn = e.target.closest('.js-save-and-print, button[type="submit"][name="action"]');
-  if (!btn) return;
-
-  // フローティングメニュー内のボタンのみ対象とする(通常のフォーム内ボタンと競合しないよう)
-  if (!btn.closest('.floating-actions')) return;
+  if (!btn || !btn.closest('.floating-actions')) return;
 
   e.preventDefault();
 
   const formId = btn.getAttribute('form') || btn.dataset.formId || 'mainForm';
-  const action = btn.value || btn.dataset.action || ''; // ボタンのvalue (saveなど)
+  const action = btn.value || btn.dataset.action || '';
   const target = btn.dataset.target || '_blank';
   const form = document.getElementById(formId);
   const isPrintBtn = btn.classList.contains('js-save-and-print');
-  
-  if (!form) {
-      alert('エラー: 対象のフォームが見つかりません (ID: ' + formId + ')');
-      return;
-  }
 
-  // 手動クリック時は、ブラウザ標準のバリデーションを表示してあげる
-  if (!form.reportValidity()) {
-      return; // 必須項目が足りないなどの場合、ここで止める（ブラウザが吹き出しを出す）
-  }
+  if (!form) return alert('フォームが見つかりません');
+
+  // ブラウザ標準の入力チェックを表示
+  if (!form.reportValidity()) return;
 
   try {
-    // フォームに action (saveなど) を追加して送信
-    const fd = new FormData(form);
-    if (action) fd.append('action', action);
-
-    // Ajax送信を実行
-    // ここでの fetch は rtmsAjaxSave を使わず、action値を渡すために直接書くか、
-    // rtmsAjaxSave を改造する。ここでは直接実装します。
-    
-    const res = await fetch(window.location.href, {
-        method: 'POST',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        body: fd,
-        credentials: 'same-origin',
-    });
-
-    if (!res.ok) throw new Error(`通信エラー: ${res.status}`);
-    const data = await res.json();
-
-    if (data.status === 'error') {
-        let msg = '保存できませんでした。入力内容を確認してください。\n';
-        if (data.errors) {
-             msg += Object.entries(data.errors).map(([k, v]) => `・${k}: ${v}`).join('\n');
-        }
-        alert(msg); // ユーザーに具体的な理由を通知
-        return;
+    // 送信前に action 値を hidden で追加（FormDataに含まれるように）
+    let actionInput = form.querySelector('input[name="action"]');
+    if (!actionInput) {
+      actionInput = document.createElement('input');
+      actionInput.type = 'hidden';
+      actionInput.name = 'action';
+      form.appendChild(actionInput);
     }
+    actionInput.value = action;
 
-    // 成功時
+    // Ajax送信を試みる
+    const data = await rtmsAjaxSave(formId, false); // false = 手動保存
+
+    // 成功時の処理
     if (isPrintBtn) {
-        rtmsShowToast('✓ 保存しました。印刷画面を開きます');
-        const printUrl = buildPrintUrl(btn) || data.redirect_url;
-        if (printUrl) window.open(printUrl, target, 'noopener');
+      rtmsShowToast('✓ 保存しました。印刷を開きます');
+      const url = buildPrintUrl(btn) || data.redirect_url;
+      if (url) window.open(url, target, 'noopener');
     } else {
-        // 完了ボタンなどの場合
-        rtmsShowToast('✓ 保存しました');
-        if (data.redirect_url) {
-            setTimeout(() => window.location.href = data.redirect_url, 500);
-        }
+      rtmsShowToast('✓ 保存しました');
+      if (data.redirect_url) {
+        setTimeout(() => window.location.href = data.redirect_url, 500);
+      }
     }
 
   } catch (err) {
-    console.error(err);
-    alert('エラーが発生しました: ' + err.message);
+    // ★ ここが重要: HTMLが返ってきた（=エラー画面）なら、Ajaxを諦めて普通に送信する
+    if (err.message === 'HTML_RESPONSE') {
+      console.warn('Ajax response was HTML. Fallback to normal submit.');
+      form.submit(); // 画面遷移してエラーを表示させる
+    } else {
+      console.error(err);
+      alert('エラー: ' + err.message);
+    }
   }
 });
 
-// 自動保存（入力時デバウンス）
+// 自動保存
 let _t = null;
 document.addEventListener('input', (e) => {
-  const mainForm = document.getElementById('mainForm');
-  // 明示的に無効化されている場合やフォームがない場合はスキップ
-  if (!mainForm || mainForm.dataset.disableFloatingAutosave === 'true') return;
-  
-  // フォーム内の入力でなければ無視
+  const form = document.getElementById('mainForm');
+  if (!form || form.dataset.disableFloatingAutosave === 'true') return;
   if (!e.target.closest('#mainForm')) return;
-  
+
   clearTimeout(_t);
   _t = setTimeout(async () => {
     try {
-      // 第2引数 true = 自動保存モード (エラーは無視する)
-      const result = await rtmsAjaxSave('mainForm', true);
-      
-      if (result.status === 'success') {
-        rtmsShowToast('✓ 自動保存しました');
-      }
-      // skipped などの場合は何もしない
-    } catch (err) {
-      // 自動保存のエラーはコンソールに出すだけで、ユーザーには通知しない（邪魔になるため）
-      console.warn('Autosave failed (silently ignored):', err.message);
+      const res = await rtmsAjaxSave('mainForm', true); // true = 自動保存
+      if (res.status === 'success') rtmsShowToast('✓ 自動保存しました');
+    } catch (e) {
+      // 自動保存の失敗はユーザーに通知しない
     }
-  }, 1500); // 間隔を少し長めに(1.5秒)
+  }, 1500);
 });
