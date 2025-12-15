@@ -16,9 +16,29 @@
                 <div class="fw-bold">選択中の文書</div>
                 {% if docs_to_render %}
                 <div>
-                    {% for doc in docs_to_render %}
-                        <span class="badge bg-primary me-1">{{ doc.label }}</span>
-                    {% endfor %}
+                    
+					{% for doc in docs_to_render %}
+  <div class="doc-wrapper{% if not forloop.first %} page-break{% endif %}">
+    {% if doc.template %}
+      {% with include_mode=True %}
+        {% include doc.template %}
+      {% endwith %}
+    {% elif doc.pdf_static %}
+      <div class="screen-only mb-3">
+        <a class="btn btn-primary btn-sm" href="{% static doc.pdf_static %}" target="consent_pdf" rel="noopener">
+          PDFを別タブで開く
+        </a>
+        <div class="text-muted small mt-2">
+          このPDFは合本印刷には含まれません。別タブで開いて印刷してください。
+        </div>
+      </div>
+    {% else %}
+      <div class="text-muted small">この文書は表示形式が未設定です。</div>
+    {% endif %}
+  </div>
+{% endfor %}
+
+					
                 </div>
                 {% else %}
                 <div class="text-muted">表示する文書がありません。チェックボックスを選択してください。</div>
