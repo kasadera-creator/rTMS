@@ -1,5 +1,7 @@
 {% extends "rtms_app/base.html" %}
 
+{% load static %}
+
 {% block extrastyle %}
 <style>
     /* 既存のスタイル */
@@ -174,11 +176,6 @@
         <input class="form-check-input" type="checkbox" name="docs" value="suitability" id="docSuitabilityBottom" checked>
         <label class="form-check-label" for="docSuitabilityBottom">rTMS問診票</label>
       </div>
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="checkbox" name="docs" value="consent_pdf" id="docConsentBottom" checked>
-        <label class="form-check-label" for="docConsentBottom">説明同意書（PDF）</label>
-      </div>
-
       {% if dashboard_date %}
         <input type="hidden" name="dashboard_date" value="{{ dashboard_date }}">
       {% endif %}
@@ -189,8 +186,21 @@
     </form>
 
   </div>
-</div>
-</div>
+　</div>
+　</div>
+
+<div class="card mb-3">
+  <div class="card-header bg-light fw-bold">説明同意文書 印刷</div>
+  <div class="card-body">
+    <a class="btn btn-outline-primary"
+   href="{% static 'rtms_app/consent/consent_latest.pdf' %}"
+   target="consent_pdf" rel="noopener">
+  説明同意書（PDF）を表示・印刷
+  </a>
+
+  </div>
+　</div>
+　</div>
 	
 </div>
 

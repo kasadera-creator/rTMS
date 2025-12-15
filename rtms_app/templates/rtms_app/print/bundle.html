@@ -35,16 +35,7 @@
                         {% with include_mode=True %}
                             {% include doc.template %}
                         {% endwith %}
-                    {% elif doc.pdf_static %}
-                        <div class="screen-only mb-3">
-                            <div class="fw-bold mb-1">{{ doc.label }}</div>
-                            <a class="btn btn-primary btn-sm" href="{% static doc.pdf_static %}" target="_blank" rel="noopener">PDFを別タブで開く</a>
-                        </div>
-                        <div class="small text-muted">
-                            同意書は別タブのPDFから印刷してください（合本には含まれません）。
-                        </div>
-                    {% endif %}
-                </div>
+				</div>
             {% endfor %}
         {% else %}
             <div class="text-muted">選択された文書がありません。画面下部で必要な書類を選択してください。</div>
