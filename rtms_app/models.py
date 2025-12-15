@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User
+import os
 
 class Patient(models.Model):
     GENDER_CHOICES = [('M', '男性'), ('F', '女性'), ('O', 'その他')]

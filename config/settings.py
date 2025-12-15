@@ -50,7 +50,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -112,7 +112,10 @@ JAZZMIN_SETTINGS = {
     "copyright": "K. Iwata @ Kasadera Seichiryo Hospital",
     "site_logo": "img/logo.jpg", 
     "topmenu_links": [
-        {"name": "◀ ダッシュボードへ", "url": "dashboard", "permissions": ["auth.view_user"]},
+        {
+            "name": "◀ ダッシュボードへ",
+            "url": "/app/dashboard/",
+        },
     ],
     "order_with_respect_to": [
         "rtms_app.Patient",

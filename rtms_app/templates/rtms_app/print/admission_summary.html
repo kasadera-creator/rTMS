@@ -1,4 +1,12 @@
-<h1 class="print-title">入院時サマリ（rTMS）</h1>
+{% if include_mode %}
+  <div class="doc-header mb-3">
+    <div class="h5 mb-1">入院時サマリー</div>
+    <div class="text-muted small">
+      {{ patient.name }}（{{ patient.card_id }}） / {{ today|date:"Y年n月j日" }}
+    </div>
+    <hr class="my-2">
+  </div>
+{% endif %}
 
 <table class="print-kv">
   <tr>

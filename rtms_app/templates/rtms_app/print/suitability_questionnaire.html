@@ -1,4 +1,13 @@
-<div class="doc-title">rTMS 適正質問票</div>
+{% if include_mode %}
+  <div class="doc-header mb-3">
+    <div class="h5 mb-1">rTMS適正問診票</div>
+    <div class="text-muted small">
+      {{ patient.name }}（{{ patient.card_id }}） / {{ today|date:"Y年n月j日" }}
+    </div>
+    <hr class="my-2">
+  </div>
+{% endif %}
+
 <div class="questionnaire-meta">
     <div>患者名：{{ patient.name|default:"" }} 様</div>
     <div>カルテID：{{ patient.card_id|default:"" }}</div>
