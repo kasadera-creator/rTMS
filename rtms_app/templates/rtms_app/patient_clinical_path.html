@@ -51,6 +51,19 @@
             </div>
         </div>
 
+        <div class="mb-4">
+            <h5>評価結果</h5>
+            {% if baseline_assessment %}
+            <p>治療前評価: {{ baseline_assessment.total_score_17 }}点 ({{ baseline_assessment.date }})</p>
+            {% endif %}
+            {% if last_assessment %}
+            <p>3週目評価: {{ last_assessment.total_score_17 }}点 ({{ last_assessment.date }})</p>
+            {% endif %}
+            {% if week6_assessment %}
+            <p>6週目評価: {{ week6_assessment.total_score_17 }}点 ({{ week6_assessment.date }})</p>
+            {% endif %}
+        </div>
+
         <div class="table-responsive">
             <table class="calendar-table">
                 <thead>

@@ -115,9 +115,9 @@ class TreatmentSession(models.Model):
 
 class Assessment(models.Model):
     TIMING_CHOICES = [
-        ('baseline', '治療前 (Base)'),
-        ('week3', '3週目'),
-        ('week6', '6週目'),
+        ('baseline', '治療前評価'),
+        ('week3', '3週目評価'),
+        ('week6', '6週目評価'),
         ('other', 'その他'),
     ]
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE)

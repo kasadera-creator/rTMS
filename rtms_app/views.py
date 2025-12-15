@@ -551,7 +551,8 @@ def treatment_add(request, patient_id):
             se_data['note'] = request.POST.get('se_note', ''); s.side_effects = se_data; s.save()
             # AJAX (autosave) 対応: JSON を返す
             if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-                return JsonResponse({'status': 'success', 'id': s.id})
+                redirect_url = f"/app/dashboard/?date={dashboard_date}" if dashboard_date else reverse('rtms_app:dashboard')
+                return JsonResponse({'status': 'success', 'id': s.id, 'redirect_url': redirect_url})
             return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
         else:
             # バリデーション失敗時の Ajax 応答
@@ -570,6 +571,13 @@ def assessment_add(request, patient_id, timing):
     allowed = [c[0] for c in Assessment.TIMING_CHOICES]
     if timing not in allowed:
         return HttpResponse(status=400)
+    
+    # 治療前評価の期限チェック
+    if timing == 'baseline':
+        today = timezone.now().date()
+        if patient.first_treatment_date and today > patient.first_treatment_date:
+            return HttpResponse("治療前評価は第1回治療当日までに行ってください。")
+    
     history = Assessment.objects.filter(patient=patient).order_by('date')
     hamd_items = [('q1', '1. 抑うつ気分', 4, ""), ('q2', '2. 罪責感', 4, ""), ('q3', '3. 自殺', 4, ""), ('q4', '4. 入眠障害', 2, ""), ('q5', '5. 熟眠障害', 2, ""), ('q6', '6. 早朝睡眠障害', 2, ""), ('q7', '7. 仕事と活動', 4, ""), ('q8', '8. 精神運動抑制', 4, ""), ('q9', '9. 精神運動激越', 4, ""), ('q10', '10. 不安, 精神症状', 4, ""), ('q11', '11. 不安, 身体症状', 4, ""), ('q12', '12. 身体症状, 消化器系', 2, ""), ('q13', '13. 身体症状, 一般的', 2, ""), ('q14', '14. 生殖器症状', 2, ""), ('q15', '15. 心気症', 4, ""), ('q16', '16. 体重減少', 2, ""), ('q17', '17. 病識', 2, ""), ('q18', '18. 日内変動', 2, ""), ('q19', '19. 現実感喪失, 離人症', 4, ""), ('q20', '20. 妄想症状', 3, ""), ('q21', '21. 強迫症状', 2, "")]
     mid_index = 11; hamd_items_left = hamd_items[:mid_index]; hamd_items_right = hamd_items[mid_index:]
@@ -887,6 +895,9 @@ def patient_clinical_path(request, patient_id):
     dashboard_date = request.GET.get('dashboard_date')
     # ★修正: generate_calendar_weeks を使用
     calendar_weeks = generate_calendar_weeks(patient)
+    last_assessment = Assessment.objects.filter(patient=patient, timing='week3').order_by('-date').first()
+    baseline_assessment = Assessment.objects.filter(patient=patient, timing='baseline').order_by('-date').first()
+    week6_assessment = Assessment.objects.filter(patient=patient, timing='week6').order_by('-date').first()
     floating_print_options = [{
         'label': '印刷プレビュー',
         'icon': 'fa-print',
@@ -898,6 +909,9 @@ def patient_clinical_path(request, patient_id):
     return render(request, 'rtms_app/patient_clinical_path.html', {
         'patient': patient,
         'calendar_weeks': calendar_weeks,
+        'last_assessment': last_assessment,
+        'baseline_assessment': baseline_assessment,
+        'week6_assessment': week6_assessment,
         'today': timezone.now().date(),
         'dashboard_date': dashboard_date,
         'floating_print_options': floating_print_options

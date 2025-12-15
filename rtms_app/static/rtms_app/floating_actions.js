@@ -249,10 +249,10 @@ const RtmsAutoSave = (function(){
 
 // 自動保存のアタッチ（ページロード時）
 document.addEventListener('DOMContentLoaded', function() {
-  RtmsAutoSave.attachToForm('mainForm');
-  RtmsAutoSave.attachToForm('hamdForm');
-  RtmsAutoSave.attachToForm('assessmentForm');
-  RtmsAutoSave.attachToForm('treatmentForm');
+  // RtmsAutoSave.attachToForm('mainForm');
+  // RtmsAutoSave.attachToForm('hamdForm');
+  // RtmsAutoSave.attachToForm('assessmentForm');
+  // RtmsAutoSave.attachToForm('treatmentForm');
 });
 
 // グローバルで手動トリガを呼べるように

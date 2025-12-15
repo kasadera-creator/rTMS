@@ -100,16 +100,16 @@ class MappingForm(forms.ModelForm):
 # --- 4. 治療実施フォーム ---
 class TreatmentForm(forms.ModelForm):
     # ★修正: 日付と時間を分離
-    treatment_date = forms.DateField(label='実施日', widget=DateInput(attrs={'class': 'form-control'}))
-    treatment_time = forms.TimeField(label='開始時間', widget=TimeInput(attrs={'class': 'form-control'}))
+    treatment_date = forms.DateField(label='実施日', widget=DateInput(attrs={'class': 'form-control', 'required': True}))
+    treatment_time = forms.TimeField(label='開始時間', widget=TimeInput(attrs={'class': 'form-control', 'required': True}))
 
     class Meta:
         model = TreatmentSession
         fields = ['safety_sleep', 'safety_alcohol', 'safety_meds', 'motor_threshold', 'intensity', 'total_pulses']
         widgets = {
-            'motor_threshold': forms.NumberInput(attrs={'class': 'form-control'}), 
-            'intensity': forms.NumberInput(attrs={'class': 'form-control'}), 
-            'total_pulses': forms.NumberInput(attrs={'class': 'form-control'})
+            'motor_threshold': forms.NumberInput(attrs={'class': 'form-control', 'required': True}), 
+            'intensity': forms.NumberInput(attrs={'class': 'form-control', 'required': True}), 
+            'total_pulses': forms.NumberInput(attrs={'class': 'form-control', 'required': True})
         }
 
 # --- 5. 入院手続きフォーム ---
