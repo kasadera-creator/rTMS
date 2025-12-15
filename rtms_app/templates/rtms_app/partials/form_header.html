@@ -1,0 +1,30 @@
+{% comment %}
+共通フォームヘッダー
+患者名/日付/時点/保存ステータスを表示
+{% endcomment %}
+<div class="alert alert-light border shadow-sm mb-4 d-flex align-items-center justify-content-between no-print">
+    <div class="d-flex align-items-center">
+        <span class="badge bg-dark me-2">ID: {{ patient.card_id }}</span>
+        <span class="h5 mb-0 me-3">{{ patient.name }} 様</span>
+        {% if session_num %}
+            <span class="badge bg-success me-1">第{{ session_num }}回目</span>
+        {% endif %}
+        {% if week_num %}
+            <span class="badge bg-light text-dark border me-1">第{{ week_num }}週目</span>
+        {% endif %}
+        {% if initial_timing_display %}
+            <span class="badge bg-primary">{{ initial_timing_display }}</span>
+        {% endif %}
+        {% if today %}
+            <span class="badge bg-info ms-1">{{ today|date:"Y/n/j" }}</span>
+        {% endif %}
+    </div>
+    <div class="d-flex align-items-center">
+        {% if start_date and end_date_est %}
+            <span class="text-muted small me-3">期間: {{ start_date|date:"Y/n/j" }} ～ {{ end_date_est|date:"Y/n/j" }}</span>
+        {% endif %}
+        <div id="autoSaveStatus" class="text-muted small">
+            <i class="fas fa-save"></i> 未保存
+        </div>
+    </div>
+</div>

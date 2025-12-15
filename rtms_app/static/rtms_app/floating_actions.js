@@ -163,20 +163,95 @@ document.addEventListener('click', async (e) => {
   }
 });
 
-// 自動保存
-let _t = null;
-document.addEventListener('input', (e) => {
-  const form = document.getElementById('mainForm');
-  if (!form || form.dataset.disableFloatingAutosave === 'true') return;
-  if (!e.target.closest('#mainForm')) return;
+// 共通オートセーブ: debounce / in-flight / status表示
+const RtmsAutoSave = (function(){
+  const timers = new Map();
+  const inFlight = new Map();
+  const debounceMs = 1200;
 
-  clearTimeout(_t);
-  _t = setTimeout(async () => {
-    try {
-      const res = await rtmsAjaxSave('mainForm', true); // true = 自動保存
-      if (res.status === 'success') rtmsShowToast('✓ 自動保存しました');
-    } catch (e) {
-      // 自動保存の失敗はユーザーに通知しない
+  function getStatusEl(form) {
+    let el = form.querySelector('.autosave-status');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'autosave-status small text-muted ms-2';
+      el.style.minWidth = '110px';
+      el.style.display = 'inline-block';
+      const controls = form.querySelector('.floating-actions') || form.querySelector('.card-footer') || form;
+      if (controls && controls.parentNode) controls.parentNode.insertBefore(el, controls.nextSibling);
+      else form.appendChild(el);
     }
-  }, 1500);
+    return el;
+  }
+
+  function setStatus(form, state) {
+    const el = getStatusEl(form);
+    if (state === 'saving') {
+      el.textContent = '保存中…';
+      el.classList.remove('text-success', 'text-danger');
+    } else if (state === 'saved') {
+      el.textContent = '✓ 保存済';
+      el.classList.add('text-success');
+      setTimeout(() => { el.textContent = ''; el.classList.remove('text-success'); }, 2000);
+    } else if (state === 'failed') {
+      el.textContent = '保存失敗';
+      el.classList.add('text-danger');
+    } else {
+      el.textContent = '';
+      el.classList.remove('text-success', 'text-danger');
+    }
+  }
+
+  async function doSave(formId, isAutosave=false) {
+    const form = document.getElementById(formId);
+    if (!form) return;
+    if (inFlight.get(formId)) return; // prevent concurrent saves
+    inFlight.set(formId, true);
+    setStatus(form, 'saving');
+    try {
+      const res = await rtmsAjaxSave(formId, isAutosave);
+      if (res && (res.status === 'success' || res.status === undefined)) {
+        setStatus(form, 'saved');
+      } else {
+        setStatus(form, 'failed');
+      }
+    } catch (err) {
+      console.error('autosave error', err);
+      setStatus(form, 'failed');
+    } finally {
+      inFlight.set(formId, false);
+    }
+  }
+
+  function scheduleSave(formId) {
+    if (timers.has(formId)) clearTimeout(timers.get(formId));
+    timers.set(formId, setTimeout(() => { doSave(formId, true); timers.delete(formId); }, debounceMs));
+  }
+
+  function attachToForm(formId) {
+    const form = document.getElementById(formId);
+    if (!form) return;
+    if (form.dataset.disableFloatingAutosave === 'true') return;
+
+    const handler = (e) => {
+      if (!e.target.closest(`#${formId}`)) return;
+      scheduleSave(formId);
+    };
+
+    form.addEventListener('input', handler);
+    form.addEventListener('change', handler);
+    form.querySelectorAll('textarea').forEach(t => t.addEventListener('blur', () => scheduleSave(formId)));
+  }
+
+  return { attachToForm, doSave, setStatus };
+})();
+
+// 自動保存のアタッチ（ページロード時）
+document.addEventListener('DOMContentLoaded', function() {
+  RtmsAutoSave.attachToForm('mainForm');
+  RtmsAutoSave.attachToForm('hamdForm');
+  RtmsAutoSave.attachToForm('assessmentForm');
+  RtmsAutoSave.attachToForm('treatmentForm');
 });
+
+// グローバルで手動トリガを呼べるように
+window.RtmsAutoSave = RtmsAutoSave;

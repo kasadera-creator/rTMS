@@ -114,6 +114,48 @@ def get_weekly_session_count(patient, target_date):
     week_end_date = week_start_date + timedelta(days=6)
     return TreatmentSession.objects.filter(patient=patient, date__date__range=[week_start_date, week_end_date]).count()
 
+def get_assessment_timing_for_date(patient, target_date):
+    """
+    指定日がどの評価タイミングに該当するか判定。
+    baseline: 入院日 <= date < 治療開始日
+    week3: 治療開始日を起点とした第3週 (14-20日目)
+    week6: 治療開始日を起点とした第6週 (35-41日目)
+    該当しない場合は None
+    """
+    if not patient.admission_date or not patient.first_treatment_date:
+        return None
+    
+    if patient.admission_date <= target_date < patient.first_treatment_date:
+        return 'baseline'
+    
+    if patient.first_treatment_date:
+        days_since_start = (target_date - patient.first_treatment_date).days
+        week_num = (days_since_start // 7) + 1
+        if week_num == 3:
+            return 'week3'
+        elif week_num == 6:
+            return 'week6'
+    
+    return None
+
+def get_assessment_deadline(patient, timing):
+    """
+    指定 timing の評価期限最終日を返す。
+    baseline: 治療開始日前日
+    week3: 第3週の最終日 (治療開始日 + 20日)
+    week6: 第6週の最終日 (治療開始日 + 41日)
+    """
+    if not patient.first_treatment_date:
+        return None
+    
+    if timing == 'baseline':
+        return patient.first_treatment_date - timedelta(days=1)
+    elif timing == 'week3':
+        return patient.first_treatment_date + timedelta(days=20)
+    elif timing == 'week6':
+        return patient.first_treatment_date + timedelta(days=41)
+    return None
+
 # ★修正: カレンダーデータ生成ロジック (週単位のリストを返す)
 def generate_calendar_weeks(patient):
     # 基準となる開始日
@@ -182,18 +224,8 @@ def generate_calendar_weeks(patient):
                 })
                 
                 # 4. 評価予定
-                timing = None
-                label = ""
-                if session_num == 1: timing = 'baseline'; label = '治療前評価'
-                elif session_num == 15: timing = 'week3'; label = '中間評価'
-                elif session_num == 30: timing = 'week6'; label = '最終評価'
-                
-                if timing:
-                    day_info['events'].append({
-                        'type': 'assessment',
-                        'label': label,
-                        'url': build_url('assessment_add', [patient.id], {'date': current, 'timing': timing})
-                    })
+                # 治療日に評価を表示するのではなく、期限最終日に表示する
+                pass  # 後で全体で処理
         
         # 5. 退院
         if current == patient.discharge_date:
@@ -212,6 +244,30 @@ def generate_calendar_weeks(patient):
         current += timedelta(days=1)
         
     if current_week: calendar_weeks.append(current_week)
+    
+    # 評価イベントを期限最終日に追加
+    for timing in ['baseline', 'week3', 'week6']:
+        deadline = get_assessment_deadline(patient, timing)
+        if deadline and start_date <= deadline <= end_date:
+            # 該当日の day_info を探す
+            for week in calendar_weeks:
+                for day in week:
+                    if day['date'] == deadline:
+                        existing = Assessment.objects.filter(patient=patient, timing=timing).exists()
+                        label = {
+                            'baseline': '治療前評価',
+                            'week3': '中間評価',
+                            'week6': '最終評価'
+                        }.get(timing, timing)
+                        if existing:
+                            label += ' (済)'
+                        day['events'].append({
+                            'type': 'assessment',
+                            'label': label,
+                            'url': build_url('assessment_add', [patient.id, timing])
+                        })
+                        break
+    
     return calendar_weeks
 
 
@@ -479,7 +535,14 @@ def treatment_add(request, patient_id):
             for key, label in side_effect_items: val = request.POST.get(f'se_{key}'); 
             if val: se_data[key] = val
             se_data['note'] = request.POST.get('se_note', ''); s.side_effects = se_data; s.save()
+            # AJAX (autosave) 対応: JSON を返す
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                return JsonResponse({'status': 'success', 'id': s.id})
             return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
+        else:
+            # バリデーション失敗時の Ajax 応答
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                return JsonResponse({'status': 'error', 'errors': form.errors}, status=400)
     else:
         initial_data = {'treatment_date': initial_date, 'treatment_time': now.strftime('%H:%M'), 'total_pulses': 1980, 'intensity': 120}
         if latest_mapping: initial_data['motor_threshold'] = latest_mapping.resting_mt
@@ -487,12 +550,17 @@ def treatment_add(request, patient_id):
     return render(request, 'rtms_app/treatment_add.html', {'patient': patient, 'form': form, 'latest_mapping': latest_mapping, 'side_effect_items': side_effect_items, 'session_num': session_num, 'week_num': week_num, 'end_date_est': end_date_est, 'start_date': patient.first_treatment_date, 'dashboard_date': dashboard_date, 'alert_msg': alert_msg, 'instruction_msg': instruction_msg, 'judgment_info': judgment_info})
 
 @login_required
-def assessment_add(request, patient_id):
+def assessment_add(request, patient_id, timing):
     patient = get_object_or_404(Patient, pk=patient_id); dashboard_date = request.GET.get('dashboard_date')
+    # Validate timing against model choices to prevent tampering
+    allowed = [c[0] for c in Assessment.TIMING_CHOICES]
+    if timing not in allowed:
+        return HttpResponse(status=400)
     history = Assessment.objects.filter(patient=patient).order_by('date')
     hamd_items = [('q1', '1. 抑うつ気分', 4, ""), ('q2', '2. 罪責感', 4, ""), ('q3', '3. 自殺', 4, ""), ('q4', '4. 入眠障害', 2, ""), ('q5', '5. 熟眠障害', 2, ""), ('q6', '6. 早朝睡眠障害', 2, ""), ('q7', '7. 仕事と活動', 4, ""), ('q8', '8. 精神運動抑制', 4, ""), ('q9', '9. 精神運動激越', 4, ""), ('q10', '10. 不安, 精神症状', 4, ""), ('q11', '11. 不安, 身体症状', 4, ""), ('q12', '12. 身体症状, 消化器系', 2, ""), ('q13', '13. 身体症状, 一般的', 2, ""), ('q14', '14. 生殖器症状', 2, ""), ('q15', '15. 心気症', 4, ""), ('q16', '16. 体重減少', 2, ""), ('q17', '17. 病識', 2, ""), ('q18', '18. 日内変動', 2, ""), ('q19', '19. 現実感喪失, 離人症', 4, ""), ('q20', '20. 妄想症状', 3, ""), ('q21', '21. 強迫症状', 2, "")]
     mid_index = 11; hamd_items_left = hamd_items[:mid_index]; hamd_items_right = hamd_items[mid_index:]
-    target_date_str = request.GET.get('date') or timezone.now().strftime('%Y-%m-%d'); timing = request.GET.get('timing', 'other')
+    target_date_str = request.GET.get('date') or timezone.now().strftime('%Y-%m-%d')
+    # timing is fixed by URL parameter and server-side validated above
     existing_assessment = Assessment.objects.filter(patient=patient, date=target_date_str, type='HAM-D').first()
     recommendation = ""
     if timing in ['week3', 'week6']:
@@ -505,12 +573,25 @@ def assessment_add(request, patient_id):
         try:
             scores = {}
             for key, label, max, text in hamd_items: scores[key] = int(request.POST.get(key, 0))
-            if existing_assessment: assessment = existing_assessment; assessment.scores = scores; assessment.timing = request.POST.get('timing', 'other'); assessment.note = request.POST.get('note', '')
-            else: assessment = Assessment(patient=patient, date=target_date_str, type='HAM-D', scores=scores, timing=request.POST.get('timing', 'other'), note=request.POST.get('note', ''))
+            if existing_assessment:
+                assessment = existing_assessment
+                assessment.scores = scores
+                assessment.timing = timing
+                assessment.note = request.POST.get('note', '')
+            else:
+                assessment = Assessment(patient=patient, date=target_date_str, type='HAM-D', scores=scores, timing=timing, note=request.POST.get('note', ''))
             assessment.calculate_scores(); assessment.save()
+            # Ajax の場合は JSON を返す
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                return JsonResponse({'status': 'success', 'id': assessment.id})
             return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
-        except Exception as e: print(e)
-    return render(request, 'rtms_app/assessment_add.html', {'patient': patient, 'history': history, 'today': target_date_str, 'hamd_items_left': hamd_items_left, 'hamd_items_right': hamd_items_right, 'initial_timing': timing, 'existing_assessment': existing_assessment, 'recommendation': recommendation, 'dashboard_date': dashboard_date})
+        except Exception as e:
+            print(e)
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    timing_display = dict(Assessment.TIMING_CHOICES).get(timing, timing)
+    deadline = get_assessment_deadline(patient, timing)
+    return render(request, 'rtms_app/assessment_add.html', {'patient': patient, 'history': history, 'today': target_date_str, 'hamd_items_left': hamd_items_left, 'hamd_items_right': hamd_items_right, 'initial_timing': timing, 'initial_timing_display': timing_display, 'existing_assessment': existing_assessment, 'recommendation': recommendation, 'dashboard_date': dashboard_date, 'deadline': deadline})
 
 @login_required
 def patient_summary_view(request, patient_id):

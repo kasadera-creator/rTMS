@@ -1,4 +1,4 @@
-#!/Users/kuniyuki/rTMS/venv/bin/python3
+#!/Users/kuniyuki/rTMS/rTMS/venv/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys

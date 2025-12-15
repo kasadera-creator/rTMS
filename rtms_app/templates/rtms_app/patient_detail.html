@@ -132,7 +132,7 @@
                         <a href="{% url 'rtms_app:treatment_add' patient.id %}" class="btn btn-sm btn-light text-success fw-bold">
                             <i class="fas fa-plus"></i> 治療
                         </a>
-                        <a href="{% url 'rtms_app:assessment_add' patient.id %}" class="btn btn-sm btn-light text-danger fw-bold">
+                        <a href="{% url 'rtms_app:assessment_add' patient.id 'baseline' %}" class="btn btn-sm btn-light text-danger fw-bold">
                             <i class="fas fa-plus"></i> 評価
                         </a>
                     </div>

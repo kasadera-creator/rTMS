@@ -42,19 +42,9 @@
     </div>
     {% endif %}
 
-    <div class="alert alert-light border shadow-sm mb-4 d-flex align-items-center justify-content-between no-print">
-        <div class="d-flex align-items-center">
-            <span class="badge bg-dark me-2">ID: {{ patient.card_id }}</span>
-            <span class="h5 mb-0 me-3">{{ patient.name }} 様</span>
-            <span class="badge bg-success me-1">第{{ session_num }}回目</span> 
-            <span class="badge bg-light text-dark border">第{{ week_num }}週目</span>
-        </div>
-        <div class="text-muted small">
-            期間: {{ start_date|date:"Y/n/j" }} ～ {{ end_date_est|date:"Y/n/j" }}
-        </div>
-    </div>
+    {% include "rtms_app/partials/form_header.html" %}
 
-    <form method="post" id="mainForm">
+    <form method="post" id="treatmentForm">
         {% csrf_token %}
         
         <div class="row g-4 no-print">
@@ -195,14 +185,14 @@
             </div>
         </div>
 
-        {% url 'rtms_app:dashboard' as dashboard_url %}
-        {% if dashboard_date %}
-          {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
-            {% include "rtms_app/partials/floating_actions.html" with back_url=back_url %}
-          {% endwith %}
-        {% else %}
-          {% include "rtms_app/partials/floating_actions.html" with back_url=dashboard_url %}
-        {% endif %}
+                {% url 'rtms_app:dashboard' as dashboard_url %}
+                {% if dashboard_date %}
+                    {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+                        {% include "rtms_app/partials/floating_actions.html" with back_url=back_url form_id='treatmentForm' %}
+                    {% endwith %}
+                {% else %}
+                    {% include "rtms_app/partials/floating_actions.html" with back_url=dashboard_url form_id='treatmentForm' %}
+                {% endif %}
 
     </form>
 </div>

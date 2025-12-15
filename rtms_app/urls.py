@@ -63,7 +63,7 @@ urlpatterns = [
         name="treatment_add",
     ),
     path(
-        "patient/<int:patient_id>/assessment/add/",
+        "patient/<int:patient_id>/assessment/<str:timing>/add/",
         views.assessment_add,
         name="assessment_add",
     ),
