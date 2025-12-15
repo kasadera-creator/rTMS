@@ -9,6 +9,9 @@ import dj_database_url
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+
 # SECURITY WARNING: keep the secret key used in production secret!
 # (Render等の環境変数で上書きされることを推奨しますが、ここではデフォルト値を維持)
 SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-_y5m9v54tdo0dc_c3rq^#ac4nez0vwziv5smsk5!oaq)!$$(ej")

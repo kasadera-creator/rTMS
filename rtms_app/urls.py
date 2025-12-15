@@ -2,6 +2,9 @@ from django.urls import path
 from django.shortcuts import redirect
 from . import views
 
+from django.conf import settings
+from django.conf.urls.static import static
+
 app_name = "rtms_app"
 
 urlpatterns = [
@@ -12,6 +15,8 @@ urlpatterns = [
     path("patients/", views.patient_list_view, name="patient_list"),
     path("patients/add/", views.patient_add_view, name="patient_add"),
     path("logout/", views.custom_logout, name="custom_logout"),
+    
+    path("app/consent/latest/", views.latest_consent, name="latest_consent"),
 
     # =========================
     # Patient main pages
@@ -98,3 +103,8 @@ urlpatterns = [
     path("consent/latest/", views.consent_latest, name="consent_latest"),
 
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+

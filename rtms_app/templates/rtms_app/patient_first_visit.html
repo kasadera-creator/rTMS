@@ -190,12 +190,11 @@
 　
 　<div class="card-header bg-light fw-bold">説明同意文書 印刷</div>
   <div class="card-body">
-    <a class="btn btn-outline-primary"
-   href="{% static 'rtms_app/docs/rTMS-ICF_20251201.pdf' %}"
+  <a class="btn btn-outline-primary"
+   href="{% url 'rtms_app:latest_consent' %}"
    target="consent_pdf" rel="noopener">
   説明同意書を表示・印刷
-</a>
-
+  </a>
   </div>
 　</div>
 

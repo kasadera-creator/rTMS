@@ -14,7 +14,7 @@ import csv
 import json
 from urllib.parse import urlencode
 
-from .models import Patient, TreatmentSession, MappingSession, Assessment
+from .models import Patient, TreatmentSession, MappingSession, Assessment, ConsentDocument
 from .forms import (
     PatientFirstVisitForm, MappingForm, TreatmentForm, 
     PatientRegistrationForm, AdmissionProcedureForm
@@ -819,3 +819,13 @@ def patient_print_path(request, patient_id):
         'calendar_weeks': calendar_weeks,
         'back_url': back_url,
     })
+
+@login_required
+def latest_consent(request):
+    doc = ConsentDocument.objects.order_by("-uploaded_at").first()
+    if doc and doc.file:
+        return redirect(doc.file.url)
+    # アップロードが無い / 初期化で消えた → 静的ファイルへフォールバック
+    return redirect(static("rtms_app/docs/consent_default.pdf"))
+
+

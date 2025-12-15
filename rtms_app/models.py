@@ -55,6 +55,26 @@ class Patient(models.Model):
         today = timezone.now().date()
         return today.year - self.birth_date.year - ((today.month, today.day) < (self.birth_date.month, self.birth_date.day))
 
+
+def consent_upload_to(instance, filename):
+    # 拡張子を維持（.pdf想定）
+    ext = os.path.splitext(filename)[1].lower() or ".pdf"
+    date_str = timezone.localdate().strftime("%Y%m%d")
+    # ファイル名固定ルール
+    return f"consent/rTMS-ICF_{date_str}{ext}"
+
+
+class ConsentDocument(models.Model):
+    file = models.FileField(upload_to=consent_upload_to)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-uploaded_at"]
+
+    def __str__(self):
+        return f"ConsentDocument {self.uploaded_at:%Y-%m-%d}"
+
+
 class MappingSession(models.Model):
     WEEK_CHOICES = [
         (1, '第1週'), (2, '第2週'), (3, '第3週'), 
