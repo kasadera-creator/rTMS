@@ -6,60 +6,53 @@
 
 {% block print_content %}
 <div class="bundle-container">
-    <div class="screen-only mb-3">
-        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-            <div>
-                <div class="fw-bold">患者: {{ patient.name }} (ID: {{ patient.card_id }})</div>
-                <div class="text-muted small">{{ today|date:"Y年n月j日" }} 時点</div>
-            </div>
-            <div class="text-end">
-                <div class="fw-bold">選択中の文書</div>
-                {% if docs_to_render %}
-                <div>
-                    
-					{% for doc in docs_to_render %}
-  <div class="doc-wrapper{% if not forloop.first %} page-break{% endif %}">
-    {% if doc.template %}
-      {% with include_mode=True %}
-        {% include doc.template %}
-      {% endwith %}
-    {% elif doc.pdf_static %}
-      <div class="screen-only mb-3">
-        <a class="btn btn-primary btn-sm" href="{% static doc.pdf_static %}" target="consent_pdf" rel="noopener">
-          PDFを別タブで開く
-        </a>
-        <div class="text-muted small mt-2">
-          このPDFは合本印刷には含まれません。別タブで開いて印刷してください。
-        </div>
+  <div class="screen-only mb-3">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+      <div>
+        <div class="fw-bold">患者: {{ patient.name }} (ID: {{ patient.card_id }})</div>
+        <div class="text-muted small">{{ today|date:"Y年n月j日" }} 時点</div>
       </div>
+
+      <div class="text-end">
+        <div class="fw-bold">選択中の文書</div>
+        {% if docs_to_render %}
+          <div>
+            {% for doc in docs_to_render %}
+              <span class="badge bg-primary me-1">{{ doc.label }}</span>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted">表示する文書がありません。チェックボックスを選択してください。</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="bundle-section">
+    {% if docs_to_render %}
+      {% for doc in docs_to_render %}
+        <div class="doc-wrapper{% if not forloop.first %} page-break{% endif %}">
+          {% if doc.template %}
+            {% with include_mode=True %}
+              {% include doc.template %}
+            {% endwith %}
+          {% elif doc.pdf_static %}
+            <div class="screen-only mb-3">
+              <a class="btn btn-primary btn-sm" href="{% static doc.pdf_static %}" target="consent_pdf" rel="noopener">
+                PDFを別タブで開く
+              </a>
+              <div class="text-muted small mt-2">
+                このPDFは合本印刷には含まれません。別タブで開いて印刷してください。
+              </div>
+            </div>
+          {% else %}
+            <div class="text-muted small">この文書は表示形式が未設定です。</div>
+          {% endif %}
+        </div>
+      {% endfor %}
     {% else %}
-      <div class="text-muted small">この文書は表示形式が未設定です。</div>
+      <div class="text-muted">選択された文書がありません。画面下部で必要な書類を選択してください。</div>
     {% endif %}
   </div>
-{% endfor %}
-
-					
-                </div>
-                {% else %}
-                <div class="text-muted">表示する文書がありません。チェックボックスを選択してください。</div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-
-    <div class="bundle-section">
-        {% if docs_to_render %}
-            {% for doc in docs_to_render %}
-                <div class="doc-wrapper{% if not forloop.first %} page-break{% endif %}">
-                    {% if doc.template %}
-                        {% with include_mode=True %}
-                            {% include doc.template %}
-                        {% endwith %}
-				</div>
-            {% endfor %}
-        {% else %}
-            <div class="text-muted">選択された文書がありません。画面下部で必要な書類を選択してください。</div>
-        {% endif %}
-    </div>
 </div>
 {% endblock %}
