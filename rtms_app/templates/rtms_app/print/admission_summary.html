@@ -26,29 +26,18 @@
 
     <div class="content-section">
       <div class="section-label">診断名・主訴</div>
-      <div>
+      <div class="text-content mb-1">
         <strong>【診断名】</strong> {{ patient.diagnosis|default:"-" }}<br>
         <strong>【主　訴】</strong> {{ patient.chief_complaint|default:""|linebreaksbr }}
       </div>
 
       <div class="section-label">病歴・背景</div>
       <div class="text-content mb-1">
-        <div class="mb-2">
-            <strong>【生活歴】</strong><br>
-            {{ patient.life_history|default:"(記載なし)"|linebreaksbr }}
-        </div>
-        <div class="mb-2">
-            <strong>【既往歴】</strong><br>
-            {{ patient.past_history|default:"(記載なし)"|linebreaksbr }}
-        </div>
-        <div class="mb-2">
-            <strong>【現病歴】</strong><br>
-            {{ patient.present_illness|default:"(記載なし)"|linebreaksbr }}
-        </div>
-        <div>
-            <strong>【薬物治療歴】</strong><br>
-            {{ patient.medication_history|default:"(記載なし)"|linebreaksbr }}
-        </div>
+        <strong>【生活歴】</strong><br>{{ patient.life_history|default:"(記載なし)"|linebreaksbr }}<br><br>
+		<strong>【既往歴】</strong><br>{{ patient.past_history|default:"(記載なし)"|linebreaksbr }}}<br><br>
+        <strong>【現病歴】</strong><br>{{ patient.present_illness|default:"(記載なし)"|linebreaksbr }}}<br><br>
+        <strong>【薬物治療歴】</strong><br>{{ patient.medication_history|default:"(記載なし)"|linebreaksbr }}
+	  </div>
       </div>
     </div>
 
