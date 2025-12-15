@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.db import models
 from django_jsonform.widgets import JSONFormWidget
-from .models import Patient, TreatmentSession, Assessment, ConsentDocument
+from .models import Patient, TreatmentSession, Assessment, ConsentDocument, AuditLog
 
 # --- 1. 適正に関する質問票 (初診時) ---
 QUESTIONNAIRE_SCHEMA = {
@@ -137,5 +137,11 @@ admin.site.register(Assessment)
 @admin.register(ConsentDocument)
 class ConsentDocumentAdmin(admin.ModelAdmin):
     list_display = ("id", "uploaded_at", "file")
+
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = ('created_at', 'user', 'patient', 'action', 'target_model', 'target_pk', 'summary')
+    list_filter = ('action', 'target_model', 'created_at')
+    search_fields = ('user__username', 'patient__name', 'summary')
 
 

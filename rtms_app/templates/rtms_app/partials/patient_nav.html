@@ -14,6 +14,13 @@
     治療経過・退院準備
   </a>
 
+  {% if can_view_audit %}
+  <a class="btn btn-outline-warning btn-sm"
+     href="{% url 'rtms_app:audit_logs' patient.id %}">
+    変更履歴
+  </a>
+  {% endif %}
+
   <a class="btn btn-secondary btn-sm"
      href="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}">
     ダッシュボードへ戻る

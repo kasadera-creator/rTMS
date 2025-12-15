@@ -15,11 +15,36 @@ import csv
 import json
 from urllib.parse import urlencode
 
-from .models import Patient, TreatmentSession, MappingSession, Assessment, ConsentDocument
+from .models import Patient, TreatmentSession, MappingSession, Assessment, ConsentDocument, AuditLog
 from .forms import (
     PatientFirstVisitForm, MappingForm, TreatmentForm, 
     PatientRegistrationForm, AdmissionProcedureForm
 )
+from .utils.request_context import get_current_request, get_client_ip, get_user_agent, can_view_audit
+
+def log_audit_action(patient, action, target_model, target_pk, summary='', meta=None):
+    request = get_current_request()
+    if not request or not request.user.is_authenticated:
+        return
+    
+    ip = get_client_ip(request)
+    user_agent = get_user_agent(request)
+    
+    meta = meta or {}
+    if patient:
+        meta['course_number'] = getattr(patient, 'course_number', 1)
+    
+    AuditLog.objects.create(
+        user=request.user,
+        patient=patient,
+        target_model=target_model,
+        target_pk=target_pk,
+        action=action,
+        summary=summary,
+        meta=meta,
+        ip=ip,
+        user_agent=user_agent,
+    )
 
 def build_url(name, args=None, query=None):
     """
@@ -504,7 +529,7 @@ def patient_first_visit(request, patient_id):
         'formtarget': '_blank',
         'docs_form_id': 'bundlePrintFormFirstVisit',
     }]
-    return render(request, 'rtms_app/patient_first_visit.html', {'patient': patient, 'form': form, 'referral_options': referral_options, 'referral_map_json': json.dumps(referral_map_json, ensure_ascii=False), 'end_date_est': end_date_est, 'dashboard_date': dashboard_date, 'hamd_items_left': hamd_items_left, 'hamd_items_right': hamd_items_right, 'baseline_assessment': baseline_assessment, 'floating_print_options': floating_print_options})
+    return render(request, 'rtms_app/patient_first_visit.html', {'patient': patient, 'form': form, 'referral_options': referral_options, 'referral_map_json': json.dumps(referral_map_json, ensure_ascii=False), 'end_date_est': end_date_est, 'dashboard_date': dashboard_date, 'hamd_items_left': hamd_items_left, 'hamd_items_right': hamd_items_right, 'baseline_assessment': baseline_assessment, 'floating_print_options': floating_print_options, 'can_view_audit': can_view_audit(request.user)})
 
 @login_required
 def treatment_add(request, patient_id):
@@ -698,7 +723,7 @@ def patient_summary_view(request, patient_id):
             "docs_form_id": "bundlePrintFormDischarge",
         },
     ]
-    return render(request, 'rtms_app/patient_summary.html', {'patient': patient, 'summary_text': summary_text, 'history_list': history_list, 'today': timezone.now().date(), 'test_scores': test_scores, 'dashboard_date': dashboard_date, 'floating_print_options': floating_print_options})
+    return render(request, 'rtms_app/patient_summary.html', {'patient': patient, 'summary_text': summary_text, 'history_list': history_list, 'today': timezone.now().date(), 'test_scores': test_scores, 'dashboard_date': dashboard_date, 'floating_print_options': floating_print_options, 'can_view_audit': can_view_audit(request.user)})
     
 @login_required
 def patient_add_view(request):
@@ -725,7 +750,14 @@ def patient_add_view(request):
 def export_treatment_csv(request):
     response = HttpResponse(content_type='text/csv; charset=utf-8-sig'); response['Content-Disposition'] = 'attachment; filename="treatment_data.csv"'; writer = csv.writer(response); writer.writerow(['ID', '氏名', '実施日時', 'MT(%)', '強度(%)', 'パルス数', '実施者', '副作用'])
     treatments = TreatmentSession.objects.all().select_related('patient', 'performer').order_by('date')
+    rows = treatments.count()
     for t in treatments: se_str = json.dumps(t.side_effects, ensure_ascii=False) if t.side_effects else ""; writer.writerow([t.patient.card_id, t.patient.name, t.date.strftime('%Y-%m-%d %H:%M'), t.motor_threshold, t.intensity, t.total_pulses, t.performer.username if t.performer else "", se_str])
+    meta = {
+        'export_type': 'csv',
+        'filters': {},
+        'rows': rows,
+    }
+    log_audit_action(None, 'EXPORT', 'TreatmentSession', '', '治療データCSVエクスポート', meta)
     return response
 
 @login_required
@@ -883,6 +915,16 @@ def patient_print_bundle(request, patient_id):
         "back_url": back_url,
     }
 
+    # 印刷ログ記録
+    for doc_key in selected_doc_keys:
+        doc_label = DOC_DEFINITIONS.get(doc_key, {}).get('label', doc_key)
+        meta = {
+            'docs': selected_doc_keys,
+            'querystring': request.GET.urlencode(),
+            'return_to': return_to,
+        }
+        log_audit_action(patient, 'PRINT', 'Document', doc_key, f'{doc_label}印刷', meta)
+
     return render(
         request,
         "rtms_app/print/bundle.html",
@@ -914,7 +956,8 @@ def patient_clinical_path(request, patient_id):
         'week6_assessment': week6_assessment,
         'today': timezone.now().date(),
         'dashboard_date': dashboard_date,
-        'floating_print_options': floating_print_options
+        'floating_print_options': floating_print_options,
+        'can_view_audit': can_view_audit(request.user)
     })
 
 @login_required
@@ -924,10 +967,29 @@ def patient_print_path(request, patient_id):
     calendar_weeks = generate_calendar_weeks(patient)
     return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
     back_url = return_to or reverse("rtms_app:patient_clinical_path", args=[patient.id])
+    log_audit_action(patient, 'PRINT', 'ClinicalPath', '', '臨床経過表印刷', {
+        'docs': ['path'],
+        'querystring': request.GET.urlencode(),
+        'return_to': return_to,
+    })
     return render(request, 'rtms_app/print/path.html', {
         'patient': patient,
         'calendar_weeks': calendar_weeks,
         'back_url': back_url,
+    })
+
+@login_required
+def audit_logs_view(request, patient_id):
+    # 権限チェック: adminユーザーまたはofficeグループ
+    if not can_view_audit(request.user):
+        return HttpResponse("アクセス権限がありません。", status=403)
+    
+    patient = get_object_or_404(Patient, pk=patient_id)
+    logs = AuditLog.objects.filter(patient=patient).order_by('-timestamp')
+    
+    return render(request, 'rtms_app/audit_logs.html', {
+        'patient': patient,
+        'logs': logs,
     })
 
 @login_required

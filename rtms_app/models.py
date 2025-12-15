@@ -142,3 +142,36 @@ class Assessment(models.Model):
     class Meta:
         verbose_name = "評価"
         verbose_name_plural = "評価"
+
+class AuditLog(models.Model):
+    ACTION_CHOICES = [
+        ('CREATE', '作成'),
+        ('UPDATE', '更新'),
+        ('DELETE', '削除'),
+        ('PRINT', '印刷'),
+        ('EXPORT', 'エクスポート'),
+    ]
+    
+    created_at = models.DateTimeField("作成日時", auto_now_add=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, verbose_name="ユーザー")
+    patient = models.ForeignKey(Patient, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="患者")
+    target_model = models.CharField("対象モデル", max_length=100)
+    target_pk = models.CharField("対象PK", max_length=50)
+    action = models.CharField("アクション", max_length=10, choices=ACTION_CHOICES)
+    summary = models.TextField("概要")
+    meta = models.JSONField("メタデータ", default=dict)
+    ip = models.GenericIPAddressField("IPアドレス", null=True, blank=True)
+    user_agent = models.TextField("ユーザーエージェント", blank=True)
+    
+    def __str__(self):
+        return f"{self.created_at} - {self.user} - {self.action} on {self.target_model}:{self.target_pk}"
+    
+    class Meta:
+        verbose_name = "監査ログ"
+        verbose_name_plural = "監査ログ"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['created_at']),
+            models.Index(fields=['patient']),
+            models.Index(fields=['action']),
+        ]

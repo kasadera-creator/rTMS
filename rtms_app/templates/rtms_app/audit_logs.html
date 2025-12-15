@@ -1,0 +1,50 @@
+{% extends "rtms_app/base.html" %}
+
+{% block content %}
+<div class="container py-4">
+    <h3>監査ログ - {{ patient.name }} 様 (ID: {{ patient.card_id }})</h3>
+    
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>タイムスタンプ</th>
+                <th>ユーザー</th>
+                <th>アクション</th>
+                <th>対象モデル</th>
+                <th>対象PK</th>
+                <th>概要</th>
+                <th>IP</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td>{{ log.created_at|date:"Y-m-d H:i:s" }}</td>
+                <td>{{ log.user.username if log.user else "不明" }}</td>
+                <td>{{ log.get_action_display }}</td>
+                <td>{{ log.target_model }}</td>
+                <td>{{ log.target_pk }}</td>
+                <td>{{ log.summary }}</td>
+                <td>{{ log.ip }}</td>
+            </tr>
+            {% if log.meta %}
+            <tr>
+                <td colspan="7">
+                    <details>
+                        <summary>詳細 (meta)</summary>
+                        <pre>{{ log.meta|safe }}</pre>
+                    </details>
+                </td>
+            </tr>
+            {% endif %}
+            {% empty %}
+            <tr>
+                <td colspan="7">ログがありません。</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <a href="{% url 'rtms_app:patient_detail' patient.id %}" class="btn btn-secondary">戻る</a>
+</div>
+{% endblock %}

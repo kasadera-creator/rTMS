@@ -102,6 +102,8 @@ urlpatterns = [
 
     path("consent/latest/", views.consent_latest, name="consent_latest"),
 
+    path("patient/<int:patient_id>/audit_logs/", views.audit_logs_view, name="audit_logs"),
+
 ]
 
 if settings.DEBUG:
