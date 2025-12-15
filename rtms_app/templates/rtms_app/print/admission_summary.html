@@ -34,32 +34,26 @@
     <div class="content-section">
       <div class="section-label">病歴・背景</div>
       <div class="text-content" style="text-align: left !important; line-height: 1.6;">
-        
-        <div style="margin-bottom: 12px;">
+        <div>
             <strong>【主　訴】</strong><br>
             {{ patient.chief_complaint|default:""|linebreaksbr }}
         </div>
-
-        <div style="margin-bottom: 12px;">
+        <div>
             <strong>【生活歴】</strong><br>
             {{ patient.life_history|default:"(記載なし)"|linebreaksbr }}
         </div>
-
-        <div style="margin-bottom: 12px;">
+        <div>
             <strong>【既往歴】</strong><br>
             {{ patient.past_history|default:"(記載なし)"|linebreaksbr }}
         </div>
-
-        <div style="margin-bottom: 12px;">
+        <div>
             <strong>【現病歴】</strong><br>
             {{ patient.present_illness|default:"(記載なし)"|linebreaksbr }}
         </div>
-
         <div>
             <strong>【薬物治療歴】</strong><br>
             {{ patient.medication_history|default:"(記載なし)"|linebreaksbr }}
         </div>
-
       </div>
     </div>
 
