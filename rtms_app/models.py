@@ -55,6 +55,10 @@ class Patient(models.Model):
     def age(self):
         today = timezone.now().date()
         return today.year - self.birth_date.year - ((today.month, today.day) < (self.birth_date.month, self.birth_date.day))
+        
+    class Meta:
+        verbose_name = "患者"
+        verbose_name_plural = "患者"
 
 
 def consent_upload_to(instance, filename):
@@ -71,6 +75,8 @@ class ConsentDocument(models.Model):
 
     class Meta:
         ordering = ["-uploaded_at"]
+        verbose_name = "説明同意書"
+        verbose_name_plural = "説明同意書"
 
     def __str__(self):
         return f"ConsentDocument {self.uploaded_at:%Y-%m-%d}"
@@ -88,6 +94,9 @@ class MappingSession(models.Model):
     resting_mt = models.IntegerField("MT")
     stimulation_site = models.CharField("部位", max_length=100, default="左DLPFC")
     notes = models.TextField("特記", blank=True)
+    class Meta:
+        verbose_name = "位置決めセッション"
+        verbose_name_plural = "位置決めセッション"
 
 class TreatmentSession(models.Model):
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE)
@@ -100,6 +109,9 @@ class TreatmentSession(models.Model):
     total_pulses = models.IntegerField("パルス", default=1980)
     side_effects = models.JSONField("副作用", default=dict, blank=True, null=True)
     performer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    class Meta:
+        verbose_name = "治療セッション"
+        verbose_name_plural = "治療セッション"
 
 class Assessment(models.Model):
     TIMING_CHOICES = [
@@ -126,3 +138,7 @@ class Assessment(models.Model):
     def save(self, *args, **kwargs):
         if self.type == 'HAM-D': self.calculate_scores()
         super().save(*args, **kwargs)
+        
+    class Meta:
+        verbose_name = "評価"
+        verbose_name_plural = "評価"

@@ -120,6 +120,7 @@ JAZZMIN_SETTINGS = {
         },
     ],
     "order_with_respect_to": [
+        "rtms_app.ConsentDocument",
         "rtms_app.Patient",
         "rtms_app.TreatmentSession",
         "rtms_app.Assessment",
