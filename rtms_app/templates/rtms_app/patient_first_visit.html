@@ -367,9 +367,6 @@
   }
 </script>
 
-<!-- Bootstrap bundle（Popover/Modal必須） -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
 <!-- baseline scores を hidden に先に流し込む（hamd_widget が restore できるように） -->
 <script>
   (function(){
@@ -388,6 +385,17 @@
 <script src="{% static 'rtms_app/hamd_widget.js' %}"></script>
 
 <script>
+  function cleanupHamdModal() {
+    const modalEl = document.getElementById('hamdModal');
+    if (modalEl && window.bootstrap && bootstrap.Modal) {
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      modal.hide();
+    }
+    document.body.classList.remove('modal-open');
+    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+    document.body.style.removeProperty('padding-right');
+  }
+
   // 初診HAM-D 保存（暗転フリーズ対策：必ずmodal/backdropを掃除）
   async function saveHamdAjax() {
     const form = document.getElementById('hamdForm');
@@ -429,24 +437,12 @@
         }
       }
 
-      // モーダルを閉じる（確実に）
-      const modalEl = document.getElementById('hamdModal');
-      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-      modal.hide();
-
-      // backdrop除去（万一残った場合の保険）
-      setTimeout(() => {
-        document.body.classList.remove('modal-open');
-        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
-        document.body.style.removeProperty('padding-right');
-      }, 250);
+      cleanupHamdModal();
 
     } catch (err) {
+      console.error('HAM-D save failed', err);
       alert("エラー: " + (err?.message || err));
-      // 失敗時でも backdrop が残らないよう掃除
-      document.body.classList.remove('modal-open');
-      document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
-      document.body.style.removeProperty('padding-right');
+      cleanupHamdModal();
     } finally {
       btn.disabled = false;
       btn.textContent = "評価を保存して判定";
