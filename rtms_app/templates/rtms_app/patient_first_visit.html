@@ -3,11 +3,11 @@
 
 {% block extrastyle %}
 <style>
-  /* 既存のスタイルは残す（アップロード版準拠） */
+  /* 既存のスタイル（アップロード版準拠） */
   .form-section { background-color: #fff; padding: 25px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
   .section-title { border-left: 5px solid #0d6efd; padding-left: 15px; font-weight: bold; margin-bottom: 20px; color: #333; font-size: 1.2rem; }
 
-  /* HAMDボタンUI用（assessment_addと同系） */
+  /* HAMD（button+hidden+popover） */
   .hamd-row { border: 1px solid #e9ecef; border-radius: 10px; background: #fff; }
   .hamd-row:hover { border-color: #0d6efd; background: #f8fbff; }
   .q-badge { width: 28px; height: 28px; background: #f1f3f5; color:#495057; border-radius: 50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:.8rem; flex: 0 0 auto; }
@@ -16,223 +16,212 @@
   .compact-label { font-size: .92rem; line-height: 1.2; }
   .popover { max-width: 420px; }
   .popover-body { white-space: pre-wrap; font-size: .9rem; }
+  .sticky-scorebar {
+    position: sticky; bottom: 0; z-index: 1020;
+    background: #fff; border-top: 1px solid #dee2e6;
+    padding: 10px 12px;
+  }
 </style>
 <link rel="icon" href="{% static 'img/logo.jpg' %}">
 {% endblock %}
 
 {% block content %}
-
 <div class="container py-4 mb-5">
-    <!-- ヘッダー -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3 class="fw-bold"><i class="fas fa-file-medical"></i> 初診・基本情報入力</h3>
-        {% include "rtms_app/partials/patient_nav.html" %}
-    </div>
+  <!-- ヘッダー -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="fw-bold"><i class="fas fa-file-medical"></i> 初診・基本情報入力</h3>
+    {% include "rtms_app/partials/patient_nav.html" %}
+  </div>
 
-    <form method="post" id="mainForm">
-        {% csrf_token %}
-        {% if form.errors %}
-        <div class="alert alert-danger"><strong>保存できませんでした:</strong> {{ form.errors }}</div>
-        {% endif %}
-
-        <!-- 1. 基本情報 -->
-        <div class="form-section">
-            <h5 class="section-title">基本情報・サマリー</h5>
-            <div class="row g-3 mb-3">
-                <div class="col-md-3"><label class="form-label fw-bold">カルテID</label>{{ form.card_id }}</div>
-                <div class="col-md-3"><label class="form-label fw-bold">氏名</label>{{ form.name }}</div>
-                <div class="col-md-3"><label class="form-label fw-bold">生年月日</label>{{ form.birth_date }}</div>
-                <div class="col-md-3"><label class="form-label fw-bold">性別</label>{{ form.gender }}</div>
-                <div class="col-md-12">
-                    <label class="form-label fw-bold">紹介元情報</label>
-                    <div class="row g-2">
-                        <div class="col-md-6"><div class="input-group"><span class="input-group-text bg-light">医療機関</span>{{ form.referral_source }}</div><datalist id="referral-options">{% for opt in referral_options %}<option value="{{ opt }}">{% endfor %}</datalist></div>
-                        <div class="col-md-6"><div class="input-group"><span class="input-group-text bg-light">医師名</span>{{ form.referral_doctor }}<span class="input-group-text bg-light">先生</span></div><datalist id="doctor-options"></datalist></div>
-                    </div>
-                </div>
-            </div>
-            <div class="mb-3"><label class="fw-bold">主訴</label>{{ form.chief_complaint }}</div>
-            <div class="mb-3"><label class="fw-bold">生活歴</label><textarea name="{{ form.life_history.name }}" class="form-control" rows="3">{{ form.life_history.value|default_if_none:"" }}</textarea></div>
-            <div class="mb-3"><label class="fw-bold">既往歴</label><textarea name="{{ form.past_history.name }}" class="form-control" rows="3">{{ form.past_history.value|default_if_none:"" }}</textarea></div>
-            <div class="mb-3"><label class="fw-bold">現病歴</label><textarea name="{{ form.present_illness.name }}" class="form-control" rows="8">{{ form.present_illness.value|default_if_none:"" }}</textarea></div>
-            <div class="mb-3"><label class="fw-bold">薬剤治療歴</label><textarea name="{{ form.medication_history.name }}" class="form-control" rows="6">{{ form.medication_history.value|default_if_none:"" }}</textarea></div>
-        </div>
-
-        <!-- 2. 診断名・重症度評価 -->
-        <div class="form-section">
-            <h5 class="section-title">診断名・重症度評価</h5>
-            <div class="mb-3">
-                <div class="d-flex align-items-center mb-2">
-                    <label class="fw-bold me-3">診断名</label>
-                </div>
-                {{ form.diagnosis }}
-                
-                <div class="diag-check-group mt-1">
-                    <div class="row g-2">
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="うつ病" id="d_dep"><label class="form-check-label" for="d_dep">うつ病</label></div></div>
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="双極症" id="d_bp"><label class="form-check-label" for="d_bp">双極症</label></div></div>
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="統合失調症" id="d_sch"><label class="form-check-label" for="d_sch">統合失調症</label></div></div>
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="強迫症" id="d_ocd"><label class="form-check-label" for="d_ocd">強迫症</label></div></div>
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="社交不安症" id="d_sad"><label class="form-check-label" for="d_sad">社交不安症</label></div></div>
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="パニック症" id="d_pd"><label class="form-check-label" for="d_pd">パニック症</label></div></div>
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="広場恐怖症" id="d_ag"><label class="form-check-label" for="d_ag">広場恐怖症</label></div></div>
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="全般性不安症" id="d_gad"><label class="form-check-label" for="d_gad">全般性不安症</label></div></div>
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="心的外傷後ストレス症" id="d_ptsd"><label class="form-check-label" for="d_ptsd">心的外傷後ストレス症</label></div></div>
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="知的発達症" id="d_mr"><label class="form-check-label" for="d_mr">知的発達症</label></div></div>
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="自閉スペクトラム症" id="d_asd"><label class="form-check-label" for="d_asd">自閉スペクトラム症</label></div></div>
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="注意欠如多動症" id="d_adhd"><label class="form-check-label" for="d_adhd">注意欠如多動症</label></div></div>
-                        <div class="col-12"><hr class="my-2"></div>
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="軽度認知障害(MCI)" id="d_mci"><label class="form-check-label" for="d_mci">軽度認知障害（MCI）</label></div></div>
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="認知症" id="d_dementia"><label class="form-check-label" for="d_dementia">認知症（詳細は下記へ）</label></div></div>
-                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="パーキンソン病" id="d_parkinson"><label class="form-check-label" for="d_parkinson">パーキンソン病</label></div></div>
-                        <div class="col-12 mt-2"><label class="small text-muted fw-bold">詳細・その他の診断名 (認知症の型などもこちらへ)</label><input type="text" name="diag_other" class="form-control form-control-sm" placeholder="例: アルツハイマー型認知症、レビー小体型認知症など"></div>
-                    </div>
-                </div>
-
-                <div class="my-3 p-3 bg-light border rounded">
-                    <div class="d-flex align-items-center">
-                        <button type="button" class="btn btn-outline-danger btn-sm me-3" data-bs-toggle="modal" data-bs-target="#hamdModal">
-                            <i class="fas fa-chart-bar"></i> 治療前HAM-D評価
-                        </button>
-
-                        <span id="hamd-result-display" class="fw-bold text-dark">
-                            {% if baseline_assessment %}
-                                HAM-D17: <span class="fs-5">{{ baseline_assessment.total_score_17 }}</span> 点 (評価済)
-                            {% else %}
-                                未評価
-                            {% endif %}
-                        </span>
-                    </div>
-                    <div class="text-muted small mt-1">
-                        評価済みの点数が表示されます。未評価の場合は入力してください。
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="form-section" id="q_section">
-            <h5 class="section-title">rTMS 適正に関する質問票</h5>
-            <p class="text-muted small">※患者様への聴取結果を入力してください。</p>
-            <table class="q-table">
-                <thead class="table-light"><tr><th style="text-align: left;">質問項目</th><th width="80" class="text-center">はい</th><th width="80" class="text-center">いいえ</th></tr></thead>
-                <tbody>
-                    <tr><td>rTMS実施経験</td><td class="text-center"><input type="radio" name="q_past_rtms" value="はい"></td><td class="text-center"><input type="radio" name="q_past_rtms" value="いいえ" checked></td></tr>
-                    <tr><td>rTMSのあとに副作用などの不快な経験</td><td class="text-center"><input type="radio" name="q_past_side_effect" value="はい"></td><td class="text-center"><input type="radio" name="q_past_side_effect" value="いいえ" checked></td></tr>
-                    <tr><td>電気けいれん療法（副作用の有無など）</td><td class="text-center"><input type="radio" name="q_past_ect" value="はい"></td><td class="text-center"><input type="radio" name="q_past_ect" value="いいえ" checked></td></tr>
-                    <tr><td>けいれん発作（てんかんの診断の有無を問わない）</td><td class="text-center"><input type="radio" name="q_past_seizure" value="はい"></td><td class="text-center"><input type="radio" name="q_past_seizure" value="いいえ" checked></td></tr>
-                    <tr><td>意識消失発作</td><td class="text-center"><input type="radio" name="q_past_loc" value="はい"></td><td class="text-center"><input type="radio" name="q_past_loc" value="いいえ" checked></td></tr>
-                    <tr><td>脳卒中（脳梗塞や脳出血など）</td><td class="text-center"><input type="radio" name="q_past_stroke" value="はい"></td><td class="text-center"><input type="radio" name="q_past_stroke" value="いいえ" checked></td></tr>
-                    <tr><td>頭部外傷（意識がなくなるなど重度なもの）</td><td class="text-center"><input type="radio" name="q_past_trauma" value="はい"></td><td class="text-center"><input type="radio" name="q_past_trauma" value="いいえ" checked></td></tr>
-                    <tr><td>頭部の手術</td><td class="text-center"><input type="radio" name="q_past_surgery" value="はい"></td><td class="text-center"><input type="radio" name="q_past_surgery" value="いいえ" checked></td></tr>
-                    <tr><td>脳外科もしくは神経内科の病気</td><td class="text-center"><input type="radio" name="q_past_neuro" value="はい"></td><td class="text-center"><input type="radio" name="q_past_neuro" value="いいえ" checked></td></tr>
-                    <tr><td>脳障害をおこす可能性のある内科疾患</td><td class="text-center"><input type="radio" name="q_past_internal" value="はい"></td><td class="text-center"><input type="radio" name="q_past_internal" value="いいえ" checked></td></tr>
-                    <tr><td>アルコールや薬物の乱用</td><td class="text-center"><input type="radio" name="q_past_abuse" value="はい"></td><td class="text-center"><input type="radio" name="q_past_abuse" value="いいえ" checked></td></tr>
-                    <tr class="q-header-row"><td colspan="3">現在、以下のことはありますか？</td></tr>
-                    <tr><td>頻繁または重度な頭痛</td><td class="text-center"><input type="radio" name="q_cur_headache" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_headache" value="いいえ" checked></td></tr>
-                    <tr><td>頭の中に金属や磁性体（チタン製品かどうか要確認）</td><td class="text-center"><input type="radio" name="q_cur_metal" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_metal" value="いいえ" checked></td></tr>
-                    <tr><td>体内埋め込み式の医療機器（心臓ペースメーカーなど）</td><td class="text-center"><input type="radio" name="q_cur_device" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_device" value="いいえ" checked></td></tr>
-                    <tr><td>多量の飲酒や薬物の乱用</td><td class="text-center"><input type="radio" name="q_cur_abuse" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_abuse" value="いいえ" checked></td></tr>
-                    <tr><td>妊娠中、もしくは妊娠の可能性が否定されない</td><td class="text-center"><input type="radio" name="q_cur_preg" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_preg" value="いいえ" checked></td></tr>
-                    <tr><td>家族内にてんかんを持っているかた</td><td class="text-center"><input type="radio" name="q_cur_family_epilepsy" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_family_epilepsy" value="いいえ" checked></td></tr>
-                </tbody>
-            </table>
-            <div class="mt-3"><label class="form-label fw-bold small">「はい」とチェックした項目について、より詳しくおしえてください</label><textarea name="q_details" class="form-control" rows="4"></textarea></div>
-            <input type="hidden" name="questionnaire_data" id="questionnaire_json">
-        </div>
-
-        <div class="form-section">
-            <h5 class="section-title">スケジュール・担当医設定</h5>
-            <div class="row g-3">
-                <div class="col-md-4"><label class="form-label text-primary fw-bold">入院予定日</label>{{ form.admission_date }}</div>
-                <div class="col-md-4"><label class="form-label text-warning fw-bold">初回位置決め日</label>{{ form.mapping_date }}</div>
-                <div class="col-md-4"><label class="form-label text-success fw-bold">初回治療日</label>{{ form.first_treatment_date }}</div>
-                <div class="col-md-8"><label class="form-label fw-bold">今後の担当医</label><div class="d-flex align-items-center">{{ form.attending_physician }}<span class="form-text ms-2 mb-0">※担当医を決めてください</span></div></div>
-            </div>
-        </div>
-
-        <div style="height: 60px;"></div>
-    </form>
-
-    {% url 'rtms_app:dashboard' as dashboard_url %}
-    {% if dashboard_date %}
-      {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
-        {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=back_url %}
-      {% endwith %}
-    {% else %}
-      {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=dashboard_url %}
+  <form method="post" id="mainForm">
+    {% csrf_token %}
+    {% if form.errors %}
+      <div class="alert alert-danger"><strong>保存できませんでした:</strong> {{ form.errors }}</div>
     {% endif %}
 
+    <!-- 1. 基本情報 -->
     <div class="form-section">
-      <h5 class="section-title">印刷</h5>
+      <h5 class="section-title">基本情報・サマリー</h5>
+      <div class="row g-3 mb-3">
+        <div class="col-md-3"><label class="form-label fw-bold">カルテID</label>{{ form.card_id }}</div>
+        <div class="col-md-3"><label class="form-label fw-bold">氏名</label>{{ form.name }}</div>
+        <div class="col-md-3"><label class="form-label fw-bold">生年月日</label>{{ form.birth_date }}</div>
+        <div class="col-md-3"><label class="form-label fw-bold">性別</label>{{ form.gender }}</div>
 
-      <div class="row g-3">
-        <!-- 初診時印刷 -->
-        <div class="col-lg-7">
-          <div class="p-3 border rounded bg-light">
-            <div class="fw-bold mb-2">初診時 印刷</div>
-            <form id="bundlePrintFormFirstVisit"
-                  action="{% url 'rtms_app:patient_print_bundle' patient.id %}"
-                  method="get"
-                  target="_blank">
-              <div class="d-flex flex-wrap gap-3">
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" name="docs" value="admission" id="docAdmissionBottom" checked>
-                  <label class="form-check-label" for="docAdmissionBottom">入院時サマリ</label>
-                </div>
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" name="docs" value="suitability" id="docSuitabilityBottom" checked>
-                  <label class="form-check-label" for="docSuitabilityBottom">rTMS問診票</label>
-                </div>
+        <div class="col-md-12">
+          <label class="form-label fw-bold">紹介元情報</label>
+          <div class="row g-2">
+            <div class="col-md-6">
+              <div class="input-group">
+                <span class="input-group-text bg-light">医療機関</span>
+                {{ form.referral_source }}
               </div>
-              {% if dashboard_date %}
-                <input type="hidden" name="dashboard_date" value="{{ dashboard_date }}">
-              {% endif %}
-              <div class="mt-3">
-                <button type="submit" class="btn btn-primary">
-                  印刷プレビュー
-                </button>
-                <div class="text-muted small mt-2">
-                  ※選択した書類をまとめてプレビュー表示します（同意書は別ボタン）
-                </div>
+              <datalist id="referral-options">
+                {% for opt in referral_options %}<option value="{{ opt }}">{% endfor %}
+              </datalist>
+            </div>
+            <div class="col-md-6">
+              <div class="input-group">
+                <span class="input-group-text bg-light">医師名</span>
+                {{ form.referral_doctor }}
+                <span class="input-group-text bg-light">先生</span>
               </div>
-            </form>
+              <datalist id="doctor-options"></datalist>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-3"><label class="fw-bold">主訴</label>{{ form.chief_complaint }}</div>
+      <div class="mb-3"><label class="fw-bold">生活歴</label><textarea name="{{ form.life_history.name }}" class="form-control" rows="3">{{ form.life_history.value|default_if_none:"" }}</textarea></div>
+      <div class="mb-3"><label class="fw-bold">既往歴</label><textarea name="{{ form.past_history.name }}" class="form-control" rows="3">{{ form.past_history.value|default_if_none:"" }}</textarea></div>
+      <div class="mb-3"><label class="fw-bold">現病歴</label><textarea name="{{ form.present_illness.name }}" class="form-control" rows="8">{{ form.present_illness.value|default_if_none:"" }}</textarea></div>
+      <div class="mb-3"><label class="fw-bold">薬剤治療歴</label><textarea name="{{ form.medication_history.name }}" class="form-control" rows="6">{{ form.medication_history.value|default_if_none:"" }}</textarea></div>
+    </div>
+
+    <!-- 2. 診断名・重症度評価 -->
+    <div class="form-section">
+      <h5 class="section-title">診断名・重症度評価</h5>
+
+      <div class="mb-3">
+        <div class="d-flex align-items-center mb-2">
+          <label class="fw-bold me-3">診断名</label>
+        </div>
+        {{ form.diagnosis }}
+
+        <!-- （診断チェック群：アップロード版を維持） -->
+        <div class="diag-check-group mt-1">
+          <div class="row g-2">
+            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="うつ病" id="d_dep"><label class="form-check-label" for="d_dep">うつ病</label></div></div>
+            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="双極症" id="d_bp"><label class="form-check-label" for="d_bp">双極症</label></div></div>
+            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="統合失調症" id="d_sch"><label class="form-check-label" for="d_sch">統合失調症</label></div></div>
+            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="強迫症" id="d_ocd"><label class="form-check-label" for="d_ocd">強迫症</label></div></div>
+            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="社交不安症" id="d_sad"><label class="form-check-label" for="d_sad">社交不安症</label></div></div>
+            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="パニック症" id="d_pd"><label class="form-check-label" for="d_pd">パニック症</label></div></div>
+            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="広場恐怖症" id="d_ag"><label class="form-check-label" for="d_ag">広場恐怖症</label></div></div>
+            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="全般性不安症" id="d_gad"><label class="form-check-label" for="d_gad">全般性不安症</label></div></div>
+            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="心的外傷後ストレス症" id="d_ptsd"><label class="form-check-label" for="d_ptsd">心的外傷後ストレス症</label></div></div>
+            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="知的発達症" id="d_mr"><label class="form-check-label" for="d_mr">知的発達症</label></div></div>
+            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="自閉スペクトラム症" id="d_asd"><label class="form-check-label" for="d_asd">自閉スペクトラム症</label></div></div>
+            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="注意欠如多動症" id="d_adhd"><label class="form-check-label" for="d_adhd">注意欠如多動症</label></div></div>
+
+            <div class="col-12"><hr class="my-2"></div>
+
+            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="軽度認知障害(MCI)" id="d_mci"><label class="form-check-label" for="d_mci">軽度認知障害（MCI）</label></div></div>
+            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="認知症" id="d_dementia"><label class="form-check-label" for="d_dementia">認知症（詳細は下記へ）</label></div></div>
+            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="パーキンソン病" id="d_parkinson"><label class="form-check-label" for="d_parkinson">パーキンソン病</label></div></div>
+
+            <div class="col-12 mt-2">
+              <label class="small text-muted fw-bold">詳細・その他の診断名 (認知症の型などもこちらへ)</label>
+              <input type="text" name="diag_other" class="form-control form-control-sm" placeholder="例: アルツハイマー型認知症、レビー小体型認知症など">
+            </div>
           </div>
         </div>
 
-        <!-- 説明同意文書 -->
-        <div class="col-lg-5">
-          <div class="p-3 border rounded bg-white">
-            <div class="fw-bold mb-2">説明同意文書 印刷</div>
-            <a class="btn btn-outline-primary"
-               href="{% url 'rtms_app:latest_consent' %}"
-               target="consent_pdf" rel="noopener">
-              説明同意書を表示・印刷
-            </a>
-            <div class="text-muted small mt-2">
-              ※最新の同意書PDFを別タブで開きます。
-            </div>
+        <!-- HAMD（起動ボタン） -->
+        <div class="my-3 p-3 bg-light border rounded">
+          <div class="d-flex align-items-center flex-wrap gap-2">
+            <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#hamdModal">
+              <i class="fas fa-chart-bar"></i> 治療前HAM-D評価
+            </button>
+            <span id="hamd-result-display" class="fw-bold text-dark">
+              {% if baseline_assessment %}
+                HAMD17: <span class="fs-5">{{ baseline_assessment.total_score_17 }}</span> 点（評価済）
+              {% else %}
+                未評価
+              {% endif %}
+            </span>
+          </div>
+          <div class="text-muted small mt-1">
+            評価済みの点数が表示されます。未評価の場合は入力してください。
           </div>
         </div>
       </div>
     </div>
 
+    <!-- 質問票（アップロード版維持） -->
+    <div class="form-section" id="q_section">
+      <h5 class="section-title">rTMS 適正に関する質問票</h5>
+      <p class="text-muted small">※患者様への聴取結果を入力してください。</p>
+      <table class="q-table">
+        <thead class="table-light"><tr><th style="text-align: left;">質問項目</th><th width="80" class="text-center">はい</th><th width="80" class="text-center">いいえ</th></tr></thead>
+        <tbody>
+          <tr><td>rTMS実施経験</td><td class="text-center"><input type="radio" name="q_past_rtms" value="はい"></td><td class="text-center"><input type="radio" name="q_past_rtms" value="いいえ" checked></td></tr>
+          <tr><td>rTMSのあとに副作用などの不快な経験</td><td class="text-center"><input type="radio" name="q_past_side_effect" value="はい"></td><td class="text-center"><input type="radio" name="q_past_side_effect" value="いいえ" checked></td></tr>
+          <tr><td>電気けいれん療法（副作用の有無など）</td><td class="text-center"><input type="radio" name="q_past_ect" value="はい"></td><td class="text-center"><input type="radio" name="q_past_ect" value="いいえ" checked></td></tr>
+          <tr><td>けいれん発作（てんかんの診断の有無を問わない）</td><td class="text-center"><input type="radio" name="q_past_seizure" value="はい"></td><td class="text-center"><input type="radio" name="q_past_seizure" value="いいえ" checked></td></tr>
+          <tr><td>意識消失発作</td><td class="text-center"><input type="radio" name="q_past_loc" value="はい"></td><td class="text-center"><input type="radio" name="q_past_loc" value="いいえ" checked></td></tr>
+          <tr><td>脳卒中（脳梗塞や脳出血など）</td><td class="text-center"><input type="radio" name="q_past_stroke" value="はい"></td><td class="text-center"><input type="radio" name="q_past_stroke" value="いいえ" checked></td></tr>
+          <tr><td>頭部外傷（意識がなくなるなど重度なもの）</td><td class="text-center"><input type="radio" name="q_past_trauma" value="はい"></td><td class="text-center"><input type="radio" name="q_past_trauma" value="いいえ" checked></td></tr>
+          <tr><td>頭部の手術</td><td class="text-center"><input type="radio" name="q_past_surgery" value="はい"></td><td class="text-center"><input type="radio" name="q_past_surgery" value="いいえ" checked></td></tr>
+          <tr><td>脳外科もしくは神経内科の病気</td><td class="text-center"><input type="radio" name="q_past_neuro" value="はい"></td><td class="text-center"><input type="radio" name="q_past_neuro" value="いいえ" checked></td></tr>
+          <tr><td>脳障害をおこす可能性のある内科疾患</td><td class="text-center"><input type="radio" name="q_past_internal" value="はい"></td><td class="text-center"><input type="radio" name="q_past_internal" value="いいえ" checked></td></tr>
+          <tr><td>アルコールや薬物の乱用</td><td class="text-center"><input type="radio" name="q_past_abuse" value="はい"></td><td class="text-center"><input type="radio" name="q_past_abuse" value="いいえ" checked></td></tr>
+
+          <tr class="q-header-row"><td colspan="3">現在、以下のことはありますか？</td></tr>
+
+          <tr><td>頻繁または重度な頭痛</td><td class="text-center"><input type="radio" name="q_cur_headache" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_headache" value="いいえ" checked></td></tr>
+          <tr><td>頭の中に金属や磁性体（チタン製品かどうか要確認）</td><td class="text-center"><input type="radio" name="q_cur_metal" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_metal" value="いいえ" checked></td></tr>
+          <tr><td>体内埋め込み式の医療機器（心臓ペースメーカーなど）</td><td class="text-center"><input type="radio" name="q_cur_device" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_device" value="いいえ" checked></td></tr>
+          <tr><td>多量の飲酒や薬物の乱用</td><td class="text-center"><input type="radio" name="q_cur_abuse" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_abuse" value="いいえ" checked></td></tr>
+          <tr><td>妊娠中、もしくは妊娠の可能性が否定されない</td><td class="text-center"><input type="radio" name="q_cur_preg" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_preg" value="いいえ" checked></td></tr>
+          <tr><td>家族内にてんかんを持っているかた</td><td class="text-center"><input type="radio" name="q_cur_family_epilepsy" value="はい"></td><td class="text-center"><input type="radio" name="q_cur_family_epilepsy" value="いいえ" checked></td></tr>
+        </tbody>
+      </table>
+      <div class="mt-3">
+        <label class="form-label fw-bold small">「はい」とチェックした項目について、より詳しくおしえてください</label>
+        <textarea name="q_details" class="form-control" rows="4"></textarea>
+      </div>
+      <input type="hidden" name="questionnaire_data" id="questionnaire_json">
+    </div>
+
+    <!-- スケジュール（アップロード版維持） -->
+    <div class="form-section">
+      <h5 class="section-title">スケジュール・担当医設定</h5>
+      <div class="row g-3">
+        <div class="col-md-4"><label class="form-label text-primary fw-bold">入院予定日</label>{{ form.admission_date }}</div>
+        <div class="col-md-4"><label class="form-label text-warning fw-bold">初回位置決め日</label>{{ form.mapping_date }}</div>
+        <div class="col-md-4"><label class="form-label text-success fw-bold">初回治療日</label>{{ form.first_treatment_date }}</div>
+        <div class="col-md-8"><label class="form-label fw-bold">今後の担当医</label><div class="d-flex align-items-center">{{ form.attending_physician }}<span class="form-text ms-2 mb-0">※担当医を決めてください</span></div></div>
+      </div>
+    </div>
+
+    <div style="height: 60px;"></div>
+  </form>
+
+  {% url 'rtms_app:dashboard' as dashboard_url %}
+  {% if dashboard_date %}
+    {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+      {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=back_url %}
+    {% endwith %}
+  {% else %}
+    {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=dashboard_url %}
+  {% endif %}
 </div>
 
-<!-- HAM-D モーダル（ボタン+hidden+popover版） -->
-<div class="modal fade" id="hamdModal" tabindex="-1">
-  <div class="modal-dialog modal-xl">
+<!-- =========================
+     HAM-D Modal（button+hidden+popover 統一版）
+     ========================= -->
+{% if baseline_assessment %}
+  {{ baseline_assessment.scores|json_script:"baselineScores" }}
+{% else %}
+  {{ "{}"|json_script:"baselineScores" }}
+{% endif %}
+
+<div class="modal fade" id="hamdModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header bg-danger text-white">
         <h5 class="modal-title">治療前 HAM-D 評価</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
       </div>
 
-      <div class="modal-body">
+      <div class="modal-body bg-light">
         <form id="hamdForm">
           {% csrf_token %}
           <input type="hidden" name="hamd_ajax" value="true">
 
-          <div class="row g-3">
+          <div class="row g-2">
             <div class="col-lg-6">
               <div class="d-flex flex-column gap-2">
                 {% for key, label, max, text in hamd_items_left %}
@@ -245,17 +234,23 @@
                          data-bs-toggle="popover"
                          data-bs-placement="auto"
                          data-bs-html="false"
-                         data-bs-content="{{ text|default:''|escape }}"></i>
+                         data-bs-content="{{ text|escape }}"></i>
                     </div>
                     <div class="text-end">
-                      <input type="hidden" name="{{ key }}" id="id_{{ key }}" value="0">
+                      <input type="hidden" name="{{ key }}" value="0">
                       <div class="btn-group btn-group-sm hamd-btn-group" role="group" data-hamd-key="{{ key }}">
                         {% if max == 2 %}
-                          {% for v in "012"|make_list %}<button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>{% endfor %}
+                          {% for v in "012"|make_list %}
+                            <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
+                          {% endfor %}
                         {% elif max == 3 %}
-                          {% for v in "0123"|make_list %}<button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>{% endfor %}
+                          {% for v in "0123"|make_list %}
+                            <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
+                          {% endfor %}
                         {% else %}
-                          {% for v in "01234"|make_list %}<button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>{% endfor %}
+                          {% for v in "01234"|make_list %}
+                            <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
+                          {% endfor %}
                         {% endif %}
                       </div>
                     </div>
@@ -276,17 +271,23 @@
                          data-bs-toggle="popover"
                          data-bs-placement="auto"
                          data-bs-html="false"
-                         data-bs-content="{{ text|default:''|escape }}"></i>
+                         data-bs-content="{{ text|escape }}"></i>
                     </div>
                     <div class="text-end">
-                      <input type="hidden" name="{{ key }}" id="id_{{ key }}" value="0">
+                      <input type="hidden" name="{{ key }}" value="0">
                       <div class="btn-group btn-group-sm hamd-btn-group" role="group" data-hamd-key="{{ key }}">
                         {% if max == 2 %}
-                          {% for v in "012"|make_list %}<button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>{% endfor %}
+                          {% for v in "012"|make_list %}
+                            <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
+                          {% endfor %}
                         {% elif max == 3 %}
-                          {% for v in "0123"|make_list %}<button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>{% endfor %}
+                          {% for v in "0123"|make_list %}
+                            <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
+                          {% endfor %}
                         {% else %}
-                          {% for v in "01234"|make_list %}<button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>{% endfor %}
+                          {% for v in "01234"|make_list %}
+                            <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
+                          {% endfor %}
                         {% endif %}
                       </div>
                     </div>
@@ -297,12 +298,15 @@
           </div>
 
           <div class="mt-3 bg-white p-3 rounded border">
-            <div class="d-flex flex-wrap gap-3 align-items-center">
+            <label class="form-label fw-bold"><i class="fas fa-comment-dots me-1"></i>コメント・特記事項</label>
+            <textarea name="hamd_note" class="form-control" rows="3" placeholder="必要であれば入力してください"></textarea>
+          </div>
+
+          <div class="sticky-scorebar mt-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
               <div class="fw-bold">
-                HAMD17 合計: <span id="hamd17Total">0</span> 点
-              </div>
-              <div class="fw-bold">
-                判定: <span id="hamd17Severity">正常</span>
+                HAMD17 合計：<span id="hamd17Total" class="text-danger">0</span> 点
+                <span class="ms-2">重症度：<span id="hamd17Severity" class="text-primary">正常</span></span>
               </div>
               <div class="text-muted small">
                 HAMD17 参考基準: 0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23-:最重症
@@ -310,176 +314,186 @@
             </div>
           </div>
 
-          <div class="mt-3">
-            <label class="form-label fw-bold"><i class="fas fa-comment-dots me-1"></i>コメント・特記事項</label>
-            <textarea class="form-control" name="note" rows="3" placeholder="特記事項があれば入力してください">{{ baseline_assessment.note|default:"" }}</textarea>
-          </div>
-
         </form>
       </div>
 
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
-        <button type="button" class="btn btn-danger" id="hamdSaveBtn"><i class="fas fa-save me-1"></i> 保存</button>
+        <button type="button" class="btn btn-primary" id="btnSaveHamd">評価を保存して判定</button>
       </div>
     </div>
   </div>
 </div>
+{% endblock %}
 
-<!-- ============================================== -->
-<!-- ✅修正1: Bootstrap JS (Bundle) を最初に読み込む -->
-<!-- ============================================== -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
-<!-- ============================================== -->
-<!-- ✅修正2: HAM-Dデータ復元 (hamd_widget.js実行前) -->
-<!-- ============================================== -->
+{% block scripts %}
 <script>
-  {% if baseline_assessment %}
-  (function(){
-      // ウィジェットJSがロードされる前に、サーバー値を hidden inputs に入れておく
-      const scores = {{ baseline_assessment.scores|safe }};
-      if (scores) {
-          for (const [key, value] of Object.entries(scores)) {
-              // モーダル内の hidden input を探して値をセット
-              const hidden = document.querySelector(`#hamdForm input[name="${key}"][type="hidden"]`);
-              if (hidden) {
-                  hidden.value = value;
-              }
-          }
-      }
-  })();
-  {% endif %}
+  // 紹介元・紹介医の連携（アップロード版を維持）
+  const referralMap = JSON.parse('{{ referral_map_json|safe }}');
+  const sourceInput = document.querySelector('input[name="referral_source"]');
+  const doctorInput = document.querySelector('input[name="referral_doctor"]');
+  const doctorDatalist = document.getElementById('doctor-options');
+
+  function updateDoctorOptions() {
+    if (!sourceInput || !doctorDatalist) return;
+    const selectedSource = sourceInput.value;
+    doctorDatalist.innerHTML = '';
+    if (referralMap[selectedSource]) {
+      referralMap[selectedSource].forEach(docName => {
+        const option = document.createElement('option');
+        option.value = docName;
+        doctorDatalist.appendChild(option);
+      });
+    }
+  }
+
+  if (sourceInput) {
+    sourceInput.addEventListener('input', updateDoctorOptions);
+    sourceInput.addEventListener('change', updateDoctorOptions);
+  }
+  if (doctorInput) doctorInput.setAttribute('list', 'doctor-options');
+
+  // 質問票 json 化（アップロード版維持）
+  const mainForm = document.getElementById('mainForm');
+  if (mainForm) {
+    mainForm.addEventListener('submit', function() {
+      const data = {};
+      document.querySelectorAll('input[type="radio"]:checked').forEach(r => { data[r.name] = r.value; });
+      const details = document.querySelector('textarea[name="q_details"]');
+      data['q_details'] = details ? details.value : "";
+      const out = document.getElementById('questionnaire_json');
+      if (out) out.value = JSON.stringify(data);
+    });
+  }
 </script>
 
-<!-- ============================================== -->
-<!-- ✅修正3: ウィジェットJSの読み込み -->
-<!-- ============================================== -->
+<!-- Bootstrap bundle（Popover/Modal必須） -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- baseline scores を hidden に先に流し込む（hamd_widget が restore できるように） -->
+<script>
+  (function(){
+    const el = document.getElementById("baselineScores");
+    if (!el) return;
+    let scores = {};
+    try { scores = JSON.parse(el.textContent || "{}"); } catch(e) { scores = {}; }
+    for (const [key, value] of Object.entries(scores)) {
+      const hidden = document.querySelector(`#hamdForm input[name="${key}"][type="hidden"]`);
+      if (hidden) hidden.value = String(value);
+    }
+  })();
+</script>
+
+<!-- hamd_widget.js（static 配置先：rtms_app/static/rtms_app/hamd_widget.js を想定） -->
 <script src="{% static 'rtms_app/hamd_widget.js' %}"></script>
 
-<!-- その他のページ固有スクリプト -->
 <script>
-    // 紹介元・紹介医の連携ロジック
-    const referralMap = JSON.parse('{{ referral_map_json|safe }}');
-    const sourceInput = document.querySelector('input[name="referral_source"]');
-    const doctorInput = document.querySelector('input[name="referral_doctor"]');
-    const doctorDatalist = document.getElementById('doctor-options');
+  // 初診HAM-D 保存（暗転フリーズ対策：必ずmodal/backdropを掃除）
+  async function saveHamdAjax() {
+    const form = document.getElementById('hamdForm');
+    const btn = document.getElementById('btnSaveHamd');
+    if (!form || !btn) return;
 
-    function updateDoctorOptions() {
-        const selectedSource = sourceInput.value;
-        doctorDatalist.innerHTML = '';
-        if (referralMap[selectedSource]) {
-            referralMap[selectedSource].forEach(docName => {
-                const option = document.createElement('option');
-                option.value = docName;
-                doctorDatalist.appendChild(option);
-            });
+    btn.disabled = true;
+    btn.textContent = "保存中…";
+
+    try {
+      const formData = new FormData(form); // csrf は form 内の hidden を使う（appendしない）
+      const res = await fetch(window.location.href, {
+        method: 'POST',
+        body: formData,
+        headers: {'X-Requested-With': 'XMLHttpRequest'}
+      });
+
+      let data = null;
+      try { data = await res.json(); } catch(e) { data = null; }
+
+      if (!res.ok || !data || data.status !== 'success') {
+        const msg = (data && data.message) ? data.message : `保存に失敗しました (HTTP ${res.status})`;
+        throw new Error(msg);
+      }
+
+      // 表示更新
+      const disp = document.getElementById('hamd-result-display');
+      if (disp) {
+        disp.innerHTML = `HAMD17: <span class="fs-5">${data.total_17}</span> 点（評価済） 判定: ${data.severity}`;
+      }
+
+      // 中等症の場合、質問票へ誘導
+      if (Number(data.total_17) >= 14 && Number(data.total_17) <= 18) {
+        const qSection = document.getElementById('q_section');
+        if (qSection) {
+          qSection.scrollIntoView({ behavior: 'smooth' });
+          qSection.style.border = "2px solid #dc3545";
+          setTimeout(() => { qSection.style.border = "none"; }, 2000);
         }
+      }
+
+      // モーダルを閉じる（確実に）
+      const modalEl = document.getElementById('hamdModal');
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      modal.hide();
+
+      // backdrop除去（万一残った場合の保険）
+      setTimeout(() => {
+        document.body.classList.remove('modal-open');
+        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+        document.body.style.removeProperty('padding-right');
+      }, 250);
+
+    } catch (err) {
+      alert("エラー: " + (err?.message || err));
+      // 失敗時でも backdrop が残らないよう掃除
+      document.body.classList.remove('modal-open');
+      document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+      document.body.style.removeProperty('padding-right');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "評価を保存して判定";
     }
-    if (sourceInput) {
-        sourceInput.addEventListener('input', updateDoctorOptions);
-        sourceInput.addEventListener('change', updateDoctorOptions);
-    }
-    if (doctorInput) {
-        doctorInput.setAttribute('list', 'doctor-options');
-    }
+  }
 
-    // JSONデータの構築 (送信前)
-    document.getElementById('mainForm').addEventListener('submit', function(e) {
-        const data = {}; 
-        document.querySelectorAll('input[type="radio"]:checked').forEach(r => { data[r.name] = r.value; });
-        const details = document.querySelector('textarea[name="q_details"]');
-        if (details) data['q_details'] = details.value;
-        document.getElementById('questionnaire_json').value = JSON.stringify(data);
-    });
+  document.addEventListener('DOMContentLoaded', function() {
+    updateDoctorOptions();
 
-    // HAM-D Ajax保存
-    function saveHamd() {
-        const form = document.getElementById('hamdForm');
-        const formData = new FormData(form);
-        formData.append('hamd_ajax', 'true');
-        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-
-        fetch(window.location.href, {
-            method: 'POST',
-            body: formData,
-            headers: {'X-Requested-With': 'XMLHttpRequest'}
-        })
-        .then(response => response.json())
-        .then(data => {
-            if(data.status === 'success') {
-                // モーダルを閉じる
-                const modalEl = document.getElementById('hamdModal');
-                const modal = bootstrap.Modal.getOrCreateInstance(modalEl); 
-                modal.hide();
-
-                // 結果表示の更新
-                document.getElementById('hamd-result-display').innerHTML = 
-                    `HAM-D17: <span class="fs-5">${data.total_17}</span> 点 (評価済)`;
-
-                alert(data.message + "\n(合計: " + data.total_17 + "点)");
-
-                // 中等度(14点)以上の場合、質問票へ誘導するUX
-                if (data.total_17 >= 14) {
-                    const qSection = document.getElementById('q_section');
-                    if (qSection) {
-                        qSection.scrollIntoView({ behavior: 'smooth' });
-                        // 少し目立たせる
-                        qSection.style.transition = "box-shadow 0.5s";
-                        qSection.style.boxShadow = "0 0 10px rgba(220, 53, 69, 0.5)";
-                        setTimeout(() => { qSection.style.boxShadow = "none"; }, 2000);
-                    }
-                }
-            } else {
-                alert('エラーが発生しました: ' + data.message);
-            }
-        })
-        .catch(err => {
-            console.error(err);
-            alert('通信エラーが発生しました。');
-        });
-    }
-
-    document.getElementById('hamdSaveBtn')?.addEventListener('click', saveHamd);
-
-    document.addEventListener('DOMContentLoaded', function() {
-        // 診断名のチェックボックス復元
-        const diagStr = "{{ patient.diagnosis }}";
-        if(diagStr) {
-            const diags = diagStr.split(', ');
-            diags.forEach(d => {
-                const el = document.querySelector(`input[name="diag_list"][value="${d}"]`);
-                if(el) el.checked = true;
-                const otherMatch = d.match(/^その他\((.+)\)$/);
-                if (otherMatch && otherMatch[1]) { 
-                    const otherInput = document.querySelector('input[name="diag_other"]');
-                    if(otherInput) otherInput.value = otherMatch[1]; 
-                }
-            });
-        } else {
-            // デフォルトでうつ病にチェック
-            const depEl = document.getElementById('d_dep');
-            if(depEl) depEl.checked = true;
+    // 診断名復元（アップロード版維持）
+    const diagStr = "{{ patient.diagnosis }}";
+    if(diagStr) {
+      const diags = diagStr.split(', ');
+      diags.forEach(d => {
+        const el = document.querySelector(`input[name="diag_list"][value="${d}"]`);
+        if(el) el.checked = true;
+        const otherMatch = d.match(/^その他\((.+)\)$/);
+        if (otherMatch && otherMatch[1]) {
+          const other = document.querySelector('input[name="diag_other"]');
+          if (other) other.value = otherMatch[1];
         }
-        
-        // 質問票データの復元
-        const raw = '{{ patient.questionnaire_data|safe }}';
-        if(raw && raw !== '{}' && raw !== 'None' && raw !== 'null') {
-            try {
-                const data = JSON.parse(raw);
-                for (const [key, value] of Object.entries(data)) {
-                    if (key === 'q_details') { 
-                        const txt = document.querySelector('textarea[name="q_details"]'); 
-                        if(txt) txt.value = value; 
-                    } else { 
-                        const el = document.querySelector(`input[name="${key}"][value="${value}"]`); 
-                        if(el) el.checked = true; 
-                    }
-                }
-            } catch(e) { console.error("JSON parse error", e); }
+      });
+    } else {
+      const depEl = document.getElementById('d_dep');
+      if(depEl) depEl.checked = true;
+    }
+
+    // 質問票復元（アップロード版維持）
+    const raw = '{{ patient.questionnaire_data|safe }}';
+    if(raw && raw !== '{}' && raw !== 'None' && raw !== 'null') {
+      try {
+        const data = JSON.parse(raw);
+        for (const [key, value] of Object.entries(data)) {
+          if (key === 'q_details') {
+            const txt = document.querySelector('textarea[name="q_details"]');
+            if(txt) txt.value = value;
+          } else {
+            const el = document.querySelector(`input[name="${key}"][value="${value}"]`);
+            if(el) el.checked = true;
+          }
         }
-        
-        if (typeof updateDoctorOptions === 'function') updateDoctorOptions();
-    });
+      } catch(e) {}
+    }
+
+    // 保存ボタンイベント
+    const btn = document.getElementById('btnSaveHamd');
+    if (btn) btn.addEventListener('click', saveHamdAjax);
+  });
 </script>
 {% endblock %}
