@@ -1,13 +1,11 @@
-// static/rtms_app/hamd_widget.js
+// rtms_app/static/rtms_app/hamd_widget.js
 (function () {
-  // ---- Device detection ----
   function isTouchDevice() {
     return (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) ||
       ("ontouchstart" in window) ||
       (navigator.maxTouchPoints > 0);
   }
 
-  // ---- Severity calculation ----
   function getSeverity(total) {
     if (total <= 7) return "正常";
     if (total <= 13) return "軽症";
@@ -16,7 +14,6 @@
     return "最重症";
   }
 
-  // ---- HAMD17 calculation ----
   function calcHAMD17() {
     let total = 0;
     for (let i = 1; i <= 17; i++) {
@@ -32,7 +29,6 @@
     if (sevEl) sevEl.textContent = getSeverity(total);
   }
 
-  // ---- Button group handling ----
   function initButtonGroups() {
     document.querySelectorAll('.hamd-btn-group').forEach(group => {
       const key = group.dataset.hamdKey;
@@ -42,20 +38,15 @@
       const buttons = group.querySelectorAll('.hamd-btn');
       buttons.forEach(btn => {
         btn.addEventListener('click', () => {
-          // Remove active from all buttons in group
           buttons.forEach(b => b.classList.remove('active'));
-          // Add active to clicked button
           btn.classList.add('active');
-          // Update hidden input
           hidden.value = btn.dataset.value;
-          // Recalculate total
           calcHAMD17();
         });
       });
     });
   }
 
-  // ---- Popover initialization ----
   function initPopovers() {
     if (!window.bootstrap || !bootstrap.Popover) return;
 
@@ -70,7 +61,6 @@
       });
     });
 
-    // Touch device: close on outside click
     if (isTouchDevice()) {
       document.addEventListener("click", (e) => {
         const clickedTrigger = e.target.closest('[data-bs-toggle="popover"]');
@@ -86,30 +76,28 @@
     }
   }
 
-  // ---- Restore existing values ----
   function restoreValues() {
     document.querySelectorAll('.hamd-btn-group').forEach(group => {
       const key = group.dataset.hamdKey;
       const hidden = document.querySelector(`input[name="${key}"][type="hidden"]`);
-      if (!hidden || !hidden.value) return;
+      if (!hidden) return;
 
+      const current = String(hidden.value ?? "0");
       const buttons = group.querySelectorAll('.hamd-btn');
       buttons.forEach(btn => {
-        if (btn.dataset.value === hidden.value) {
+        btn.classList.remove('active');
+        if (String(btn.dataset.value) === current) {
           btn.classList.add('active');
         }
       });
     });
-    // Calculate after restore
     calcHAMD17();
   }
 
-  // ---- Boot ----
   function boot() {
     initButtonGroups();
     initPopovers();
     restoreValues();
-    // Extra calculations for safety
     setTimeout(calcHAMD17, 50);
     setTimeout(calcHAMD17, 200);
   }
@@ -120,7 +108,5 @@
     boot();
   }
 
-  // Expose for manual calls
   window.calcHAMD17 = calcHAMD17;
-})();</content>
-<parameter name="filePath">/Users/kuniyuki/rTMS/static/rtms_app/hamd_widget.js
+})();
