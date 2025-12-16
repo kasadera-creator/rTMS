@@ -258,7 +258,7 @@ def generate_calendar_weeks(patient):
     base_end = patient.discharge_date
     if not base_end:
         if treatment_end_est:
-            base_end = treatment_end_est + timedelta(days=7)  # 余白を7日に増やす
+            base_end = treatment_end_est + timedelta(days=14)  # 余白を14日に増やす
         else:
             base_end = base_start + timedelta(days=60)
             
@@ -336,16 +336,15 @@ def generate_calendar_weeks(patient):
         
     if current_week: calendar_weeks.append(current_week)
     
-    # 評価イベントを期限最終日に追加
+    # 評価イベントを window_end に追加
     for timing in ['baseline', 'week3', 'week6']:
-        deadline = get_assessment_deadline(patient, timing)
-        if deadline and start_date <= deadline <= end_date:
+        ws, we = get_assessment_window(patient, timing)
+        if we and start_date <= we <= end_date:
             # 該当日の day_info を探す
             for week in calendar_weeks:
                 for day in week:
-                    if day['date'] == deadline:
+                    if day['date'] == we:
                         existing = Assessment.objects.filter(patient=patient, timing=timing).exists()
-                        ws, we = get_assessment_window(patient, timing)
                         label = {
                             'baseline': f'治療前評価（HAM-D） ({we.strftime("%m/%d")})',
                             'week3': f'第3週目評価（HAM-D） ({we.strftime("%m/%d")})',
@@ -357,7 +356,7 @@ def generate_calendar_weeks(patient):
                             'type': 'assessment',
                             'label': label,
                             'url': build_url('assessment_add', [patient.id, timing], query={'from': 'clinical_path'}),
-                            'date': deadline,
+                            'date': we,
                             'timing': timing,
                             'window_end': we
                         }
@@ -839,8 +838,6 @@ def assessment_add(request, patient_id, timing):
                     }
                 )
 
-            return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else "rtms_app:dashboard")
-
             # クリニカルパスから来た場合は戻す
             if from_page == "clinical_path":
                 url = reverse("rtms_app:patient_clinical_path", args=[patient.id])
@@ -848,6 +845,8 @@ def assessment_add(request, patient_id, timing):
                     url += f"?dashboard_date={dashboard_date}"
                 url += f"&focus={assessment.date.strftime('%Y-%m-%d')}"
                 return redirect(url)
+
+            return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else "rtms_app:dashboard")
 
         except Exception as e:
             import traceback

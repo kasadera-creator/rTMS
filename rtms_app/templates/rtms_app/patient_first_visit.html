@@ -488,57 +488,19 @@
             } catch(e) {}
         }
         updateDoctorOptions();
+
+        // 既存HAM-Dスコア復元
+        {% if baseline_assessment %}
+        const scores = {{ baseline_assessment.scores|safe }};
+        for (const [key, value] of Object.entries(scores)) {
+            const hidden = document.querySelector(`#hamdForm input[name="${key}"][type="hidden"]`);
+            if (hidden) hidden.value = value;
+        }
+        {% endif %}
     });
 </script>
 {% endblock %}
 
 {% block extrascript %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-
-    // popover 初期化
-    document.querySelectorAll('[data-bs-toggle="popover"]').forEach(el => {
-        new bootstrap.Popover(el);
-    });
-
-    {% if scores %}
-        // 既存スコア復元（再編集時など）
-        const scores = {{ scores|safe }};
-        for (const [key, value] of Object.entries(scores)) {
-            const radio = document.getElementById(`id_${key}_${value}`);
-            if (radio) radio.checked = true;
-        }
-    {% else %}
-        // 初期値は全項目 0
-        document.querySelectorAll('input.btn-check[value="0"]').forEach(r => r.checked = true);
-    {% endif %}
-
-    // HAM-D リアルタイム計算
-    function calcHAMD17() {
-        let total = 0;
-        for (let i=1; i<=17; i++) {
-            const el = document.getElementById("id_q"+i);
-            if (!el) continue;
-            const v = parseInt(el.value || "0", 10);
-            total += isNaN(v) ? 0 : v;
-        }
-        document.getElementById("hamd17Total").textContent = String(total);
-
-        let sev = "正常";
-        if (total >= 23) sev = "最重症";
-        else if (total >= 19) sev = "重症";
-        else if (total >= 14) sev = "中等症";
-        else if (total >= 8) sev = "軽症";
-        document.getElementById("hamd17Severity").textContent = sev;
-    }
-
-    // 監視
-    document.querySelectorAll('input[type="radio"]').forEach(el => {
-        el.addEventListener("change", calcHAMD17);
-    });
-
-    calcHAMD17();
-});
-</script>
 {% endblock %}
