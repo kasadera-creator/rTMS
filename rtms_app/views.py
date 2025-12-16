@@ -319,11 +319,11 @@ def generate_calendar_weeks(patient):
         
         # 5. 退院
         if current == patient.discharge_date:
-            day_info['events'].append({'type': 'discharge', 'label': '退院', 'url': build_url('patient_home', [patient.id])})
+            day_info['events'].append({'type': 'discharge', 'label': '退院準備', 'url': build_url('patient_home', [patient.id])})
 
         elif not patient.discharge_date and treatment_start:
             if treatment_end_est and current == treatment_end_est + timedelta(days=1):
-                day_info['events'].append({'type': 'discharge', 'label': '退院予定'})
+                day_info['events'].append({'type': 'discharge', 'label': '退院準備（予定）', 'url': build_url('patient_home', [patient.id])})
 
         current_week.append(day_info)
         
@@ -437,6 +437,18 @@ def dashboard_view(request):
                     if assessment.date == target_date: task_assessment.append({'obj': p, 'status': "実施済", 'color': "success", 'timing_code': target_timing, 'todo': f"{todo_label} (完了)"})
                 else: task_assessment.append({'obj': p, 'status': "実施未", 'color': "danger", 'timing_code': target_timing, 'todo': todo_label})
         if session_count_so_far == 30: task_discharge.append({'obj': p, 'status': "退院準備", 'color': "info", 'todo': "サマリー・紹介状作成"})
+
+    # 退院準備: 退院日が確定している患者
+    discharge_patients = Patient.objects.filter(discharge_date=target_date)
+    for p in discharge_patients:
+        task_discharge.append({'obj': p, 'status': "退院準備", 'color': "info", 'todo': "サマリー・紹介状作成"})
+
+    # 退院準備: 退院日未設定だが推定退院日+1日の患者
+    for p in active_candidates:
+        if p.discharge_date: continue  # 既に上記で追加済み
+        treatment_end_est = get_completion_date(p.first_treatment_date)
+        if treatment_end_est and target_date == treatment_end_est + timedelta(days=1):
+            task_discharge.append({'obj': p, 'status': "退院準備（予定）", 'color': "info", 'todo': "サマリー・紹介状作成"})
 
     dashboard_tasks = [{'list': task_first_visit, 'title': "① 初診", 'color': "bg-g-1", 'icon': "fa-user-plus"}, {'list': task_admission, 'title': "② 入院", 'color': "bg-g-2", 'icon': "fa-procedures"}, {'list': task_mapping, 'title': "③ 位置決め", 'color': "bg-g-3", 'icon': "fa-crosshairs"}, {'list': task_treatment, 'title': "④ 治療実施", 'color': "bg-g-4", 'icon': "fa-bolt"}, {'list': task_assessment, 'title': "⑤ 尺度評価", 'color': "bg-g-5", 'icon': "fa-clipboard-check"}, {'list': task_discharge, 'title': "⑥ 退院準備", 'color': "bg-g-6", 'icon': "fa-file-export"}]
     return render(request, 'rtms_app/dashboard.html', {'today': target_date, 'target_date_display': target_date_display, 'prev_day': prev_day, 'next_day': next_day, 'today_raw': jst_now.date(), 'dashboard_tasks': dashboard_tasks})
