@@ -71,15 +71,20 @@
                     <div class="fw-bold compact-label">{{ label }}</div>
                     <i class="fas fa-info-circle help-icon"
                        tabindex="0"
-                       data-bs-toggle="popover"
+                       data-hamd-popover
                        data-bs-placement="auto"
                        data-bs-html="false"
                        data-bs-content="{{ text|escape }}"></i>
                   </div>
                   <div class="text-end">
-                    <input type="number" name="{{ key }}" id="id_{{ key }}" class="form-control form-control-sm score-input hamd-score"
-                           min="0" max="{{ max }}" value="0" required>
-                    <div class="text-muted small">(0-{{ max }})</div>
+                    <div class="btn-group btn-group-sm" role="group">
+                      {% for v in "0123456789"|make_list %}
+                        {% if forloop.counter0 <= max %}
+                          <input type="radio" class="btn-check" name="{{ key }}" id="{{ key }}_{{v}}" value="{{v}}">
+                          <label class="btn btn-outline-primary" for="{{ key }}_{{v}}">{{v}}</label>
+                        {% endif %}
+                      {% endfor %}
+                    </div>
                   </div>
                 </div>
               {% endfor %}
@@ -95,14 +100,20 @@
                     <div class="fw-bold compact-label">{{ label }}</div>
                     <i class="fas fa-info-circle help-icon"
                        tabindex="0"
-                       data-bs-toggle="popover"
+                       data-hamd-popover
+                       data-bs-placement="auto"
                        data-bs-html="false"
                        data-bs-content="{{ text|escape }}"></i>
                   </div>
                   <div class="text-end">
-                    <input type="number" name="{{ key }}" id="id_{{ key }}" class="form-control form-control-sm score-input hamd-score"
-                           min="0" max="{{ max }}" value="0" required>
-                    <div class="text-muted small">(0-{{ max }})</div>
+                    <div class="btn-group btn-group-sm" role="group">
+                      {% for v in "0123456789"|make_list %}
+                        {% if forloop.counter0 <= max %}
+                          <input type="radio" class="btn-check" name="{{ key }}" id="{{ key }}_{{v}}" value="{{v}}">
+                          <label class="btn btn-outline-primary" for="{{ key }}_{{v}}">{{v}}</label>
+                        {% endif %}
+                      {% endfor %}
+                    </div>
                   </div>
                 </div>
               {% endfor %}
@@ -149,72 +160,17 @@
   {% include "rtms_app/partials/floating_actions.html" with back_url=dashboard_url form_id='assessmentForm' %}
 {% endif %}
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{% static 'rtms_app/js/hamd_common.js' %}"></script>
 <script>
-  function isTouchDevice() {
-    return (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) ||
-           ("ontouchstart" in window) ||
-           (navigator.maxTouchPoints > 0);
-  }
-
-  function initPopovers() {
-    const trigger = isTouchDevice() ? "click" : "hover focus";
-    document.querySelectorAll('[data-bs-toggle="popover"]').forEach(el => {
-      new bootstrap.Popover(el, { trigger, container: "body" });
-    });
-
-    // touch端末：外側タップで閉じる
-    if (isTouchDevice()) {
-      document.addEventListener("click", (e) => {
-        const pop = document.querySelector(".popover");
-        const clickedHelp = e.target.closest('[data-bs-toggle="popover"]');
-        if (!clickedHelp && pop && !pop.contains(e.target)) {
-          document.querySelectorAll('[data-bs-toggle="popover"]').forEach(el => {
-            const inst = bootstrap.Popover.getInstance(el);
-            if (inst) inst.hide();
-          });
-        }
-      });
-    }
-  }
-
-  function calcHAMD17() {
-    let total = 0;
-    for (let i=1; i<=17; i++) {
-      const el = document.getElementById("id_q"+i);
-      if (!el) continue;
-      const v = parseInt(el.value || "0", 10);
-      total += isNaN(v) ? 0 : v;
-    }
-    document.getElementById("hamd17Total").textContent = String(total);
-
-    let sev = "正常";
-    if (total >= 23) sev = "最重症";
-    else if (total >= 19) sev = "重症";
-    else if (total >= 14) sev = "中等症";
-    else if (total >= 8) sev = "軽症";
-    document.getElementById("hamd17Severity").textContent = sev;
-  }
-
   window.addEventListener("load", function() {
-    initPopovers();
-
     // 既存データの復元
     {% if existing_assessment %}
       const scores = {{ existing_assessment.scores|safe }};
       for (const [key, value] of Object.entries(scores)) {
-        const input = document.getElementById('id_' + key);
-        if (input) input.value = value;
+        const radio = document.getElementById(key + '_' + value);
+        if (radio) radio.checked = true;
       }
     {% endif %}
-
-    // 監視
-    document.querySelectorAll(".hamd-score").forEach(el => {
-      el.addEventListener("input", calcHAMD17);
-      el.addEventListener("change", calcHAMD17);
-    });
-
-    calcHAMD17();
   });
 </script>
 {% endblock %}

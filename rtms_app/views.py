@@ -344,10 +344,11 @@ def generate_calendar_weeks(patient):
                 for day in week:
                     if day['date'] == deadline:
                         existing = Assessment.objects.filter(patient=patient, timing=timing).exists()
+                        ws, we = get_assessment_window(patient, timing)
                         label = {
-                            'baseline': '治療前評価',
-                            'week3': '中間評価',
-                            'week6': '最終評価'
+                            'baseline': f'治療前評価 ({we.strftime("%m/%d")})',
+                            'week3': f'中間評価 ({we.strftime("%m/%d")})',
+                            'week6': f'最終評価 ({we.strftime("%m/%d")})'
                         }.get(timing, timing)
                         if existing:
                             label += ' (済)'
@@ -414,7 +415,7 @@ def dashboard_view(request):
         ws, we = get_assessment_window(p, 'baseline')
         if ws <= target_date <= we:
             done = Assessment.objects.filter(patient=p, timing='baseline').exists()
-            if not done: task_assessment.append({'obj': p, 'status': "実施未", 'color': "danger", 'timing_code': 'baseline', 'todo': "治療前評価"})
+            if not done: task_assessment.append({'obj': p, 'status': "実施未", 'color': "danger", 'timing_code': 'baseline', 'todo': f"治療前評価 ({we.strftime('%m/%d')})"})
             elif Assessment.objects.filter(patient=p, timing='baseline', date=target_date).exists(): task_assessment.append({'obj': p, 'status': "実施済", 'color': "success", 'timing_code': 'baseline', 'todo': "治療前評価 (完了)"})
 
     active_candidates = Patient.objects.filter(first_treatment_date__lte=target_date).order_by('card_id')
@@ -435,7 +436,7 @@ def dashboard_view(request):
                 assessment = Assessment.objects.filter(patient=p, timing=target_timing, date__range=[ws, we]).first()
                 if assessment:
                     if assessment.date == target_date: task_assessment.append({'obj': p, 'status': "実施済", 'color': "success", 'timing_code': target_timing, 'todo': f"{todo_label} (完了)"})
-                else: task_assessment.append({'obj': p, 'status': "実施未", 'color': "danger", 'timing_code': target_timing, 'todo': todo_label})
+                else: task_assessment.append({'obj': p, 'status': "実施未", 'color': "danger", 'timing_code': target_timing, 'todo': f"{todo_label} ({we.strftime('%m/%d')})"})
         if session_count_so_far == 30: task_discharge.append({'obj': p, 'status': "退院準備", 'color': "info", 'todo': "サマリー・紹介状作成"})
 
     # 退院準備: 退院日が確定している患者
