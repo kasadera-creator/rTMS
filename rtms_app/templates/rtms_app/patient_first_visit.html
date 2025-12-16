@@ -236,21 +236,25 @@
                     <div class="row">
                         <!-- 左カラム -->
                         <div class="col-md-6">
+                            {% if hamd_items_left %}
                             {% for key, label, max, text in hamd_items_left %}
                             <div class="d-flex justify-content-between align-items-center hamd-input-group">
                                 <span class="hamd-label small">{{ label }}</span>
                                 <input type="number" name="{{ key }}" class="form-control form-control-sm hamd-input" min="0" max="{{ max }}" value="0">
                             </div>
                             {% endfor %}
+                            {% endif %}
                         </div>
                         <!-- 右カラム -->
                         <div class="col-md-6">
+                            {% if hamd_items_right %}
                             {% for key, label, max, text in hamd_items_right %}
                             <div class="d-flex justify-content-between align-items-center hamd-input-group">
                                 <span class="hamd-label small">{{ label }}</span>
                                 <input type="number" name="{{ key }}" class="form-control form-control-sm hamd-input" min="0" max="{{ max }}" value="0">
                             </div>
                             {% endfor %}
+                            {% endif %}
                         </div>
                     </div>
                 </form>
