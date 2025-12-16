@@ -38,7 +38,6 @@
         <!-- 1. 基本情報 -->
         <div class="form-section">
             <h5 class="section-title">基本情報・サマリー</h5>
-            <!-- (省略なしで記述) -->
             <div class="row g-3 mb-3">
                 <div class="col-md-3"><label class="form-label fw-bold">カルテID</label>{{ form.card_id }}</div>
                 <div class="col-md-3"><label class="form-label fw-bold">氏名</label>{{ form.name }}</div>
@@ -68,8 +67,7 @@
                 </div>
                 {{ form.diagnosis }}
                 
-                                <div class="diag-check-group mt-1">
-                    <!-- 診断名リスト (省略せず記述) -->
+                <div class="diag-check-group mt-1">
                     <div class="row g-2">
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="うつ病" id="d_dep"><label class="form-check-label" for="d_dep">うつ病</label></div></div>
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="双極症" id="d_bp"><label class="form-check-label" for="d_bp">双極症</label></div></div>
@@ -89,6 +87,8 @@
                         <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="diag_list" value="パーキンソン病" id="d_parkinson"><label class="form-check-label" for="d_parkinson">パーキンソン病</label></div></div>
                         <div class="col-12 mt-2"><label class="small text-muted fw-bold">詳細・その他の診断名 (認知症の型などもこちらへ)</label><input type="text" name="diag_other" class="form-control form-control-sm" placeholder="例: アルツハイマー型認知症、レビー小体型認知症など"></div>
                     </div>
+                </div>
+
                 <div class="my-3 p-3 bg-light border rounded">
                     <div class="d-flex align-items-center">
                         <button type="button" class="btn btn-outline-danger btn-sm me-3" data-bs-toggle="modal" data-bs-target="#hamdModal">
@@ -106,7 +106,7 @@
                     <div class="text-muted small mt-1">
                         評価済みの点数が表示されます。未評価の場合は入力してください。
                     </div>
-                </div></div>
+                </div>
             </div>
         </div>
 
@@ -114,7 +114,6 @@
             <h5 class="section-title">rTMS 適正に関する質問票</h5>
             <p class="text-muted small">※患者様への聴取結果を入力してください。</p>
             <table class="q-table">
-                <!-- (質問票テーブルも省略せずに記述) -->
                 <thead class="table-light"><tr><th style="text-align: left;">質問項目</th><th width="80" class="text-center">はい</th><th width="80" class="text-center">いいえ</th></tr></thead>
                 <tbody>
                     <tr><td>rTMS実施経験</td><td class="text-center"><input type="radio" name="q_past_rtms" value="はい"></td><td class="text-center"><input type="radio" name="q_past_rtms" value="いいえ" checked></td></tr>
@@ -155,74 +154,67 @@
     </form>
 
     {% url 'rtms_app:dashboard' as dashboard_url %}
-{% if dashboard_date %}
-  {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
-    {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=back_url %}
-  {% endwith %}
-{% else %}
-  {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=dashboard_url %}
-{% endif %}
+    {% if dashboard_date %}
+      {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+        {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=back_url %}
+      {% endwith %}
+    {% else %}
+      {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=dashboard_url %}
+    {% endif %}
 
-<div class="form-section">
-  <h5 class="section-title">印刷</h5>
+    <div class="form-section">
+      <h5 class="section-title">印刷</h5>
 
-  <div class="row g-3">
-    <!-- 初診時印刷 -->
-    <div class="col-lg-7">
-      <div class="p-3 border rounded bg-light">
-        <div class="fw-bold mb-2">初診時 印刷</div>
-
-        <form id="bundlePrintFormFirstVisit"
-              action="{% url 'rtms_app:patient_print_bundle' patient.id %}"
-              method="get"
-              target="_blank">
-
-          <div class="d-flex flex-wrap gap-3">
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" name="docs" value="admission" id="docAdmissionBottom" checked>
-              <label class="form-check-label" for="docAdmissionBottom">入院時サマリ</label>
-            </div>
-
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" name="docs" value="suitability" id="docSuitabilityBottom" checked>
-              <label class="form-check-label" for="docSuitabilityBottom">rTMS問診票</label>
-            </div>
+      <div class="row g-3">
+        <!-- 初診時印刷 -->
+        <div class="col-lg-7">
+          <div class="p-3 border rounded bg-light">
+            <div class="fw-bold mb-2">初診時 印刷</div>
+            <form id="bundlePrintFormFirstVisit"
+                  action="{% url 'rtms_app:patient_print_bundle' patient.id %}"
+                  method="get"
+                  target="_blank">
+              <div class="d-flex flex-wrap gap-3">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="docs" value="admission" id="docAdmissionBottom" checked>
+                  <label class="form-check-label" for="docAdmissionBottom">入院時サマリ</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="docs" value="suitability" id="docSuitabilityBottom" checked>
+                  <label class="form-check-label" for="docSuitabilityBottom">rTMS問診票</label>
+                </div>
+              </div>
+              {% if dashboard_date %}
+                <input type="hidden" name="dashboard_date" value="{{ dashboard_date }}">
+              {% endif %}
+              <div class="mt-3">
+                <button type="submit" class="btn btn-primary">
+                  印刷プレビュー
+                </button>
+                <div class="text-muted small mt-2">
+                  ※選択した書類をまとめてプレビュー表示します（同意書は別ボタン）
+                </div>
+              </div>
+            </form>
           </div>
+        </div>
 
-          {% if dashboard_date %}
-            <input type="hidden" name="dashboard_date" value="{{ dashboard_date }}">
-          {% endif %}
-
-          <div class="mt-3">
-            <button type="submit" class="btn btn-primary">
-              印刷プレビュー
-            </button>
+        <!-- 説明同意文書 -->
+        <div class="col-lg-5">
+          <div class="p-3 border rounded bg-white">
+            <div class="fw-bold mb-2">説明同意文書 印刷</div>
+            <a class="btn btn-outline-primary"
+               href="{% url 'rtms_app:latest_consent' %}"
+               target="consent_pdf" rel="noopener">
+              説明同意書を表示・印刷
+            </a>
             <div class="text-muted small mt-2">
-              ※選択した書類をまとめてプレビュー表示します（同意書は別ボタン）
+              ※最新の同意書PDFを別タブで開きます。
             </div>
           </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- 説明同意文書 -->
-    <div class="col-lg-5">
-      <div class="p-3 border rounded bg-white">
-        <div class="fw-bold mb-2">説明同意文書 印刷</div>
-
-        <a class="btn btn-outline-primary"
-           href="{% url 'rtms_app:latest_consent' %}"
-           target="consent_pdf" rel="noopener">
-          説明同意書を表示・印刷
-        </a>
-
-        <div class="text-muted small mt-2">
-          ※最新の同意書PDFを別タブで開きます。
         </div>
       </div>
     </div>
-  </div>
-</div>
 
 </div>
 
@@ -334,72 +326,45 @@
   </div>
 </div>
 
-{% endblock %}
-
-{# baseline既存scoresを hidden に反映（hamd_widget.js より先に） #}
-{% if baseline_assessment %}
-  {{ baseline_assessment.scores|json_script:"baselineScores" }}
-{% else %}
-  {{ "{}"|json_script:"baselineScores" }}
-{% endif %}
-
+<!-- ============================================== -->
+<!-- ✅修正1: Bootstrap JS (Bundle) を最初に読み込む -->
+<!-- ============================================== -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
+<!-- ============================================== -->
+<!-- ✅修正2: HAM-Dデータ復元 (hamd_widget.js実行前) -->
+<!-- ============================================== -->
 <script>
+  {% if baseline_assessment %}
   (function(){
-    const el = document.getElementById("baselineScores");
-    if (!el) return;
-    let scores = {};
-    try { scores = JSON.parse(el.textContent || "{}"); } catch(e) { scores = {}; }
-    Object.entries(scores).forEach(([k,v]) => {
-      const hid = document.querySelector(`#hamdModal input[type="hidden"][name="${k}"]`);
-      if (hid) hid.value = String(v);
-    });
-  })();
-</script>
-
-<script src="{% static 'rtms_app/hamd_widget.js' %}"></script>
-
-<script>
-  // 既存のAjax保存ロジック：hidden inputs でも FormData に入るのでそのまま動く
-  function saveHamd() {
-    const form = document.getElementById('hamdForm');
-    const formData = new FormData(form);
-    fetch(window.location.href, {
-      method: 'POST',
-      body: formData,
-      headers: {'X-Requested-With': 'XMLHttpRequest'}
-    })
-    .then(r => r.json())
-    .then(data => {
-      if (data.status === 'success') {
-        // summaryを書き換え（views側が total_17 / severity を返す前提。返さない場合は adjust）
-        const summary = document.getElementById('baselineHamdSummary');
-        if (summary) {
-          summary.className = "alert alert-success mb-0";
-          summary.innerHTML = `HAMD17: <span class="fs-5">${data.total_17}</span> 点（評価済）`;
-        }
-        const modalEl = document.getElementById('hamdModal');
-        const m = bootstrap.Modal.getInstance(modalEl);
-        if (m) m.hide();
-      } else {
-        alert(data.message || "保存に失敗しました。");
+      // ウィジェットJSがロードされる前に、サーバー値を hidden inputs に入れておく
+      const scores = {{ baseline_assessment.scores|safe }};
+      if (scores) {
+          for (const [key, value] of Object.entries(scores)) {
+              // モーダル内の hidden input を探して値をセット
+              const hidden = document.querySelector(`#hamdForm input[name="${key}"][type="hidden"]`);
+              if (hidden) {
+                  hidden.value = value;
+              }
+          }
       }
-    })
-    .catch(() => alert("通信エラーが発生しました。"));
-  }
-
-  document.getElementById('hamdSaveBtn')?.addEventListener('click', saveHamd);
+  })();
+  {% endif %}
 </script>
 
-{% block scripts %}
+<!-- ============================================== -->
+<!-- ✅修正3: ウィジェットJSの読み込み -->
+<!-- ============================================== -->
 <script src="{% static 'rtms_app/hamd_widget.js' %}"></script>
+
+<!-- その他のページ固有スクリプト -->
 <script>
     // 紹介元・紹介医の連携ロジック
     const referralMap = JSON.parse('{{ referral_map_json|safe }}');
     const sourceInput = document.querySelector('input[name="referral_source"]');
     const doctorInput = document.querySelector('input[name="referral_doctor"]');
     const doctorDatalist = document.getElementById('doctor-options');
+
     function updateDoctorOptions() {
         const selectedSource = sourceInput.value;
         doctorDatalist.innerHTML = '';
@@ -411,18 +376,24 @@
             });
         }
     }
-    sourceInput.addEventListener('input', updateDoctorOptions);
-    sourceInput.addEventListener('change', updateDoctorOptions);
-    doctorInput.setAttribute('list', 'doctor-options');
+    if (sourceInput) {
+        sourceInput.addEventListener('input', updateDoctorOptions);
+        sourceInput.addEventListener('change', updateDoctorOptions);
+    }
+    if (doctorInput) {
+        doctorInput.setAttribute('list', 'doctor-options');
+    }
 
+    // JSONデータの構築 (送信前)
     document.getElementById('mainForm').addEventListener('submit', function(e) {
         const data = {}; 
         document.querySelectorAll('input[type="radio"]:checked').forEach(r => { data[r.name] = r.value; });
-        data['q_details'] = document.querySelector('textarea[name="q_details"]').value;
+        const details = document.querySelector('textarea[name="q_details"]');
+        if (details) data['q_details'] = details.value;
         document.getElementById('questionnaire_json').value = JSON.stringify(data);
     });
 
-    // HAM-D Ajax保存 (修正: モーダル操作の堅牢化)
+    // HAM-D Ajax保存
     function saveHamd() {
         const form = document.getElementById('hamdForm');
         const formData = new FormData(form);
@@ -444,26 +415,35 @@
 
                 // 結果表示の更新
                 document.getElementById('hamd-result-display').innerHTML = 
-                    `HAM-D17: <span class="fs-5">${data.total_17}</span> 点 判定: ${data.severity}`;
+                    `HAM-D17: <span class="fs-5">${data.total_17}</span> 点 (評価済)`;
 
                 alert(data.message + "\n(合計: " + data.total_17 + "点)");
 
-                // 中等度(14-18)の場合、質問票へ誘導
-                if (data.total_17 >= 14 && data.total_17 <= 18) {
+                // 中等度(14点)以上の場合、質問票へ誘導するUX
+                if (data.total_17 >= 14) {
                     const qSection = document.getElementById('q_section');
-                    qSection.scrollIntoView({ behavior: 'smooth' });
-                    // オプション: 質問票エリアを目立たせる
-                    qSection.style.border = "2px solid #dc3545";
-                    setTimeout(() => { qSection.style.border = "none"; }, 2000);
+                    if (qSection) {
+                        qSection.scrollIntoView({ behavior: 'smooth' });
+                        // 少し目立たせる
+                        qSection.style.transition = "box-shadow 0.5s";
+                        qSection.style.boxShadow = "0 0 10px rgba(220, 53, 69, 0.5)";
+                        setTimeout(() => { qSection.style.boxShadow = "none"; }, 2000);
+                    }
                 }
             } else {
                 alert('エラーが発生しました: ' + data.message);
             }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('通信エラーが発生しました。');
         });
     }
 
+    document.getElementById('hamdSaveBtn')?.addEventListener('click', saveHamd);
+
     document.addEventListener('DOMContentLoaded', function() {
-        // (診断名や質問票の復元処理は変更なし)
+        // 診断名のチェックボックス復元
         const diagStr = "{{ patient.diagnosis }}";
         if(diagStr) {
             const diags = diagStr.split(', ');
@@ -471,13 +451,18 @@
                 const el = document.querySelector(`input[name="diag_list"][value="${d}"]`);
                 if(el) el.checked = true;
                 const otherMatch = d.match(/^その他\((.+)\)$/);
-                if (otherMatch && otherMatch[1]) { document.querySelector('input[name="diag_other"]').value = otherMatch[1]; }
+                if (otherMatch && otherMatch[1]) { 
+                    const otherInput = document.querySelector('input[name="diag_other"]');
+                    if(otherInput) otherInput.value = otherMatch[1]; 
+                }
             });
         } else {
+            // デフォルトでうつ病にチェック
             const depEl = document.getElementById('d_dep');
             if(depEl) depEl.checked = true;
         }
         
+        // 質問票データの復元
         const raw = '{{ patient.questionnaire_data|safe }}';
         if(raw && raw !== '{}' && raw !== 'None' && raw !== 'null') {
             try {
@@ -491,22 +476,10 @@
                         if(el) el.checked = true; 
                     }
                 }
-            } catch(e) {}
+            } catch(e) { console.error("JSON parse error", e); }
         }
-        updateDoctorOptions();
-
-        // 既存HAM-Dスコア復元
-        {% if baseline_assessment %}
-        const scores = {{ baseline_assessment.scores|safe }};
-        for (const [key, value] of Object.entries(scores)) {
-            const hidden = document.querySelector(`#hamdForm input[name="${key}"][type="hidden"]`);
-            if (hidden) hidden.value = value;
-        }
-        {% endif %}
+        
+        if (typeof updateDoctorOptions === 'function') updateDoctorOptions();
     });
 </script>
-{% endblock %}
-
-{% block extrascript %}
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 {% endblock %}
