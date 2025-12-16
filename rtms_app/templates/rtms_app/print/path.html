@@ -74,9 +74,7 @@
     <div class="page-sheet page-break-after">
         <h2 class="text-center fw-bold mb-2">rTMS治療スケジュール</h2>
         <div class="d-flex justify-content-between mb-2 border-bottom border-dark pb-1" style="font-size: 10.5pt;">
-            <div>氏名: <strong>{{ patient.name }} 様</strong></div>
-            <div>ID: {{ patient.card_id }} {% if patient.course_number > 1 %}({{ patient.course_number }}クール目){% endif %}</div>
-            <div>担当医: {{ patient.attending_physician.last_name }} 先生</div>
+            <div>氏名: <strong>{{ patient.name }} 様</strong>　ID: {{ patient.card_id }} {% if patient.course_number > 1 %}({{ patient.course_number }}クール目){% endif %}　担当医: {{ patient.attending_physician.last_name }} 先生</div>
         </div>
 
         <table class="cal-table">
