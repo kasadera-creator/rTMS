@@ -346,16 +346,16 @@ def generate_calendar_weeks(patient):
                         existing = Assessment.objects.filter(patient=patient, timing=timing).exists()
                         ws, we = get_assessment_window(patient, timing)
                         label = {
-                            'baseline': f'治療前評価 ({we.strftime("%m/%d")})',
-                            'week3': f'中間評価 ({we.strftime("%m/%d")})',
-                            'week6': f'最終評価 ({we.strftime("%m/%d")})'
+                            'baseline': f'治療前評価（HAM-D） ({we.strftime("%m/%d")})',
+                            'week3': f'第3週目評価（HAM-D） ({we.strftime("%m/%d")})',
+                            'week6': f'第6週目評価（HAM-D） ({we.strftime("%m/%d")})'
                         }.get(timing, timing)
                         if existing:
                             label += ' (済)'
                         day['events'].append({
                             'type': 'assessment',
                             'label': label,
-                            'url': build_url('assessment_add', [patient.id, timing])
+                            'url': build_url('assessment_add', [patient.id, timing], query={'from': 'clinical_path'})
                         })
                         break
     
@@ -600,8 +600,9 @@ def patient_first_visit(request, patient_id):
             try:
                 scores = {}
                 for key, _, _, _ in hamd_items: scores[key] = int(request.POST.get(key, 0))
-                if baseline_assessment: assessment = baseline_assessment; assessment.scores = scores
-                else: assessment = Assessment(patient=patient, date=timezone.now().date(), type='HAM-D', scores=scores, timing='baseline')
+                note = request.POST.get('hamd_note', '').strip()
+                if baseline_assessment: assessment = baseline_assessment; assessment.scores = scores; assessment.note = note
+                else: assessment = Assessment(patient=patient, date=timezone.now().date(), type='HAM-D', scores=scores, timing='baseline', note=note)
                 assessment.calculate_scores(); assessment.save()
                 total = assessment.total_score_17; msg = ""; severity = ""
                 if 14 <= total <= 18: severity = "中等症"; msg = "中等症と判定しました。rTMS適正質問票を確認してください。"
@@ -705,6 +706,7 @@ def treatment_add(request, patient_id):
 def assessment_add(request, patient_id, timing):
     patient = get_object_or_404(Patient, pk=patient_id)
     dashboard_date = request.GET.get("dashboard_date")
+    from_page = request.GET.get("from")
 
     # Validate timing against model choices to prevent tampering
     allowed = [c[0] for c in Assessment.TIMING_CHOICES]
@@ -832,6 +834,14 @@ def assessment_add(request, patient_id, timing):
                 )
 
             return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else "rtms_app:dashboard")
+
+            # クリニカルパスから来た場合は戻す
+            if from_page == "clinical_path":
+                url = reverse("rtms_app:patient_clinical_path", args=[patient.id])
+                if dashboard_date:
+                    url += f"?dashboard_date={dashboard_date}"
+                url += f"&focus={assessment.date.strftime('%Y-%m-%d')}"
+                return redirect(url)
 
         except Exception as e:
             import traceback

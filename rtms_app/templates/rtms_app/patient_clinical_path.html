@@ -82,7 +82,8 @@
                     <tr>
                         {% for day in week %}
                         <td class="{% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %} {% if day.url %}clickable{% endif %}"
-                            {% if day.url %}onclick="window.location.href='{{ day.url }}'"{% endif %}>
+                            {% if day.url %}onclick="window.location.href='{{ day.url }}'"{% endif %}
+                            data-date="{{ day.date|date:'Y-m-d' }}">
                             
                             <span class="date-num">
                                 {{ day.date|date:"n/j" }}
@@ -121,4 +122,16 @@
   {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=dashboard_url %}
 {% endif %}
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.addEventListener("load", function() {
+    const params = new URLSearchParams(window.location.search);
+    const focus = params.get("focus");
+    if (!focus) return;
+    const el = document.querySelector(`[data-date="${focus}"]`);
+    if (el) el.scrollIntoView({behavior:"smooth", block:"center"});
+  });
+</script>
 {% endblock %}
