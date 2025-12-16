@@ -119,6 +119,20 @@
             </tbody>
         </table>
 
+        <div class="mt-3" style="font-size: 10pt;">
+            <strong>評価結果:</strong>
+            {% for event in assessment_events %}
+                {% if event.timing == 'baseline' %}
+                    治療前評価: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %} ({{ event.window_end|date:"m/d" }})
+                {% elif event.timing == 'week3' %}
+                    第3週目評価: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %} ({{ event.window_end|date:"m/d" }})
+                {% elif event.timing == 'week6' %}
+                    第6週目評価: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %} ({{ event.window_end|date:"m/d" }})
+                {% endif %}
+                {% if not forloop.last %} / {% endif %}
+            {% endfor %}
+        </div>
+
         <div class="mt-1 text-end" style="font-size: 8.5pt;">※スケジュールは治療経過や病院の都合により変更になる場合があります。<span style="color:#dc3545;">赤色(祝日)</span>は治療がお休みです。</div>
     </div>
 

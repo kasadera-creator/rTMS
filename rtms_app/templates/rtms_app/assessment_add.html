@@ -77,21 +77,19 @@
                        data-bs-content="{{ text|escape }}"></i>
                   </div>
                   <div class="text-end">
-                    <div class="btn-group btn-group-sm" role="group" aria-label="score">
+                    <input type="hidden" name="{{ key }}" value="0">
+                    <div class="btn-group btn-group-sm hamd-btn-group" role="group" data-hamd-key="{{ key }}">
                       {% if max == 2 %}
                         {% for v in "012"|make_list %}
-                          <input type="radio" class="btn-check" name="{{ key }}" id="{{ key }}_{{ v }}" value="{{ v }}" data-hamd-score="1">
-                          <label class="btn btn-outline-primary" for="{{ key }}_{{ v }}" data-hamd-label="1">{{ v }}</label>
+                          <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
                         {% endfor %}
                       {% elif max == 3 %}
                         {% for v in "0123"|make_list %}
-                          <input type="radio" class="btn-check" name="{{ key }}" id="{{ key }}_{{ v }}" value="{{ v }}" data-hamd-score="1">
-                          <label class="btn btn-outline-primary" for="{{ key }}_{{ v }}" data-hamd-label="1">{{ v }}</label>
+                          <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
                         {% endfor %}
                       {% else %}
                         {% for v in "01234"|make_list %}
-                          <input type="radio" class="btn-check" name="{{ key }}" id="{{ key }}_{{ v }}" value="{{ v }}" data-hamd-score="1">
-                          <label class="btn btn-outline-primary" for="{{ key }}_{{ v }}" data-hamd-label="1">{{ v }}</label>
+                          <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
                         {% endfor %}
                       {% endif %}
                     </div>
@@ -116,21 +114,19 @@
                        data-bs-content="{{ text|escape }}"></i>
                   </div>
                   <div class="text-end">
-                    <div class="btn-group btn-group-sm" role="group" aria-label="score">
+                    <input type="hidden" name="{{ key }}" value="0">
+                    <div class="btn-group btn-group-sm hamd-btn-group" role="group" data-hamd-key="{{ key }}">
                       {% if max == 2 %}
                         {% for v in "012"|make_list %}
-                          <input type="radio" class="btn-check" name="{{ key }}" id="{{ key }}_{{ v }}" value="{{ v }}" data-hamd-score="1">
-                          <label class="btn btn-outline-primary" for="{{ key }}_{{ v }}" data-hamd-label="1">{{ v }}</label>
+                          <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
                         {% endfor %}
                       {% elif max == 3 %}
                         {% for v in "0123"|make_list %}
-                          <input type="radio" class="btn-check" name="{{ key }}" id="{{ key }}_{{ v }}" value="{{ v }}" data-hamd-score="1">
-                          <label class="btn btn-outline-primary" for="{{ key }}_{{ v }}" data-hamd-label="1">{{ v }}</label>
+                          <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
                         {% endfor %}
                       {% else %}
                         {% for v in "01234"|make_list %}
-                          <input type="radio" class="btn-check" name="{{ key }}" id="{{ key }}_{{ v }}" value="{{ v }}" data-hamd-score="1">
-                          <label class="btn btn-outline-primary" for="{{ key }}_{{ v }}" data-hamd-label="1">{{ v }}</label>
+                          <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
                         {% endfor %}
                       {% endif %}
                     </div>
@@ -180,18 +176,16 @@
   {% include "rtms_app/partials/floating_actions.html" with back_url=dashboard_url form_id='assessmentForm' %}
 {% endif %}
 
-<script src="{% static 'rtms_app/js/hamd_common.js' %}"></script>
+<script src="{% static 'rtms_app/js/hamd_widget.js' %}"></script>
 <script>
   window.addEventListener("load", function() {
     // 既存データの復元
     {% if existing_assessment %}
       const scores = {{ existing_assessment.scores|safe }};
       for (const [key, value] of Object.entries(scores)) {
-        const r = document.querySelector(`input[name="${key}"][value="${value}"]`);
-        if (r) r.checked = true;
+        const hidden = document.querySelector(`input[name="${key}"][type="hidden"]`);
+        if (hidden) hidden.value = value;
       }
-      // 復元後に再計算
-      if (window.calcHAMD17) window.calcHAMD17();
     {% endif %}
   });
 </script>

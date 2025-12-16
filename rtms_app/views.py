@@ -258,7 +258,7 @@ def generate_calendar_weeks(patient):
     base_end = patient.discharge_date
     if not base_end:
         if treatment_end_est:
-            base_end = treatment_end_est + timedelta(days=1)
+            base_end = treatment_end_est + timedelta(days=7)  # 余白を7日に増やす
         else:
             base_end = base_start + timedelta(days=60)
             
@@ -275,6 +275,7 @@ def generate_calendar_weeks(patient):
     
     mapping_dates = list(MappingSession.objects.filter(patient=patient).values_list('date', flat=True))
     treatments_done = {t.date.date(): t for t in TreatmentSession.objects.filter(patient=patient)}
+    assessment_events = []  # 評価イベントを別途収集
 
     while current <= end_date:
         is_hol = is_holiday(current)
@@ -352,14 +353,19 @@ def generate_calendar_weeks(patient):
                         }.get(timing, timing)
                         if existing:
                             label += ' (済)'
-                        day['events'].append({
+                        event = {
                             'type': 'assessment',
                             'label': label,
-                            'url': build_url('assessment_add', [patient.id, timing], query={'from': 'clinical_path'})
-                        })
+                            'url': build_url('assessment_add', [patient.id, timing], query={'from': 'clinical_path'}),
+                            'date': deadline,
+                            'timing': timing,
+                            'window_end': we
+                        }
+                        day['events'].append(event)
+                        assessment_events.append(event)
                         break
     
-    return calendar_weeks
+    return calendar_weeks, assessment_events
 
 HAMD_ANCHORS = {
     "q1": "0. なし\n1. 質問をされた時のみ示される（一時的、軽度のうつ状態）\n2. 自ら言葉で訴える（持続的、軽度から中等度のうつ状態）\n3. 言葉を使わなくとも伝わる（例えば、表情・姿勢・声・涙もろさ）（持続的、中等度から重度のうつ状態）\n4. 言語的にも、非言語的にも、事実上こうした気分の状態のみが、自然に表現される（持続的、極めて重度のうつ状態、希望のなさや涙もろさが顕著）",
@@ -428,8 +434,8 @@ def dashboard_view(request):
             task_treatment.append({'obj': p, 'note': f"第{week_num}週 ({current_count}回目)", 'status': "実施済" if is_done else "実施未", 'color': "success" if is_done else "danger", 'session_num': current_count, 'todo': "rTMS治療"})
         
         target_timing = None; todo_label = ""
-        if week_num == 3: target_timing = 'week3'; todo_label = "中間評価 (第3週)"
-        elif week_num == 6: target_timing = 'week6'; todo_label = "最終評価 (第6週)"
+        if week_num == 3: target_timing = 'week3'; todo_label = "第3週目評価"
+        elif week_num == 6: target_timing = 'week6'; todo_label = "第6週目評価"
         if target_timing:
             ws, we = get_assessment_window(p, target_timing)
             if ws <= target_date <= we:
@@ -1037,12 +1043,13 @@ def patient_print_summary(request, pk):
 @login_required
 def print_clinical_path(request, patient_id: int):
     patient = get_object_or_404(Patient, id=patient_id)
-    calendar_weeks = generate_calendar_weeks(patient)
+    calendar_weeks, assessment_events = generate_calendar_weeks(patient)
     return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
     back_url = return_to or reverse("rtms_app:patient_clinical_path", args=[patient.id])
     return render(request, "rtms_app/print/path.html", {
         "patient": patient,
         "calendar_weeks": calendar_weeks,
+        "assessment_events": assessment_events,
         "back_url": back_url,
     })
 
@@ -1170,7 +1177,7 @@ def patient_clinical_path(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     dashboard_date = request.GET.get('dashboard_date')
     # ★修正: generate_calendar_weeks を使用
-    calendar_weeks = generate_calendar_weeks(patient)
+    calendar_weeks, assessment_events = generate_calendar_weeks(patient)
     last_assessment = Assessment.objects.filter(patient=patient, timing='week3').order_by('-date').first()
     baseline_assessment = Assessment.objects.filter(patient=patient, timing='baseline').order_by('-date').first()
     week6_assessment = Assessment.objects.filter(patient=patient, timing='week6').order_by('-date').first()
@@ -1185,6 +1192,7 @@ def patient_clinical_path(request, patient_id):
     return render(request, 'rtms_app/patient_clinical_path.html', {
         'patient': patient,
         'calendar_weeks': calendar_weeks,
+        'assessment_events': assessment_events,
         'last_assessment': last_assessment,
         'baseline_assessment': baseline_assessment,
         'week6_assessment': week6_assessment,
@@ -1198,7 +1206,7 @@ def patient_clinical_path(request, patient_id):
 def patient_print_path(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     # ★修正: generate_calendar_weeks を使用
-    calendar_weeks = generate_calendar_weeks(patient)
+    calendar_weeks, assessment_events = generate_calendar_weeks(patient)
     return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
     back_url = return_to or reverse("rtms_app:patient_clinical_path", args=[patient.id])
     log_audit_action(patient, 'PRINT', 'ClinicalPath', '', '臨床経過表印刷', {
@@ -1209,6 +1217,7 @@ def patient_print_path(request, patient_id):
     return render(request, 'rtms_app/print/path.html', {
         'patient': patient,
         'calendar_weeks': calendar_weeks,
+        'assessment_events': assessment_events,
         'back_url': back_url,
     })
 

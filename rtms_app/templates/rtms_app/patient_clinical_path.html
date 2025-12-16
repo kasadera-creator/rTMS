@@ -53,15 +53,15 @@
 
         <div class="mb-4">
             <h5>評価結果</h5>
-            {% if baseline_assessment %}
-            <p>治療前評価: {{ baseline_assessment.total_score_17 }}点 ({{ baseline_assessment.date }})</p>
-            {% endif %}
-            {% if last_assessment %}
-            <p>3週目評価: {{ last_assessment.total_score_17 }}点 ({{ last_assessment.date }})</p>
-            {% endif %}
-            {% if week6_assessment %}
-            <p>6週目評価: {{ week6_assessment.total_score_17 }}点 ({{ week6_assessment.date }})</p>
-            {% endif %}
+            {% for event in assessment_events %}
+                {% if event.timing == 'baseline' %}
+                    <p>治療前評価: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %} ({{ event.window_end|date:"m/d" }})</p>
+                {% elif event.timing == 'week3' %}
+                    <p>第3週目評価: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %} ({{ event.window_end|date:"m/d" }})</p>
+                {% elif event.timing == 'week6' %}
+                    <p>第6週目評価: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %} ({{ event.window_end|date:"m/d" }})</p>
+                {% endif %}
+            {% endfor %}
         </div>
 
         <div class="table-responsive">

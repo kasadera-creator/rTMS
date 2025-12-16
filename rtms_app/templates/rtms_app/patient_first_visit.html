@@ -295,21 +295,19 @@
                                        data-bs-content="{{ text|escape }}"></i>
                                 </div>
                                 <div class="text-end">
-                                    <div class="btn-group btn-group-sm" role="group" aria-label="score">
+                                    <input type="hidden" name="{{ key }}" value="0">
+                                    <div class="btn-group btn-group-sm hamd-btn-group" role="group" data-hamd-key="{{ key }}">
                                         {% if max == 2 %}
                                             {% for v in "012"|make_list %}
-                                            <input type="radio" class="btn-check" name="{{ key }}" id="{{ key }}_{{ v }}" value="{{ v }}" data-hamd-score="1">
-                                            <label class="btn btn-outline-primary" for="{{ key }}_{{ v }}" data-hamd-label="1">{{ v }}</label>
+                                            <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
                                             {% endfor %}
                                         {% elif max == 3 %}
                                             {% for v in "0123"|make_list %}
-                                            <input type="radio" class="btn-check" name="{{ key }}" id="{{ key }}_{{ v }}" value="{{ v }}" data-hamd-score="1">
-                                            <label class="btn btn-outline-primary" for="{{ key }}_{{ v }}" data-hamd-label="1">{{ v }}</label>
+                                            <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
                                             {% endfor %}
                                         {% else %}
                                             {% for v in "01234"|make_list %}
-                                            <input type="radio" class="btn-check" name="{{ key }}" id="{{ key }}_{{ v }}" value="{{ v }}" data-hamd-score="1">
-                                            <label class="btn btn-outline-primary" for="{{ key }}_{{ v }}" data-hamd-label="1">{{ v }}</label>
+                                            <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
                                             {% endfor %}
                                         {% endif %}
                                     </div>
@@ -335,21 +333,19 @@
                                        data-bs-content="{{ text|escape }}"></i>
                                 </div>
                                 <div class="text-end">
-                                    <div class="btn-group btn-group-sm" role="group" aria-label="score">
+                                    <input type="hidden" name="{{ key }}" value="0">
+                                    <div class="btn-group btn-group-sm hamd-btn-group" role="group" data-hamd-key="{{ key }}">
                                         {% if max == 2 %}
                                             {% for v in "012"|make_list %}
-                                            <input type="radio" class="btn-check" name="{{ key }}" id="{{ key }}_{{ v }}" value="{{ v }}" data-hamd-score="1">
-                                            <label class="btn btn-outline-primary" for="{{ key }}_{{ v }}" data-hamd-label="1">{{ v }}</label>
+                                            <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
                                             {% endfor %}
                                         {% elif max == 3 %}
                                             {% for v in "0123"|make_list %}
-                                            <input type="radio" class="btn-check" name="{{ key }}" id="{{ key }}_{{ v }}" value="{{ v }}" data-hamd-score="1">
-                                            <label class="btn btn-outline-primary" for="{{ key }}_{{ v }}" data-hamd-label="1">{{ v }}</label>
+                                            <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
                                             {% endfor %}
                                         {% else %}
                                             {% for v in "01234"|make_list %}
-                                            <input type="radio" class="btn-check" name="{{ key }}" id="{{ key }}_{{ v }}" value="{{ v }}" data-hamd-score="1">
-                                            <label class="btn btn-outline-primary" for="{{ key }}_{{ v }}" data-hamd-label="1">{{ v }}</label>
+                                            <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
                                             {% endfor %}
                                         {% endif %}
                                     </div>
@@ -391,7 +387,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{% static 'rtms_app/js/hamd_common.js' %}"></script>
+<script src="{% static 'rtms_app/js/hamd_widget.js' %}"></script>
 <script>
     // 紹介元・紹介医の連携ロジック
     const referralMap = JSON.parse('{{ referral_map_json|safe }}');
