@@ -605,7 +605,15 @@ def assessment_add(request, patient_id, timing):
             return HttpResponse("治療前評価は第1回治療当日までに行ってください。")
     
     history = Assessment.objects.filter(patient=patient).order_by('date')
-    hamd_items = [('q1', '1. 抑うつ気分', 4, ""), ('q2', '2. 罪責感', 4, ""), ('q3', '3. 自殺', 4, ""), ('q4', '4. 入眠障害', 2, ""), ('q5', '5. 熟眠障害', 2, ""), ('q6', '6. 早朝睡眠障害', 2, ""), ('q7', '7. 仕事と活動', 4, ""), ('q8', '8. 精神運動抑制', 4, ""), ('q9', '9. 精神運動激越', 4, ""), ('q10', '10. 不安, 精神症状', 4, ""), ('q11', '11. 不安, 身体症状', 4, ""), ('q12', '12. 身体症状, 消化器系', 2, ""), ('q13', '13. 身体症状, 一般的', 2, ""), ('q14', '14. 生殖器症状', 2, ""), ('q15', '15. 心気症', 4, ""), ('q16', '16. 体重減少', 2, ""), ('q17', '17. 病識', 2, ""), ('q18', '18. 日内変動', 2, ""), ('q19', '19. 現実感喪失, 離人症', 4, ""), ('q20', '20. 妄想症状', 3, ""), ('q21', '21. 強迫症状', 2, "")]
+    hamd_items = [
+        ('q1', '1. 抑うつ気分', 4, ""), ('q2', '2. 罪責感', 4, ""), ('q3', '3. 自殺', 4, ""), 
+        ('q4', '4. 入眠障害', 2, ""), ('q5', '5. 熟眠障害', 2, ""), ('q6', '6. 早朝睡眠障害', 2, ""), 
+        ('q7', '7. 仕事と活動', 4, ""), ('q8', '8. 精神運動抑制', 4, ""), ('q9', '9. 精神運動激越', 4, ""), 
+        ('q10', '10. 不安, 精神症状', 4, ""), ('q11', '11. 不安, 身体症状', 4, ""), ('q12', '12. 身体症状, 消化器系', 2, ""), 
+        ('q13', '13. 身体症状, 一般的', 2, ""), ('q14', '14. 生殖器症状', 2, ""), ('q15', '15. 心気症', 4, ""), 
+        ('q16', '16. 体重減少', 2, ""), ('q17', '17. 病識', 2, ""), ('q18', '18. 日内変動', 2, ""), 
+        ('q19', '19. 現実感喪失, 離人症', 4, ""), ('q20', '20. 妄想症状', 3, ""), ('q21', '21. 強迫症状', 2, "")
+    ]
     mid_index = 11; hamd_items_left = hamd_items[:mid_index]; hamd_items_right = hamd_items[mid_index:]
     target_date_str = request.GET.get('date') or timezone.now().strftime('%Y-%m-%d')
     # timing is fixed by URL parameter and server-side validated above
@@ -617,6 +625,7 @@ def assessment_add(request, patient_id, timing):
             imp = (baseline.total_score_21 - existing_assessment.total_score_21) / baseline.total_score_21 * 100
             if imp < 20: recommendation = "【判定】反応不良 (改善率20%未満)。刺激部位やプロトコルの変更を検討してください。"
             else: recommendation = "【判定】治療継続 (順調に改善中)。"
+    
     if request.method == 'POST':
         try:
             scores = {}
@@ -634,9 +643,16 @@ def assessment_add(request, patient_id, timing):
                 return JsonResponse({'status': 'success', 'id': assessment.id})
             return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
         except Exception as e:
-            print(e)
+            # エラーログ出力
+            import traceback
+            traceback.print_exc()
             if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                 return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+            # ★修正: 非Ajax時のエラーハンドリング (再レンダリングする)
+            # エラーメッセージをコンテキストに含めると親切かもしれないが、まずは500を防ぐ
+            # ここで return しないと None が返り "NoneType object is not iterable" になる
+    
+    # GETリクエスト、またはPOST失敗時
     timing_display = dict(Assessment.TIMING_CHOICES).get(timing, timing)
     deadline = get_assessment_deadline(patient, timing)
     return render(request, 'rtms_app/assessment_add.html', {'patient': patient, 'history': history, 'today': target_date_str, 'hamd_items_left': hamd_items_left, 'hamd_items_right': hamd_items_right, 'initial_timing': timing, 'initial_timing_display': timing_display, 'existing_assessment': existing_assessment, 'recommendation': recommendation, 'dashboard_date': dashboard_date, 'deadline': deadline})
@@ -1002,5 +1018,3 @@ def latest_consent(request):
         return redirect(doc.file.url)
     # アップロードが無い / 初期化で消えた → 静的ファイルへフォールバック
     return redirect(static("rtms_app/docs/consent_default.pdf"))
-
-

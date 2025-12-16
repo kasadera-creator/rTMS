@@ -45,6 +45,7 @@
         </tbody>
     </table>
     
-    <a href="{% url 'rtms_app:patient_detail' patient.id %}" class="btn btn-secondary">戻る</a>
+    <!-- ★修正: 存在しない patient_detail を patient_first_visit に変更 -->
+    <a href="{% url 'rtms_app:patient_first_visit' patient.id %}" class="btn btn-secondary">戻る</a>
 </div>
 {% endblock %}
