@@ -89,6 +89,57 @@ def is_treatment_day(d):
     """治療実施日か判定（平日かつ祝日でない）"""
     return d.weekday() < 5 and not is_holiday(d)
 
+# =========================
+# Assessment window helpers
+# =========================
+def _first_last_treatment_day_in_range(start_d, end_d):
+    """start_d〜end_d の範囲で、治療日(is_treatment_day)の最初と最後を返す。無ければ (None, None)"""
+    cur = start_d
+    first = None
+    last = None
+    while cur <= end_d:
+        if is_treatment_day(cur):
+            if first is None:
+                first = cur
+            last = cur
+        cur += timedelta(days=1)
+    return first, last
+
+def get_assessment_window(patient, timing):
+    """
+    評価予定日レンジ(window)を返す: (window_start, window_end)
+    baseline: 初診日(created_at)〜初回治療日
+    week3: 第3週(14-20日後)の治療日(平日・祝日除外)の最初〜最後
+    week6: 第6週(35-41日後)の治療日(平日・祝日除外)の最初〜最後
+    """
+    # baseline
+    if timing == "baseline":
+        ws = patient.created_at.date() if patient.created_at else timezone.localdate()
+        we = patient.first_treatment_date or ws
+        return ws, we
+
+    if not patient.first_treatment_date:
+        today = timezone.localdate()
+        return today, today
+
+    ft = patient.first_treatment_date
+    if timing == "week3":
+        raw_start = ft + timedelta(days=14)
+        raw_end = ft + timedelta(days=20)
+    elif timing == "week6":
+        raw_start = ft + timedelta(days=35)
+        raw_end = ft + timedelta(days=41)
+    else:
+        today = timezone.localdate()
+        return today, today
+
+    ws, we = _first_last_treatment_day_in_range(raw_start, raw_end)
+    # 治療日が1日も無い極端ケースのフォールバック
+    if ws is None or we is None:
+        ws = raw_start
+        we = raw_end
+    return ws, we
+
 # --- ヘルパー関数 ---
 
 def get_session_number(start_date, target_date):
@@ -360,9 +411,11 @@ def dashboard_view(request):
 
     pre_candidates = Patient.objects.filter(admission_date__lte=target_date).filter(Q(first_treatment_date__isnull=True) | Q(first_treatment_date__gte=target_date))
     for p in pre_candidates:
-        done = Assessment.objects.filter(patient=p, timing='baseline').exists()
-        if not done: task_assessment.append({'obj': p, 'status': "実施未", 'color': "danger", 'timing_code': 'baseline', 'todo': "治療前評価"})
-        elif Assessment.objects.filter(patient=p, timing='baseline', date=target_date).exists(): task_assessment.append({'obj': p, 'status': "実施済", 'color': "success", 'timing_code': 'baseline', 'todo': "治療前評価 (完了)"})
+        ws, we = get_assessment_window(p, 'baseline')
+        if ws <= target_date <= we:
+            done = Assessment.objects.filter(patient=p, timing='baseline').exists()
+            if not done: task_assessment.append({'obj': p, 'status': "実施未", 'color': "danger", 'timing_code': 'baseline', 'todo': "治療前評価"})
+            elif Assessment.objects.filter(patient=p, timing='baseline', date=target_date).exists(): task_assessment.append({'obj': p, 'status': "実施済", 'color': "success", 'timing_code': 'baseline', 'todo': "治療前評価 (完了)"})
 
     active_candidates = Patient.objects.filter(first_treatment_date__lte=target_date).order_by('card_id')
     for p in active_candidates:
@@ -377,12 +430,12 @@ def dashboard_view(request):
         if week_num == 3: target_timing = 'week3'; todo_label = "中間評価 (第3週)"
         elif week_num == 6: target_timing = 'week6'; todo_label = "最終評価 (第6週)"
         if target_timing:
-            start_date = p.first_treatment_date; days_diff = (target_date - start_date).days; week_start_offset = (days_diff // 7) * 7
-            ws = start_date + timedelta(days=week_start_offset); we = ws + timedelta(days=6)
-            assessment = Assessment.objects.filter(patient=p, timing=target_timing, date__range=[ws, we]).first()
-            if assessment:
-                if assessment.date == target_date: task_assessment.append({'obj': p, 'status': "実施済", 'color': "success", 'timing_code': target_timing, 'todo': f"{todo_label} (完了)"})
-            else: task_assessment.append({'obj': p, 'status': "実施未", 'color': "danger", 'timing_code': target_timing, 'todo': todo_label})
+            ws, we = get_assessment_window(p, target_timing)
+            if ws <= target_date <= we:
+                assessment = Assessment.objects.filter(patient=p, timing=target_timing, date__range=[ws, we]).first()
+                if assessment:
+                    if assessment.date == target_date: task_assessment.append({'obj': p, 'status': "実施済", 'color': "success", 'timing_code': target_timing, 'todo': f"{todo_label} (完了)"})
+                else: task_assessment.append({'obj': p, 'status': "実施未", 'color': "danger", 'timing_code': target_timing, 'todo': todo_label})
         if session_count_so_far == 30: task_discharge.append({'obj': p, 'status': "退院準備", 'color': "info", 'todo': "サマリー・紹介状作成"})
 
     dashboard_tasks = [{'list': task_first_visit, 'title': "① 初診", 'color': "bg-g-1", 'icon': "fa-user-plus"}, {'list': task_admission, 'title': "② 入院", 'color': "bg-g-2", 'icon': "fa-procedures"}, {'list': task_mapping, 'title': "③ 位置決め", 'color': "bg-g-3", 'icon': "fa-crosshairs"}, {'list': task_treatment, 'title': "④ 治療実施", 'color': "bg-g-4", 'icon': "fa-bolt"}, {'list': task_assessment, 'title': "⑤ 尺度評価", 'color': "bg-g-5", 'icon': "fa-clipboard-check"}, {'list': task_discharge, 'title': "⑥ 退院準備", 'color': "bg-g-6", 'icon': "fa-file-export"}]
@@ -637,84 +690,164 @@ def treatment_add(request, patient_id):
 
 @login_required
 def assessment_add(request, patient_id, timing):
-    patient = get_object_or_404(Patient, pk=patient_id); dashboard_date = request.GET.get('dashboard_date')
+    patient = get_object_or_404(Patient, pk=patient_id)
+    dashboard_date = request.GET.get("dashboard_date")
+
     # Validate timing against model choices to prevent tampering
     allowed = [c[0] for c in Assessment.TIMING_CHOICES]
     if timing not in allowed:
         return HttpResponse(status=400)
-    
-    # 治療前評価の期限チェック
-    if timing == 'baseline':
-        today = timezone.now().date()
-        if patient.first_treatment_date and today > patient.first_treatment_date:
-            return HttpResponse("治療前評価は第1回治療当日までに行ってください。")
-    
-    history = Assessment.objects.filter(patient=patient).order_by('date')
+
+    # ★ 期限超過による強制終了はしない（要件変更）
+    # （ここにあった baseline の HttpResponse ブロックは削除）
+
+    history = Assessment.objects.filter(patient=patient).order_by("date")
+
     hamd_items = [
-    ('q1', '1. 抑うつ気分', 4, HAMD_ANCHORS['q1']),
-    ('q2', '2. 罪責感', 4, HAMD_ANCHORS['q2']),
-    ('q3', '3. 自殺', 4, HAMD_ANCHORS['q3']),
-    ('q4', '4. 入眠障害', 2, HAMD_ANCHORS['q4']),
-    ('q5', '5. 熟眠障害', 2, HAMD_ANCHORS['q5']),
-    ('q6', '6. 早朝睡眠障害', 2, HAMD_ANCHORS['q6']),
-    ('q7', '7. 仕事と活動', 4, HAMD_ANCHORS['q7']),
-    ('q8', '8. 精神運動抑制', 4, HAMD_ANCHORS['q8']),
-    ('q9', '9. 精神運動激越', 4, HAMD_ANCHORS['q9']),
-    ('q10', '10. 不安, 精神症状', 4, HAMD_ANCHORS['q10']),
-    ('q11', '11. 不安, 身体症状', 4, HAMD_ANCHORS['q11']),
-    ('q12', '12. 身体症状, 消化器系', 2, HAMD_ANCHORS['q12']),
-    ('q13', '13. 身体症状, 一般的', 2, HAMD_ANCHORS['q13']),
-    ('q14', '14. 生殖器症状', 2, HAMD_ANCHORS['q14']),
-    ('q15', '15. 心気症', 4, HAMD_ANCHORS['q15']),
-    ('q16', '16. この1週間の体重減少', 2, HAMD_ANCHORS['q16']),
-    ('q17', '17. 病識', 2, HAMD_ANCHORS['q17']),
-    ('q18', '18. 日内変動', 2, HAMD_ANCHORS['q18']),
-    ('q19', '19. 現実感喪失, 離人症', 4, HAMD_ANCHORS['q19']),
-    ('q20', '20. 妄想症状', 3, HAMD_ANCHORS['q20']),
-    ('q21', '21. 強迫症状', 2, HAMD_ANCHORS['q21']),
+        ("q1", "1. 抑うつ気分", 4, HAMD_ANCHORS["q1"]),
+        ("q2", "2. 罪責感", 4, HAMD_ANCHORS["q2"]),
+        ("q3", "3. 自殺", 4, HAMD_ANCHORS["q3"]),
+        ("q4", "4. 入眠障害", 2, HAMD_ANCHORS["q4"]),
+        ("q5", "5. 熟眠障害", 2, HAMD_ANCHORS["q5"]),
+        ("q6", "6. 早朝睡眠障害", 2, HAMD_ANCHORS["q6"]),
+        ("q7", "7. 仕事と活動", 4, HAMD_ANCHORS["q7"]),
+        ("q8", "8. 精神運動抑制", 4, HAMD_ANCHORS["q8"]),
+        ("q9", "9. 精神運動激越", 4, HAMD_ANCHORS["q9"]),
+        ("q10", "10. 不安, 精神症状", 4, HAMD_ANCHORS["q10"]),
+        ("q11", "11. 不安, 身体症状", 4, HAMD_ANCHORS["q11"]),
+        ("q12", "12. 身体症状, 消化器系", 2, HAMD_ANCHORS["q12"]),
+        ("q13", "13. 身体症状, 一般的", 2, HAMD_ANCHORS["q13"]),
+        ("q14", "14. 生殖器症状", 2, HAMD_ANCHORS["q14"]),
+        ("q15", "15. 心気症", 4, HAMD_ANCHORS["q15"]),
+        ("q16", "16. この1週間の体重減少", 2, HAMD_ANCHORS["q16"]),
+        ("q17", "17. 病識", 2, HAMD_ANCHORS["q17"]),
+        ("q18", "18. 日内変動", 2, HAMD_ANCHORS["q18"]),
+        ("q19", "19. 現実感喪失, 離人症", 4, HAMD_ANCHORS["q19"]),
+        ("q20", "20. 妄想症状", 3, HAMD_ANCHORS["q20"]),
+        ("q21", "21. 強迫症状", 2, HAMD_ANCHORS["q21"]),
     ]
-    mid_index = 11; hamd_items_left = hamd_items[:mid_index]; hamd_items_right = hamd_items[mid_index:]
-    target_date_str = request.GET.get('date') or timezone.now().strftime('%Y-%m-%d')
-    # timing is fixed by URL parameter and server-side validated above
-    existing_assessment = Assessment.objects.filter(patient=patient, date=target_date_str, type='HAM-D').first()
+    mid_index = 11
+    hamd_items_left = hamd_items[:mid_index]
+    hamd_items_right = hamd_items[mid_index:]
+
+    # 表示上の「実施日」初期値：GET date があればそれ、なければ今日
+    target_date_str = request.GET.get("date")
+    target_date = parse_date(target_date_str) if target_date_str else None
+    if not target_date:
+        target_date = timezone.localdate()
+
+    # ★ window 計算（表示＆検索に使う）
+    window_start, window_end = get_assessment_window(patient, timing)
+
+    # ★ 既存評価の取得方針
+    # baseline: timing='baseline' の最新を編集対象
+    # week3/week6: window 内の最新を編集対象（date文字列一致は廃止）
+    if timing == "baseline":
+        existing_assessment = (
+            Assessment.objects.filter(patient=patient, type="HAM-D", timing="baseline")
+            .order_by("-date")
+            .first()
+        )
+    elif timing in ("week3", "week6"):
+        existing_assessment = (
+            Assessment.objects.filter(
+                patient=patient,
+                type="HAM-D",
+                timing=timing,
+                date__range=[window_start, window_end],
+            )
+            .order_by("-date")
+            .first()
+        )
+    else:
+        existing_assessment = None
+
+    # baseline を常に取得してテンプレートに渡す（改善率計算などに使用）
+    baseline = (
+        Assessment.objects.filter(patient=patient, timing="baseline", type="HAM-D")
+        .order_by("-date")
+        .first()
+    )
+    baseline_total = baseline.total_score_21 if baseline else None
+    baseline_scores = baseline.scores if baseline else None
+
+    # 参考：week3/week6 で既存がある場合だけ recommendation を出す（必要なら今後拡張）
     recommendation = ""
-    if timing in ['week3', 'week6']:
-        baseline = Assessment.objects.filter(patient=patient, timing='baseline').first()
-        if baseline and baseline.total_score_21 > 0 and existing_assessment:
-            imp = (baseline.total_score_21 - existing_assessment.total_score_21) / baseline.total_score_21 * 100
-            if imp < 20: recommendation = "【判定】反応不良 (改善率20%未満)。刺激部位やプロトコルの変更を検討してください。"
-            else: recommendation = "【判定】治療継続 (順調に改善中)。"
-    
-    if request.method == 'POST':
+    if timing in ("week3", "week6") and baseline and baseline.total_score_21 > 0 and existing_assessment:
+        imp = (baseline.total_score_21 - existing_assessment.total_score_21) / baseline.total_score_21 * 100
+        if imp < 20: recommendation = "【判定】反応不良 (改善率20%未満)。刺激部位やプロトコルの変更を検討してください。"
+        else: recommendation = "【判定】治療継続 (順調に改善中)。"
+
+    if request.method == "POST":
         try:
             scores = {}
-            for key, label, max, text in hamd_items: scores[key] = int(request.POST.get(key, 0))
+            for key, label, mx, text in hamd_items:
+                scores[key] = int(request.POST.get(key, 0))
+
+            note = request.POST.get("note", "")
+
             if existing_assessment:
                 assessment = existing_assessment
                 assessment.scores = scores
+                assessment.note = note
+                # baselineは既存のdate維持、week3/week6は入力日として target_date を採用
+                if timing in ("week3", "week6"):
+                    assessment.date = target_date
                 assessment.timing = timing
-                assessment.note = request.POST.get('note', '')
+                assessment.type = "HAM-D"
             else:
-                assessment = Assessment(patient=patient, date=target_date_str, type='HAM-D', scores=scores, timing=timing, note=request.POST.get('note', ''))
-            assessment.calculate_scores(); assessment.save()
-            # Ajax の場合は JSON を返す
-            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-                return JsonResponse({'status': 'success', 'id': assessment.id})
-            return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
+                assessment = Assessment(
+                    patient=patient,
+                    date=target_date,
+                    type="HAM-D",
+                    scores=scores,
+                    timing=timing,
+                    note=note,
+                )
+
+            assessment.calculate_scores()
+            assessment.save()
+
+            if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                return JsonResponse(
+                    {
+                        "status": "success",
+                        "id": assessment.id,
+                        "total_17": assessment.total_score_17,
+                        "total_21": assessment.total_score_21,
+                    }
+                )
+
+            return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else "rtms_app:dashboard")
+
         except Exception as e:
-            # エラーログ出力
             import traceback
             traceback.print_exc()
-            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-                return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-            # ★修正: 非Ajax時のエラーハンドリング (再レンダリングする)
-            # エラーメッセージをコンテキストに含めると親切かもしれないが、まずは500を防ぐ
-            # ここで return しないと None が返り "NoneType object is not iterable" になる
-    
-    # GETリクエスト、またはPOST失敗時
+            if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
     timing_display = dict(Assessment.TIMING_CHOICES).get(timing, timing)
-    deadline = get_assessment_deadline(patient, timing)
-    return render(request, 'rtms_app/assessment_add.html', {'patient': patient, 'history': history, 'today': target_date_str, 'hamd_items_left': hamd_items_left, 'hamd_items_right': hamd_items_right, 'initial_timing': timing, 'initial_timing_display': timing_display, 'existing_assessment': existing_assessment, 'recommendation': recommendation, 'dashboard_date': dashboard_date, 'deadline': deadline})
+
+    context = {
+        "patient": patient,
+        "history": history,
+        "today": target_date,  # Date型で渡す
+        "hamd_items_left": hamd_items_left,
+        "hamd_items_right": hamd_items_right,
+        "initial_timing": timing,
+        "initial_timing_display": timing_display,
+        "existing_assessment": existing_assessment,
+        "recommendation": recommendation,
+        "dashboard_date": dashboard_date,
+
+        # ★ 期限ではなく window 表示
+        "window_start": window_start,
+        "window_end": window_end,
+
+        "baseline_total": baseline_total,
+        "baseline_scores": baseline_scores,
+    }
+    return render(request, "rtms_app/assessment_add.html", context)
 
 @login_required
 def patient_summary_view(request, patient_id):

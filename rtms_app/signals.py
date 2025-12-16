@@ -51,7 +51,8 @@ def audit_log_save(sender, instance, created, **kwargs):
     meta = {}
     if not created:
         # 更新時は変更点を記録（簡易版）
-        meta = {'updated_fields': list(kwargs.get('update_fields', []))}
+        update_fields = kwargs.get("update_fields")
+        meta = {'updated_fields': list(update_fields) if update_fields else []}
     
     create_audit_log(instance, action, summary, meta)
 

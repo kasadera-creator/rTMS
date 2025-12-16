@@ -52,6 +52,11 @@
     padding: .15rem .45rem;
     font-weight: 700;
 }
+.sticky-scorebar {
+    position: sticky; bottom: 0; z-index: 1020;
+    background: #fff; border-top: 1px solid #dee2e6;
+    padding: 10px 12px;
+}
 </style>
 
 
@@ -283,8 +288,10 @@
                                     <div class="fw-bold small lh-sm">
                                         {{ label }}
                                         <i class="fas fa-info-circle help-icon"
-                                           data-bs-toggle="tooltip"
-                                           title="{{ text }}"></i>
+                                           data-bs-toggle="popover"
+                                           data-bs-placement="auto"
+                                           data-bs-html="false"
+                                           data-bs-content="{{ text|escape }}"></i>
                                     </div>
                                 </div>
 
@@ -318,8 +325,10 @@
                                     <div class="fw-bold small lh-sm">
                                         {{ label }}
                                         <i class="fas fa-info-circle help-icon"
-                                           data-bs-toggle="tooltip"
-                                           title="{{ text }}"></i>
+                                           data-bs-toggle="popover"
+                                           data-bs-placement="auto"
+                                           data-bs-html="false"
+                                           data-bs-content="{{ text|escape }}"></i>
                                     </div>
                                 </div>
 
@@ -346,6 +355,18 @@
 						
                     </div>
                 </form>
+            </div>
+            <!-- ★ リアルタイム合計＆重症度（sticky） -->
+            <div class="sticky-scorebar">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <div class="fw-bold">
+                        HAMD17 合計：<span id="hamd17Total" class="text-danger">0</span> 点
+                        <span class="ms-2">重症度：<span id="hamd17Severity" class="text-primary">正常</span></span>
+                    </div>
+                    <div class="text-muted small">
+                        HAMD17 参考基準: 0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23-:最重症
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
@@ -466,9 +487,9 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
 
-    // tooltip 初期化
-    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
-        new bootstrap.Tooltip(el);
+    // popover 初期化
+    document.querySelectorAll('[data-bs-toggle="popover"]').forEach(el => {
+        new bootstrap.Popover(el);
     });
 
     {% if scores %}
@@ -482,6 +503,32 @@ document.addEventListener('DOMContentLoaded', function () {
         // 初期値は全項目 0
         document.querySelectorAll('input.btn-check[value="0"]').forEach(r => r.checked = true);
     {% endif %}
+
+    // HAM-D リアルタイム計算
+    function calcHAMD17() {
+        let total = 0;
+        for (let i=1; i<=17; i++) {
+            const el = document.getElementById("id_q"+i);
+            if (!el) continue;
+            const v = parseInt(el.value || "0", 10);
+            total += isNaN(v) ? 0 : v;
+        }
+        document.getElementById("hamd17Total").textContent = String(total);
+
+        let sev = "正常";
+        if (total >= 23) sev = "最重症";
+        else if (total >= 19) sev = "重症";
+        else if (total >= 14) sev = "中等症";
+        else if (total >= 8) sev = "軽症";
+        document.getElementById("hamd17Severity").textContent = sev;
+    }
+
+    // 監視
+    document.querySelectorAll('input[type="radio"]').forEach(el => {
+        el.addEventListener("change", calcHAMD17);
+    });
+
+    calcHAMD17();
 });
 </script>
 {% endblock %}
