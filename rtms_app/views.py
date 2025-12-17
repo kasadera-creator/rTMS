@@ -198,10 +198,12 @@ def get_assessment_timing_for_date(patient, target_date):
     week6: 治療開始日を起点とした第6週 (35-41日目)
     該当しない場合は None
     """
-    if not patient.admission_date or not patient.first_treatment_date:
+    # admission_date に依存せず、治療開始日が設定されていれば
+    # 対象日が治療開始日当日またはそれ以前なら baseline と見なす
+    if not patient.first_treatment_date:
         return None
-    
-    if patient.admission_date <= target_date < patient.first_treatment_date:
+
+    if target_date <= patient.first_treatment_date:
         return 'baseline'
     
     if patient.first_treatment_date:
@@ -239,7 +241,8 @@ def get_assessment_deadline(patient, timing):
         return None
     
     if timing == 'baseline':
-        return patient.first_treatment_date - timedelta(days=1)
+        # baseline は治療開始日当日を含めて許可するため、期限は初回治療日までとする
+        return patient.first_treatment_date
     elif timing == 'week3':
         return get_nth_treatment_date(patient.first_treatment_date, 15)
     elif timing == 'week6':
@@ -633,7 +636,7 @@ def patient_first_visit(request, patient_id):
                 query = {'docs': ['admission', 'suitability', 'consent_pdf']}
                 if dashboard_date:
                     query['dashboard_date'] = dashboard_date
-                return redirect(build_url('patient_print_bundle', args=[patient.id], query=query))
+                return redirect(build_url('rtms_app:rtms_app_print:patient_print_bundle', args=[patient.id], query=query))
 
             if dashboard_date:
                 return redirect(f"{reverse('rtms_app:dashboard')}?date={dashboard_date}")
@@ -643,7 +646,7 @@ def patient_first_visit(request, patient_id):
         'label': '印刷プレビュー',
         'value': 'print_bundle',
         'icon': 'fa-print',
-        'formaction': reverse('rtms_app:patient_print_bundle', args=[patient.id]),
+        'formaction': reverse('rtms_app:rtms_app_print:patient_print_bundle', args=[patient.id]),
         'formtarget': '_blank',
         'docs_form_id': 'bundlePrintFormFirstVisit',
     }]
@@ -837,12 +840,12 @@ def patient_summary_view(request, patient_id):
             if action == 'print_discharge':
                 return JsonResponse({
                     'status': 'success',
-                    'redirect_url': reverse("rtms_app:patient_print_discharge", args=[patient.id]),
+                    'redirect_url': reverse("rtms_app:rtms_app_print:patient_print_discharge", args=[patient.id]),
                 })
             if action == 'print_referral':
                 return JsonResponse({
                     'status': 'success',
-                    'redirect_url': reverse("rtms_app:patient_print_referral", args=[patient.id]),
+                    'redirect_url': reverse("rtms_app:rtms_app_print:patient_print_referral", args=[patient.id]),
                 })
             else:
                 redirect_url = f"{reverse('rtms_app:dashboard')}?date={dashboard_date}" if dashboard_date else reverse('rtms_app:dashboard')
@@ -852,15 +855,15 @@ def patient_summary_view(request, patient_id):
         if action == 'print_bundle':
             return redirect(
                 build_url(
-                    'patient_print_bundle',
+                    'rtms_app:rtms_app_print:patient_print_bundle',
                     args=[patient.id],
                     query={'docs': ['discharge', 'referral']},
                 )
             )
         if action == 'print_discharge':
-            return redirect(reverse("rtms_app:patient_print_discharge", args=[patient.id]))
+            return redirect(reverse("rtms_app:rtms_app_print:patient_print_discharge", args=[patient.id]))
         if action == 'print_referral':
-            return redirect(reverse("rtms_app:patient_print_referral", args=[patient.id]))
+            return redirect(reverse("rtms_app:rtms_app_print:patient_print_referral", args=[patient.id]))
 
         return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
 
@@ -891,7 +894,7 @@ def patient_summary_view(request, patient_id):
             "label": "印刷プレビュー",
             "value": "print_bundle",
             "icon": "fa-print",
-            "formaction": reverse("rtms_app:patient_print_bundle", args=[patient.id]),
+            "formaction": reverse("rtms_app:rtms_app_print:patient_print_bundle", args=[patient.id]),
             "formtarget": "_blank",
             "docs_form_id": "bundlePrintFormDischarge",
         },
@@ -957,7 +960,7 @@ def patient_print_preview(request, pk):
     query = {"docs": [target_doc]}
     if return_to:
         query["return_to"] = return_to
-    return redirect(build_url("patient_print_bundle", args=[patient.id], query=query))
+    return redirect(build_url("rtms_app:rtms_app_print:patient_print_bundle", args=[patient.id], query=query))
 
 def _render_patient_summary(request, patient, mode):
     normalized_mode = 'discharge' if mode == 'summary' else mode
@@ -965,7 +968,7 @@ def _render_patient_summary(request, patient, mode):
     return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
     if return_to:
         query["return_to"] = return_to
-    return redirect(build_url("patient_print_bundle", args=[patient.id], query=query))
+    return redirect(build_url("rtms_app:rtms_app_print:patient_print_bundle", args=[patient.id], query=query))
 
 
 def patient_print_summary(request, pk):
@@ -974,136 +977,9 @@ def patient_print_summary(request, pk):
     return _render_patient_summary(request, patient, mode)
 
 @login_required
-def print_clinical_path(request, patient_id: int):
-    patient = get_object_or_404(Patient, id=patient_id)
-    calendar_weeks, assessment_events = generate_calendar_weeks(patient)
-    return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
-    back_url = return_to or reverse("rtms_app:patient_clinical_path", args=[patient.id])
-    return render(request, "rtms_app/print/path.html", {
-        "patient": patient,
-        "calendar_weeks": calendar_weeks,
-        "assessment_events": assessment_events,
-        "back_url": back_url,
-    })
-
-@login_required
-def patient_print_discharge(request, patient_id):
-    patient = get_object_or_404(Patient, id=patient_id)
-    return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
-    return redirect(
-        build_url(
-            'patient_print_bundle',
-            args=[patient.id],
-            query={'docs': ['discharge'], 'return_to': return_to} if return_to else {'docs': ['discharge']},
-        )
-    )
-
-
-@login_required
-def patient_print_referral(request, patient_id):
-    patient = get_object_or_404(Patient, id=patient_id)
-    return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
-    return redirect(
-        build_url(
-            'patient_print_bundle',
-            args=[patient.id],
-            query={'docs': ['referral'], 'return_to': return_to} if return_to else {'docs': ['referral']},
-        )
-    )
-
-
 @login_required
 def consent_latest(request):
     return render(request, "rtms_app/consent_latest.html")
-
-
-@login_required
-def patient_print_bundle(request, patient_id):
-    patient = get_object_or_404(Patient, id=patient_id)
-
-    return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
-
-    raw_docs = request.GET.getlist("docs")
-    if not raw_docs:
-        legacy_docs = request.GET.get("docs")
-        if legacy_docs:
-            raw_docs = legacy_docs.split(",")
-
-    legacy_map = {
-        "consent": "consent_pdf",
-    }
-    raw_docs = [legacy_map.get(doc, doc) for doc in raw_docs]
-
-    DOC_DEFINITIONS = {
-        "admission": {
-            "label": "初診時サマリー",
-            "template": "rtms_app/print/admission_summary.html",
-        },
-        "suitability": {
-            "label": "rTMS問診票",
-            "template": "rtms_app/print/suitability_questionnaire.html",
-        },
-        "consent_pdf": {
-            "label": "説明同意書（PDF）",
-            "pdf_static": "rtms_app/docs/rtms_consent_latest.pdf",
-        },
-        "discharge": {
-            "label": "退院時サマリー",
-            "template": "rtms_app/print/discharge_summary.html",
-        },
-        "referral": {
-            "label": "紹介状",
-            "template": "rtms_app/print/referral.html",
-        },
-    }
-    DOC_ORDER = ["admission", "suitability", "consent_pdf", "discharge", "referral"]
-
-    selected_doc_keys = [d for d in DOC_ORDER if d in raw_docs]
-
-    assessments = Assessment.objects.filter(
-        patient=patient
-    ).order_by("date")
-
-    end_date_est = get_completion_date(patient.first_treatment_date)
-    today = timezone.now().date()
-    back_url = return_to or reverse("rtms_app:patient_first_visit", args=[patient.id])
-
-    docs_to_render = []
-    for key in selected_doc_keys:
-        if key not in DOC_DEFINITIONS:
-            continue
-        doc_info = DOC_DEFINITIONS[key].copy()
-        doc_info["key"] = key
-        docs_to_render.append(doc_info)
-
-    context = {
-        "patient": patient,
-        "docs_to_render": docs_to_render,
-        "doc_definitions": DOC_DEFINITIONS,
-        "selected_doc_keys": selected_doc_keys,
-        "assessments": assessments,
-        "test_scores": assessments,
-        "consent_copies": ["患者控え", "病院控え"],
-        "end_date_est": end_date_est,
-        "today": today,
-        "back_url": back_url,
-    }
-
-    # 印刷ログ記録
-    for doc_key in selected_doc_keys:
-        doc_label = DOC_DEFINITIONS.get(doc_key, {}).get('label', doc_key)
-        meta = {
-            'docs': selected_doc_keys,
-            'querystring': request.GET.urlencode(),
-            'return_to': return_to,
-        }
-        log_audit_action(patient, 'PRINT', 'Document', doc_key, f'{doc_label}印刷', meta)
-
-    return render(
-        request,
-        "rtms_app/print/bundle.html",
-        context,
-    )
 
 @login_required
 def patient_clinical_path(request, patient_id):
@@ -1118,7 +994,7 @@ def patient_clinical_path(request, patient_id):
         'label': '印刷プレビュー',
         'icon': 'fa-print',
         'value': 'print_path',
-        'formaction': reverse('rtms_app:print_clinical_path', args=[patient.id]),
+        'formaction': reverse('rtms_app:rtms_app_print:print_clinical_path', args=[patient.id]),
         'formmethod': 'get',
         'formtarget': '_blank'
     }]
@@ -1136,24 +1012,6 @@ def patient_clinical_path(request, patient_id):
     })
 
 @login_required
-def patient_print_path(request, patient_id):
-    patient = get_object_or_404(Patient, pk=patient_id)
-    # ★修正: generate_calendar_weeks を使用
-    calendar_weeks, assessment_events = generate_calendar_weeks(patient)
-    return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
-    back_url = return_to or reverse("rtms_app:patient_clinical_path", args=[patient.id])
-    log_audit_action(patient, 'PRINT', 'ClinicalPath', '', '臨床経過表印刷', {
-        'docs': ['path'],
-        'querystring': request.GET.urlencode(),
-        'return_to': return_to,
-    })
-    return render(request, 'rtms_app/print/path.html', {
-        'patient': patient,
-        'calendar_weeks': calendar_weeks,
-        'assessment_events': assessment_events,
-        'back_url': back_url,
-    })
-
 @login_required
 def audit_logs_view(request, patient_id):
     # 権限チェック: adminユーザーまたはofficeグループ

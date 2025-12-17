@@ -115,7 +115,7 @@
             <div class="card-header bg-light fw-bold">退院時 印刷</div>
             <div class="card-body">
                 <form id="bundlePrintFormDischarge"
-                      action="{% url 'rtms_app:patient_print_bundle' patient.id %}"
+                      action="{% url 'rtms_app:rtms_app_print:patient_print_bundle' patient.id %}"
                       method="get"
                       target="_blank">
                     <div class="form-check form-check-inline">

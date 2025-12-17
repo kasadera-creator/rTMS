@@ -246,7 +246,7 @@
           <div class="p-3 border rounded bg-light">
             <div class="fw-bold mb-2">初診時 印刷</div>
             <form id="bundlePrintFormFirstVisit"
-                  action="{% url 'rtms_app:patient_print_bundle' patient.id %}"
+                  action="{% url 'rtms_app:rtms_app_print:patient_print_bundle' patient.id %}"
                   method="get"
                   target="_blank">
               <div class="d-flex flex-wrap gap-3">

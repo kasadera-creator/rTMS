@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, include
 from django.shortcuts import redirect
 from . import views
 
@@ -78,27 +78,9 @@ urlpatterns = [
     ),
 
     # =========================
-    # Print
+    # Print（分離）
     # =========================
-    path(
-        "patient/<int:patient_id>/print/bundle/",
-        views.patient_print_bundle,
-        name="patient_print_bundle",
-    ),
-    
-    path("patient/<int:patient_id>/print/path/", views.print_clinical_path, name="print_clinical_path"),
-    
-    path(
-    "patient/<int:patient_id>/print/discharge/",
-    views.patient_print_discharge,
-    name="patient_print_discharge",
-    ),
-    
-    path(
-    "patient/<int:patient_id>/print/referral/",
-    views.patient_print_referral,
-    name="patient_print_referral",
-    ),
+    path("", include("rtms_app.print_urls")),
 
     path("consent/latest/", views.consent_latest, name="consent_latest"),
 
