@@ -121,7 +121,15 @@
                         {% elif task_group.title == "④ 治療実施" %}
                             <a href="{% url 'rtms_app:treatment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
                         {% elif task_group.title == "⑤ 尺度評価" %}
-                            <a href="{% url 'rtms_app:assessment_add' item.obj.id item.timing_code %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                            {% if item.timing_code == 'baseline' %}
+                                <a href="{% url 'rtms_app:assessment_baseline' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                            {% elif item.timing_code == 'week3' %}
+                                <a href="{% url 'rtms_app:assessment_week3' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                            {% elif item.timing_code == 'week6' %}
+                                <a href="{% url 'rtms_app:assessment_week6' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                            {% else %}
+                                <a href="{% url 'rtms_app:assessment_baseline' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                            {% endif %}
                         {% elif task_group.title == "⑥ 退院準備" %}
                             <a href="{% url 'rtms_app:patient_home' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
                         {% endif %}

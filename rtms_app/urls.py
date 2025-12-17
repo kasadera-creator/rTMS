@@ -1,6 +1,7 @@
 from django.urls import path, include
 from django.shortcuts import redirect
 from . import views
+from . import views_health
 
 from django.conf import settings
 from django.conf.urls.static import static
@@ -8,6 +9,12 @@ from django.conf.urls.static import static
 app_name = "rtms_app"
 
 urlpatterns = [
+    # =========================
+    # Health & System
+    # =========================
+    path("healthz/", views_health.healthz, name="healthz"),
+    path("version/", views_health.version, name="version"),
+    
     # =========================
     # Dashboard / List
     # =========================
@@ -63,6 +70,21 @@ urlpatterns = [
         name="treatment_add",
     ),
     path(
+        "patient/<int:patient_id>/assessment/baseline/",
+        views.assessment_baseline,
+        name="assessment_baseline",
+    ),
+    path(
+        "patient/<int:patient_id>/assessment/week3/",
+        views.assessment_week3,
+        name="assessment_week3",
+    ),
+    path(
+        "patient/<int:patient_id>/assessment/week6/",
+        views.assessment_week6,
+        name="assessment_week6",
+    ),
+    path(
         "patient/<int:patient_id>/assessment/<str:timing>/add/",
         views.assessment_add,
         name="assessment_add",
@@ -80,7 +102,7 @@ urlpatterns = [
     # =========================
     # Print（分離）
     # =========================
-    path("", include("rtms_app.print_urls")),
+    path("patient/<int:patient_id>/print/", include(("rtms_app.print_urls", "print"), namespace="print")),
 
     path("consent/latest/", views.consent_latest, name="consent_latest"),
 

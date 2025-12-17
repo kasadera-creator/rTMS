@@ -1,163 +1,188 @@
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
+from django.contrib.auth.decorators import login_required
 from django.utils import timezone
-from django.http import HttpResponse
 
-from .models import Patient, Assessment, ConsentDocument, AuditLog
-from .utils.request_context import get_current_request, get_client_ip, get_user_agent
+from .models import Patient, Assessment, ConsentDocument, TreatmentSession, SideEffectCheck
+from .views import generate_calendar_weeks
 
-
-# Lazy imports to avoid circular dependency
-def _get_calendar_weeks_func():
-    from .views import generate_calendar_weeks
-    return generate_calendar_weeks
-
-
-def _get_completion_date_func():
-    from .views import get_completion_date
-    return get_completion_date
-
-
-def _get_log_audit_action_func():
-    from .views import log_audit_action
-    return log_audit_action
-
-
-def _get_build_url_func():
-    from .views import build_url
-    return build_url
-
-
-@login_required
-def print_clinical_path(request, patient_id: int):
-    patient = get_object_or_404(Patient, id=patient_id)
-    generate_calendar_weeks = _get_calendar_weeks_func()
-    calendar_weeks, assessment_events = generate_calendar_weeks(patient)
-    return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
-    back_url = return_to or reverse("rtms_app:patient_clinical_path", args=[patient.id])
-    return render(request, "rtms_app/print/path.html", {
-        "patient": patient,
-        "calendar_weeks": calendar_weeks,
-        "assessment_events": assessment_events,
-        "back_url": back_url,
-    })
-
-
-@login_required
-def patient_print_discharge(request, patient_id):
-    patient = get_object_or_404(Patient, id=patient_id)
-    build_url = _get_build_url_func()
-    return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
-    return redirect(
-        build_url(
-            'rtms_app_print:patient_print_bundle',
-            args=[patient.id],
-            query={'docs': ['discharge'], 'return_to': return_to} if return_to else {'docs': ['discharge']},
-        )
-    )
-
-
-@login_required
-def patient_print_referral(request, patient_id):
-    patient = get_object_or_404(Patient, id=patient_id)
-    build_url = _get_build_url_func()
-    return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
-    return redirect(
-        build_url(
-            'rtms_app_print:patient_print_bundle',
-            args=[patient.id],
-            query={'docs': ['referral'], 'return_to': return_to} if return_to else {'docs': ['referral']},
-        )
-    )
+# map doc keys to templates or pdf statics
+DOC_TEMPLATES = {
+	"admission": {"label": "入院時サマリ", "template": "rtms_app/print/admission_summary.html"},
+	"suitability": {"label": "rTMS問診票", "template": "rtms_app/print/suitability_questionnaire.html"},
+	"consent_pdf": {"label": "説明同意書（標準）", "pdf_static": "rtms_app/docs/consent_default.pdf"},
+	"discharge": {"label": "退院時サマリー", "template": "rtms_app/print/discharge_summary.html"},
+	"referral": {"label": "紹介状", "template": "rtms_app/print/referral.html"},
+	"path": {"label": "臨床経過表", "template": "rtms_app/print/path.html"},
+}
 
 
 @login_required
 def patient_print_bundle(request, patient_id):
-    patient = get_object_or_404(Patient, id=patient_id)
-    get_completion_date = _get_completion_date_func()
-    log_audit_action = _get_log_audit_action_func()
+	patient = get_object_or_404(Patient, pk=patient_id)
 
-    return_to = request.GET.get("return_to") or request.META.get("HTTP_REFERER")
+	# always use getlist to collect multiple docs from ?docs=...&docs=...
+	docs = request.GET.getlist("docs")
+	docs = [d for d in docs if d]
 
-    raw_docs = request.GET.getlist("docs")
-    if not raw_docs:
-        legacy_docs = request.GET.get("docs")
-        if legacy_docs:
-            raw_docs = legacy_docs.split(",")
+	# filter to allowed templates
+	valid_docs = [d for d in docs if d in DOC_TEMPLATES]
 
-    legacy_map = {
-        "consent": "consent_pdf",
-    }
-    raw_docs = [legacy_map.get(doc, doc) for doc in raw_docs]
+	# build render list
+	docs_to_render = []
+	for key in valid_docs:
+		tpl_info = DOC_TEMPLATES.get(key, {})
+		label = tpl_info.get('label') or key
+		if key == 'consent_pdf':
+			# prefer uploaded consent if exists, otherwise fallback to static PDF
+			doc = ConsentDocument.objects.order_by('-uploaded_at').first()
+			if doc and getattr(doc, 'file', None):
+				docs_to_render.append({'label': '説明同意書（最新）', 'pdf_url': doc.file.url})
+			else:
+				docs_to_render.append({'label': label, 'pdf_static': tpl_info.get('pdf_static')})
+		else:
+			if tpl_info.get('template'):
+				docs_to_render.append({'label': label, 'template': tpl_info.get('template')})
+			else:
+				docs_to_render.append({'label': label})
 
-    DOC_DEFINITIONS = {
-        "admission": {
-            "label": "初診時サマリー",
-            "template": "rtms_app/print/admission_summary.html",
-        },
-        "suitability": {
-            "label": "rTMS問診票",
-            "template": "rtms_app/print/suitability_questionnaire.html",
-        },
-        "consent_pdf": {
-            "label": "説明同意書（PDF）",
-            "pdf_static": "rtms_app/docs/rtms_consent_latest.pdf",
-        },
-        "discharge": {
-            "label": "退院時サマリー",
-            "template": "rtms_app/print/discharge_summary.html",
-        },
-        "referral": {
-            "label": "紹介状",
-            "template": "rtms_app/print/referral.html",
-        },
-    }
-    DOC_ORDER = ["admission", "suitability", "consent_pdf", "discharge", "referral"]
+	# determine a sensible back_url: explicit, Referer, or patient summary
+	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
 
-    selected_doc_keys = [d for d in DOC_ORDER if d in raw_docs]
+	# if no valid docs selected, render bundle with an error message (don't 500)
+	if not docs_to_render:
+		context = {
+			'patient': patient,
+			'today': timezone.now().date(),
+			'docs_to_render': [],
+			'doc_templates': DOC_TEMPLATES,
+			'bundle_error': '表示する文書がありません。チェックボックスを選択してください。',
+			'back_url': back_url,
+		}
+		return render(request, 'rtms_app/print/bundle.html', context, status=400)
 
-    assessments = Assessment.objects.filter(
-        patient=patient
-    ).order_by("date")
+	context = {
+		'patient': patient,
+		'today': timezone.now().date(),
+		'docs_to_render': docs_to_render,
+		'doc_templates': DOC_TEMPLATES,
+		'back_url': back_url,
+	}
+	return render(request, 'rtms_app/print/bundle.html', context)
 
-    end_date_est = get_completion_date(patient.first_treatment_date)
-    today = timezone.now().date()
-    back_url = return_to or reverse("rtms_app:patient_first_visit", args=[patient.id])
 
-    docs_to_render = []
-    for key in selected_doc_keys:
-        if key not in DOC_DEFINITIONS:
-            continue
-        doc_info = DOC_DEFINITIONS[key].copy()
-        doc_info["key"] = key
-        docs_to_render.append(doc_info)
+@login_required
+def print_clinical_path(request, patient_id):
+	patient = get_object_or_404(Patient, pk=patient_id)
+	calendar_weeks, assessment_events = generate_calendar_weeks(patient)
+	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
+	context = {
+		'patient': patient,
+		'calendar_weeks': calendar_weeks,
+		'assessment_events': assessment_events,
+		'today': timezone.now().date(),
+		'back_url': back_url,
+	}
+	return render(request, 'rtms_app/print/path.html', context)
 
-    context = {
-        "patient": patient,
-        "docs_to_render": docs_to_render,
-        "doc_definitions": DOC_DEFINITIONS,
-        "selected_doc_keys": selected_doc_keys,
-        "assessments": assessments,
-        "test_scores": assessments,
-        "consent_copies": ["患者控え", "病院控え"],
-        "end_date_est": end_date_est,
-        "today": today,
-        "back_url": back_url,
-    }
 
-    # 印刷ログ記録
-    for doc_key in selected_doc_keys:
-        doc_label = DOC_DEFINITIONS.get(doc_key, {}).get('label', doc_key)
-        meta = {
-            'docs': selected_doc_keys,
-            'querystring': request.GET.urlencode(),
-            'return_to': return_to,
-        }
-        log_audit_action(patient, 'PRINT', 'Document', doc_key, f'{doc_label}印刷', meta)
+@login_required
+def patient_print_discharge(request, patient_id):
+	patient = get_object_or_404(Patient, pk=patient_id)
+	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
+    
+	# Get assessments and collapse to latest per date
+	assessments_qs = Assessment.objects.filter(patient=patient).order_by('date')
+	latest_by_date = {}
+	for a in assessments_qs:
+		latest_by_date[a.date] = a
+	test_scores = [latest_by_date[d] for d in sorted(latest_by_date.keys())]
+	
+	context = {
+		'patient': patient,
+		'today': timezone.now().date(),
+		'test_scores': test_scores,
+		'back_url': back_url,
+	}
+	return render(request, 'rtms_app/print/discharge_summary.html', context)
 
-    return render(
-        request,
-        "rtms_app/print/bundle.html",
-        context,
-    )
+
+@login_required
+def patient_print_admission(request, patient_id):
+	from datetime import timedelta
+	patient = get_object_or_404(Patient, pk=patient_id)
+	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
+	
+	# Get baseline assessments
+	assessments = Assessment.objects.filter(patient=patient, timing='baseline').order_by('date')
+	
+	# Calculate estimated end date (30 sessions from first treatment date)
+	end_date_est = None
+	if patient.first_treatment_date:
+		end_date_est = patient.first_treatment_date + timedelta(days=42)  # ~30 weekdays
+	
+	context = {
+		'patient': patient,
+		'today': timezone.now().date(),
+		'assessments': assessments,
+		'end_date_est': end_date_est,
+		'back_url': back_url,
+	}
+	return render(request, 'rtms_app/print/admission_summary.html', context)
+
+
+@login_required
+def patient_print_referral(request, patient_id):
+	patient = get_object_or_404(Patient, pk=patient_id)
+	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
+	# 重複があれば同日最新のみ
+	assessments_qs = Assessment.objects.filter(patient=patient).order_by('date')
+	latest_by_date = {}
+	for a in assessments_qs:
+		latest_by_date[a.date] = a
+	test_scores = [latest_by_date[d] for d in sorted(latest_by_date.keys())]
+	context = {
+		'patient': patient,
+		'today': timezone.now().date(),
+		'test_scores': test_scores,
+		'back_url': back_url,
+	}
+	return render(request, 'rtms_app/print/referral.html', context)
+
+
+@login_required
+def print_side_effect_check(request, patient_id, session_id):
+	"""Print view for side-effect check of a specific treatment session."""
+	patient = get_object_or_404(Patient, pk=patient_id)
+	session = get_object_or_404(TreatmentSession, pk=session_id, patient=patient)
+	
+	# Calculate session number (all treatment sessions for this patient up to and including this one)
+	session_number = TreatmentSession.objects.filter(
+		patient=patient,
+		date__lte=session.date
+	).order_by('date').count()
+	
+	# Get side-effect check if exists
+	try:
+		side_effect_check = SideEffectCheck.objects.get(session=session)
+		rows = side_effect_check.rows or []
+		memo = side_effect_check.memo or ""
+		signature = side_effect_check.physician_signature or ""
+	except SideEffectCheck.DoesNotExist:
+		rows = []
+		memo = ""
+		signature = ""
+	
+	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
+	
+	context = {
+		'patient': patient,
+		'session': session,
+		'session_number': session_number,
+		'side_effect_rows': rows,
+		'side_effect_memo': memo,
+		'side_effect_signature': signature,
+		'today': timezone.now().date(),
+		'back_url': back_url,
+	}
+	return render(request, 'rtms_app/print/side_effect_check.html', context)

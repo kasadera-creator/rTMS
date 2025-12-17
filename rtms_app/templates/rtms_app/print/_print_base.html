@@ -15,9 +15,13 @@
         </div>
 
         <div class="print-toolbar-right d-flex align-items-center gap-2">
-			<button class="btn btn-light btn-sm no-print" onclick="window.print()">印刷</button>
+			<button class="btn btn-primary btn-sm no-print shadow" onclick="window.print()">
+				<i class="fas fa-print me-1"></i>印刷
+			</button>
 			{% if back_url %}
-            <a class="btn btn-outline-primary btn-sm no-print" href="{{ back_url }}">戻る</a>
+            <a class="btn btn-outline-secondary btn-sm no-print" href="{{ back_url }}">
+				<i class="fas fa-times me-1"></i>閉じる
+			</a>
             {% endif %}
         </div>
     </div>

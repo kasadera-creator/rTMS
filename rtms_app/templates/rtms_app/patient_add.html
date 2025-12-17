@@ -1,4 +1,5 @@
 {% extends "rtms_app/base.html" %}
+{% load static %}
 
 {% block extrastyle %}
 <style>
@@ -23,7 +24,7 @@
                         <p class="mb-3">氏名: <strong>{{ existing_patient.name }}</strong> 様 ({{ existing_patient.course_number }}クール目登録済)</p>
                         <hr>
                         <p class="mb-2 fw-bold">どうしますか？</p>
-                        <form method="post">
+                        <form method="post" id="patientAddForm">
                             {% csrf_token %}
                             <input type="hidden" name="card_id" value="{{ form.card_id.value }}">
                             <input type="hidden" name="name" value="{{ form.name.value }}">
@@ -45,7 +46,7 @@
                     </div>
                     {% else %}
 
-                    <form method="post">
+                    <form method="post" id="patientAddForm">
                         {% csrf_token %}
                         {% if form.errors %}
                         <div class="alert alert-danger"><strong>入力エラーがあります:</strong> {{ form.errors }}</div>
@@ -95,4 +96,24 @@
         </div>
     </div>
 </div>
+<div class="text-center my-4 no-print">
+    <button type="submit" form="patientAddForm" class="btn btn-primary btn-lg px-5 fw-bold shadow-sm">
+        <i class="fas fa-check"></i> 入院手続き完了
+    </button>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
+<script src="{% static 'rtms_app/floating.js' %}"></script>
+
+{% url 'rtms_app:dashboard' as dashboard_url %}
+<div class="fab-stack no-print">
+    <button type="button" class="btn btn-success fab" onclick="RTMSFloating.submitFormById('patientAddForm')">
+        <i class="fas fa-save"></i> 保存
+    </button>
+    <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
+        <i class="fas fa-undo"></i> 戻る
+    </a>
+    </div>
 {% endblock %}

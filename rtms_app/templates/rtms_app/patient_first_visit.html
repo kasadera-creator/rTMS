@@ -231,10 +231,44 @@
   {% url 'rtms_app:dashboard' as dashboard_url %}
   {% if dashboard_date %}
     {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
-      {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=back_url %}
+      <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
+      <script src="{% static 'rtms_app/floating.js' %}"></script>
+
+      <div class="fab-stack no-print">
+        <button type="button" class="btn btn-primary fab"
+                onclick="RTMSFloating.openPrintForm('bundlePrintFormFirstVisit')">
+          <i class="fas fa-print"></i> 印刷プレビュー
+        </button>
+
+        <button type="button" class="btn btn-success fab"
+                onclick="RTMSFloating.submitFormById('mainForm')">
+          <i class="fas fa-save"></i> 保存
+        </button>
+
+        <a class="btn btn-secondary fab" href="{{ back_url }}">
+          <i class="fas fa-undo"></i> 戻る
+        </a>
+      </div>
     {% endwith %}
   {% else %}
-    {% include "rtms_app/partials/floating_actions.html" with print_options=floating_print_options back_url=dashboard_url %}
+    <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
+    <script src="{% static 'rtms_app/floating.js' %}"></script>
+
+    <div class="fab-stack no-print">
+      <button type="button" class="btn btn-primary fab"
+              onclick="RTMSFloating.openPrintForm('bundlePrintFormFirstVisit')">
+        <i class="fas fa-print"></i> 印刷プレビュー
+      </button>
+
+      <button type="button" class="btn btn-success fab"
+              onclick="RTMSFloating.submitFormById('mainForm')">
+        <i class="fas fa-save"></i> 保存
+      </button>
+
+      <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
+        <i class="fas fa-undo"></i> 戻る
+      </a>
+    </div>
   {% endif %}
   
   <div class="form-section">
@@ -246,9 +280,9 @@
           <div class="p-3 border rounded bg-light">
             <div class="fw-bold mb-2">初診時 印刷</div>
             <form id="bundlePrintFormFirstVisit"
-                  action="{% url 'rtms_app:rtms_app_print:patient_print_bundle' patient.id %}"
-                  method="get"
-                  target="_blank">
+              action="{% url 'rtms_app:print:patient_print_bundle' patient.id %}"
+              method="get"
+              target="_blank">
               <div class="d-flex flex-wrap gap-3">
                 <div class="form-check">
                   <input class="form-check-input" type="checkbox" name="docs" value="admission" id="docAdmissionBottom" checked>
@@ -423,6 +457,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{% static 'rtms_app/hamd_widget.js' %}"></script>
 <script>
   // 紹介元・紹介医の連携（アップロード版を維持）
   const referralMap = JSON.parse('{{ referral_map_json|safe }}');

@@ -27,7 +27,7 @@
 {% block content %}
 <div class="container py-4">
     
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-2">
         <div>
             <h2 class="fw-bold mb-0">
                 {{ patient.name }} 殿 
@@ -48,6 +48,13 @@
             </a>
         </div>
     </div>
+
+    {% if recommendation and recommendation.status != 'pending' %}
+    <div class="alert {% if recommendation.status == 'remission' %}alert-success{% elif recommendation.status == 'ineffective' %}alert-danger{% else %}alert-info{% endif %} fw-bold mb-3">
+        <i class="fas fa-bullhorn me-1"></i>{{ recommendation.message }}
+        <div class="small fw-normal mt-1">{{ recommendation.detail }}</div>
+    </div>
+    {% endif %}
 
     <div class="row">
         <div class="col-md-5">
@@ -132,7 +139,7 @@
                         <a href="{% url 'rtms_app:treatment_add' patient.id %}" class="btn btn-sm btn-light text-success fw-bold">
                             <i class="fas fa-plus"></i> 治療
                         </a>
-                        <a href="{% url 'rtms_app:assessment_add' patient.id 'baseline' %}" class="btn btn-sm btn-light text-danger fw-bold">
+                        <a href="{% url 'rtms_app:assessment_baseline' patient.id %}" class="btn btn-sm btn-light text-danger fw-bold">
                             <i class="fas fa-plus"></i> 評価
                         </a>
                     </div>

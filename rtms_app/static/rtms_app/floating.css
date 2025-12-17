@@ -1,0 +1,22 @@
+/* floating.css */
+.fab-stack{
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2000;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  align-items:flex-end;
+}
+.fab{
+  border-radius: 999px;
+  padding: 10px 14px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.18);
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  font-weight: 700;
+}
+.fab i{ width: 16px; text-align:center; }
+@media print { .fab-stack{ display:none !important; } }

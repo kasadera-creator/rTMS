@@ -1,3 +1,10 @@
+{% extends 'rtms_app/print/_print_base.html' %}
+{% load static %}
+
+{% block title %}退院時サマリー - {{ patient.name }}{% endblock %}
+{% block toolbar_title %}退院時サマリー - {{ patient.name }} 様{% endblock %}
+
+{% block print_content %}
 <div class="page-container">
     <div class="page-sheet">
         <div class="summary-header">
@@ -77,3 +84,4 @@
         </div>
     </div>
 </div>
+{% endblock %}

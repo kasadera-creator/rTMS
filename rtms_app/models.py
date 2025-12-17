@@ -93,7 +93,21 @@ class MappingSession(models.Model):
     week_number = models.IntegerField("時期", choices=WEEK_CHOICES, default=1)
     resting_mt = models.IntegerField("MT")
     stimulation_site = models.CharField("部位", max_length=100, default="左DLPFC")
+    
+    # 刺激強度パラメータ
+    stimulus_intensity_mt_percent = models.IntegerField("刺激強度MT%", null=True, blank=True, help_text="例: 120")
+    intensity_percent = models.IntegerField("強度%", null=True, blank=True, help_text="例: 60")
+    
+    # ヘルメット位置 a
+    helmet_position_a_x = models.DecimalField("ヘルメット位置a X", max_digits=5, decimal_places=2, null=True, blank=True, help_text="例: 3.00")
+    helmet_position_a_y = models.DecimalField("ヘルメット位置a Y", max_digits=5, decimal_places=2, null=True, blank=True, help_text="例: 1.00")
+    
+    # ヘルメット位置 b
+    helmet_position_b_x = models.DecimalField("ヘルメット位置b X", max_digits=5, decimal_places=2, null=True, blank=True, help_text="例: 9.00")
+    helmet_position_b_y = models.DecimalField("ヘルメット位置b Y", max_digits=5, decimal_places=2, null=True, blank=True, help_text="例: 1.00")
+    
     notes = models.TextField("特記", blank=True)
+    
     class Meta:
         verbose_name = "位置決めセッション"
         verbose_name_plural = "位置決めセッション"
@@ -104,14 +118,44 @@ class TreatmentSession(models.Model):
     safety_sleep = models.BooleanField(default=True)
     safety_alcohol = models.BooleanField(default=True)
     safety_meds = models.BooleanField(default=True)
-    motor_threshold = models.IntegerField("MT")
-    intensity = models.IntegerField("強度", default=120)
-    total_pulses = models.IntegerField("パルス", default=1980)
+
+    # 当日治療パラメータ（印刷用にも利用）
+    coil_type = models.CharField(max_length=32, blank=True, default="H1")
+    target_site = models.CharField(max_length=64, blank=True, default="左背外側前頭前野")
+
+    mt_percent = models.PositiveSmallIntegerField(null=True, blank=True)
+    intensity_percent = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    frequency_hz = models.DecimalField(max_digits=5, decimal_places=1, default=18.0)
+    train_seconds = models.DecimalField(max_digits=5, decimal_places=1, default=2.0)
+    intertrain_seconds = models.DecimalField(max_digits=5, decimal_places=1, default=20.0)
+    train_count = models.PositiveSmallIntegerField("トレイン数", default=55)
+    total_pulses = models.PositiveIntegerField(default=1980)
+    sessions_per_day = models.PositiveSmallIntegerField(default=1)
+
+    treatment_notes = models.TextField(blank=True, default="")
+
+    # 互換性確保（旧UIの値を上書き）
+    motor_threshold = models.IntegerField("MT", null=True, blank=True)
+    intensity = models.IntegerField("強度", null=True, blank=True)
+
     side_effects = models.JSONField("副作用", default=dict, blank=True, null=True)
     performer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+
     class Meta:
         verbose_name = "治療セッション"
         verbose_name_plural = "治療セッション"
+
+
+class SideEffectCheck(models.Model):
+    session = models.OneToOneField("TreatmentSession", on_delete=models.CASCADE, related_name="side_effect_check")
+    rows = models.JSONField(default=list, blank=True)
+    memo = models.TextField(blank=True, default="")
+    physician_signature = models.CharField(max_length=128, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"SideEffectCheck(session={self.session_id})"
 
 class Assessment(models.Model):
     TIMING_CHOICES = [

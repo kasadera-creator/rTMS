@@ -1,4 +1,5 @@
 {% extends "rtms_app/base.html" %}
+{% load static %}
 {% block extrastyle %}
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 {% endblock %}
@@ -25,33 +26,79 @@
                 <div class="card-body bg-light">
                     <form method="post" id="mainForm">
                         {% csrf_token %}
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">実施日</label>
-                            {{ form.date }}
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">時期 (週数)</label>
-                            {{ form.week_number }}
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">安静時モーター閾値 (MT%)</label>
-                            <div class="input-group">
-                                {{ form.resting_mt }}
-                                <span class="input-group-text">%</span>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label fw-bold small">実施日</label>
+                                {{ form.date }}
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-bold small">時期 (週数)</label>
+                                {{ form.week_number }}
                             </div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">刺激部位</label>
-                            {{ form.stimulation_site }}
+                        
+                        <div class="card bg-warning bg-opacity-10 border-warning border-2 p-3 mb-3">
+                            <h5 class="text-warning fw-bold mb-3"><i class="fas fa-bolt me-2"></i>刺激パラメータ</h5>
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <label class="form-label fw-bold">刺激強度 MT(%)</label>
+                                    <div class="input-group">
+                                        {{ form.stimulus_intensity_mt_percent }}
+                                        <span class="input-group-text">%</span>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label fw-bold">強度 (%)</label>
+                                    <div class="input-group">
+                                        {{ form.intensity_percent }}
+                                        <span class="input-group-text">%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-6">
+                                    <label class="form-label fw-bold">位置 a</label>
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <div class="input-group">
+                                                <span class="input-group-text">X</span>
+                                                {{ form.helmet_position_a_x }}
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="input-group">
+                                                <span class="input-group-text">Y</span>
+                                                {{ form.helmet_position_a_y }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label fw-bold">位置 b</label>
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <div class="input-group">
+                                                <span class="input-group-text">X</span>
+                                                {{ form.helmet_position_b_x }}
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="input-group">
+                                                <span class="input-group-text">Y</span>
+                                                {{ form.helmet_position_b_y }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+                        
                         <div class="mb-3">
-                            <label class="form-label fw-bold">備考</label>
+                            <label class="form-label fw-bold small">備考</label>
                             {{ form.notes }}
                         </div>
                         <hr>
-                        <button type="submit" class="btn btn-warning w-100 fw-bold shadow-sm">
-                            <i class="fas fa-save"></i> 保存
-                        </button>
+                        <!-- 保存操作は右下のフローティングメニューに統一 -->
                     </form>
                 </div>
             </div>
@@ -69,10 +116,22 @@
                             <strong>{{ item.date|date:"Y/n/j" }}</strong>
                             <span class="badge bg-secondary">{{ item.get_week_number_display }}</span>
                         </div>
-                        <div class="d-flex justify-content-between text-muted small">
+                        <div class="d-flex justify-content-between text-muted small mb-1">
                             <span>MT: <strong class="text-dark">{{ item.resting_mt }}%</strong></span>
                             <span>{{ item.stimulation_site }}</span>
                         </div>
+                        {% if item.stimulus_intensity_mt_percent or item.intensity_percent %}
+                        <div class="small text-muted">
+                            {% if item.stimulus_intensity_mt_percent %}刺激強度MT: {{ item.stimulus_intensity_mt_percent }}%{% endif %}
+                            {% if item.intensity_percent %} / 強度: {{ item.intensity_percent }}%{% endif %}
+                        </div>
+                        {% endif %}
+                        {% if item.helmet_position_a_x or item.helmet_position_b_x %}
+                        <div class="small text-muted">
+                            {% if item.helmet_position_a_x %}a({{ item.helmet_position_a_x }}, {{ item.helmet_position_a_y }}){% endif %}
+                            {% if item.helmet_position_b_x %} b({{ item.helmet_position_b_x }}, {{ item.helmet_position_b_y }}){% endif %}
+                        </div>
+                        {% endif %}
                         {% if item.notes %}
                         <div class="small text-muted mt-1 border-top pt-1">
                             <i class="fas fa-comment-dots"></i> {{ item.notes }}
@@ -90,13 +149,39 @@
     </div>
 </div>
 
+<div class="text-center my-4 no-print">
+    <button type="submit" form="mainForm" class="btn btn-warning btn-lg px-5 fw-bold shadow-sm">
+        <i class="fas fa-check"></i> 位置決め完了
+    </button>
+</div>
+
 {% url 'rtms_app:dashboard' as dashboard_url %}
 {% if dashboard_date %}
-  {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
-    {% include "rtms_app/partials/floating_actions.html" with back_url=back_url %}
-  {% endwith %}
+    {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+        <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
+        <script src="{% static 'rtms_app/floating.js' %}"></script>
+
+        <div class="fab-stack no-print">
+            <button type="button" class="btn btn-success fab" onclick="RTMSFloating.submitFormById('mainForm')">
+                <i class="fas fa-save"></i> 保存
+            </button>
+            <a class="btn btn-secondary fab" href="{{ back_url }}">
+                <i class="fas fa-undo"></i> 戻る
+            </a>
+        </div>
+    {% endwith %}
 {% else %}
-  {% include "rtms_app/partials/floating_actions.html" with back_url=dashboard_url %}
+    <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
+    <script src="{% static 'rtms_app/floating.js' %}"></script>
+
+    <div class="fab-stack no-print">
+        <button type="button" class="btn btn-success fab" onclick="RTMSFloating.submitFormById('mainForm')">
+            <i class="fas fa-save"></i> 保存
+        </button>
+        <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
+            <i class="fas fa-undo"></i> 戻る
+        </a>
+    </div>
 {% endif %}
 
 {% endblock %}
