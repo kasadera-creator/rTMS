@@ -1,0 +1,23 @@
+{% comment %}
+Small pill badge summarizing week-3 recommendation.
+Requires `recommendation` in context (from services.recommendation.get_patient_recommendation).
+{% endcomment %}
+{% if recommendation %}
+  {% if recommendation.status == 'remission' %}
+    <span class="badge rounded-pill bg-success" title="{{ recommendation.scale }}: {{ recommendation.current }}点 / 改善率: {% if recommendation.improvement_rate %}{{ recommendation.improvement_rate|floatformat:0 }}{% else %}-{% endif %}%">
+      <i class="fas fa-check-circle me-1"></i>寛解・漸減
+    </span>
+  {% elif recommendation.status == 'ineffective' %}
+    <span class="badge rounded-pill bg-danger" title="{{ recommendation.scale }}: {{ recommendation.current }}点 / 改善率: {% if recommendation.improvement_rate %}{{ recommendation.improvement_rate|floatformat:0 }}{% else %}-{% endif %}%">
+      <i class="fas fa-exclamation-triangle me-1"></i>中止検討
+    </span>
+  {% elif recommendation.status == 'effective' %}
+    <span class="badge rounded-pill bg-primary" title="{{ recommendation.scale }}: {{ recommendation.current }}点 / 改善率: {% if recommendation.improvement_rate %}{{ recommendation.improvement_rate|floatformat:0 }}{% else %}-{% endif %}%">
+      <i class="fas fa-arrow-right me-1"></i>継続（30回）
+    </span>
+  {% else %}
+    <span class="badge rounded-pill bg-secondary" title="第3週評価を実施してください">
+      <i class="fas fa-hourglass-half me-1"></i>未評価
+    </span>
+  {% endif %}
+{% endif %}
