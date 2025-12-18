@@ -86,9 +86,11 @@ class MappingSession(models.Model):
     WEEK_CHOICES = [
         (1, '第1週'), (2, '第2週'), (3, '第3週'), 
         (4, '第4週'), (5, '第5週'), (6, '第6週'), 
-        (99, 'その他')
+        (7, '第7週'), (8, '第8週')
     ]
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE)
+    # クール数を記録（自然キーの一部）
+    course_number = models.IntegerField("クール数", default=1, db_index=True)
     date = models.DateField("実施日", default=timezone.now)
     week_number = models.IntegerField("時期", choices=WEEK_CHOICES, default=1)
     resting_mt = models.IntegerField("MT")
@@ -111,10 +113,20 @@ class MappingSession(models.Model):
     class Meta:
         verbose_name = "位置決めセッション"
         verbose_name_plural = "位置決めセッション"
+        constraints = [
+            models.UniqueConstraint(fields=['patient', 'course_number', 'date', 'stimulation_site'], name='unique_mapping_per_patient_course_date_site')
+        ]
 
 class TreatmentSession(models.Model):
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE)
+    # 日時は詳細情報として保持しつつ、レコードの自然キーとして日付部分を別管理
     date = models.DateTimeField("日時", default=timezone.now)
+    # クール数を記録（自然キーの一部）
+    course_number = models.IntegerField("クール数", default=1, db_index=True)
+    # 実施日は日付単位で一意判定するために保持
+    session_date = models.DateField("実施日", default=timezone.now, db_index=True)
+    # 将来的な1日複数回対応用スロット
+    slot = models.CharField("スロット", max_length=8, blank=True, default="")
     safety_sleep = models.BooleanField(default=True)
     safety_alcohol = models.BooleanField(default=True)
     safety_meds = models.BooleanField(default=True)
@@ -145,6 +157,9 @@ class TreatmentSession(models.Model):
     class Meta:
         verbose_name = "治療セッション"
         verbose_name_plural = "治療セッション"
+        constraints = [
+            models.UniqueConstraint(fields=['patient', 'course_number', 'session_date', 'slot'], name='unique_treatment_per_patient_course_date_slot')
+        ]
 
 
 class SideEffectCheck(models.Model):
@@ -161,10 +176,13 @@ class Assessment(models.Model):
     TIMING_CHOICES = [
         ('baseline', '治療前評価'),
         ('week3', '3週目評価'),
+        ('week4', '4週目評価'),
         ('week6', '6週目評価'),
         ('other', 'その他'),
     ]
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE)
+    # クール数を記録（自然キーの一部）
+    course_number = models.IntegerField("クール数", default=1, db_index=True)
     date = models.DateField("日", default=timezone.now)
     type = models.CharField("種別", max_length=20, default='HAM-D')
     scores = models.JSONField("スコア", default=dict)
@@ -186,6 +204,9 @@ class Assessment(models.Model):
     class Meta:
         verbose_name = "評価"
         verbose_name_plural = "評価"
+        constraints = [
+            models.UniqueConstraint(fields=['patient', 'course_number', 'timing', 'type'], name='unique_assessment_per_patient_course_timing_type')
+        ]
 
 class AuditLog(models.Model):
     ACTION_CHOICES = [

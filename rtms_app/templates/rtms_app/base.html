@@ -10,6 +10,42 @@
     {% load static %}
     <link rel="icon" href="{% static 'img/logo.jpg' %}">
     <style>
+        /* テーマカラー定義 */
+        :root {
+            --theme-primary: #0d7bb7;
+            --theme-primary-light: #1a8fc9;
+            --theme-secondary: #17a697;
+            --theme-info: #2ca7d8;
+            --theme-success: #28a745;
+            --theme-warning: #ffc107;
+            --theme-danger: #dc3545;
+            
+            /* 機能別カラー */
+            --color-first-visit: #00bcd4;
+            --color-first-visit-dark: #0097a7;
+            --color-admission: #1976d2;
+            --color-admission-dark: #1565c0;
+            --color-mapping: #fbc02d;
+            --color-mapping-dark: #f57f17;
+            --color-treatment: #388e3c;
+            --color-treatment-dark: #2e7d32;
+            --color-assessment: #d32f2f;
+            --color-assessment-dark: #c62828;
+            --color-discharge: #7b1fa2;
+            --color-discharge-dark: #6a1b9a;
+            --color-patient-list: #546e7a; /* Slate Gray */
+            --color-patient-list-dark: #455a64;
+
+            /* 機能別カラー (背景) */
+            --color-first-visit-bg: #e0f7fa;
+            --color-admission-bg: #e3f2fd;
+            --color-mapping-bg: #fffde7;
+            --color-treatment-bg: #e8f5e9;
+            --color-assessment-bg: #ffebee;
+            --color-discharge-bg: #f3e5f5;
+            --color-patient-list-bg: #eceff1;
+        }
+        
         body { font-family: 'Noto Sans JP', sans-serif; background-color: #f0f2f5; display: flex; flex-direction: column; min-height: 100vh; }
         .navbar-brand { font-weight: bold; }
         .content-wrapper { flex: 1; }
@@ -34,6 +70,71 @@
             white-space: nowrap;
         }
 
+        /* ナビボタン統一スタイル */
+        .btn-nav { font-size: 0.875rem; font-weight: 500; }
+        .btn-nav-primary { background-color: var(--theme-primary); border-color: var(--theme-primary); color: white; }
+        .btn-nav-primary:hover { background-color: var(--theme-primary-light); border-color: var(--theme-primary-light); color: white; }
+        .btn-nav-secondary { background-color: var(--theme-secondary); border-color: var(--theme-secondary); color: white; }
+        .btn-nav-secondary:hover { background-color: #158374; border-color: #158374; color: white; }
+        
+        /* 機能別ボタンスタイル */
+        .btn-first-visit { background-color: var(--color-first-visit) !important; border-color: var(--color-first-visit) !important; color: white !important; }
+        .btn-first-visit:hover { background-color: var(--color-first-visit-dark) !important; border-color: var(--color-first-visit-dark) !important; color: white !important; }
+        .btn-admission { background-color: var(--color-admission) !important; border-color: var(--color-admission) !important; color: white !important; }
+        .btn-admission:hover { background-color: var(--color-admission-dark) !important; border-color: var(--color-admission-dark) !important; color: white !important; }
+        .btn-mapping { background-color: var(--color-mapping) !important; border-color: var(--color-mapping) !important; color: white !important; }
+        .btn-mapping:hover { background-color: var(--color-mapping-dark) !important; border-color: var(--color-mapping-dark) !important; color: white !important; }
+        .btn-treatment { background-color: var(--color-treatment) !important; border-color: var(--color-treatment) !important; color: white !important; }
+        .btn-treatment:hover { background-color: var(--color-treatment-dark) !important; border-color: var(--color-treatment-dark) !important; color: white !important; }
+        .btn-assessment { background-color: var(--color-assessment) !important; border-color: var(--color-assessment) !important; color: white !important; }
+        .btn-assessment:hover { background-color: var(--color-assessment-dark) !important; border-color: var(--color-assessment-dark) !important; color: white !important; }
+        .btn-discharge { background-color: var(--color-discharge) !important; border-color: var(--color-discharge) !important; color: white !important; }
+        .btn-discharge:hover { background-color: var(--color-discharge-dark) !important; border-color: var(--color-discharge-dark) !important; color: white !important; }
+        .btn-patient-list { background-color: var(--color-patient-list) !important; border-color: var(--color-patient-list) !important; color: white !important; }
+        .btn-patient-list:hover { background-color: var(--color-patient-list-dark) !important; border-color: var(--color-patient-list-dark) !important; color: white !important; }
+        
+        /* Outline variants */
+        .btn-outline-first-visit { color: var(--color-first-visit); border-color: var(--color-first-visit); }
+        .btn-outline-first-visit:hover { background-color: var(--color-first-visit); border-color: var(--color-first-visit); color: white; }
+        .btn-outline-admission { color: var(--color-admission); border-color: var(--color-admission); }
+        .btn-outline-admission:hover { background-color: var(--color-admission); border-color: var(--color-admission); color: white; }
+        .btn-outline-mapping { color: var(--color-mapping); border-color: var(--color-mapping); }
+        .btn-outline-mapping:hover { background-color: var(--color-mapping); border-color: var(--color-mapping); color: #333; }
+        .btn-outline-treatment { color: var(--color-treatment); border-color: var(--color-treatment); }
+        .btn-outline-treatment:hover { background-color: var(--color-treatment); border-color: var(--color-treatment); color: white; }
+        .btn-outline-assessment { color: var(--color-assessment); border-color: var(--color-assessment); }
+        .btn-outline-assessment:hover { background-color: var(--color-assessment); border-color: var(--color-assessment); color: white; }
+        .btn-outline-discharge { color: var(--color-discharge); border-color: var(--color-discharge); }
+        .btn-outline-discharge:hover { background-color: var(--color-discharge); border-color: var(--color-discharge); color: white; }
+        .btn-outline-patient-list { color: var(--color-patient-list); border-color: var(--color-patient-list); }
+        .btn-outline-patient-list:hover { background-color: var(--color-patient-list); border-color: var(--color-patient-list); color: white; }
+
+        /* Override Bootstrap btn-primary and btn-info for visibility */
+        .btn-primary { background-color: #0d6efd !important; border-color: #0d6efd !important; color: white !important; }
+        .btn-primary:hover { background-color: #0b5ed7 !important; border-color: #0a58ca !important; color: white !important; }
+        .btn-primary:focus { background-color: #0b5ed7 !important; border-color: #0a58ca !important; color: white !important; box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.5) !important; }
+        .btn-info { background-color: #0dcaf0 !important; border-color: #0dcaf0 !important; color: #000 !important; }
+        .btn-info:hover { background-color: #31d5e5 !important; border-color: #25cff2 !important; color: #000 !important; }
+        .btn-info:focus { background-color: #31d5e5 !important; border-color: #25cff2 !important; color: #000 !important; box-shadow: 0 0 0 0.25rem rgba(13, 202, 240, 0.5) !important; }
+
+        /* Badge colors by function */
+        .bg-treatment { background-color: var(--color-treatment) !important; }
+        .bg-assessment { background-color: var(--color-assessment) !important; }
+        .bg-first-visit { background-color: var(--color-first-visit) !important; }
+        .bg-admission { background-color: var(--color-admission) !important; }
+        .bg-mapping { background-color: var(--color-mapping) !important; }
+        .bg-discharge { background-color: var(--color-discharge) !important; }
+        .bg-patient-list { background-color: var(--color-patient-list) !important; }
+
+        /* ページ別テーマ */
+        .page-first-visit .page-title-icon { color: var(--color-first-visit); }
+        .page-admission .page-title-icon { color: var(--color-admission); }
+        .page-mapping .page-title-icon { color: var(--color-mapping); }
+        .page-treatment .page-title-icon { color: var(--color-treatment); }
+        .page-assessment .page-title-icon { color: var(--color-assessment); }
+        .page-discharge .page-title-icon { color: var(--color-discharge); }
+        .page-patient-list .page-title-icon { color: var(--color-patient-list); }
+
         @media print {
             .no-print { display: none !important; }
             body { background-color: white; }
@@ -43,7 +144,7 @@
     </style>
     {% block extrastyle %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top shadow-sm no-print">
     <div class="container-fluid px-4">
@@ -82,16 +183,7 @@
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="{% static 'rtms_app/floating_actions.js' %}"></script>
 
 {% block scripts %}{% endblock %}
-<style>
-  .toast-save{position:fixed;right:16px;bottom:16px;padding:10px 12px;border-radius:10px;
-  background:rgba(0,0,0,.82);color:#fff;font-size:13px;z-index:99999;display:none}
-  .toast-save.show{display:block}
-  .toast-save.error{background:rgba(180,0,0,.88)}
-</style>
-<div id="toastSave" class="toast-save">保存しました</div>
-
 </body>
 </html>

@@ -99,14 +99,27 @@ LOGOUT_REDIRECT_URL = "/admin/login/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Logging（500根治のため、django.request は ERROR以上を必ず出す）
+# NOTE:
+# - DJANGO_LOG_LEVEL controls application/framework loggers.
+# - DJANGO_CONSOLE_LOG_LEVEL controls what actually prints to terminal.
+#   This prevents accidental DEBUG spam (SQL/autoreload) even if DJANGO_LOG_LEVEL=DEBUG.
 LOG_LEVEL = env("DJANGO_LOG_LEVEL", "INFO")
+CONSOLE_LOG_LEVEL = env("DJANGO_CONSOLE_LOG_LEVEL", "INFO")
+DB_LOG_LEVEL = env("DJANGO_DB_LOG_LEVEL", "WARNING")
+AUTORELOAD_LOG_LEVEL = env("DJANGO_AUTORELOAD_LOG_LEVEL", "WARNING")
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "level": CONSOLE_LOG_LEVEL}},
     "loggers": {
         "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": True},
         "django": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        # Keep terminal output readable in dev by default.
+        # Enable explicitly by setting DJANGO_DB_LOG_LEVEL=DEBUG etc.
+        "django.db.backends": {"handlers": ["console"], "level": DB_LOG_LEVEL, "propagate": False},
+        "django.utils.autoreload": {"handlers": ["console"], "level": AUTORELOAD_LOG_LEVEL, "propagate": False},
+        "watchfiles": {"handlers": ["console"], "level": AUTORELOAD_LOG_LEVEL, "propagate": False},
+        "whitenoise": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
     },
 }
 

@@ -3,14 +3,14 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>副作用チェック表 - {{ patient.last_name }}</title>
+  <title>副作用チェック表 - {{ patient.name }}</title>
   <style>
     /* リセット & 基本設定 */
-    @page { size: A4 portrait; margin: 15mm; }
+    @page { size: A4 portrait; margin: 10mm; }
     body { 
       font-family: "Hiragino Mincho ProN", "MS PMincho", serif; 
       color: #000; 
-      margin: 0; padding: 20px; 
+      margin: 0; padding: 10px; 
       width: 100%; box-sizing: border-box;
       background: white;
     }
@@ -36,8 +36,8 @@
     }
     
     /* テーブル */
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
-    th, td { border: 1px solid #000; padding: 6px 4px; text-align: center; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
+    th, td { border: 1px solid #000; padding: 4px; text-align: center; }
     th { background-color: #f0f0f0; }
     td.left-align { text-align: left; padding-left: 8px; }
 
@@ -71,13 +71,19 @@
   <script>
     function printPage() { window.print(); }
     function closePage() { window.close(); }
+    function goBack() {
+      const url = "{{ back_url|escapejs }}";
+      if (url) {
+        window.location.assign(url);
+      }
+    }
     // window.addEventListener('load', () => window.print());
   </script>
 </head>
 <body>
   <div class="print-btn-container no-print">
-    <button class="btn-print" onclick="printPage()"><i class="fas fa-print"></i> 印刷</button>
-    <button class="btn-close" onclick="closePage()">閉じる</button>
+    <button class="btn-print" onclick="printPage()">印刷</button>
+    <button class="btn-close" onclick="goBack()">戻る</button>
   </div>
 
   <h1 class="title text-center">反復経頭蓋磁気刺激療法(rTMS)の副作用チェック表</h1>

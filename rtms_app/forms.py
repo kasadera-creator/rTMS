@@ -44,7 +44,7 @@ class PatientFirstVisitForm(forms.ModelForm):
             'referral_source', 'referral_doctor',
             'chief_complaint', 'diagnosis', 
             'life_history', 'past_history', 'present_illness', 'medication_history', 
-            'admission_date', 'mapping_date', 'first_treatment_date'
+            'admission_date', 'first_treatment_date'
         ]
         widgets = {
             'card_id': forms.TextInput(attrs={'class': 'form-control'}),
@@ -60,7 +60,6 @@ class PatientFirstVisitForm(forms.ModelForm):
             'medication_history': forms.Textarea(attrs={'class': 'form-control', 'rows': 6}),
             'dementia_detail': forms.TextInput(attrs={'class': 'form-control form-control-sm', 'placeholder': '', 'style': 'display: inline-block; width: auto; margin-left: 10px;'}),
             'admission_date': DateInput(attrs={'class': 'form-control'}),
-            'mapping_date': DateInput(attrs={'class': 'form-control'}),
             'first_treatment_date': DateInput(attrs={'class': 'form-control'}),
         }
 
@@ -78,7 +77,6 @@ class PatientFirstVisitForm(forms.ModelForm):
         # 必須チェックを行う項目
         required_fields = {
             'admission_date': '入院予定日',
-            'mapping_date': '初回位置決め日',
             'first_treatment_date': '初回治療日',
             'attending_physician': '今後の担当医',
         }
@@ -95,8 +93,7 @@ class MappingForm(forms.ModelForm):
     class Meta:
         model = MappingSession
         fields = [
-            'date', 'week_number',
-            'stimulus_intensity_mt_percent', 'intensity_percent',
+            'date', 'week_number', 'resting_mt',
             'helmet_position_a_x', 'helmet_position_a_y',
             'helmet_position_b_x', 'helmet_position_b_y',
             'notes'
@@ -104,12 +101,11 @@ class MappingForm(forms.ModelForm):
         widgets = {
             'date': DateInput(attrs={'class': 'form-control'}),
             'week_number': forms.Select(attrs={'class': 'form-select'}),
-            'stimulus_intensity_mt_percent': forms.NumberInput(attrs={'class': 'form-control', 'value': '120'}),
-            'intensity_percent': forms.NumberInput(attrs={'class': 'form-control', 'value': '60'}),
-            'helmet_position_a_x': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': 'X座標'}),
-            'helmet_position_a_y': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': 'Y座標'}),
-            'helmet_position_b_x': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': 'X座標'}),
-            'helmet_position_b_y': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': 'Y座標'}),
+            'resting_mt': forms.NumberInput(attrs={'class': 'form-control', 'required': True, 'min': 0, 'step': '1', 'value': '60'}),
+            'helmet_position_a_x': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5', 'value': '3', 'placeholder': 'X座標'}),
+            'helmet_position_a_y': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5', 'value': '1', 'placeholder': 'Y座標'}),
+            'helmet_position_b_x': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5', 'value': '9', 'placeholder': 'X座標'}),
+            'helmet_position_b_y': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5', 'value': '1', 'placeholder': 'Y座標'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2})
         }
 
@@ -124,8 +120,8 @@ class TreatmentForm(forms.ModelForm):
         fields = [
             'safety_sleep', 'safety_alcohol', 'safety_meds',
             'coil_type', 'target_site',
-            'mt_percent', 'intensity_percent',
-            'frequency_hz', 'train_seconds', 'intertrain_seconds',
+            'mt_percent',
+            'train_seconds', 'frequency_hz', 'intertrain_seconds',
             'train_count', 'total_pulses',
             'treatment_notes',
         ]
@@ -133,13 +129,12 @@ class TreatmentForm(forms.ModelForm):
             'coil_type': forms.TextInput(attrs={'class': 'form-control', 'required': True, 'value': 'BrainsWay H1'}),
             'target_site': forms.TextInput(attrs={'class': 'form-control', 'required': True, 'value': '左DLPFC'}),
             'mt_percent': forms.NumberInput(attrs={'class': 'form-control', 'required': True, 'min': 0}),
-            'intensity_percent': forms.NumberInput(attrs={'class': 'form-control', 'required': True, 'min': 0}),
-            'frequency_hz': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1', 'required': True, 'value': 18}),
             'train_seconds': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1', 'required': True, 'value': 2}),
+            'frequency_hz': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1', 'required': True, 'value': 18}),
             'intertrain_seconds': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1', 'required': True, 'value': 20}),
             'train_count': forms.NumberInput(attrs={'class': 'form-control', 'required': True, 'min': 1, 'value': 55}),
             'total_pulses': forms.NumberInput(attrs={'class': 'form-control', 'required': True, 'min': 0, 'value': 1980}),
-            'treatment_notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+            'treatment_notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
 
 # --- 5. 入院手続きフォーム ---

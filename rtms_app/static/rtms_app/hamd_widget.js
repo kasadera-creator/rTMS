@@ -82,7 +82,7 @@
       const hidden = document.querySelector(`input[name="${key}"][type="hidden"]`);
       if (!hidden) return;
 
-      const current = String(hidden.value ?? "0");
+      const current = String(hidden.value || "0");
       const buttons = group.querySelectorAll('.hamd-btn');
       buttons.forEach(btn => {
         btn.classList.remove('active');
@@ -109,4 +109,5 @@
   }
 
   window.calcHAMD17 = calcHAMD17;
+  window.restoreHAMDValues = restoreValues;
 })();

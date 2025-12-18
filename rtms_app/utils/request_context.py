@@ -18,4 +18,8 @@ def get_user_agent(request):
     return request.META.get('HTTP_USER_AGENT', '')
 
 def can_view_audit(user):
-    return user.is_superuser or user.groups.filter(name='office').exists()
+    # Allow superusers and users in the '事務' group (administrative staff)
+    try:
+        return user.is_superuser or user.groups.filter(name='事務').exists()
+    except Exception:
+        return False

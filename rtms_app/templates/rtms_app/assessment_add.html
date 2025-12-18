@@ -1,20 +1,23 @@
 {% extends "rtms_app/base.html" %}
 {% load static %}
+
+{% block body_class %}page-assessment{% endblock %}
+
 {% block extrastyle %}
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
   .score-input { width: 64px; text-align: center; font-weight: 700; }
   .hamd-row { border: 1px solid #e9ecef; border-radius: 10px; background: #fff; }
-  .hamd-row:hover { border-color: #0d6efd; background: #f8fbff; }
+  .hamd-row:hover { border-color: var(--color-assessment); background: #fef8f8; }
   .q-badge { width: 28px; height: 28px; background: #f1f3f5; color: #495057; border-radius: 999px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size: .8rem; }
-  .help-icon { color:#0d6efd; cursor:pointer; opacity:.75; }
+  .help-icon { color: var(--color-assessment); cursor:pointer; opacity:.75; }
   .help-icon:hover { opacity:1; }
   .popover { max-width: 420px; }
   .popover-body { white-space: pre-wrap; font-size: .9rem; }
   .sticky-scorebar {
     position: sticky; bottom: 0; z-index: 1020;
-    background: #fff; border-top: 1px solid #dee2e6;
+    background: #fff; border-top: 2px solid var(--color-assessment);
     padding: 10px 12px;
   }
   .compact-label { font-size:.92rem; line-height:1.2; }
@@ -24,7 +27,7 @@
 {% block content %}
 <div class="container py-3 mb-5">
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="fw-bold mb-0"><i class="fas fa-chart-bar text-danger"></i> 尺度評価 (HAM-D)</h4>
+    <h4 class="fw-bold mb-0"><i class="fas fa-chart-bar page-title-icon"></i> 尺度評価 (HAM-D)</h4>
     {% include "rtms_app/partials/patient_nav.html" %}
   </div>
 
@@ -46,7 +49,7 @@
     {% csrf_token %}
 
     <div class="card shadow-sm border-0">
-      <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+      <div class="card-header text-white d-flex justify-content-between align-items-center" style="background-color: var(--color-assessment);">
         <div class="fw-bold">
           {% if existing_assessment %}
             <i class="fas fa-edit"></i> 評価の編集 (保存済み)
@@ -56,7 +59,7 @@
         </div>
         <div class="d-flex align-items-center gap-2">
           <div class="small">実施日</div>
-          <input type="date" name="date" class="form-control form-control-sm" value="{{ today|date:'Y-m-d' }}" style="width:auto;">
+          <input type="date" name="date" class="form-control form-control-sm" value="{{ default_date|date:'Y-m-d' }}" style="width:auto;">
         </div>
       </div>
 
@@ -147,10 +150,10 @@
       <!-- 保存操作は右下のフローティングメニューに統一 -->
 
       <!-- ★ リアルタイム合計＆重症度（sticky） -->
-      <div class="sticky-scorebar">
+      <div class="sticky-scorebar shadow">
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
           <div class="fw-bold">
-            HAMD17 合計：<span id="hamd17Total" class="text-danger">0</span> 点
+            HAMD17 合計：<span id="hamd17Total" style="color: var(--color-assessment);">0</span> 点
             <span class="ms-2">重症度：<span id="hamd17Severity" class="text-primary">正常</span></span>
           </div>
           <div class="text-muted small">
@@ -170,7 +173,7 @@
         <script src="{% static 'rtms_app/floating.js' %}"></script>
 
         <div class="fab-stack no-print">
-          <button type="button" class="btn btn-success fab" onclick="RTMSFloating.submitFormById('assessmentForm')">
+          <button type="button" class="btn btn-assessment fab" onclick="RTMSFloating.submitFormById('assessmentForm')">
             <i class="fas fa-save"></i> 保存
           </button>
           <a class="btn btn-secondary fab" href="{{ back_url }}">
@@ -183,7 +186,7 @@
       <script src="{% static 'rtms_app/floating.js' %}"></script>
 
       <div class="fab-stack no-print">
-        <button type="button" class="btn btn-success fab" onclick="RTMSFloating.submitFormById('assessmentForm')">
+        <button type="button" class="btn btn-assessment fab" onclick="RTMSFloating.submitFormById('assessmentForm')">
           <i class="fas fa-save"></i> 保存
         </button>
         <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
@@ -192,17 +195,25 @@
       </div>
     {% endif %}
 
-<script src="{% static 'rtms_app/hamd_widget.js' %}"></script>
-<script>
-  window.addEventListener("load", function() {
-    // 既存データの復元
-    {% if existing_assessment %}
-      const scores = {{ existing_assessment.scores|safe }};
-      for (const [key, value] of Object.entries(scores)) {
-        const hidden = document.querySelector(`input[name="${key}"][type="hidden"]`);
-        if (hidden) hidden.value = value;
-      }
-    {% endif %}
-  });
-</script>
+  {# Embed scores safely and restore hidden inputs BEFORE loading the widget script #}
+  {% if existing_assessment %}
+    {{ existing_assessment.scores|json_script:"assessmentScores" }}
+  {% else %}
+    {{ "{}"|json_script:"assessmentScores" }}
+  {% endif %}
+
+  <script>
+  (function(){
+    const el = document.getElementById('assessmentScores');
+    if (!el) return;
+    let scores = {};
+    try { scores = JSON.parse(el.textContent || '{}'); } catch(e) { scores = {}; }
+    for (const [key, value] of Object.entries(scores)) {
+      const hidden = document.querySelector(`#assessmentForm input[name="${key}"][type="hidden"]`);
+      if (hidden) hidden.value = String(value);
+    }
+  })();
+  </script>
+
+  <script src="{% static 'rtms_app/hamd_widget.js' %}"></script>
 {% endblock %}

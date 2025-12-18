@@ -1,5 +1,8 @@
 # rTMS Side-Effect Check & Treatment Parameters Implementation Summary
 
+> NOTE (2025-12-18): Legacy v1 notes may remain in this document.
+> Current implementation uses `rtms_app/static/rtms_app/side_effect_widget_v2.js` and PRG (POST→Redirect→GET) for print.
+
 ## Overview
 Successfully implemented a FastAPI-style rapid input side-effect checklist with treatment parameter capture and printable PDF-like output per TreatmentSession. The system includes:
 - Interactive button-based side-effect severity/relatedness selection
@@ -127,8 +130,8 @@ Features:
 
 ### 6. Static Assets
 
-#### side_effect_widget.js (New)
-**Location:** [rtms_app/static/rtms_app/side_effect_widget.js](rtms_app/static/rtms_app/side_effect_widget.js)
+#### side_effect_widget_v2.js (Current)
+**Location:** [rtms_app/static/rtms_app/side_effect_widget_v2.js](rtms_app/static/rtms_app/side_effect_widget_v2.js)
 
 Class: `SideEffectWidget`
 - Constructor takes element ID and initial JSON data
@@ -173,11 +176,11 @@ Status: ✅ Applied successfully
    - Fills safety checks
    - Updates treatment parameters (optional)
    - Clicks side-effect buttons to record incidents
-4. On Save (AJAX):
+4. On Save (POST, PRG):
    - Form data posted with action="" or "print_side_effect"
    - Server saves TreatmentSession with all parameters
    - Server upserts SideEffectCheck with JSON rows
-   - Returns JSON: {status, id, redirect_url, print_url}
+   - Redirects to dashboard or print view
 5. Frontend:
    - Shows success toast
    - If action was print_side_effect: opens print URL in new window
@@ -240,7 +243,7 @@ Status: ✅ Applied successfully
 - [ ] View print page (verify parameters and side effects render)
 - [ ] Print to PDF (verify layout and formatting)
 - [ ] Verify old code still works (motor_threshold/intensity populated)
-- [ ] Test AJAX save + print flow
+- [ ] (Legacy) Test AJAX save + print flow
 - [ ] Verify form validation (required fields)
 - [ ] Test backward navigation
 
@@ -258,7 +261,7 @@ Status: ✅ Applied successfully
 ## Files Modified/Created
 
 ### New Files
-- `rtms_app/static/rtms_app/side_effect_widget.js` (253 lines)
+- `rtms_app/static/rtms_app/side_effect_widget_v2.js` (current)
 - `rtms_app/services/side_effect_schema.py` (16 lines)
 - `rtms_app/services/mapping_service.py` (7 lines)
 - `rtms_app/templates/rtms_app/print/side_effect_check.html` (122 lines)

@@ -70,21 +70,6 @@ urlpatterns = [
         name="treatment_add",
     ),
     path(
-        "patient/<int:patient_id>/assessment/baseline/",
-        views.assessment_baseline,
-        name="assessment_baseline",
-    ),
-    path(
-        "patient/<int:patient_id>/assessment/week3/",
-        views.assessment_week3,
-        name="assessment_week3",
-    ),
-    path(
-        "patient/<int:patient_id>/assessment/week6/",
-        views.assessment_week6,
-        name="assessment_week6",
-    ),
-    path(
         "patient/<int:patient_id>/assessment/<str:timing>/add/",
         views.assessment_add,
         name="assessment_add",

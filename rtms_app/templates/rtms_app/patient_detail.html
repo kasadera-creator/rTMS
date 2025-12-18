@@ -29,9 +29,10 @@
     
     <div class="d-flex justify-content-between align-items-center mb-2">
         <div>
-            <h2 class="fw-bold mb-0">
+            <h2 class="fw-bold mb-0 d-flex align-items-center gap-2">
                 {{ patient.name }} 殿 
                 <span class="fs-5 text-muted ms-2">ID: {{ patient.card_id }}</span>
+                {% include "rtms_app/partials/recommendation_badge.html" %}
             </h2>
             <div class="text-muted small">
                 {{ patient.get_gender_display }} / {{ patient.age }}歳 / {{ patient.birth_date|date:"Y年n月j日" }}生
@@ -194,6 +195,10 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <div class="my-4">
+        {% include 'rtms_app/partials/print_box.html' %}
     </div>
 </div>
 {% endblock %}

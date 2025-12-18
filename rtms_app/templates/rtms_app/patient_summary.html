@@ -1,14 +1,22 @@
 {% extends "rtms_app/base.html" %}
 {% load static %}
+
+{% block body_class %}page-discharge{% endblock %}
+
 {% block extrastyle %}
 <style>
+    .section-title {
+        border-left: 5px solid var(--color-discharge);
+        padding-left: 10px;
+        margin-bottom: 1.5rem;
+    }
     textarea { width: 100%; border: 1px solid #ced4da; border-radius: 4px; padding: 10px; resize: vertical; }
     .history-table th { background-color: #f8f9fa; text-align: center; white-space: nowrap; }
     .history-table td { text-align: center; vertical-align: middle; }
-    .score-table th { background-color: #e8f5e9; text-align: center; font-size: 0.9rem; }
+    .score-table th { background-color: #f3e5f5; text-align: center; font-size: 0.9rem; }
     .score-table td { text-align: center; font-size: 0.9rem; }
 
-    .discharge-date-card { border-left: 5px solid #17a2b8; background-color: #f0fdf4; }
+    .discharge-date-card { border-left: 5px solid var(--color-discharge); background-color: #faf5ff; }
 
     .autosave-toast {
         position: fixed;
@@ -26,7 +34,7 @@
 <div class="container py-4 mb-5">
     <!-- ヘッダー: 患者メニュー -->
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <h3 class="d-flex align-items-center gap-2 mb-0"><i class="fas fa-file-alt"></i> 治療経過・退院準備 {% include "rtms_app/partials/recommendation_badge.html" %}</h3>
+      <h3 class="d-flex align-items-center gap-2 mb-0"><i class="fas fa-file-alt page-title-icon"></i> 治療経過・退院準備 {% include "rtms_app/partials/recommendation_badge.html" %}</h3>
         {% include "rtms_app/partials/patient_nav.html" %}
     </div>
 
@@ -59,7 +67,7 @@
         <div class="card discharge-date-card mb-4 shadow-sm">
             <div class="card-body py-3">
                 <div class="row align-items-center">
-                    <div class="col-md-auto"><label class="fw-bold text-info mb-0" style="font-size: 1.1rem;"><i class="fas fa-calendar-check me-2"></i>退院日設定</label></div>
+                    <div class="col-md-auto"><label class="fw-bold mb-0" style="font-size: 1.1rem; color: var(--color-discharge);"><i class="fas fa-calendar-check me-2"></i>退院日設定</label></div>
                     <div class="col-md-auto"><input type="date" name="discharge_date" id="dischargeDateInput" class="form-control fw-bold" value="{{ patient.discharge_date|date:'Y-m-d' }}"></div>
                     <div class="col"><span class="text-muted small">※退院日が決まったら設定してください。入力すると下のサマリー本文に自動反映されます。</span></div>
                 </div>
@@ -67,20 +75,20 @@
         </div>
 
         <div class="mb-4">
-            <label class="form-label fw-bold">入院経過・治療結果（サマリー本文）</label>
+            <h5 class="form-label fw-bold section-title">入院経過・治療結果（サマリー本文）</h5>
             <textarea name="summary_text" id="summaryText" rows="10" class="form-control">{{ summary_text }}</textarea>
             <div class="form-text text-muted">※内容は編集可能です。印刷ボタンを押すと自動保存されます。</div>
         </div>
 
         <div class="mb-4">
-            <label class="form-label fw-bold text-primary">退院時処方</label>
+            <h5 class="form-label fw-bold section-title">退院時処方</h5>
             <textarea name="discharge_prescription" rows="4" class="form-control" placeholder="退院時の処方内容を入力してください...">{{ patient.discharge_prescription }}</textarea>
         </div>
 
         <hr>
 
         <div class="mt-4">
-            <h6 class="fw-bold border-bottom pb-2">rTMS 治療実施記録</h6>
+            <h6 class="fw-bold section-title">rTMS 治療実施記録</h6>
             <div style="max-height: 300px; overflow-y: auto;">
                 <table class="table table-bordered history-table table-sm">
                     <thead><tr><th>回数</th><th>日付</th><th>MT(%)</th><th>強度(%)</th><th>備考・副作用</th></tr></thead>
@@ -98,7 +106,7 @@
         </div>
 
         <div class="mt-4">
-            <h6 class="fw-bold border-bottom pb-2 text-success"><i class="fas fa-chart-line"></i> 心理検査推移 (HAMD)</h6>
+            <h6 class="fw-bold section-title"><i class="fas fa-chart-line"></i> 心理検査推移 (HAMD)</h6>
             <div style="overflow-x: auto;">
                 <table class="table table-sm table-striped score-table w-auto">
                     <thead><tr><th style="min-width:120px;">実施日</th><th style="min-width:100px;">時期</th><th style="min-width:100px;">HAMD 17項</th><th style="min-width:100px;">HAMD 21項</th></tr></thead>
@@ -156,7 +164,7 @@
         <i class="fas fa-print"></i> 印刷プレビュー
       </button>
 
-      <button type="button" class="btn btn-success fab" onclick="RTMSFloating.submitFormById('mainForm')">
+      <button type="button" class="btn btn-discharge fab" onclick="RTMSFloating.submitFormById('mainForm')">
         <i class="fas fa-save"></i> 保存
       </button>
 
@@ -174,7 +182,7 @@
         <i class="fas fa-print"></i> 印刷プレビュー
       </button>
 
-      <button type="button" class="btn btn-success fab" onclick="RTMSFloating.submitFormById('mainForm')">
+      <button type="button" class="btn btn-discharge fab" onclick="RTMSFloating.submitFormById('mainForm')">
         <i class="fas fa-save"></i> 保存
       </button>
 

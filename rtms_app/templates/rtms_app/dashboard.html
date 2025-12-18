@@ -7,12 +7,13 @@
     .card-task:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
     .task-header { padding: 12px 15px; color: white; display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 1rem; border-radius: 10px 10px 0 0; }
     
-    .bg-g-1 { background: linear-gradient(135deg, #6610f2, #520dc2); }
-    .bg-g-2 { background: linear-gradient(135deg, #0d6efd, #0a58ca); }
-    .bg-g-3 { background: linear-gradient(135deg, #fd7e14, #e67700); }
-    .bg-g-4 { background: linear-gradient(135deg, #198754, #146c43); }
-    .bg-g-5 { background: linear-gradient(135deg, #dc3545, #b02a37); }
-    .bg-g-6 { background: linear-gradient(135deg, #0dcaf0, #0aa2c0); }
+    /* テーマベースのグラデーション */
+    .bg-g-first-visit { background: linear-gradient(135deg, var(--color-first-visit), var(--color-first-visit-dark)); }
+    .bg-g-admission { background: linear-gradient(135deg, var(--color-admission), var(--color-admission-dark)); }
+    .bg-g-mapping { background: linear-gradient(135deg, var(--color-mapping), var(--color-mapping-dark)); color: #333 !important; }
+    .bg-g-treatment { background: linear-gradient(135deg, var(--color-treatment), var(--color-treatment-dark)); }
+    .bg-g-assessment { background: linear-gradient(135deg, var(--color-assessment), var(--color-assessment-dark)); }
+    .bg-g-discharge { background: linear-gradient(135deg, var(--color-discharge), var(--color-discharge-dark)); }
 
     .list-group-item { border: none; border-bottom: 1px solid #f0f0f0; padding: 10px 15px; font-size: 0.95rem; }
     .list-group-item:hover { background-color: #f8f9fa; }
@@ -79,10 +80,10 @@
         <!-- 右側: アクションボタン -->
         <div class="w-100 w-md-auto">
             <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                <a href="{% url 'rtms_app:patient_add' %}" class="btn btn-primary btn-sm fw-bold shadow-sm text-nowrap">
+                <a href="{% url 'rtms_app:patient_add' %}" class="btn btn-first-visit btn-sm text-nowrap">
                     <i class="fas fa-user-plus me-1"></i> 新規患者登録
                 </a>
-                <a href="{% url 'rtms_app:patient_list' %}?dashboard_date={{ today|date:'Y-m-d' }}" class="btn btn-outline-dark btn-sm fw-bold text-nowrap">
+                <a href="{% url 'rtms_app:patient_list' %}?dashboard_date={{ today|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm fw-bold text-nowrap">
                     <i class="fas fa-users me-1"></i> 患者一覧
                 </a>
             </div>
@@ -96,7 +97,7 @@
         {% for task_group in dashboard_tasks %}
         <div class="col-md-6 col-lg-4">
             <div class="card-task bg-white">
-                <div class="task-header {{ task_group.color }}">
+                <div class="task-header {{ task_group.color_class }}">
                     <span><i class="fas {{ task_group.icon }} me-2"></i>{{ task_group.title }}</span>
                     <span class="badge bg-white text-dark rounded-pill opacity-75">{{ task_group.list|length }}</span>
                 </div>
@@ -122,13 +123,13 @@
                             <a href="{% url 'rtms_app:treatment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
                         {% elif task_group.title == "⑤ 尺度評価" %}
                             {% if item.timing_code == 'baseline' %}
-                                <a href="{% url 'rtms_app:assessment_baseline' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                                <a href="{% url 'rtms_app:assessment_add' item.obj.id 'baseline' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
                             {% elif item.timing_code == 'week3' %}
-                                <a href="{% url 'rtms_app:assessment_week3' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                                <a href="{% url 'rtms_app:assessment_add' item.obj.id 'week3' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
                             {% elif item.timing_code == 'week6' %}
-                                <a href="{% url 'rtms_app:assessment_week6' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                                <a href="{% url 'rtms_app:assessment_add' item.obj.id 'week6' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
                             {% else %}
-                                <a href="{% url 'rtms_app:assessment_baseline' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                                <a href="{% url 'rtms_app:assessment_add' item.obj.id 'baseline' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
                             {% endif %}
                         {% elif task_group.title == "⑥ 退院準備" %}
                             <a href="{% url 'rtms_app:patient_home' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">

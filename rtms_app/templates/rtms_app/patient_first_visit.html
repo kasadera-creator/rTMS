@@ -1,11 +1,12 @@
 {% extends "rtms_app/base.html" %}
 {% load static %}
+{% block body_class %}page-first-visit{% endblock %}
 
 {% block extrastyle %}
 <style>
   /* 既存のスタイル（アップロード版準拠） */
   .form-section { background-color: #fff; padding: 25px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-  .section-title { border-left: 5px solid #0d6efd; padding-left: 15px; font-weight: bold; margin-bottom: 20px; color: #333; font-size: 1.2rem; }
+  .section-title { border-left: 5px solid var(--color-first-visit); padding-left: 15px; font-weight: bold; margin-bottom: 20px; color: #333; font-size: 1.2rem; }
 
 /* ===== 質問票テーブル（これが無いと崩れやすい） ===== */
   .q-table{
@@ -68,7 +69,7 @@
 <div class="container py-4 mb-5">
   <!-- ヘッダー -->
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="fw-bold"><i class="fas fa-file-medical"></i> 初診・基本情報入力</h3>
+    <h3 class="fw-bold"><i class="fas fa-file-medical page-title-icon"></i> 初診・基本情報入力</h3>
     {% include "rtms_app/partials/patient_nav.html" %}
   </div>
 
@@ -218,9 +219,8 @@
     <div class="form-section">
       <h5 class="section-title">スケジュール・担当医設定</h5>
       <div class="row g-3">
-        <div class="col-md-4"><label class="form-label text-primary fw-bold">入院予定日</label>{{ form.admission_date }}</div>
-        <div class="col-md-4"><label class="form-label text-warning fw-bold">初回位置決め日</label>{{ form.mapping_date }}</div>
-        <div class="col-md-4"><label class="form-label text-success fw-bold">初回治療日</label>{{ form.first_treatment_date }}</div>
+        <div class="col-md-6"><label class="form-label text-primary fw-bold">入院予定日</label>{{ form.admission_date }}</div>
+        <div class="col-md-6"><label class="form-label text-success fw-bold">初回治療日</label>{{ form.first_treatment_date }}</div>
         <div class="col-md-8"><label class="form-label fw-bold">今後の担当医</label><div class="d-flex align-items-center">{{ form.attending_physician }}<span class="form-text ms-2 mb-0">※担当医を決めてください</span></div></div>
       </div>
     </div>
@@ -240,7 +240,7 @@
           <i class="fas fa-print"></i> 印刷プレビュー
         </button>
 
-        <button type="button" class="btn btn-success fab"
+        <button type="button" class="btn btn-first-visit fab"
                 onclick="RTMSFloating.submitFormById('mainForm')">
           <i class="fas fa-save"></i> 保存
         </button>
@@ -260,7 +260,7 @@
         <i class="fas fa-print"></i> 印刷プレビュー
       </button>
 
-      <button type="button" class="btn btn-success fab"
+      <button type="button" class="btn btn-first-visit fab"
               onclick="RTMSFloating.submitFormById('mainForm')">
         <i class="fas fa-save"></i> 保存
       </button>
@@ -453,6 +453,9 @@
       </div>
     </div>
   </div>
+    <div class="my-4">
+        {% include 'rtms_app/partials/print_box.html' %}
+    </div>
 </div>
 {% endblock %}
 

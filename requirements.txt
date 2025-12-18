@@ -7,3 +7,4 @@ django-jazzmin==2.6.0
 django-jsonform>=2.22.0
 python-dotenv>=1.0.0
 # pandas>=2.0.0  <-- 削除（または行頭に#をつけてコメントアウト）
+jpholiday>=0.1.9

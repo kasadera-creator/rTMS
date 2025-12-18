@@ -1,5 +1,9 @@
 # Implementation Status Report - rTMS Side-Effect Check System
 
+> NOTE (2025-12-18): This file includes legacy notes from an earlier iteration.
+> Current implementation uses `rtms_app/static/rtms_app/side_effect_widget_v2.js` and PRG (POST→Redirect→GET).
+> The old AJAX save/print flow and `side_effect_widget.js` are removed.
+
 **Date Completed:** December 17, 2025  
 **Project:** FastAPI-style rTMS副作用チェック表 with Treatment Parameters  
 **Status:** ✅ COMPLETE AND READY FOR DEPLOYMENT
@@ -15,7 +19,7 @@ Successfully implemented a comprehensive side-effect checklist system for the rT
 3. **Automatic Defaults** - MT% and parameters auto-populated from guideline standards and patient history
 4. **Persistent Storage** - JSON-based SideEffectCheck model linked to TreatmentSession
 5. **Printable Output** - Professional PDF-ready print template with full treatment parameters
-6. **AJAX Integration** - Seamless save & print workflow
+6. **PRG Flow** - Save then redirect; print page is GET-only
 7. **Database Migration** - New model and fields with backward compatibility
 
 ---
@@ -26,14 +30,14 @@ Successfully implemented a comprehensive side-effect checklist system for the rT
 
 | Feature | Component | Status | Notes |
 |---------|-----------|--------|-------|
-| Side-effect widget | `side_effect_widget.js` | ✅ Complete | 11 items, 6 buttons each, real-time JSON sync |
+| Side-effect widget | `side_effect_widget_v2.js` | ✅ Complete | Interactive table widget, real-time JSON sync |
 | Treatment parameters form | `TreatmentForm` | ✅ Complete | 9 new fields, Bootstrap styling |
 | Parameter defaults | `treatment_add` view | ✅ Complete | Auto-fill from mapping, guideline standards |
 | Side-effect storage | `SideEffectCheck` model | ✅ Complete | OneToOne to TreatmentSession, JSON rows |
 | Print view | `print_side_effect_check` view | ✅ Complete | Full parameter display, professional layout |
 | Print template | `side_effect_check.html` | ✅ Complete | Parameter grid, side-effect table, signature |
 | URL routing | `print_urls.py` | ✅ Complete | Namespaced under `/patient/{id}/print/` |
-| AJAX handling | `treatment_add` view | ✅ Complete | Returns print_url and redirect_url |
+| Save/Print handling | `treatment_add` view | ✅ Complete | PRG redirect to print view |
 | Database schema | Migration 0017 | ✅ Complete | 9 new TreatmentSession fields + SideEffectCheck |
 
 ### ✅ Files Created
@@ -41,7 +45,7 @@ Successfully implemented a comprehensive side-effect checklist system for the rT
 ```
 rtms_app/
 ├── static/rtms_app/
-│   └── side_effect_widget.js ......................... 253 lines
+│   └── side_effect_widget_v2.js ...................... (current)
 ├── services/
 │   ├── side_effect_schema.py ......................... 16 lines
 │   └── mapping_service.py ............................ 7 lines
@@ -235,7 +239,7 @@ python manage.py collectstatic --noinput
 ### Common Issues & Solutions
 
 **Issue:** Widget not rendering on treatment_add page
-- **Cause:** side_effect_widget.js not loading
+- **Cause:** side_effect_widget_v2.js not loading
 - **Solution:** Check browser console for 404 errors, verify static file path
 
 **Issue:** Parameters not auto-filling
@@ -251,9 +255,9 @@ python manage.py collectstatic --noinput
 - **Cause:** Missing required field or invalid value
 - **Solution:** Check form.errors in response JSON, fill all marked fields
 
-**Issue:** AJAX returns HTML instead of JSON
-- **Cause:** Form validation failed on server
-- **Solution:** Check JSON response for specific field errors
+**Issue:** (Legacy) AJAX returns HTML instead of JSON
+- **Cause:** The AJAX flow is removed in the current PRG design
+- **Solution:** Use the normal POST→Redirect flow; check server-side form errors in logs
 
 ### Debug Mode
 
@@ -285,7 +289,7 @@ LOGGING = {
 ### Page Load Times
 - treatment_add form: ~200ms (includes 66 button renders)
 - print page: ~150ms
-- AJAX submit: ~300ms (including form validation)
+- POST submit: ~300ms (including form validation)
 
 ### Storage
 - Per SideEffectCheck: ~500 bytes (JSON rows + memo)
@@ -306,7 +310,7 @@ treatment_add view (GET)
     
 User fills form & clicks buttons
     ↓
-side_effect_widget.js handles clicks
+side_effect_widget_v2.js handles clicks
     ├─ Update row data structure
     ├─ Re-render buttons (showing selection)
     └─ Sync hidden JSON input
@@ -318,13 +322,12 @@ treatment_add view (POST)
     ├─ Save TreatmentSession with new params
     ├─ Parse side_effect_rows_json
     ├─ Create/update SideEffectCheck
-    └─ Return JSON (AJAX) or redirect (normal)
+    └─ Redirect (PRG)
     
 User clicks Print button
     ↓
-Frontend AJAX handling
-    ├─ Get print_url from response
-    └─ window.open(print_url)
+Redirect-based print handling
+    └─ Redirect to print URL
     
 print_side_effect_check view (GET)
     ├─ Fetch TreatmentSession & SideEffectCheck

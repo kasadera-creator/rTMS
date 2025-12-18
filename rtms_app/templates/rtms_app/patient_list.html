@@ -1,4 +1,5 @@
 {% extends "rtms_app/base.html" %}
+{% block body_class %}page-patient-list{% endblock %}
 {% block extrastyle %}
 <style>
     .card { border: none; border-radius: 8px; overflow: hidden; }
@@ -8,8 +9,8 @@
 {% block content %}
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3><i class="fas fa-users"></i> 患者一覧</h3>
-        <a href="{% url 'rtms_app:dashboard' %}" class="btn btn-secondary">ダッシュボードへ戻る</a>
+        <h3><i class="fas fa-users page-title-icon"></i> 患者一覧</h3>
+        <a href="{% url 'rtms_app:dashboard' %}" class="btn btn-patient-list btn-sm">ダッシュボードへ戻る</a>
     </div>
 	
 	<form method="get" class="card shadow-sm mb-3">
@@ -39,8 +40,8 @@
       <input type="hidden" name="sort" value="{{ current_sort|default:'card_id' }}">
 
       <div class="col-md-2 d-flex gap-2">
-        <button class="btn btn-primary" type="submit">検索</button>
-        <a class="btn btn-outline-secondary" href="{% url 'rtms_app:patient_list' %}">クリア</a>
+        <button class="btn btn-patient-list btn-sm" type="submit">検索</button>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'rtms_app:patient_list' %}">クリア</a>
       </div>
     </div>
   </div>
@@ -138,16 +139,10 @@
                             </span>
                         </td>
                         <td class="text-center">
-                            <div class="btn-group" role="group">
-                                <a href="{% url 'rtms_app:patient_first_visit' patient.id %}" class="btn btn-sm btn-outline-primary">
-                                    <i class="fas fa-user-edit"></i> 初診・基本情報
-                                </a>
-                                <a href="{% url 'rtms_app:patient_clinical_path' patient.id %}" class="btn btn-sm btn-outline-success">
-                                    <i class="fas fa-calendar-alt"></i> クリニカルパス
-                                </a>
-                                <a href="{% url 'rtms_app:patient_home' patient.id %}" class="btn btn-sm btn-outline-info">
-                                    <i class="fas fa-file-medical-alt"></i> 治療経過・退院準備
-                                </a>
+                            <div class="d-inline-flex gap-2">
+                                <a href="{% url 'rtms_app:patient_first_visit' patient.id %}" class="btn btn-outline-first-visit btn-sm btn-nav">初診・基本情報</a>
+                                <a href="{% url 'rtms_app:patient_clinical_path' patient.id %}" class="btn btn-outline-admission btn-sm btn-nav">クリニカルパス</a>
+                                <a href="{% url 'rtms_app:patient_home' patient.id %}" class="btn btn-outline-discharge btn-sm btn-nav">治療経過・退院準備</a>
                             </div>
                         </td>
                     </tr>

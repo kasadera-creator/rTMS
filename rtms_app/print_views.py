@@ -2,6 +2,8 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
+from django.http import HttpResponseNotAllowed
+from urllib.parse import urlencode
 
 from .models import Patient, Assessment, ConsentDocument, TreatmentSession, SideEffectCheck
 from .views import generate_calendar_weeks
@@ -153,27 +155,63 @@ def patient_print_referral(request, patient_id):
 @login_required
 def print_side_effect_check(request, patient_id, session_id):
 	"""Print view for side-effect check of a specific treatment session."""
+	if request.method != 'GET':
+		return HttpResponseNotAllowed(['GET'])
+
 	patient = get_object_or_404(Patient, pk=patient_id)
 	session = get_object_or_404(TreatmentSession, pk=session_id, patient=patient)
 	
 	# Calculate session number (all treatment sessions for this patient up to and including this one)
-	session_number = TreatmentSession.objects.filter(
-		patient=patient,
-		date__lte=session.date
-	).order_by('date').count()
+	if getattr(session, 'session_date', None):
+		session_number = TreatmentSession.objects.filter(
+			patient=patient,
+			session_date__lte=session.session_date,
+		).order_by('session_date', 'date').count()
+	else:
+		session_number = TreatmentSession.objects.filter(
+			patient=patient,
+			date__lte=session.date,
+		).order_by('date').count()
 	
 	# Get side-effect check if exists
+	def default_rows():
+		return [
+			{"item": "頭皮痛・刺激痛", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
+			{"item": "顔面の不快感", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
+			{"item": "頸部痛・肩こり", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
+			{"item": "頭痛 (刺激後)", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
+			{"item": "けいれん (部位・時間)", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
+			{"item": "失神", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
+			{"item": "聴覚障害", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
+			{"item": "めまい・耳鳴り", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
+			{"item": "注意集中困難", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
+			{"item": "急性気分変化 (躁転など)", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
+			{"item": "その他", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
+		]
+
 	try:
 		side_effect_check = SideEffectCheck.objects.get(session=session)
-		rows = side_effect_check.rows or []
+		rows = side_effect_check.rows or default_rows()
 		memo = side_effect_check.memo or ""
 		signature = side_effect_check.physician_signature or ""
 	except SideEffectCheck.DoesNotExist:
-		rows = []
+		rows = default_rows()
 		memo = ""
 		signature = ""
 	
-	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
+	# Always prefer explicit back_url (PRG). Fallback is deterministic treatment_add URL.
+	back_url = request.GET.get('back_url')
+	if not back_url:
+		query = {}
+		if getattr(session, 'session_date', None):
+			query['date'] = session.session_date.isoformat()
+		elif getattr(session, 'date', None):
+			query['date'] = session.date.date().isoformat()
+		dashboard_date = request.GET.get('dashboard_date')
+		if dashboard_date:
+			query['dashboard_date'] = dashboard_date
+		base = reverse('rtms_app:treatment_add', args=[patient.id])
+		back_url = f"{base}?{urlencode(query)}" if query else base
 	
 	context = {
 		'patient': patient,

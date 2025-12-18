@@ -1,6 +1,8 @@
 {% extends "rtms_app/base.html" %}
 {% load static %}
 
+{% block body_class %}page-admission{% endblock %}
+
 {% block extrastyle %}
 <style>
     .calendar-container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
@@ -23,12 +25,12 @@
     
     /* イベントバッジ */
     .event-item { font-size: 0.75rem; margin-bottom: 2px; padding: 2px 4px; border-radius: 3px; display: block; line-height: 1.2; text-decoration: none; color: inherit; }
-    /* 統一テーマ: Admission=Primary(blue), Mapping=Warning(yellow), Treatment=Success(green), Assessment=Danger(red), Discharge=Info(teal) */
-    .evt-admission { background-color: #cfe2ff; color: #084298; border: 1px solid #b6d4fe; }
-    .evt-mapping { background-color: #fff3cd; color: #664d03; border: 1px solid #ffec99; }
-    .evt-treatment { background-color: #d1e7dd; color: #0f5132; border: 1px solid #a3cfbb; }
-    .evt-assessment { background-color: #f8d7da; color: #842029; border: 1px solid #f1aeb5; font-weight: bold; }
-    .evt-discharge { background-color: #cff4fc; color: #055160; border: 1px solid #b6effb; font-weight: bold; }
+    /* 機能別テーマ */
+    .evt-admission { background-color: var(--color-admission-bg); color: var(--color-admission); border: 1px solid var(--color-admission); }
+    .evt-mapping { background-color: var(--color-mapping-bg); color: var(--color-mapping); border: 1px solid var(--color-mapping); }
+    .evt-treatment { background-color: var(--color-treatment-bg); color: var(--color-treatment); border: 1px solid var(--color-treatment); }
+    .evt-assessment { background-color: var(--color-assessment-bg); color: var(--color-assessment); border: 1px solid var(--color-assessment); font-weight: bold; }
+    .evt-discharge { background-color: var(--color-discharge-bg); color: var(--color-discharge); border: 1px solid var(--color-discharge); font-weight: bold; }
 
 </style>
 {% endblock %}
@@ -37,7 +39,7 @@
 <form id="mainForm" class="d-none" method="get"></form>
 <div class="container py-4 mb-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3 class="d-flex align-items-center gap-2 mb-0"><i class="fas fa-calendar-alt text-success"></i> クリニカルパス (スケジュール) {% include "rtms_app/partials/recommendation_badge.html" %}</h3>
+        <h3 class="d-flex align-items-center gap-2 mb-0"><i class="fas fa-calendar-alt page-title-icon"></i> クリニカルパス (スケジュール) {% include "rtms_app/partials/recommendation_badge.html" %}</h3>
         {% include "rtms_app/partials/patient_nav.html" %}
     </div>
 
@@ -64,11 +66,11 @@
             <h5>評価結果</h5>
             {% for event in assessment_events %}
                 {% if event.timing == 'baseline' %}
-                    <p>治療前評価: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %} ({{ event.window_end|date:"m/d" }})</p>
+                    <p>評価（治療前）: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %}</p>
                 {% elif event.timing == 'week3' %}
-                    <p>第3週目評価: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %} ({{ event.window_end|date:"m/d" }})</p>
+                    <p>評価（第3週目）: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %}</p>
                 {% elif event.timing == 'week6' %}
-                    <p>第6週目評価: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %} ({{ event.window_end|date:"m/d" }})</p>
+                    <p>評価（第4週目）: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %}</p>
                 {% endif %}
             {% endfor %}
         </div>
@@ -130,7 +132,7 @@
 
         <div class="fab-stack no-print">
             {% if floating_print_options and floating_print_options.0.href %}
-                <button type="button" class="btn btn-primary fab" onclick="(function(){ if (typeof RTMSFloating !== 'undefined' && RTMSFloating.openPrintForm && RTMSFloating.openPrintForm('bundlePrintFormDischarge')) return; window.open('{{ floating_print_options.0.href }}', '_blank'); })();">
+                <button type="button" class="btn btn-primary fab" onclick="window.open('{{ floating_print_options.0.href|escapejs }}', '{{ floating_print_options.0.target|default:"_blank" }}');">
                     <i class="fas fa-print"></i> 印刷プレビュー
                 </button>
             {% endif %}
@@ -151,11 +153,15 @@
             </a>
         {% endif %}
 
-        <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
+        <a class="btn btn-patient-list fab" href="{{ dashboard_url }}">
             <i class="fas fa-undo"></i> 戻る
         </a>
     </div>
 {% endif %}
+
+    <div class="my-4">
+        {% include 'rtms_app/partials/print_box.html' %}
+    </div>
 
 {% endblock %}
 

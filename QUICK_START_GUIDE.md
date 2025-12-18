@@ -1,5 +1,8 @@
 # rTMS Side-Effect Check - Quick Start Guide
 
+> NOTE (2025-12-18): The old AJAX save/print flow is removed.
+> Current behavior is PRG (POST→Redirect→GET). The widget file is `rtms_app/static/rtms_app/side_effect_widget_v2.js`.
+
 ## User Workflow
 
 ### 1. Recording a Treatment Session
@@ -133,13 +136,12 @@ TreatmentSession {
 }
 ```
 
-## API Reference (AJAX)
+## API Reference (Legacy: AJAX)
 
 ### POST /app/patient/{id}/treatment/add/
 **Request Headers:**
-```
-X-Requested-With: XMLHttpRequest
-```
+
+Legacy only. Current flow does not require `X-Requested-With`.
 
 **Form Data:**
 ```
@@ -166,6 +168,8 @@ action: "" or "print_side_effect"
 ```
 
 **Success Response:**
+
+Legacy only. Current flow redirects (no JSON response).
 ```json
 {
   "status": "success",
@@ -222,7 +226,7 @@ SIDE_EFFECT_ITEMS = [
 - Edit side-effect table: `se-print-table` element
 
 ### Change Button Colors
-**File:** `rtms_app/static/rtms_app/side_effect_widget.js`
+**File:** `rtms_app/static/rtms_app/side_effect_widget_v2.js`
 
 Search for button styling in `renderRow()` method:
 ```javascript
@@ -237,7 +241,7 @@ Search for button styling in `renderRow()` method:
 
 ### Widget not appearing on treatment_add page
 1. Check browser console for JS errors
-2. Verify `side_effect_widget.js` is loaded (check Network tab)
+2. Verify `side_effect_widget_v2.js` is loaded (check Network tab)
 3. Ensure `#sideEffectWidget` div exists in template
 4. Check `data-initial` attribute has valid JSON
 
@@ -251,11 +255,10 @@ Search for button styling in `renderRow()` method:
 2. Check `get_latest_mt_percent()` service function
 3. Confirm mapping date is recent (within treatment timeframe)
 
-### AJAX save not working
-1. Check X-Requested-With header is set
+### (Legacy) AJAX save not working
+1. This flow is removed; use normal POST→Redirect
 2. Verify CSRF token in form
 3. Check browser console for 403/400/500 errors
-4. Review form validation errors in response
 
 ### Print layout broken or misaligned
 1. Test in different browsers (Chrome, Firefox, Safari)

@@ -1,13 +1,23 @@
 {% extends "rtms_app/base.html" %}
 {% load static %}
+
+{% block body_class %}page-mapping{% endblock %}
+
 {% block extrastyle %}
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  .section-title {
+    border-left: 5px solid var(--color-mapping);
+    padding-left: 10px;
+    margin-bottom: 1.5rem;
+  }
+</style>
 {% endblock %}
 
 {% block content %}
 <div class="container py-4 mb-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3 class="fw-bold"><i class="fas fa-crosshairs text-warning"></i> 位置決め記録</h3>
+        <h3 class="fw-bold d-flex align-items-center gap-2 mb-0"><i class="fas fa-crosshairs page-title-icon"></i> 位置決め記録 {% include "rtms_app/partials/recommendation_badge.html" %}</h3>
         {% include "rtms_app/partials/patient_nav.html" %}
     </div>
 
@@ -20,7 +30,7 @@
     <div class="row">
         <div class="col-md-6">
             <div class="card shadow-sm border-0 h-100">
-                <div class="card-header bg-warning text-dark fw-bold">
+                <div class="card-header fw-bold" style="background-color: var(--color-mapping); color: #fff;">
                     <i class="fas fa-pen me-1"></i> 新規記録
                 </div>
                 <div class="card-body bg-light">
@@ -37,22 +47,13 @@
                             </div>
                         </div>
                         
-                        <div class="card bg-warning bg-opacity-10 border-warning border-2 p-3 mb-3">
-                            <h5 class="text-warning fw-bold mb-3"><i class="fas fa-bolt me-2"></i>刺激パラメータ</h5>
+                        <div class="card border-2 p-3 mb-3" style="border-color: var(--color-mapping) !important;">
+                            <h5 class="fw-bold mb-3 section-title"><i class="fas fa-bolt me-2"></i>位置決めパラメータ</h5>
                             <div class="row mb-3">
                                 <div class="col-6">
-                                    <label class="form-label fw-bold">刺激強度 MT(%)</label>
-                                    <div class="input-group">
-                                        {{ form.stimulus_intensity_mt_percent }}
-                                        <span class="input-group-text">%</span>
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <label class="form-label fw-bold">強度 (%)</label>
-                                    <div class="input-group">
-                                        {{ form.intensity_percent }}
-                                        <span class="input-group-text">%</span>
-                                    </div>
+                                    <label class="form-label fw-bold">MT（モーター閾値）</label>
+                                    {{ form.resting_mt }}
+                                    <div class="form-text small">ステップ: 1</div>
                                 </div>
                             </div>
                             <div class="row">
@@ -113,25 +114,12 @@
                     {% for item in history %}
                     <div class="list-group-item list-group-item-action">
                         <div class="d-flex justify-content-between align-items-center mb-1">
-                            <strong>{{ item.date|date:"Y/n/j" }}</strong>
-                            <span class="badge bg-secondary">{{ item.get_week_number_display }}</span>
+                            <strong>{{ item.date|date:"Y/n/j" }}（{{ item.get_week_number_display }}）</strong>
                         </div>
-                        <div class="d-flex justify-content-between text-muted small mb-1">
-                            <span>MT: <strong class="text-dark">{{ item.resting_mt }}%</strong></span>
-                            <span>{{ item.stimulation_site }}</span>
+                        <div class="text-muted small mb-1">
+                            MT強度：<strong class="text-dark">{{ item.resting_mt }}</strong>
+                            　位置：A({{ item.helmet_position_a_x|default:"-" }},{{ item.helmet_position_a_y|default:"-" }}) / B({{ item.helmet_position_b_x|default:"-" }},{{ item.helmet_position_b_y|default:"-" }})
                         </div>
-                        {% if item.stimulus_intensity_mt_percent or item.intensity_percent %}
-                        <div class="small text-muted">
-                            {% if item.stimulus_intensity_mt_percent %}刺激強度MT: {{ item.stimulus_intensity_mt_percent }}%{% endif %}
-                            {% if item.intensity_percent %} / 強度: {{ item.intensity_percent }}%{% endif %}
-                        </div>
-                        {% endif %}
-                        {% if item.helmet_position_a_x or item.helmet_position_b_x %}
-                        <div class="small text-muted">
-                            {% if item.helmet_position_a_x %}a({{ item.helmet_position_a_x }}, {{ item.helmet_position_a_y }}){% endif %}
-                            {% if item.helmet_position_b_x %} b({{ item.helmet_position_b_x }}, {{ item.helmet_position_b_y }}){% endif %}
-                        </div>
-                        {% endif %}
                         {% if item.notes %}
                         <div class="small text-muted mt-1 border-top pt-1">
                             <i class="fas fa-comment-dots"></i> {{ item.notes }}
@@ -150,38 +138,38 @@
 </div>
 
 <div class="text-center my-4 no-print">
-    <button type="submit" form="mainForm" class="btn btn-warning btn-lg px-5 fw-bold shadow-sm">
-        <i class="fas fa-check"></i> 位置決め完了
+    <button type="submit" form="mainForm" name="action" value="to_treatment" class="btn btn-success btn-lg px-5 fw-bold shadow-sm me-3">
+        <i class="fas fa-arrow-right"></i> 本日の治療へ
+    </button>
+    <button type="submit" form="mainForm" name="action" value="save_and_return" class="btn btn-secondary btn-lg px-5 fw-bold shadow-sm">
+        <i class="fas fa-save"></i> 保存して戻る
     </button>
 </div>
 
 {% url 'rtms_app:dashboard' as dashboard_url %}
-{% if dashboard_date %}
-    {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
-        <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
-        <script src="{% static 'rtms_app/floating.js' %}"></script>
+<link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
+<script src="{% static 'rtms_app/floating.js' %}"></script>
 
-        <div class="fab-stack no-print">
-            <button type="button" class="btn btn-success fab" onclick="RTMSFloating.submitFormById('mainForm')">
-                <i class="fas fa-save"></i> 保存
-            </button>
-            <a class="btn btn-secondary fab" href="{{ back_url }}">
-                <i class="fas fa-undo"></i> 戻る
-            </a>
-        </div>
-    {% endwith %}
-{% else %}
-    <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
-    <script src="{% static 'rtms_app/floating.js' %}"></script>
-
-    <div class="fab-stack no-print">
-        <button type="button" class="btn btn-success fab" onclick="RTMSFloating.submitFormById('mainForm')">
-            <i class="fas fa-save"></i> 保存
+<div class="fab-stack no-print">
+    {% if dashboard_date %}
+        {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+        <button type="button" class="btn btn-warning fab" onclick="document.getElementById('mainForm').submit()">
+            <i class="fas fa-save"></i> 保存して戻る
+        </button>
+        <a class="btn btn-secondary fab" href="{{ back_url }}">
+            <i class="fas fa-undo"></i> 戻る
+        </a>
+        {% endwith %}
+    {% else %}
+        <button type="button" class="btn btn-warning fab" onclick="document.getElementById('mainForm').submit()">
+            <i class="fas fa-save"></i> 保存して戻る
         </button>
         <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
             <i class="fas fa-undo"></i> 戻る
         </a>
-    </div>
-{% endif %}
+    {% endif %}
+</div>
+
+</div>
 
 {% endblock %}
