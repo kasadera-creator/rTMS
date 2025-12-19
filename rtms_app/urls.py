@@ -36,11 +36,25 @@ urlpatterns = [
         name="patient_first_visit",
     ),
 
+    # ★ 基本情報編集（権限制限）
+    path(
+        "patient/<int:patient_id>/basic/edit/",
+        views.patient_basic_edit,
+        name="patient_basic_edit",
+    ),
+
     # ★ 退院準備（サマリー）
     path(
         "patient/<int:patient_id>/summary/",
         views.patient_summary_view,
         name="patient_home",
+    ),
+
+    # ★ 適正質問票（別画面）
+    path(
+        "patient/<int:patient_id>/questionnaire/",
+        views.questionnaire_edit,
+        name="questionnaire_edit",
     ),
 
     # ---- 後方互換（旧URL） ----
@@ -68,6 +82,11 @@ urlpatterns = [
         "patient/<int:patient_id>/treatment/add/",
         views.treatment_add,
         name="treatment_add",
+    ),
+    path(
+        "patient/<int:patient_id>/assessment/week4/",
+        views.assessment_week4,
+        name="assessment_week4",
     ),
     path(
         "patient/<int:patient_id>/assessment/<str:timing>/add/",

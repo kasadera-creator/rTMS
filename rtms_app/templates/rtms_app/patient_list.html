@@ -1,157 +1,153 @@
 {% extends "rtms_app/base.html" %}
 {% block body_class %}page-patient-list{% endblock %}
-{% block extrastyle %}
-<style>
-    .card { border: none; border-radius: 8px; overflow: hidden; }
-    .table td { vertical-align: middle; }
-</style>
-{% endblock %}
+
+{% block header_breadcrumb %}
+  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
+  <span class="text-white-50 px-1">/</span>
+  <span class="text-white px-1" style="font-size: 0.9rem;">患者一覧</span>
+{% endblock header_breadcrumb %}
+
+{% block extrastyle %}{% endblock %}
 {% block content %}
-<div class="container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3><i class="fas fa-users page-title-icon"></i> 患者一覧</h3>
+<div class="stack-md">
+    <div class="d-flex justify-content-between align-items-center">
+        <div class="page-title"><i class="fas fa-users page-title-icon"></i> 患者一覧</div>
         <a href="{% url 'rtms_app:dashboard' %}" class="btn btn-patient-list btn-sm">ダッシュボードへ戻る</a>
     </div>
-	
-	<form method="get" class="card shadow-sm mb-3">
-  <div class="card-body">
-    <div class="row g-2 align-items-end">
-      <div class="col-md-2">
-  <label class="form-label mb-1">入院ステータス</label>
-  <select name="status" class="form-select">
-    <option value="">（すべて）</option>
-    <option value="waiting"   {% if status == "waiting" %}selected{% endif %}>入院待ち</option>
-    <option value="inpatient" {% if status == "inpatient" %}selected{% endif %}>入院中</option>
-    <option value="discharged"{% if status == "discharged" %}selected{% endif %}>退院済</option>
-  </select>
-<input type="hidden" name="sort" value="{{ current_sort }}">
-<input type="hidden" name="dir" value="{{ current_dir }}">
-</div>
-	  <div class="col-md-2	">
-        <label class="form-label mb-1">ID</label>
-        <input type="text" name="card" value="{{ card|default:'' }}" class="form-control" placeholder="例：12345">
-      </div>
-	  <div class="col-md-3">
-        <label class="form-label mb-1">氏名</label>
-        <input type="text" name="q" value="{{ q|default:'' }}" class="form-control" placeholder="例：笠寺">
-      </div>
-      
-      <!-- ソート状態を維持したい場合は hidden で送る -->
-      <input type="hidden" name="sort" value="{{ current_sort|default:'card_id' }}">
 
-      <div class="col-md-2 d-flex gap-2">
-        <button class="btn btn-patient-list btn-sm" type="submit">検索</button>
-        <a class="btn btn-outline-secondary btn-sm" href="{% url 'rtms_app:patient_list' %}">クリア</a>
-      </div>
-    </div>
-  </div>
-</form>
+    <form method="get" class="card-like stack-sm form-rtms">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label">入院ステータス</label>
+                <select name="status" class="form-select">
+                    <option value="">（すべて）</option>
+                    <option value="waiting"   {% if status == "waiting" %}selected{% endif %}>入院待ち</option>
+                    <option value="inpatient" {% if status == "inpatient" %}selected{% endif %}>入院中</option>
+                    <option value="discharged"{% if status == "discharged" %}selected{% endif %}>退院済</option>
+                </select>
+                <input type="hidden" name="sort" value="{{ current_sort }}">
+                <input type="hidden" name="dir" value="{{ current_dir }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">ID</label>
+                <input type="text" name="card" value="{{ card|default:'' }}" class="form-control" placeholder="例：12345">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">氏名</label>
+                <input type="text" name="q" value="{{ q|default:'' }}" class="form-control" placeholder="例：笠寺">
+            </div>
 
-    <div class="card shadow-sm">
-        <div class="card-body p-0">
-            <table class="table table-hover mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th style="width: 90px;"><a href="?{{ sort_queries.status }}">状態</a>
-						{% if current_sort == "status" %}<span class="small">{% if current_dir == "asc" %}▲{% else %}▼{% endif %}</span>{% endif %}
-						</th>
-						<th>
-                            <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.card_id }}">
-                                <span>ID</span>
-                                {% if current_sort == 'card_id' %}
-                                    <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
-                                {% endif %}
-                            </a>
-                        </th>
-                        <th>
-                            <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.name }}">
-                                <span>氏名</span>
-                                {% if current_sort == 'name' %}
-                                    <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
-                                {% endif %}
-                            </a>
-                        </th>
-                        <th>
-                            <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.birth_date }}">
-                                <span>生年月日</span>
-                                {% if current_sort == 'birth_date' %}
-                                    <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
-                                {% endif %}
-                            </a>
-                        </th>
-                        <th>
-                            <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.age }}">
-                                <span>年齢</span>
-                                {% if current_sort == 'age' %}
-                                    <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
-                                {% endif %}
-                            </a>
-                        </th>
-                        <th>
-                            <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.gender }}">
-                                <span>性別</span>
-                                {% if current_sort == 'gender' %}
-                                    <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
-                                {% endif %}
-                            </a>
-                        </th>
-                        <th>
-                            <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.attending }}">
-                                <span>担当医</span>
-                                {% if current_sort == 'attending' %}
-                                    <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
-                                {% endif %}
-                            </a>
-                        </th>
-                        <th>
-                            <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.course }}">
-                                <span>クール</span>
-                                {% if current_sort == 'course' %}
-                                    <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
-                                {% endif %}
-                            </a>
-                        </th>
-                        <th class="text-center" style="min-width: 280px;">操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for patient in patients %}
-                    <tr>
-                        <td>{% if patient.status == "inpatient" %}<span class="badge bg-success">入院中</span>
-						{% elif patient.status == "waiting" %}<span class="badge bg-warning text-dark">入院待ち</span>
-						{% elif patient.status == "discharged" %}<span class="badge bg-secondary">退院済</span>{% endif %}
-						</td>
-						<td class="fw-bold">{{ patient.card_id }}</td>
-                        <td>{{ patient.name }}</td>
-                        <td>{{ patient.birth_date|date:"Y/n/j" }}</td>
-                        <td>{{ patient.age }}歳</td>
-                        <td>{{ patient.get_gender_display }}</td>
-                        <td>
-                            {% if patient.attending_physician %}
-                                {{ patient.attending_physician.last_name }} 先生
-                            {% else %}
-                                <span class="text-muted">-</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <span class="badge {% if patient.course_number > 1 %}bg-warning text-dark{% else %}bg-secondary{% endif %} rounded-pill">
-                                {{ patient.course_number }}
-                            </span>
-                        </td>
-                        <td class="text-center">
-                            <div class="d-inline-flex gap-2">
-                                <a href="{% url 'rtms_app:patient_first_visit' patient.id %}" class="btn btn-outline-first-visit btn-sm btn-nav">初診・基本情報</a>
-                                <a href="{% url 'rtms_app:patient_clinical_path' patient.id %}" class="btn btn-outline-admission btn-sm btn-nav">クリニカルパス</a>
-                                <a href="{% url 'rtms_app:patient_home' patient.id %}" class="btn btn-outline-discharge btn-sm btn-nav">治療経過・退院準備</a>
-                            </div>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr><td colspan="9" class="text-center py-4 text-muted">登録患者はいません</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <!-- ソート状態を維持したい場合は hidden で送る -->
+            <input type="hidden" name="sort" value="{{ current_sort|default:'card_id' }}">
+
+            <div class="col-md-3 d-flex gap-2">
+                <button class="btn btn-patient-list btn-sm" type="submit">検索</button>
+                <a class="btn btn-outline-secondary btn-sm" href="{% url 'rtms_app:patient_list' %}">クリア</a>
+            </div>
         </div>
+    </form>
+
+    <div class="card-like p-0">
+        <table class="table-rtms">
+            <thead>
+                <tr>
+                    <th style="width: 90px;"><a href="?{{ sort_queries.status }}" class="text-decoration-none text-reset">状態{% if current_sort == "status" %}<span class="small"> {% if current_dir == "asc" %}▲{% else %}▼{% endif %}</span>{% endif %}</a></th>
+                    <th>
+                        <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.card_id }}">
+                            <span>ID</span>
+                            {% if current_sort == 'card_id' %}
+                                <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.name }}">
+                            <span>氏名</span>
+                            {% if current_sort == 'name' %}
+                                <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.birth_date }}">
+                            <span>生年月日</span>
+                            {% if current_sort == 'birth_date' %}
+                                <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.age }}">
+                            <span>年齢</span>
+                            {% if current_sort == 'age' %}
+                                <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.gender }}">
+                            <span>性別</span>
+                            {% if current_sort == 'gender' %}
+                                <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.attending }}">
+                            <span>担当医</span>
+                            {% if current_sort == 'attending' %}
+                                <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" href="?{{ sort_queries.course }}">
+                            <span>クール</span>
+                            {% if current_sort == 'course' %}
+                                <span class="small">{% if current_dir == 'asc' %}▲{% else %}▼{% endif %}</span>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th class="text-center" style="min-width: 280px;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for patient in patients %}
+                <tr>
+                    <td>{% if patient.status == "inpatient" %}<span class="badge bg-success">入院中</span>
+                    {% elif patient.status == "waiting" %}<span class="badge bg-warning text-dark">入院待ち</span>
+                    {% elif patient.status == "discharged" %}<span class="badge bg-secondary">退院済</span>{% endif %}
+                    </td>
+                    <td class="fw-bold">{{ patient.card_id }}</td>
+                    <td>{{ patient.name }}</td>
+                    <td>{{ patient.birth_date|date:"Y/n/j" }}</td>
+                    <td>{{ patient.age }}歳</td>
+                    <td>{{ patient.get_gender_display }}</td>
+                    <td>
+                        {% if patient.attending_physician %}
+                            {{ patient.attending_physician.last_name }} 先生
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {% if patient.course_number > 1 %}bg-warning text-dark{% else %}bg-secondary{% endif %} rounded-pill">
+                            {{ patient.course_number }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <div class="d-inline-flex gap-2">
+                            <a href="{% url 'rtms_app:patient_first_visit' patient.id %}" class="btn btn-outline-first-visit btn-sm btn-nav">初診・基本情報</a>
+                            <a href="{% url 'rtms_app:patient_clinical_path' patient.id %}" class="btn btn-outline-admission btn-sm btn-nav">クリニカルパス</a>
+                            <a href="{% url 'rtms_app:patient_home' patient.id %}" class="btn btn-outline-discharge btn-sm btn-nav">治療経過・退院準備</a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="9" class="text-center py-4 text-muted">登録患者はいません</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 {% endblock %}

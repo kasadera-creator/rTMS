@@ -28,6 +28,20 @@ class PatientRegistrationForm(forms.ModelForm):
             'referral_doctor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '医師名 (任意)'}),
         }
 
+
+class PatientBasicEditForm(forms.ModelForm):
+    class Meta:
+        model = Patient
+        fields = ['card_id', 'name', 'birth_date', 'gender', 'referral_source', 'referral_doctor']
+        widgets = {
+            'card_id': forms.TextInput(attrs={'class': 'form-control'}),
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'birth_date': DateInput(attrs={'class': 'form-control'}),
+            'gender': forms.Select(attrs={'class': 'form-select'}),
+            'referral_source': forms.TextInput(attrs={'class': 'form-control', 'list': 'referral-options', 'placeholder': '医療機関名 (任意)'}),
+            'referral_doctor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '医師名 (任意)'}),
+        }
+
 # --- 2. 初診フォーム (修正: バリデーション追加) ---
 class PatientFirstVisitForm(forms.ModelForm):
     attending_physician = PhysicianChoiceField(

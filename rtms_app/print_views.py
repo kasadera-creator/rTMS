@@ -22,6 +22,8 @@ DOC_TEMPLATES = {
 @login_required
 def patient_print_bundle(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
+	questionnaire = patient.questionnaire_data or {}
+	assessments = Assessment.objects.filter(patient=patient, timing='baseline').order_by('date')
 
 	# always use getlist to collect multiple docs from ?docs=...&docs=...
 	docs = request.GET.getlist("docs")
@@ -65,6 +67,8 @@ def patient_print_bundle(request, patient_id):
 
 	context = {
 		'patient': patient,
+		'questionnaire': questionnaire,
+		'assessments': assessments,
 		'today': timezone.now().date(),
 		'docs_to_render': docs_to_render,
 		'doc_templates': DOC_TEMPLATES,
@@ -150,6 +154,22 @@ def patient_print_referral(request, patient_id):
 		'back_url': back_url,
 	}
 	return render(request, 'rtms_app/print/referral.html', context)
+
+
+@login_required
+def patient_print_suitability(request, patient_id):
+	patient = get_object_or_404(Patient, pk=patient_id)
+	questionnaire = patient.questionnaire_data or {}
+	assessments = Assessment.objects.filter(patient=patient, timing='baseline').order_by('date')
+	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_first_visit', args=[patient.id])
+	context = {
+		'patient': patient,
+		'questionnaire': questionnaire,
+		'assessments': assessments,
+		'today': timezone.now().date(),
+		'back_url': back_url,
+	}
+	return render(request, 'rtms_app/print/suitability_questionnaire.html', context)
 
 
 @login_required

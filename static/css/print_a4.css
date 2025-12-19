@@ -1,0 +1,24 @@
+/* rTMS print stylesheet for A4 */
+@page { size: A4; margin: 10mm 10mm 12mm 10mm; }
+
+/* Base print resets */
+html, body { font-size: 11pt; line-height: 1.4; background: #fff !important; }
+body { margin: 0; }
+
+/* Hide interactive UI */
+.no-print { display: none !important; }
+.navbar, .app-footer, .floating-actions { display: none !important; }
+
+/* Content safety */
+img { max-width: 100%; height: auto; }
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { word-break: break-word; }
+
+/* Pagination controls */
+thead { display: table-header-group; }
+tr { break-inside: avoid; page-break-inside: avoid; }
+p, ul, ol { break-inside: avoid-page; }
+
+/* Optional tighter layout for print */
+.rtms-page { padding: 0; max-width: none; }
+.page-title { margin-bottom: 8pt; }

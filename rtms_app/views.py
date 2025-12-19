@@ -17,8 +17,8 @@ from urllib.parse import urlencode
 
 from .models import Patient, TreatmentSession, MappingSession, Assessment, ConsentDocument, AuditLog, SideEffectCheck
 from .forms import (
-    PatientFirstVisitForm, MappingForm, TreatmentForm, 
-    PatientRegistrationForm, AdmissionProcedureForm
+    PatientFirstVisitForm, MappingForm, TreatmentForm,
+    PatientRegistrationForm, PatientBasicEditForm, AdmissionProcedureForm
 )
 from .utils.request_context import get_current_request, get_client_ip, get_user_agent, can_view_audit
 from .services.rtms_schedule import (
@@ -27,6 +27,32 @@ from .services.rtms_schedule import (
     session_info_for_date,
     format_rtms_label,
 )
+
+
+def _questionnaire_questions():
+    questions_past = [
+        {'no': 1, 'key': 'q_past_rtms', 'label': 'rTMS実施経験（治験・研究を含む）'},
+        {'no': 2, 'key': 'q_past_side_effect', 'label': 'rTMS後に副作用などの不快な経験'},
+        {'no': 3, 'key': 'q_past_ect', 'label': '電気けいれん療法（ECT）の実施歴'},
+        {'no': 4, 'key': 'q_past_seizure', 'label': 'けいれん発作（てんかん診断の有無を問わない）'},
+        {'no': 5, 'key': 'q_past_loc', 'label': '意識消失発作'},
+        {'no': 6, 'key': 'q_past_stroke', 'label': '脳卒中（脳梗塞・脳出血など）'},
+        {'no': 7, 'key': 'q_past_trauma', 'label': '頭部外傷（意識消失を伴うなど重度なもの）'},
+        {'no': 8, 'key': 'q_past_surgery', 'label': '頭部の手術歴'},
+        {'no': 9, 'key': 'q_past_neuro', 'label': '脳外科もしくは神経内科の病気'},
+        {'no': 10, 'key': 'q_past_internal', 'label': '脳障害をおこす可能性のある内科疾患'},
+        {'no': 11, 'key': 'q_past_abuse', 'label': 'アルコールや薬物の乱用'},
+    ]
+    questions_current = [
+        {'no': 12, 'key': 'q_cur_headache', 'label': '頻繁または重度な頭痛'},
+        {'no': 13, 'key': 'q_cur_metal', 'label': '頭の中に金属や磁性体（チタン製品かどうか要確認）'},
+        {'no': 14, 'key': 'q_cur_device', 'label': '体内埋め込み式の医療機器（心臓ペースメーカーなど）'},
+        {'no': 15, 'key': 'q_cur_abuse', 'label': '多量の飲酒や薬物の乱用'},
+        {'no': 16, 'key': 'q_cur_preg', 'label': '妊娠中、もしくは妊娠の可能性が否定されない'},
+        {'no': 17, 'key': 'q_cur_family_epilepsy', 'label': '家族内にてんかんを持っているかた'},
+    ]
+    keys = [q['key'] for q in (questions_past + questions_current)] + ['q_details']
+    return questions_past, questions_current, keys
 
 def log_audit_action(patient, action, target_model, target_pk, summary='', meta=None):
     request = get_current_request()
@@ -388,10 +414,17 @@ def generate_calendar_weeks(patient):
                         }.get(timing, timing)
                         if existing:
                             label += ' (済)'
+                        
+                        # Use specific URL for week4, generic for others
+                        if timing == 'week4':
+                            url = build_url('assessment_week4', [patient.id], query={'from': 'clinical_path', 'date': we.strftime('%Y-%m-%d')})
+                        else:
+                            url = build_url('assessment_add', [patient.id, timing], query={'from': 'clinical_path', 'date': we.strftime('%Y-%m-%d')})
+                            
                         event = {
                             'type': 'assessment',
                             'label': label,
-                            'url': build_url('assessment_add', [patient.id, timing], query={'from': 'clinical_path', 'date': we.strftime('%Y-%m-%d')}),
+                            'url': url,
                             'date': we,
                             'timing': timing,
                             'window_end': we
@@ -688,48 +721,62 @@ def mapping_add(request, patient_id):
 
 @login_required
 def patient_first_visit(request, patient_id):
-    patient = get_object_or_404(Patient, pk=patient_id); dashboard_date = request.GET.get('dashboard_date')
-    all_patients = Patient.objects.all(); referral_map = {}; referral_sources_set = set()
-    for p in all_patients:
-        if p.referral_source: referral_sources_set.add(p.referral_source); 
-        if p.referral_doctor:
-            if p.referral_source not in referral_map: referral_map[p.referral_source] = set()
-            referral_map[p.referral_source].add(p.referral_doctor)
-    referral_map_json = {k: sorted(list(v)) for k, v in referral_map.items()}; referral_options = sorted(list(referral_sources_set))
+    patient = get_object_or_404(Patient, pk=patient_id)
+    dashboard_date = request.GET.get('dashboard_date')
+
+    # Referral source/doctor are entered at patient registration; first-visit UI doesn't edit them.
     end_date_est = get_completion_date(patient.first_treatment_date)
+
+    # ---- HAM-D modal (baseline) ----
     hamd_items = [
-    ('q1', '1. 抑うつ気分', 4, HAMD_ANCHORS['q1']),
-    ('q2', '2. 罪責感', 4, HAMD_ANCHORS['q2']),
-    ('q3', '3. 自殺', 4, HAMD_ANCHORS['q3']),
-    ('q4', '4. 入眠障害', 2, HAMD_ANCHORS['q4']),
-    ('q5', '5. 熟眠障害', 2, HAMD_ANCHORS['q5']),
-    ('q6', '6. 早朝睡眠障害', 2, HAMD_ANCHORS['q6']),
-    ('q7', '7. 仕事と活動', 4, HAMD_ANCHORS['q7']),
-    ('q8', '8. 精神運動抑制', 4, HAMD_ANCHORS['q8']),
-    ('q9', '9. 精神運動激越', 4, HAMD_ANCHORS['q9']),
-    ('q10', '10. 不安, 精神症状', 4, HAMD_ANCHORS['q10']),
-    ('q11', '11. 不安, 身体症状', 4, HAMD_ANCHORS['q11']),
-    ('q12', '12. 身体症状, 消化器系', 2, HAMD_ANCHORS['q12']),
-    ('q13', '13. 身体症状, 一般的', 2, HAMD_ANCHORS['q13']),
-    ('q14', '14. 生殖器症状', 2, HAMD_ANCHORS['q14']),
-    ('q15', '15. 心気症', 4, HAMD_ANCHORS['q15']),
-    ('q16', '16. この1週間の体重減少', 2, HAMD_ANCHORS['q16']),
-    ('q17', '17. 病識', 2, HAMD_ANCHORS['q17']),
-    ('q18', '18. 日内変動', 2, HAMD_ANCHORS['q18']),
-    ('q19', '19. 現実感喪失, 離人症', 4, HAMD_ANCHORS['q19']),
-    ('q20', '20. 妄想症状', 3, HAMD_ANCHORS['q20']),
-    ('q21', '21. 強迫症状', 2, HAMD_ANCHORS['q21']),
+        ('q1', '1. 抑うつ気分', 4, HAMD_ANCHORS['q1']),
+        ('q2', '2. 罪責感', 4, HAMD_ANCHORS['q2']),
+        ('q3', '3. 自殺', 4, HAMD_ANCHORS['q3']),
+        ('q4', '4. 入眠障害', 2, HAMD_ANCHORS['q4']),
+        ('q5', '5. 熟眠障害', 2, HAMD_ANCHORS['q5']),
+        ('q6', '6. 早朝睡眠障害', 2, HAMD_ANCHORS['q6']),
+        ('q7', '7. 仕事と活動', 4, HAMD_ANCHORS['q7']),
+        ('q8', '8. 精神運動抑制', 4, HAMD_ANCHORS['q8']),
+        ('q9', '9. 精神運動激越', 4, HAMD_ANCHORS['q9']),
+        ('q10', '10. 不安, 精神症状', 4, HAMD_ANCHORS['q10']),
+        ('q11', '11. 不安, 身体症状', 4, HAMD_ANCHORS['q11']),
+        ('q12', '12. 身体症状, 消化器系', 2, HAMD_ANCHORS['q12']),
+        ('q13', '13. 身体症状, 一般的', 2, HAMD_ANCHORS['q13']),
+        ('q14', '14. 生殖器症状', 2, HAMD_ANCHORS['q14']),
+        ('q15', '15. 心気症', 4, HAMD_ANCHORS['q15']),
+        ('q16', '16. 体重減少', 2, HAMD_ANCHORS['q16']),
+        ('q17', '17. 病識', 2, HAMD_ANCHORS['q17']),
+        ('q18', '18. 日内変動', 2, HAMD_ANCHORS['q18']),
+        ('q19', '19. 現実感喪失・離人症', 4, HAMD_ANCHORS['q19']),
+        ('q20', '20. 妄想症状', 3, HAMD_ANCHORS['q20']),
+        ('q21', '21. 強迫症状', 2, HAMD_ANCHORS['q21']),
     ]
-    hamd_items_left = hamd_items[:11]; hamd_items_right = hamd_items[11:]
+    hamd_items_left = hamd_items[:11]
+    hamd_items_right = hamd_items[11:]
+
     baseline_assessment = Assessment.objects.filter(patient=patient, timing='baseline').first()
 
+    # ---- Questionnaire (used by modal) ----
+    questions_past, questions_current, questionnaire_keys = _questionnaire_questions()
+    questionnaire = patient.questionnaire_data or {}
+    questionnaire_done = bool(questionnaire)
+
     if request.method == 'POST':
+        # ---- HAM-D ajax save (baseline) ----
         if 'hamd_ajax' in request.POST:
             try:
                 scores = {}
-                for key, _, _, _ in hamd_items: scores[key] = int(request.POST.get(key, 0))
-                note = request.POST.get('hamd_note', '').strip()
-                # Upsert baseline assessment by natural key: patient + course_number + timing + type
+                for key, _, maxv, _ in hamd_items:
+                    v = request.POST.get(key, "0")
+                    try:
+                        iv = int(v)
+                    except Exception:
+                        iv = 0
+                    iv = max(0, min(iv, maxv))
+                    scores[key] = iv
+
+                note = (request.POST.get('hamd_note') or '').strip()
+
                 course_number = patient.course_number or 1
                 defaults = {
                     'date': timezone.now().date(),
@@ -738,26 +785,65 @@ def patient_first_visit(request, patient_id):
                     'type': 'HAM-D',
                     'course_number': course_number,
                 }
-                assessment, created = Assessment.objects.update_or_create(
+                assessment, _created = Assessment.objects.update_or_create(
                     patient=patient,
                     course_number=course_number,
                     timing='baseline',
                     type='HAM-D',
                     defaults=defaults,
                 )
-                total = assessment.total_score_17; msg = ""; severity = ""
-                if 14 <= total <= 18: severity = "中等症"; msg = "中等症と判定しました。rTMS適正質問票を確認してください。"
-                elif total >= 19: severity = "重症"; msg = "重症と判定しました。"
-                elif 8 <= total <= 13: severity = "軽症"
-                else: severity = "正常"
-                return JsonResponse({'status': 'success', 'total_17': total, 'severity': severity, 'message': msg})
-            except Exception as e: return JsonResponse({'status': 'error', 'message': str(e)})
-        form = PatientFirstVisitForm(request.POST, instance=patient)
+
+                total = assessment.total_score_17
+                if 14 <= total <= 18:
+                    severity = "中等症"
+                    msg = "中等症と判定しました。rTMS適正質問票を確認してください。"
+                elif total >= 19:
+                    severity = "重症"
+                    msg = "重症と判定しました。"
+                elif 8 <= total <= 13:
+                    severity = "軽症"
+                    msg = ""
+                else:
+                    severity = "正常"
+                    msg = ""
+
+                return JsonResponse({
+                    'status': 'success',
+                    'total_17': total,
+                    'severity': severity,
+                    'message': msg,
+                })
+            except Exception as e:
+                return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+        # card_id/name/birth_date/gender are registered at patient_add; keep stable here.
+        # If the template omits these fields (read-only), ensure POST still validates.
+        post = request.POST.copy()
+        for f in ('card_id', 'name', 'birth_date', 'gender'):
+            if not (post.get(f) or '').strip():
+                v = getattr(patient, f)
+                if hasattr(v, 'isoformat'):
+                    v = v.isoformat()
+                post[f] = str(v)
+
+        form = PatientFirstVisitForm(post, instance=patient)
         if form.is_valid():
             p = form.save(commit=False); diag_list = request.POST.getlist('diag_list'); diag_other = request.POST.get('diag_other', '').strip()
             full_diagnosis = ", ".join(diag_list);
             if diag_other: full_diagnosis += f", その他({diag_other})"
-            p.diagnosis = full_diagnosis; p.save()
+            p.diagnosis = full_diagnosis
+
+            # Questionnaire is submitted together with the first-visit form
+            q_data = {}
+            for k in questionnaire_keys:
+                if k == 'q_details':
+                    continue
+                v = (request.POST.get(k) or '').strip()
+                q_data[k] = v if v in ('はい', 'いいえ') else 'いいえ'
+            q_data['q_details'] = (request.POST.get('q_details') or '').strip()
+            p.questionnaire_data = q_data
+
+            p.save()
 
             action = request.POST.get('action')
 
@@ -774,7 +860,8 @@ def patient_first_visit(request, patient_id):
             if dashboard_date:
                 return redirect(f"{reverse('rtms_app:dashboard')}?date={dashboard_date}")
             return redirect('rtms_app:dashboard')
-    else: form = PatientFirstVisitForm(instance=patient)
+    else:
+        form = PatientFirstVisitForm(instance=patient)
     floating_print_options = [{
         'label': '印刷プレビュー',
         'value': 'print_bundle',
@@ -783,7 +870,81 @@ def patient_first_visit(request, patient_id):
         'formtarget': '_blank',
         'docs_form_id': 'bundlePrintFormFirstVisit',
     }]
-    return render(request, 'rtms_app/patient_first_visit.html', {'patient': patient, 'form': form, 'referral_options': referral_options, 'referral_map_json': json.dumps(referral_map_json, ensure_ascii=False), 'end_date_est': end_date_est, 'dashboard_date': dashboard_date, 'hamd_items_left': hamd_items_left, 'hamd_items_right': hamd_items_right, 'baseline_assessment': baseline_assessment, 'floating_print_options': floating_print_options, 'can_view_audit': can_view_audit(request.user)})
+    return render(request, 'rtms_app/patient_first_visit.html', {
+        'patient': patient,
+        'form': form,
+        'end_date_est': end_date_est,
+        'dashboard_date': dashboard_date,
+        'baseline_assessment': baseline_assessment,
+        'questionnaire_done': questionnaire_done,
+        'questionnaire': questionnaire,
+        'questions_past': questions_past,
+        'questions_current': questions_current,
+        'hamd_items_left': hamd_items_left,
+        'hamd_items_right': hamd_items_right,
+        'floating_print_options': floating_print_options,
+        'can_view_audit': can_view_audit(request.user),
+        'can_edit_basic': can_view_audit(request.user),
+    })
+
+
+@login_required
+def patient_basic_edit(request, patient_id):
+    if not can_view_audit(request.user):
+        return HttpResponse("アクセス権限がありません。", status=403)
+
+    patient = get_object_or_404(Patient, pk=patient_id)
+    dashboard_date = request.GET.get('dashboard_date')
+
+    if request.method == 'POST':
+        form = PatientBasicEditForm(request.POST, instance=patient)
+        if form.is_valid():
+            form.save()
+            if dashboard_date:
+                return redirect(f"{reverse('rtms_app:patient_first_visit', args=[patient.id])}?dashboard_date={dashboard_date}")
+            return redirect('rtms_app:patient_first_visit', patient_id=patient.id)
+    else:
+        form = PatientBasicEditForm(instance=patient)
+
+    return render(request, 'rtms_app/patient_basic_edit.html', {
+        'patient': patient,
+        'form': form,
+        'dashboard_date': dashboard_date,
+        'can_view_audit': can_view_audit(request.user),
+    })
+
+
+@login_required
+def questionnaire_edit(request, patient_id):
+    patient = get_object_or_404(Patient, pk=patient_id)
+    dashboard_date = request.GET.get('dashboard_date')
+
+    questions_past, questions_current, keys = _questionnaire_questions()
+    questionnaire = patient.questionnaire_data or {}
+
+    if request.method == 'POST':
+        data = {}
+        for k in keys:
+            if k == 'q_details':
+                continue
+            v = (request.POST.get(k) or '').strip()
+            data[k] = v if v in ('はい', 'いいえ') else 'いいえ'
+        data['q_details'] = (request.POST.get('q_details') or '').strip()
+        patient.questionnaire_data = data
+        patient.save(update_fields=['questionnaire_data'])
+
+        if dashboard_date:
+            return redirect(f"{reverse('rtms_app:patient_first_visit', args=[patient.id])}?dashboard_date={dashboard_date}")
+        return redirect('rtms_app:patient_first_visit', patient_id=patient.id)
+
+    return render(request, 'rtms_app/questionnaire_edit.html', {
+        'patient': patient,
+        'dashboard_date': dashboard_date,
+        'questionnaire': questionnaire,
+        'questions_past': questions_past,
+        'questions_current': questions_current,
+        'can_view_audit': can_view_audit(request.user),
+    })
 
 @login_required
 def treatment_add(request, patient_id):
@@ -927,7 +1088,8 @@ def treatment_add(request, patient_id):
         
         # Use mapping data if available
         if current_week_mapping: 
-            initial_data['mt_percent'] = current_week_mapping.resting_mt
+            # initial_data['mt_percent'] = current_week_mapping.resting_mt
+            initial_data['mt_percent'] = 120
         
         form = TreatmentForm(initial=initial_data)
     
@@ -1032,16 +1194,29 @@ def assessment_add(request, patient_id, timing):
 
     history = Assessment.objects.filter(patient=patient).order_by('date')
 
-    # ※アンカーポイントは別途入れる想定ならここで text を埋める
+    # hamd_items with anchor text from HAMD_ANCHORS
     hamd_items = [
-        ('q1', '1. 抑うつ気分', 4, ""), ('q2', '2. 罪責感', 4, ""), ('q3', '3. 自殺', 4, ""),
-        ('q4', '4. 入眠障害', 2, ""), ('q5', '5. 熟眠障害', 2, ""), ('q6', '6. 早朝睡眠障害', 2, ""),
-        ('q7', '7. 仕事と活動', 4, ""), ('q8', '8. 精神運動抑制', 4, ""), ('q9', '9. 精神運動激越', 4, ""),
-        ('q10', '10. 不安, 精神症状', 4, ""), ('q11', '11. 不安, 身体症状', 4, ""), ('q12', '12. 身体症状, 消化器系', 2, ""),
-        ('q13', '13. 身体症状, 一般的', 2, ""), ('q14', '14. 生殖器症状', 2, ""), ('q15', '15. 心気症', 4, ""),
-        ('q16', '16. 体重減少', 2, ""), ('q17', '17. 病識', 2, ""),
-        ('q18', '18. 日内変動', 2, ""), ('q19', '19. 現実感喪失・離人症', 4, ""), ('q20', '20. 妄想症状', 3, ""),
-        ('q21', '21. 強迫症状', 2, ""),
+        ('q1', '1. 抑うつ気分', 4, HAMD_ANCHORS['q1']),
+        ('q2', '2. 罪責感', 4, HAMD_ANCHORS['q2']),
+        ('q3', '3. 自殺', 4, HAMD_ANCHORS['q3']),
+        ('q4', '4. 入眠障害', 2, HAMD_ANCHORS['q4']),
+        ('q5', '5. 熟眠障害', 2, HAMD_ANCHORS['q5']),
+        ('q6', '6. 早朝睡眠障害', 2, HAMD_ANCHORS['q6']),
+        ('q7', '7. 仕事と活動', 4, HAMD_ANCHORS['q7']),
+        ('q8', '8. 精神運動抑制', 4, HAMD_ANCHORS['q8']),
+        ('q9', '9. 精神運動激越', 4, HAMD_ANCHORS['q9']),
+        ('q10', '10. 不安, 精神症状', 4, HAMD_ANCHORS['q10']),
+        ('q11', '11. 不安, 身体症状', 4, HAMD_ANCHORS['q11']),
+        ('q12', '12. 身体症状, 消化器系', 2, HAMD_ANCHORS['q12']),
+        ('q13', '13. 身体症状, 一般的', 2, HAMD_ANCHORS['q13']),
+        ('q14', '14. 生殖器症状', 2, HAMD_ANCHORS['q14']),
+        ('q15', '15. 心気症', 4, HAMD_ANCHORS['q15']),
+        ('q16', '16. 体重減少', 2, HAMD_ANCHORS['q16']),
+        ('q17', '17. 病識', 2, HAMD_ANCHORS['q17']),
+        ('q18', '18. 日内変動', 2, HAMD_ANCHORS['q18']),
+        ('q19', '19. 現実感喪失・離人症', 4, HAMD_ANCHORS['q19']),
+        ('q20', '20. 妄想症状', 3, HAMD_ANCHORS['q20']),
+        ('q21', '21. 強迫症状', 2, HAMD_ANCHORS['q21']),
     ]
     hamd_items_left = hamd_items[:11]
     hamd_items_right = hamd_items[11:]
@@ -1168,6 +1343,12 @@ def assessment_add(request, patient_id, timing):
     ctx['can_view_audit'] = can_view_audit(request.user)
     return render(request, 'rtms_app/assessment_add.html', ctx)
 
+def assessment_week4(request, patient_id):
+    """
+    第4週目評価用のラッパービュー
+    """
+    return assessment_add(request, patient_id, timing='week4')
+
 @login_required
 def patient_summary_view(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
@@ -1224,6 +1405,38 @@ def patient_summary_view(request, patient_id):
         
     sessions = TreatmentSession.objects.filter(patient=patient).order_by('date'); assessments = Assessment.objects.filter(patient=patient).order_by('date')
     test_scores = assessments; score_admin = assessments.first(); score_w3 = assessments.filter(timing='week3').first(); score_w6 = assessments.filter(timing='week6').first()
+
+    timing_order = [
+        ('baseline', '治療前'),
+        ('week3', '3週'),
+        ('week4', '4週'),
+        ('week6', '6週'),
+    ]
+    latest_by_timing = {
+        t: assessments.filter(timing=t).order_by('-date').first() for t, _ in timing_order
+    }
+    baseline_obj = latest_by_timing.get('baseline')
+    baseline_17 = getattr(baseline_obj, 'total_score_17', None)
+
+    trend_cols = []
+    for t, label in timing_order:
+        a = latest_by_timing.get(t)
+        date_str = a.date.strftime('%Y/%-m/%-d') if a and getattr(a, 'date', None) else '-'
+        hamd17 = getattr(a, 'total_score_17', None)
+        hamd21 = getattr(a, 'total_score_21', None)
+
+        improvement_pct = None
+        if t != 'baseline' and a and baseline_17 not in (None, 0) and hamd17 is not None:
+            improvement_pct = round((baseline_17 - hamd17) / baseline_17 * 100.0, 1)
+
+        trend_cols.append({
+            'timing': t,
+            'label': label,
+            'date_str': date_str,
+            'hamd17': hamd17,
+            'hamd21': hamd21,
+            'improvement_pct': improvement_pct,
+        })
     def fmt_score(obj): return f"HAMD17 {obj.total_score_17}点 HAMD21 {obj.total_score_21}点" if obj else "未評価"
     side_effects_list_all = []; history_list = []
     SE_MAP = {'headache': '頭痛', 'scalp': '頭皮痛', 'discomfort': '不快感', 'tooth': '歯痛', 'twitch': '攣縮', 'dizzy': 'めまい', 'nausea': '吐き気', 'tinnitus': '耳鳴り', 'hearing': '聴力低下', 'anxiety': '不安', 'other': 'その他'}
@@ -1253,7 +1466,17 @@ def patient_summary_view(request, patient_id):
             "docs_form_id": "bundlePrintFormDischarge",
         },
     ]
-    return render(request, 'rtms_app/patient_summary.html', {'patient': patient, 'summary_text': summary_text, 'history_list': history_list, 'today': timezone.now().date(), 'test_scores': test_scores, 'dashboard_date': dashboard_date, 'floating_print_options': floating_print_options, 'can_view_audit': can_view_audit(request.user)})
+    return render(request, 'rtms_app/patient_summary.html', {
+        'patient': patient,
+        'summary_text': summary_text,
+        'history_list': history_list,
+        'today': timezone.now().date(),
+        'test_scores': test_scores,
+        'trend_cols': trend_cols,
+        'dashboard_date': dashboard_date,
+        'floating_print_options': floating_print_options,
+        'can_view_audit': can_view_audit(request.user),
+    })
     
 @login_required
 def patient_add_view(request):

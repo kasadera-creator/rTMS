@@ -3,6 +3,14 @@
 
 {% block body_class %}page-mapping{% endblock %}
 
+{% block header_breadcrumb %}
+  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
+  <span class="text-white-50 px-1">/</span>
+  <a href="#" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ID {{ patient.card_id }}</a>
+  <span class="text-white-50 px-1">/</span>
+  <span class="text-white px-1" style="font-size: 0.9rem;">位置決め</span>
+{% endblock header_breadcrumb %}
+
 {% block extrastyle %}
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <style>
@@ -11,17 +19,57 @@
     padding-left: 10px;
     margin-bottom: 1.5rem;
   }
+
+  /* iPad Landscape Optimization */
+  @media only screen and (min-width: 1000px) and (orientation: landscape) {
+      .container { max-width: 98vw; padding-top: 10px !important; padding-bottom: 60px !important; }
+      h3 { font-size: 1.2rem; margin-bottom: 0.5rem !important; }
+      .alert { padding: 0.25rem 0.5rem; margin-bottom: 0.5rem !important; font-size: 0.85rem; }
+      
+      .card-header { padding: 0.25rem 0.5rem; font-size: 0.9rem; }
+      .card-body { padding: 0.5rem; }
+      
+      .form-label { margin-bottom: 0; font-size: 0.8rem; }
+      .form-control, .form-select, .input-group-text { padding: 0.15rem 0.3rem; font-size: 0.85rem; height: auto; }
+      
+      .section-title { margin-bottom: 0.5rem; font-size: 1rem; }
+      .mb-3 { margin-bottom: 0.4rem !important; }
+      .mb-4 { margin-bottom: 0.5rem !important; }
+      
+      /* History list compact */
+      .list-group-item { padding: 0.4rem 0.5rem; font-size: 0.85rem; }
+      
+      /* Hide large bottom buttons in favor of FAB to save space */
+      .text-center.my-4 { display: none; }
+      
+      .fab-stack { bottom: 15px; right: 15px; gap: 8px; }
+      .fab { padding: 6px 10px; font-size: 14px; }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container py-4 mb-5">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3 class="fw-bold d-flex align-items-center gap-2 mb-0"><i class="fas fa-crosshairs page-title-icon"></i> 位置決め記録 {% include "rtms_app/partials/recommendation_badge.html" %}</h3>
-        {% include "rtms_app/partials/patient_nav.html" %}
+<div class="container py-4">
+<div class="d-flex justify-content-between align-items-center gap-3 mb-4">
+        <div class="page-title d-flex align-items-center gap-2"><i class="fas fa-crosshairs page-title-icon"></i> 位置決め {% include "rtms_app/partials/recommendation_badge.html" %}</div>
+        <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: nowrap; margin-left: auto;">
+          <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; font-weight: 600; white-space: nowrap;">
+            <span>ID {{ patient.card_id }}</span>
+            <span style="color: #999;">|</span>
+            <span class="patient-name">{{ patient.name }}</span>
+            <span style="color: #999;">|</span>
+            <span style="font-weight: 400;">{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）{{ patient.get_gender_display }}</span>
+            <span style="color: #999;">|</span>
+            <span style="font-weight: 600;">{{ patient.course_number|default:1 }}クール</span>
+            {% if patient.attending_physician %}
+            <span style="color: #999;">|</span>
+            <span style="font-weight: 400;">担当医：{% if patient.attending_physician.last_name %}{{ patient.attending_physician.last_name }}{% else %}{{ patient.attending_physician.username }}{% endif %}</span>
+            {% endif %}
+          </div>
+        </div>
     </div>
 
-    <div class="alert alert-light border shadow-sm mb-4 d-flex align-items-center">
+    <div class="d-none">
         <span class="badge bg-dark me-2">ID: {{ patient.card_id }}</span>
         <span class="h5 mb-0 me-3">{{ patient.name }} 様</span>
         <span class="text-muted small">({{ patient.age }}歳 / {{ patient.get_gender_display }})</span>
@@ -31,7 +79,7 @@
         <div class="col-md-6">
             <div class="card shadow-sm border-0 h-100">
                 <div class="card-header fw-bold" style="background-color: var(--color-mapping); color: #fff;">
-                    <i class="fas fa-pen me-1"></i> 新規記録
+                    <i class="fas fa-pen me-1"></i> MT測定
                 </div>
                 <div class="card-body bg-light">
                     <form method="post" id="mainForm">

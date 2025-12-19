@@ -126,6 +126,8 @@
                     治療前評価: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %} ({{ event.window_end|date:"m/d" }})
                 {% elif event.timing == 'week3' %}
                     第3週目評価: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %} ({{ event.window_end|date:"m/d" }})
+                {% elif event.timing == 'week4' %}
+                    第4週目評価: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %} ({{ event.window_end|date:"m/d" }})
                 {% elif event.timing == 'week6' %}
                     第6週目評価: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %} ({{ event.window_end|date:"m/d" }})
                 {% endif %}

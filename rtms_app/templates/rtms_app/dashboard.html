@@ -2,11 +2,53 @@
 
 {% block extrastyle %}
 <style>
-    .date-nav { background: white; border-radius: 10px; padding: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 25px; }
-    .card-task { border: none; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); height: 100%; transition: transform 0.2s; }
-    .card-task:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-    .task-header { padding: 12px 15px; color: white; display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 1rem; border-radius: 10px 10px 0 0; }
-    
+    .dashboard-shell { display: flex; flex-direction: column; gap: var(--space-3); }
+    .date-nav {
+        background: #fff;
+        border: var(--border);
+        border-radius: var(--radius);
+        padding: 0.8rem 1rem;
+        box-shadow: var(--shadow);
+    }
+
+    .dashboard-grid { 
+        gap: 1rem !important; 
+        display: grid !important;
+        grid-template-columns: repeat(3, 1fr) !important;
+        grid-auto-flow: row !important;
+        grid-auto-rows: auto;
+    }
+    @media (max-width: 1024px) {
+        .dashboard-grid { grid-template-columns: repeat(2, 1fr) !important; }
+    }
+    @media (max-width: 768px) {
+        .dashboard-grid { grid-template-columns: 1fr !important; }
+    }
+    .task-group-wrapper { 
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        min-width: auto !important;
+    }
+    .card-task {
+        border: var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        background: #fff;
+        overflow: hidden;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .card-task:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
+    .task-header {
+        padding: 0.65rem 0.85rem;
+        color: #fff;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 700;
+        font-size: var(--font-base);
+    }
+
     /* テーマベースのグラデーション */
     .bg-g-first-visit { background: linear-gradient(135deg, var(--color-first-visit), var(--color-first-visit-dark)); }
     .bg-g-admission { background: linear-gradient(135deg, var(--color-admission), var(--color-admission-dark)); }
@@ -15,34 +57,44 @@
     .bg-g-assessment { background: linear-gradient(135deg, var(--color-assessment), var(--color-assessment-dark)); }
     .bg-g-discharge { background: linear-gradient(135deg, var(--color-discharge), var(--color-discharge-dark)); }
 
-    .list-group-item { border: none; border-bottom: 1px solid #f0f0f0; padding: 10px 15px; font-size: 0.95rem; }
+    .list-group-item {
+        border: none;
+        border-bottom: 1px solid #f0f0f0;
+        padding: 0.65rem 0.85rem;
+        font-size: var(--font-base);
+        line-height: 1.35;
+    }
     .list-group-item:hover { background-color: #f8f9fa; }
     .list-group-item a { text-decoration: none; color: inherit; display: block; }
-    
-    .status-badge { font-size: 0.7rem; padding: 3px 8px; border-radius: 12px; min-width: 60px; text-align: center; float: right; margin-left: 5px; }
+
+    .status-badge { font-size: 0.72rem; padding: 3px 8px; border-radius: 12px; min-width: 64px; text-align: center; margin-left: 5px; }
     .status-success, .status-done, .status-手続済, .status-実施済, .status-登録済, .status-診察済 { background-color: #e6f9ed; color: #198754; border: 1px solid #c3e6cb; }
     .status-warning, .status-要対応, .status-要手続 { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
     .status-danger, .status-実施未 { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     .status-info, .status-退院準備 { background-color: #cff4fc; color: #055160; border: 1px solid #b6effb; }
 
-    /* レイアウト変更: Todoを上に */
-    .todo-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
-    .todo-badge { font-size: 0.85rem; font-weight: bold; color: #495057; background-color: #e9ecef; padding: 3px 8px; border-radius: 4px; }
-    
-    .name-row { margin-bottom: 5px; }
-    .task-meta { font-size: 0.8rem; color: #6c757d; display: flex; justify-content: space-between; border-top: 1px dashed #eee; padding-top: 4px; }
-    
+    .todo-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 8px; }
+    .todo-badge { font-size: 0.82rem; font-weight: 700; color: #495057; background-color: #e9ecef; padding: 3px 8px; border-radius: 4px; }
+    .name-row { margin-bottom: 4px; line-height: 1.3; }
+    .task-meta { font-size: 0.78rem; color: #6c757d; display: flex; justify-content: space-between; border-top: 1px dashed #eee; padding-top: 4px; gap: 6px; }
+
     /* 日付ピッカー用スタイル */
     .date-picker-wrapper { position: relative; cursor: pointer; transition: background 0.2s; }
     .date-picker-wrapper:hover { background-color: #e2e6ea !important; }
     .date-picker-input { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10; }
+
+    @media (min-width: 1024px) and (max-width: 1366px) and (orientation: landscape) {
+        .date-nav { padding: 0.65rem 0.9rem; }
+        .task-header { padding: 0.6rem 0.75rem; }
+        .list-group-item { padding: 0.55rem 0.75rem; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<div class="dashboard-container">
     <!-- 日付ナビゲーション -->
-    <div class="date-nav d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
+    <div class="date-nav d-flex flex-column flex-md-row justify-content-between align-items-center gap-3 mb-3">
         
         <!-- 左側: タイトルと日付操作 -->
         <div class="d-flex flex-wrap align-items-center justify-content-center gap-2 w-100 w-md-auto">
@@ -91,11 +143,11 @@
     </div>
 
     <!-- 3列 x 2行 のグリッドレイアウト -->
-    <div class="row g-4">
+    <div class="dashboard-grid">
         
         <!-- views.pyから渡されたデータを使用 -->
         {% for task_group in dashboard_tasks %}
-        <div class="col-md-6 col-lg-4">
+        <div class="task-group-wrapper">
             <div class="card-task bg-white">
                 <div class="task-header {{ task_group.color_class }}">
                     <span><i class="fas {{ task_group.icon }} me-2"></i>{{ task_group.title }}</span>
@@ -126,6 +178,8 @@
                                 <a href="{% url 'rtms_app:assessment_add' item.obj.id 'baseline' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
                             {% elif item.timing_code == 'week3' %}
                                 <a href="{% url 'rtms_app:assessment_add' item.obj.id 'week3' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                            {% elif item.timing_code == 'week4' %}
+                                <a href="{% url 'rtms_app:assessment_week4' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
                             {% elif item.timing_code == 'week6' %}
                                 <a href="{% url 'rtms_app:assessment_add' item.obj.id 'week6' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
                             {% else %}

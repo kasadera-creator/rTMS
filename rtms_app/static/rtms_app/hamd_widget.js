@@ -48,18 +48,47 @@
   }
 
   function initPopovers() {
-    if (!window.bootstrap || !bootstrap.Popover) return;
+    console.log('[hamd_widget] initPopovers() called');
+    
+    // Find all popover elements
+    const popoverElements = document.querySelectorAll('[data-bs-toggle="popover"]');
+    console.log('[hamd_widget] Found', popoverElements.length, 'popover elements');
+    
+    if (popoverElements.length === 0) {
+      console.warn('[hamd_widget] No popover elements found!');
+      return;
+    }
+    
+    // Destroy existing popovers first to avoid duplicates
+    popoverElements.forEach((el) => {
+      const existingInstance = bootstrap.Popover.getInstance(el);
+      if (existingInstance) {
+        console.log('[hamd_widget] Disposing existing popover instance');
+        existingInstance.dispose();
+      }
+    });
 
     const trigger = isTouchDevice() ? "click" : "hover focus";
+    console.log('[hamd_widget] Using trigger:', trigger);
 
-    document.querySelectorAll('[data-bs-toggle="popover"]').forEach((el) => {
-      if (bootstrap.Popover.getInstance(el)) return;
-      new bootstrap.Popover(el, {
-        trigger,
-        container: "body",
-        placement: "auto",
-      });
+    let createdCount = 0;
+    popoverElements.forEach((el) => {
+      try {
+        const content = el.getAttribute('data-bs-content');
+        console.log('[hamd_widget] Creating popover with content:', content ? content.substring(0, 50) + '...' : 'NO CONTENT');
+        
+        new bootstrap.Popover(el, {
+          trigger,
+          container: "body",
+          placement: "auto",
+        });
+        createdCount++;
+      } catch (e) {
+        console.error('[hamd_widget] Failed to create popover:', e);
+      }
     });
+    
+    console.log('[hamd_widget] Created', createdCount, 'popover instances');
 
     if (isTouchDevice()) {
       document.addEventListener("click", (e) => {
@@ -95,8 +124,39 @@
   }
 
   function boot() {
+    console.log('[hamd_widget] boot() called');
     initButtonGroups();
-    initPopovers();
+    
+    // Wait for Bootstrap to be fully loaded before initializing popovers
+    if (typeof bootstrap !== 'undefined' && bootstrap.Popover) {
+      console.log('[hamd_widget] Bootstrap detected, initializing popovers');
+      initPopovers();
+      // Retry initialization after a delay to ensure all DOM elements are ready
+      setTimeout(() => {
+        console.log('[hamd_widget] Re-initializing popovers after delay');
+        initPopovers();
+      }, 500);
+    } else {
+      console.log('[hamd_widget] Bootstrap not yet loaded, waiting...');
+      let attempts = 0;
+      const checkBootstrap = setInterval(() => {
+        attempts++;
+        if (typeof bootstrap !== 'undefined' && bootstrap.Popover) {
+          console.log('[hamd_widget] Bootstrap loaded after', attempts, 'attempts');
+          clearInterval(checkBootstrap);
+          initPopovers();
+          // Retry initialization after a delay
+          setTimeout(() => {
+            console.log('[hamd_widget] Re-initializing popovers after delay');
+            initPopovers();
+          }, 500);
+        } else if (attempts > 50) {
+          console.error('[hamd_widget] Bootstrap failed to load after 50 attempts');
+          clearInterval(checkBootstrap);
+        }
+      }, 100);
+    }
+    
     restoreValues();
     setTimeout(calcHAMD17, 50);
     setTimeout(calcHAMD17, 200);
@@ -110,4 +170,5 @@
 
   window.calcHAMD17 = calcHAMD17;
   window.restoreHAMDValues = restoreValues;
+  window.reinitHAMDPopovers = initPopovers; // Expose for manual re-initialization
 })();

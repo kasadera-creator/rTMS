@@ -1,10 +1,24 @@
 {% load static %}
-<div class="container py-3 mb-5">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="fw-bold mb-0">
-      <i class="fas fa-chart-bar text-danger"></i> {{ timing_label }} (HAM-D)
-    </h4>
-    {% include "rtms_app/partials/patient_nav.html" %}
+<div class="container py-3">
+  <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+    <div class="page-title d-flex align-items-center gap-2">
+      <i class="fas fa-chart-bar page-title-icon"></i> {{ timing_label }}
+    </div>
+    <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: nowrap; margin-left: auto;">
+      <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; font-weight: 600; white-space: nowrap;">
+        <span>ID {{ patient.card_id }}</span>
+        <span style="color: #999;">|</span>
+        <span class="patient-name">{{ patient.name }}</span>
+        <span style="color: #999;">|</span>
+        <span style="font-weight: 400;">{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）{{ patient.get_gender_display }}</span>
+        <span style="color: #999;">|</span>
+        <span style="font-weight: 600;">{{ patient.course_number|default:1 }}クール</span>
+        {% if patient.attending_physician %}
+        <span style="color: #999;">|</span>
+        <span style="font-weight: 400;">担当医：{% if patient.attending_physician.last_name %}{{ patient.attending_physician.last_name }}{% else %}{{ patient.attending_physician.username }}{% endif %}</span>
+        {% endif %}
+      </div>
+    </div>
   </div>
 
   {% include "rtms_app/partials/form_header.html" %}
@@ -28,16 +42,14 @@
           <div class="col-lg-6">
             <div class="d-flex flex-column gap-2">
               {% for key, label, max, text in hamd_items_left %}
-                <div class="hamd-row p-2 d-flex align-items-center justify-content-between">
+                <div class="hamd-row p-2 d-flex align-items-center justify-content-between"
+                     data-bs-toggle="popover"
+                     data-bs-placement="auto"
+                     data-bs-trigger="hover focus"
+                     data-bs-content="{{ text }}">
                   <div class="d-flex align-items-center gap-2 flex-grow-1 me-2">
                     <div class="q-badge">Q{{ forloop.counter }}</div>
                     <div class="fw-bold compact-label">{{ label }}</div>
-                    <i class="fas fa-info-circle help-icon"
-                       tabindex="0"
-                       data-bs-toggle="popover"
-                       data-bs-placement="auto"
-                       data-bs-html="false"
-                       data-bs-content="{{ text|escape }}"></i>
                   </div>
                   <div class="text-end">
                     <input type="hidden" name="{{ key }}" value="0">
@@ -65,16 +77,14 @@
           <div class="col-lg-6">
             <div class="d-flex flex-column gap-2">
               {% for key, label, max, text in hamd_items_right %}
-                <div class="hamd-row p-2 d-flex align-items-center justify-content-between">
+                <div class="hamd-row p-2 d-flex align-items-center justify-content-between"
+                     data-bs-toggle="popover"
+                     data-bs-placement="auto"
+                     data-bs-trigger="hover focus"
+                     data-bs-content="{{ text }}">
                   <div class="d-flex align-items-center gap-2 flex-grow-1 me-2">
                     <div class="q-badge">Q{{ forloop.counter|add:11 }}</div>
                     <div class="fw-bold compact-label">{{ label }}</div>
-                    <i class="fas fa-info-circle help-icon"
-                       tabindex="0"
-                       data-bs-toggle="popover"
-                       data-bs-placement="auto"
-                       data-bs-html="false"
-                       data-bs-content="{{ text|escape }}"></i>
                   </div>
                   <div class="text-end">
                     <input type="hidden" name="{{ key }}" value="0">
@@ -172,5 +182,3 @@
     }
   })();
 </script>
-
-<script src="{% static 'rtms_app/hamd_widget.js' %}"></script>

@@ -3,6 +3,14 @@
 
 {% block body_class %}page-admission{% endblock %}
 
+{% block header_breadcrumb %}
+  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
+  <span class="text-white-50 px-1">/</span>
+  <a href="#" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ID {{ patient.card_id }}</a>
+  <span class="text-white-50 px-1">/</span>
+  <span class="text-white px-1" style="font-size: 0.9rem;">クリニカルパス</span>
+{% endblock header_breadcrumb %}
+
 {% block extrastyle %}
 <style>
     .calendar-container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
@@ -32,15 +40,46 @@
     .evt-assessment { background-color: var(--color-assessment-bg); color: var(--color-assessment); border: 1px solid var(--color-assessment); font-weight: bold; }
     .evt-discharge { background-color: var(--color-discharge-bg); color: var(--color-discharge); border: 1px solid var(--color-discharge); font-weight: bold; }
 
+    /* iPad Landscape Optimization */
+    @media only screen and (min-width: 1000px) and (orientation: landscape) {
+        .container { max-width: 98vw; padding-top: 10px !important; padding-bottom: 20px !important; }
+        h3 { font-size: 1.2rem; margin-bottom: 0.5rem !important; }
+        .alert { padding: 0.25rem 0.5rem; margin-bottom: 0.5rem !important; font-size: 0.85rem; }
+        
+        .calendar-container { padding: 10px; }
+        .calendar-header { margin-bottom: 10px; }
+        .calendar-header h5 { font-size: 1rem; }
+        
+        .calendar-table th { padding: 4px; font-size: 0.85rem; }
+        .calendar-table td { padding: 2px; min-height: 40px; height: 60px; font-size: 0.8rem; }
+        
+        .date-num { font-size: 0.8rem; margin-bottom: 0; }
+        .event-item { font-size: 0.7rem; padding: 1px 2px; margin-bottom: 1px; }
+    }
+
 </style>
 {% endblock %}
 
 {% block content %}
 <form id="mainForm" class="d-none" method="get"></form>
-<div class="container py-4 mb-5">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3 class="d-flex align-items-center gap-2 mb-0"><i class="fas fa-calendar-alt page-title-icon"></i> クリニカルパス (スケジュール) {% include "rtms_app/partials/recommendation_badge.html" %}</h3>
-        {% include "rtms_app/partials/patient_nav.html" %}
+<div class="stack-md" style="margin-bottom: 0;">
+<div class="d-flex justify-content-between align-items-center gap-3 mb-4">
+        <div class="page-title d-flex align-items-center gap-2"><i class="fas fa-calendar-alt page-title-icon"></i> クリニカルパス {% include "rtms_app/partials/recommendation_badge.html" %}</div>
+        <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: nowrap; margin-left: auto;">
+          <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; font-weight: 600; white-space: nowrap;">
+            <span>ID {{ patient.card_id }}</span>
+            <span style="color: #999;">|</span>
+            <span class="patient-name">{{ patient.name }}</span>
+            <span style="color: #999;">|</span>
+            <span style="font-weight: 400;">{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）{{ patient.get_gender_display }}</span>
+            <span style="color: #999;">|</span>
+            <span style="font-weight: 600;">{{ patient.course_number|default:1 }}クール</span>
+            {% if patient.attending_physician %}
+            <span style="color: #999;">|</span>
+            <span style="font-weight: 400;">担当医：{% if patient.attending_physician.last_name %}{{ patient.attending_physician.last_name }}{% else %}{{ patient.attending_physician.username }}{% endif %}</span>
+            {% endif %}
+          </div>
+        </div>
     </div>
 
     {% if recommendation and recommendation.status != 'pending' %}
@@ -50,7 +89,7 @@
     </div>
     {% endif %}
 
-    <div class="calendar-container">
+    <div class="calendar-container card-like">
         <div class="calendar-header">
             <div>
                 <h5 class="fw-bold mb-0">{{ patient.name }} 様</h5>
@@ -60,19 +99,6 @@
                 入院日: {{ patient.admission_date|default:"未定" }}<br>
                 退院予定: {% if patient.discharge_date %}{{ patient.discharge_date }}{% else %}未定{% endif %}
             </div>
-        </div>
-
-        <div class="mb-4">
-            <h5>評価結果</h5>
-            {% for event in assessment_events %}
-                {% if event.timing == 'baseline' %}
-                    <p>評価（治療前）: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %}</p>
-                {% elif event.timing == 'week3' %}
-                    <p>評価（第3週目）: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %}</p>
-                {% elif event.timing == 'week6' %}
-                    <p>評価（第4週目）: {% if event.label|slice:"-4:" == "(済)" %}完了{% else %}未実施{% endif %}</p>
-                {% endif %}
-            {% endfor %}
         </div>
 
         <div class="table-responsive">
@@ -160,7 +186,7 @@
 {% endif %}
 
     <div class="my-4">
-        {% include 'rtms_app/partials/print_box.html' %}
+        <!-- Assessment data removed as requested -->
     </div>
 
 {% endblock %}

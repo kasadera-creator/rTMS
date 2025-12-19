@@ -1,167 +1,119 @@
+{% extends 'rtms_app/print/_print_base.html' %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <title>副作用チェック表 - {{ patient.name }}</title>
-  <style>
-    /* リセット & 基本設定 */
-    @page { size: A4 portrait; margin: 10mm; }
-    body { 
-      font-family: "Hiragino Mincho ProN", "MS PMincho", serif; 
-      color: #000; 
-      margin: 0; padding: 10px; 
-      width: 100%; box-sizing: border-box;
-      background: white;
-    }
-    
-    /* ユーティリティ */
-    .text-center { text-align: center; }
-    .text-right { text-align: right; }
-    .fw-bold { font-weight: bold; }
-    .mb-2 { margin-bottom: 0.5rem; }
-    .mt-4 { margin-top: 1.5rem; }
-    
-    /* タイトル */
-    h1.title {
-      font-size: 22px; margin-bottom: 20px; 
-      border-bottom: 2px solid #000; padding-bottom: 10px;
-    }
 
-    /* 基本情報セクション */
-    .info-section { font-size: 14px; line-height: 1.8; margin-bottom: 15px; }
-    .info-box {
-      border: 1px solid #000; padding: 10px; margin-top: 10px;
-      font-size: 13px;
-    }
-    
-    /* テーブル */
-    table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
-    th, td { border: 1px solid #000; padding: 4px; text-align: center; }
-    th { background-color: #f0f0f0; }
-    td.left-align { text-align: left; padding-left: 8px; }
+{% block title %}副作用チェック表 - {{ patient.name }}{% endblock %}
+{% block toolbar_title %}副作用チェック表 - {{ patient.name }} 様{% endblock %}
 
-    /* 署名・フッター */
-    .footer-section { margin-top: 30px; font-size: 12px; display: flex; justify-content: space-between; }
-    .signature-line { border-bottom: 1px solid #000; display: inline-block; width: 200px; }
-    
-    /* 画面表示用ボタン (印刷時は消える) */
-    @media print {
-      .no-print { display: none !important; }
+{% block extra_head %}
+<style>
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
     }
-    .print-btn-container {
-      position: fixed; top: 20px; right: 20px; 
-      background: rgba(255,255,255,0.95); padding: 15px 20px; 
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    .data-table th, .data-table td {
+        border: 1px solid #000 !important;
+        padding: 6px;
+        vertical-align: middle !important;
     }
-    .btn-print {
-      padding: 10px 24px; cursor: pointer; font-size: 15px; font-weight: bold;
-      background: #0d6efd; color: white; border: none; border-radius: 6px;
-      box-shadow: 0 2px 6px rgba(13,110,253,0.3);
-      transition: all 0.2s;
+    .data-table th {
+        background-color: #f0f0f0;
+        text-align: center;
+        font-weight: bold;
     }
-    .btn-print:hover { background: #0b5ed7; transform: translateY(-1px); }
-    .btn-close { 
-      padding: 8px 16px; cursor: pointer; font-size: 14px;
-      background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;
-      margin-left: 8px;
-    }
-  </style>
-  <script>
-    function printPage() { window.print(); }
-    function closePage() { window.close(); }
-    function goBack() {
-      const url = "{{ back_url|escapejs }}";
-      if (url) {
-        window.location.assign(url);
-      }
-    }
-    // window.addEventListener('load', () => window.print());
-  </script>
-</head>
-<body>
-  <div class="print-btn-container no-print">
-    <button class="btn-print" onclick="printPage()">印刷</button>
-    <button class="btn-close" onclick="goBack()">戻る</button>
-  </div>
+    /* Ensure specific alignments override generic ones if needed */
+    .text-center { text-align: center !important; }
+    .text-start { text-align: left !important; }
+    .ps-2 { padding-left: 0.5rem !important; }
+</style>
+{% endblock %}
 
-  <h1 class="title text-center">反復経頭蓋磁気刺激療法(rTMS)の副作用チェック表</h1>
-  
-  <div class="info-section">
-    <div style="margin-bottom: 8px;">
-      日付: 
-      {% if session.date %}
-        {{ session.date.year }}年 {{ session.date.month }}月 {{ session.date.day }}日 (時間: {{ session.date|date:"H:i" }})
-      {% else %}
-        _____年 ___月 ___日 (時間: )
-      {% endif %}
-    </div>
-    <div style="margin-bottom: 8px;">
-      患者氏名: {{ patient.name }} 様
-    </div>
-    <div style="margin-bottom: 8px;">
-      施行者氏名: {% if session.performer %}{{ session.performer.last_name }} {{ session.performer.first_name }}{% else %}________________________{% endif %}
-    </div>
-  </div>
+{% block print_content %}
+<div class="page-container">
+    <div class="page-sheet">
+        <div class="summary-header">
+            <div>作成日: {{ today|date:"Y年n月j日" }}</div>
+            <div>笠寺精治寮病院</div>
+            <div>担当医: {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}</div>
+        </div>
+        <h1 class="doc-title">反復経頭蓋磁気刺激療法(rTMS) 副作用チェック表</h1>
 
-  <div class="info-box">
-    <div style="margin-bottom: 5px;">使用したTMS治療器の種類: Brainsway</div>
-    <div style="margin-bottom: 5px;">
-      rTMSセッション回数: {{ session_number|default:"____" }}回目　　刺激部位: {{ session.target_site|default:"____" }}
-    </div>
-    <div style="margin-bottom: 5px;">
-      刺激頻度: {{ session.frequency_hz|default:"__" }} Hz　　刺激強度: {{ session.intensity_percent|default:"__" }} %
-    </div>
-    <div>
-      総パルス数: {{ session.total_pulses|default:"____" }} パルス/セッション
-    </div>
-  </div>
+        <table class="summary-info-table">
+            <tr>
+                <th>患者ID</th>
+                <td>{{ patient.card_id }}</td>
+                <th>氏名</th>
+                <td>{{ patient.name }} 様</td>
+            </tr>
+            <tr>
+                <th>実施日</th>
+                <td>
+                    {% if session.date %}
+                        {{ session.date|date:"Y年n月j日" }} ({{ session.date|date:"H:i" }})
+                    {% else %}
+                        未実施
+                    {% endif %}
+                </td>
+                <th>回数</th>
+                <td>第 {{ session_number }} 回</td>
+            </tr>
+        </table>
 
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 20%">症状</th>
-        <th style="width: 8%">刺激前</th>
-        <th style="width: 8%">刺激中</th>
-        <th style="width: 8%">刺激後</th>
-        <th style="width: 10%">関連性</th>
-        <th style="width: 46%">メモ(対処法など)</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in side_effect_rows %}
-      <tr>
-        <td class="left-align">{{ row.item }}</td>
-        <td>{% if row.before > 0 %}{{ row.before }}{% endif %}</td>
-        <td>{% if row.during > 0 %}{{ row.during }}{% endif %}</td>
-        <td>{% if row.after > 0 %}{{ row.after }}{% endif %}</td>
-        <td>{% if row.relatedness > 0 %}{{ row.relatedness }}{% endif %}</td>
-        <td class="left-align">{{ row.memo }}</td>
-      </tr>
-      {% empty %}
-      {% for i in "12345678901"|make_list %}
-      <tr><td style="height: 25px;"></td><td></td><td></td><td></td><td></td><td></td></tr>
-      {% endfor %}
-      {% endfor %}
-    </tbody>
-  </table>
+        <div class="content-section mt-4">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2" style="width: 25%;">症状</th>
+                        <th colspan="3">重症度 (0-3)</th>
+                        <th rowspan="2" style="width: 10%;">関連性<br>(0-3)</th>
+                        <th rowspan="2" style="width: 35%;">備考</th>
+                    </tr>
+                    <tr>
+                        <th style="width: 10%;">前</th>
+                        <th style="width: 10%;">中</th>
+                        <th style="width: 10%;">後</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in side_effect_rows %}
+                    <tr>
+                        <td class="text-center">{{ row.item }}</td>
+                        <td class="text-center">{{ row.before }}</td>
+                        <td class="text-center">{{ row.during }}</td>
+                        <td class="text-center">{{ row.after }}</td>
+                        <td class="text-center">{{ row.relatedness }}</td>
+                        <td class="text-start ps-2">{{ row.memo|default:"" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div class="text-end mt-1" style="font-size: 9pt; color: #666;">
+                重症度：0=なし、1=軽度、2=中等度、3=重度 ／ 関連性：0=なし、1=低い、2=あり、3=高い
+            </div>
+        </div>
 
-  <div class="footer-section">
-    <div style="width: 60%">
-      <div><strong>重症度:</strong> 1-軽度、2-中等度、3-重度 (空欄はなし)</div>
-      <div style="margin-top:5px;"><strong>関連性:</strong> 1-低い、2-あり、3-高い</div>
-    </div>
-    <div style="width: 40%; text-align: right;">
-      <div style="margin-bottom: 40px;">
-        担当医: 
-        <span class="fw-bold" style="font-size: 1.2em; border-bottom: 1px solid #000; padding: 0 10px; display: inline-block; min-width: 150px; text-align: center;">
-          {{ side_effect_signature|default:"" }}
-        </span> (自署)
-      </div>
-      <div class="fw-bold" style="font-size: 14px;">笠寺精治療病院</div>
-    </div>
-  </div>
+        <div class="content-section mt-4">
+            <div class="section-label">特記事項・メモ</div>
+            <div class="text-content" style="min-height: 60px;">
+                {{ side_effect_memo|linebreaksbr|default:"特になし" }}
+            </div>
+        </div>
 
-  </body>
-</html>
+        <div class="footer-section mt-5">
+            <div class="row">
+                <div class="col-6"></div>
+                <div class="col-6 text-end">
+                    <div style="display: inline-block; text-align: left;">
+                        <div style="margin-bottom: 5px;">担当医署名:</div>
+                        <div style="border-bottom: 1px solid #000; width: 250px; height: 30px; display: flex; align-items: end;">
+                            {% if side_effect_signature %}
+                                <span style="font-family: 'Kaushan Script', cursive; font-size: 1.2rem;">{{ side_effect_signature }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

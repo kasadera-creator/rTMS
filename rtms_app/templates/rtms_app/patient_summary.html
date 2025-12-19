@@ -1,10 +1,26 @@
 {% extends "rtms_app/base.html" %}
 {% load static %}
 
-{% block body_class %}page-discharge{% endblock %}
+{% block body_class %}page-discharge{% endblock body_class %}
+
+{% block header_breadcrumb %}
+  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
+  <span class="text-white-50 px-1">/</span>
+  <a href="#" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ID {{ patient.card_id }}</a>
+  <span class="text-white-50 px-1">/</span>
+  <span class="text-white px-1" style="font-size: 0.9rem;">退院準備</span>
+{% endblock header_breadcrumb %}
 
 {% block extrastyle %}
 <style>
+    /* デフォルト：1カラム（PC含む） */
+    .dv-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+    
+    /* iPad横だけ 2カラム */
+    @media (max-width: 1194px) and (orientation: landscape) {
+      .dv-grid { grid-template-columns: 1fr 1fr; }
+    }
+
     .section-title {
         border-left: 5px solid var(--color-discharge);
         padding-left: 10px;
@@ -21,21 +37,34 @@
     .autosave-toast {
         position: fixed;
         right: 16px;
-        bottom: 16px;
+        bottom: calc(28px + 12px);
         min-width: 260px;
         z-index: 1100;
         display: none;
         box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     }
 </style>
-{% endblock %}
+{% endblock extrastyle %}
 
 {% block content %}
-<div class="container py-4 mb-5">
-    <!-- ヘッダー: 患者メニュー -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-      <h3 class="d-flex align-items-center gap-2 mb-0"><i class="fas fa-file-alt page-title-icon"></i> 治療経過・退院準備 {% include "rtms_app/partials/recommendation_badge.html" %}</h3>
-        {% include "rtms_app/partials/patient_nav.html" %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center gap-3 mb-4">
+      <div class="page-title d-flex align-items-center gap-2"><i class="fas fa-file-alt page-title-icon"></i> 退院準備 {% include "rtms_app/partials/recommendation_badge.html" %}</div>
+      <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: nowrap; margin-left: auto;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; font-weight: 600; white-space: nowrap;">
+          <span>ID {{ patient.card_id }}</span>
+          <span style="color: #999;">|</span>
+          <span class="patient-name">{{ patient.name }}</span>
+          <span style="color: #999;">|</span>
+          <span style="font-weight: 400;">{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）{{ patient.get_gender_display }}</span>
+          <span style="color: #999;">|</span>
+          <span style="font-weight: 600;">{{ patient.course_number|default:1 }}クール</span>
+          {% if patient.attending_physician %}
+          <span style="color: #999;">|</span>
+          <span style="font-weight: 400;">担当医：{% if patient.attending_physician.last_name %}{{ patient.attending_physician.last_name }}{% else %}{{ patient.attending_physician.username }}{% endif %}</span>
+          {% endif %}
+        </div>
+      </div>
     </div>
 
     {% if recommendation and recommendation.status != 'pending' %}
@@ -91,7 +120,7 @@
             <h6 class="fw-bold section-title">rTMS 治療実施記録</h6>
             <div style="max-height: 300px; overflow-y: auto;">
                 <table class="table table-bordered history-table table-sm">
-                    <thead><tr><th>回数</th><th>日付</th><th>MT(%)</th><th>強度(%)</th><th>備考・副作用</th></tr></thead>
+                    <thead><tr><th>回数</th><th>日付</th><th>MT（%）</th><th>刺激強度（%）</th><th>備考・副作用</th></tr></thead>
                     <tbody>
                         {% for item in history_list %}
                         <tr>
@@ -109,14 +138,39 @@
             <h6 class="fw-bold section-title"><i class="fas fa-chart-line"></i> 心理検査推移 (HAMD)</h6>
             <div style="overflow-x: auto;">
                 <table class="table table-sm table-striped score-table w-auto">
-                    <thead><tr><th style="min-width:120px;">実施日</th><th style="min-width:100px;">時期</th><th style="min-width:100px;">HAMD 17項</th><th style="min-width:100px;">HAMD 21項</th></tr></thead>
+                    <thead>
+                      <tr>
+                        <th style="min-width:140px;">項目</th>
+                        {% for c in trend_cols %}
+                          <th style="min-width:120px;">{{ c.label }}<div class="small text-muted">{{ c.date_str }}</div></th>
+                        {% endfor %}
+                      </tr>
+                    </thead>
                     <tbody>
-                        {% for score in test_scores %}
+                      {% if trend_cols %}
                         <tr>
-                            <td>{{ score.date|date:"Y/n/j" }}</td><td>{{ score.get_timing_display|default:"-" }}</td>
-                            <td class="fw-bold">{{ score.total_score_17 }}</td><td>{{ score.total_score_21 }}</td>
+                          <td class="fw-bold">HAMD 17項</td>
+                          {% for c in trend_cols %}
+                            <td class="fw-bold">{% if c.hamd17 is not None %}{{ c.hamd17 }}{% else %}-{% endif %}</td>
+                          {% endfor %}
                         </tr>
-                        {% empty %}<tr><td colspan="4" class="text-muted py-3">データなし</td></tr>{% endfor %}
+                        <tr>
+                          <td class="fw-bold">HAMD 21項</td>
+                          {% for c in trend_cols %}
+                            <td>{% if c.hamd21 is not None %}{{ c.hamd21 }}{% else %}-{% endif %}</td>
+                          {% endfor %}
+                        </tr>
+                        <tr>
+                          <td class="fw-bold">改善率（HAMD17）</td>
+                          {% for c in trend_cols %}
+                            <td>
+                              {% if c.improvement_pct is not None %}{{ c.improvement_pct }}%{% else %}-{% endif %}
+                            </td>
+                          {% endfor %}
+                        </tr>
+                      {% else %}
+                        <tr><td colspan="5" class="text-muted py-3">データなし</td></tr>
+                      {% endif %}
                     </tbody>
                 </table>
                 <div class="mt-2 p-2 bg-light border rounded small text-muted"><strong>※HAMD17 参考基準:</strong> 0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23-:最重症</div>
@@ -282,4 +336,4 @@
   });
 </script>
 
-{% endblock %}
+{% endblock content %}

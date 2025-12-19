@@ -1,0 +1,51 @@
+{% extends "rtms_app/base.html" %}
+
+{% block header_breadcrumb %}
+  <span class="text-white-50 ms-2">/ 基本情報編集</span>
+{% endblock header_breadcrumb %}
+
+{% block content %}
+<div class="stack-md">
+  <div class="d-flex justify-content-between align-items-center">
+    <div class="page-title"><i class="fas fa-user-edit page-title-icon"></i> 基本情報編集</div>
+  </div>
+
+  <div class="card-like">
+    <div class="section-title">対象患者</div>
+    <div class="small text-muted">{{ patient.card_id }} / {{ patient.name }}</div>
+  </div>
+
+  <form method="post" class="form-rtms">
+    {% csrf_token %}
+    {% if form.errors %}
+      <div class="alert alert-danger"><strong>保存できませんでした:</strong> {{ form.errors }}</div>
+    {% endif %}
+
+    <div class="card-like">
+      <div class="section-title">基本情報</div>
+      <div class="row g-3">
+        <div class="col-md-4"><label class="form-label">カルテID</label>{{ form.card_id }}</div>
+        <div class="col-md-8"><label class="form-label">氏名</label>{{ form.name }}</div>
+        <div class="col-md-4"><label class="form-label">生年月日</label>{{ form.birth_date }}</div>
+        <div class="col-md-4"><label class="form-label">性別</label>{{ form.gender }}</div>
+      </div>
+
+      <hr class="my-3">
+
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label">紹介元（医療機関）</label>{{ form.referral_source }}</div>
+        <div class="col-md-6"><label class="form-label">紹介医</label>{{ form.referral_doctor }}</div>
+      </div>
+    </div>
+
+    <div class="action-bar">
+      <div class="d-flex gap-2 flex-wrap">
+        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存</button>
+        <a class="btn btn-secondary" href="{% url 'rtms_app:patient_first_visit' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+          <i class="fas fa-undo"></i> 戻る
+        </a>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock content %}
