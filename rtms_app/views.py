@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
 from django.urls import reverse
@@ -27,6 +28,7 @@ from .services.rtms_schedule import (
     session_info_for_date,
     format_rtms_label,
 )
+from .utils.hamd import classify_hamd_response, classify_hamd17_severity
 
 
 def _questionnaire_questions():
@@ -716,7 +718,13 @@ def mapping_add(request, patient_id):
         'history': history,
         'dashboard_date': dashboard_date,
         'week_no_default': week_no_default,
-        'can_view_audit': can_view_audit(request.user)
+        'can_view_audit': can_view_audit(request.user),
+        # Unified plan bar variables
+        'treatment_plan_start': patient.first_treatment_date,
+        'treatment_plan_end': get_completion_date(patient.first_treatment_date),
+        'today_session_no': get_session_number(patient.first_treatment_date, initial_date),
+        'total_sessions': 30,
+        'week_no': week_no_default,
     })
 
 @login_required
@@ -967,6 +975,13 @@ def treatment_add(request, patient_id):
             idx = tdates.index(initial_date)
             week_num = get_current_week_number(patient.first_treatment_date, initial_date)
             session_num = idx + 1
+        plan_start_date = patient.first_treatment_date
+        plan_end_date = get_completion_date(patient.first_treatment_date)
+        total_planned_sessions = len(tdates) if tdates else 30
+    else:
+        plan_start_date = None
+        plan_end_date = None
+        total_planned_sessions = 30
     
     # Fetch current week mapping: same date first, then same week
     course_number = patient.course_number or 1
@@ -1045,6 +1060,45 @@ def treatment_add(request, patient_id):
                 defaults=defaults
             )
 
+            # Save Step6 confirm fields/flags and Step7 treat fields into meta
+            try:
+                meta = s.meta or {}
+                cps = (request.POST.get('confirm_pulse_seconds') or '').strip()
+                cmp = (request.POST.get('confirm_mt_percent') or '').strip()
+                cn = (request.POST.get('confirm_notes') or '').strip()
+                cd = request.POST.get('confirm_discomfort')
+                cm = request.POST.get('confirm_movement')
+                tn = (request.POST.get('treat_notes') or '').strip()
+                td = request.POST.get('treat_discomfort')
+                tm = request.POST.get('treat_movement')
+                
+                if cps:
+                    try:
+                        meta['confirm_pulse_seconds'] = float(cps)
+                    except Exception:
+                        pass
+                if cmp:
+                    try:
+                        meta['confirm_mt_percent'] = int(cmp)
+                    except Exception:
+                        pass
+                if cn:
+                    meta['confirm_notes'] = cn
+                
+                # チェックボックスはPOSTに含まれる場合のみTrue、含まれない場合はFalse
+                meta['confirm_discomfort'] = (cd == 'on')
+                meta['confirm_movement'] = (cm == 'on')
+                if tn:
+                    meta['treat_notes'] = tn
+                meta['treat_discomfort'] = (td == 'on')
+                meta['treat_movement'] = (tm == 'on')
+                
+                if meta != (s.meta or {}):
+                    s.meta = meta
+                    s.save(update_fields=['meta'])
+            except Exception:
+                pass
+
             # Upsert SideEffectCheck linked to this session
             rows_json = request.POST.get('side_effect_rows_json')
             signature = request.POST.get('side_effect_signature', '')
@@ -1075,6 +1129,13 @@ def treatment_add(request, patient_id):
                     print_params['dashboard_date'] = dashboard_date
                 print_url = f"{reverse('rtms_app:print:print_side_effect_check', args=[patient.id, s.id])}?{urlencode(print_params)}"
                 return redirect(print_url)
+            
+            # Wizard action or normal save
+            if action == 'save_from_wizard':
+                # ウィザードから保存：成功した旨をJSONで返す or 通常リダイレクト
+                if dashboard_date:
+                    return redirect(build_url('dashboard', query={'date': dashboard_date}))
+                return redirect(build_url('dashboard'))
 
             # Normal save -> go back to dashboard
             if dashboard_date:
@@ -1138,6 +1199,42 @@ def treatment_add(request, patient_id):
     # the widget renders default rows client-side.
 
     side_effect_rows_json = json.dumps(side_effect_rows, ensure_ascii=False)
+
+    # Build Step6 previous abnormal alert message (latest within recent 5 sessions)
+    confirm_alert_message = ''
+    try:
+        prev_qs = TreatmentSession.objects.filter(
+            patient=patient,
+            course_number=course_number,
+            session_date__lt=initial_date
+        ).order_by('-session_date')[:5]
+        alert_session = None
+        for ts in prev_qs:
+            m = getattr(ts, 'meta', None) or {}
+            if m.get('confirm_discomfort') or m.get('confirm_movement'):
+                alert_session = ts
+                break
+        if alert_session:
+            m = alert_session.meta or {}
+            d = alert_session.session_date
+            # compute session number within plan
+            sess_no = get_session_number(patient.first_treatment_date, d) if patient.first_treatment_date else None
+            d_str = f"{d.month}月{d.day}日"
+            sec = m.get('confirm_pulse_seconds')
+            pct = m.get('confirm_mt_percent')
+            kinds = []
+            if m.get('confirm_discomfort'):
+                kinds.append('不快感')
+            if m.get('confirm_movement'):
+                kinds.append('運動反応')
+            kinds_label = '・'.join(kinds) if kinds else ''
+            if sec is not None and pct is not None and kinds_label:
+                if sess_no and sess_no > 0:
+                    confirm_alert_message = f"{d_str}（第{sess_no}回）には、刺激時間{sec}秒、刺激強度{pct}%MTで、過剰な{kinds_label}がありました。"
+                else:
+                    confirm_alert_message = f"{d_str}には、刺激時間{sec}秒、刺激強度{pct}%MTで、過剰な{kinds_label}がありました。"
+    except Exception:
+        confirm_alert_message = ''
     # Side effect items for template
     side_effect_items = [
         ('headache', '頭痛'),
@@ -1158,6 +1255,82 @@ def treatment_add(request, patient_id):
     print_options = []
 
     
+    # HAMD 第3週評価の構造化情報
+    hamd3w_available = last_assessment is not None
+    hamd3w_score = getattr(last_assessment, 'total_score_17', None) if last_assessment else None
+    hamd3w_improvement_pct = None
+    hamd3w_status = None
+    if last_assessment and baseline_assessment and baseline_assessment.total_score_17 not in (None, 0):
+        hamd3w_improvement_pct = round((baseline_assessment.total_score_17 - last_assessment.total_score_17) / baseline_assessment.total_score_17 * 100.0, 1)
+        hamd3w_status = classify_hamd_response(hamd3w_score, hamd3w_improvement_pct)
+    
+    hamd_eval = {
+        'score_17': hamd3w_score,
+        'improvement_pct': hamd3w_improvement_pct,
+        'status_label': hamd3w_status,
+        'instruction': instruction_msg or None,
+    }
+    
+    # 位置決めが必要かどうかの判定
+    needs_mapping_today = False
+    mapping_reason = None
+    mapping_done = current_week_mapping is not None
+    
+    # 判定条件1: 週の初回セッション
+    if session_num == 1 or (session_num and session_num % 5 == 1):
+        needs_mapping_today = True
+        mapping_reason = "週の第1回目の治療のため"
+    
+    # 判定条件2: 安全確認が1つでもOFFの場合（POSTデータがあれば参照、なければ既存セッションデータ）
+    if request.method == 'POST':
+        safety_sleep = request.POST.get('safety_sleep') == 'on'
+        safety_alcohol = request.POST.get('safety_alcohol') == 'on'
+        safety_meds = request.POST.get('safety_meds') == 'on'
+    elif existing_session:
+        safety_sleep = existing_session.safety_sleep
+        safety_alcohol = existing_session.safety_alcohol
+        safety_meds = existing_session.safety_meds
+    else:
+        safety_sleep = True
+        safety_alcohol = True
+        safety_meds = True
+    
+    if not (safety_sleep and safety_alcohol and safety_meds):
+        needs_mapping_today = True
+        if mapping_reason:
+            mapping_reason += " / 安全確認で要再測定の項目があります"
+        else:
+            mapping_reason = "安全確認で要再測定の項目があります"
+    
+    # 位置決めURL
+    mapping_url = reverse('rtms_app:mapping_add', args=[patient.id])
+    if dashboard_date:
+        mapping_url = build_url('mapping_add', args=[patient.id], query={'dashboard_date': dashboard_date})
+    
+    # 確認刺激のデフォルト値
+    confirm_defaults = {
+        'seconds': 2.0,
+        'percent': 120,
+    }
+    
+    # 確認刺激の治療刺激のチェックボックス初期値（既存セッションから）
+    confirm_discomfort_checked = False
+    confirm_movement_checked = False
+    treat_discomfort_checked = False
+    treat_movement_checked = False
+    confirm_notes = ''
+    treat_notes = ''
+    if existing_session and existing_session.meta:
+        m = existing_session.meta
+        confirm_defaults['seconds'] = m.get('confirm_pulse_seconds', 2.0)
+        confirm_defaults['percent'] = m.get('confirm_mt_percent', 120)
+        confirm_discomfort_checked = m.get('confirm_discomfort', False)
+        confirm_movement_checked = m.get('confirm_movement', False)
+        treat_discomfort_checked = m.get('treat_discomfort', False)
+        treat_movement_checked = m.get('treat_movement', False)
+        confirm_notes = m.get('confirm_notes', '')
+        treat_notes = m.get('treat_notes', '')
+
     return render(request, 'rtms_app/treatment_add.html', {
         'patient': patient,
         'form': form,
@@ -1180,6 +1353,38 @@ def treatment_add(request, patient_id):
         'today': timezone.now().date(),
         'initial_timing_display': '',
         'can_view_audit': can_view_audit(request.user),
+        # Summary bar (both legacy names and new unified names)
+        'plan_start_date': plan_start_date,
+        'plan_end_date': plan_end_date,
+        'today_session_no': session_num,
+        'total_planned_sessions': total_planned_sessions,
+        'week_num': week_num,
+        # Unified names for plan_inline_bar.html partial
+        'treatment_plan_start': plan_start_date,
+        'treatment_plan_end': plan_end_date,
+        'total_sessions': total_planned_sessions,
+        'week_no': week_num,
+        # HAMD instruction card
+        'hamd_eval': hamd_eval,
+        'hamd3w_available': hamd3w_available,
+        'hamd3w_score': hamd3w_score,
+        'hamd3w_improvement_pct': hamd3w_improvement_pct,
+        'hamd3w_status': hamd3w_status,
+        # Wizard Step6 previous abnormal alert
+        'confirm_alert_message': confirm_alert_message,
+        # Mapping alert
+        'needs_mapping_today': needs_mapping_today,
+        'mapping_done': mapping_done,
+        'mapping_reason': mapping_reason,
+        'mapping_url': mapping_url,
+        # Confirm stimulus defaults
+        'confirm_defaults': confirm_defaults,
+        'confirm_discomfort_checked': confirm_discomfort_checked,
+        'confirm_movement_checked': confirm_movement_checked,
+        'treat_discomfort_checked': treat_discomfort_checked,
+        'treat_movement_checked': treat_movement_checked,
+        'confirm_notes': confirm_notes,
+        'treat_notes': treat_notes,
     })
 
 def assessment_add(request, patient_id, timing):
@@ -1408,15 +1613,28 @@ def patient_summary_view(request, patient_id):
 
     timing_order = [
         ('baseline', '治療前'),
-        ('week3', '3週'),
-        ('week4', '4週'),
-        ('week6', '6週'),
+        ('week3', '3週間目'),
+        ('week4', '4週間目'),
+        ('week6', '6週間目'),
     ]
     latest_by_timing = {
         t: assessments.filter(timing=t).order_by('-date').first() for t, _ in timing_order
     }
     baseline_obj = latest_by_timing.get('baseline')
     baseline_17 = getattr(baseline_obj, 'total_score_17', None)
+
+    def severity_label_17_fn(val):
+        if val is None:
+            return None
+        if val <= 7:
+            return '正常'
+        if val <= 13:
+            return '軽症'
+        if val <= 18:
+            return '中等症'
+        if val <= 22:
+            return '重症'
+        return '最重症'
 
     trend_cols = []
     for t, label in timing_order:
@@ -1428,6 +1646,7 @@ def patient_summary_view(request, patient_id):
         improvement_pct = None
         if t != 'baseline' and a and baseline_17 not in (None, 0) and hamd17 is not None:
             improvement_pct = round((baseline_17 - hamd17) / baseline_17 * 100.0, 1)
+        status_lbl = classify_hamd_response(hamd17, improvement_pct) if t != 'baseline' else None
 
         trend_cols.append({
             'timing': t,
@@ -1436,7 +1655,35 @@ def patient_summary_view(request, patient_id):
             'hamd17': hamd17,
             'hamd21': hamd21,
             'improvement_pct': improvement_pct,
+            'severity_label_17': severity_label_17_fn(hamd17),
+            'status_label': status_lbl,
         })
+
+    eval_w3 = next((c for c in trend_cols if c['timing'] == 'week3'), None)
+    eval_w4 = next((c for c in trend_cols if c['timing'] == 'week4'), None)
+    eval_w6 = next((c for c in trend_cols if c['timing'] == 'week6'), None)
+    discharge_sidebar = {
+        'treatment_count_total': sessions.count(),
+        'last_treatment_date': sessions.last().session_date if sessions.exists() else None,
+        'eval_week3': {
+            'hamd17': eval_w3.get('hamd17') if eval_w3 else None,
+            'hamd21': eval_w3.get('hamd21') if eval_w3 else None,
+            'improvement_pct': eval_w3.get('improvement_pct') if eval_w3 else None,
+            'status_label': classify_hamd_response(eval_w3.get('hamd17') if eval_w3 else None, eval_w3.get('improvement_pct') if eval_w3 else None),
+        },
+        'eval_week4': {
+            'hamd17': eval_w4.get('hamd17') if eval_w4 else None,
+            'hamd21': eval_w4.get('hamd21') if eval_w4 else None,
+            'improvement_pct': eval_w4.get('improvement_pct') if eval_w4 else None,
+            'status_label': classify_hamd_response(eval_w4.get('hamd17') if eval_w4 else None, eval_w4.get('improvement_pct') if eval_w4 else None),
+        },
+        'eval_week6': {
+            'hamd17': eval_w6.get('hamd17') if eval_w6 else None,
+            'hamd21': eval_w6.get('hamd21') if eval_w6 else None,
+            'improvement_pct': eval_w6.get('improvement_pct') if eval_w6 else None,
+            'status_label': classify_hamd_response(eval_w6.get('hamd17') if eval_w6 else None, eval_w6.get('improvement_pct') if eval_w6 else None),
+        },
+    }
     def fmt_score(obj): return f"HAMD17 {obj.total_score_17}点 HAMD21 {obj.total_score_21}点" if obj else "未評価"
     side_effects_list_all = []; history_list = []
     SE_MAP = {'headache': '頭痛', 'scalp': '頭皮痛', 'discomfort': '不快感', 'tooth': '歯痛', 'twitch': '攣縮', 'dizzy': 'めまい', 'nausea': '吐き気', 'tinnitus': '耳鳴り', 'hearing': '聴力低下', 'anxiety': '不安', 'other': 'その他'}
@@ -1449,7 +1696,7 @@ def patient_summary_view(request, patient_id):
     side_effects_summary = ", ".join(list(set(side_effects_list_all))) if side_effects_list_all else "特になし"
     start_date_str = sessions.first().date.strftime('%Y年%m月%d日') if sessions.exists() else "未開始"
     if patient.discharge_date: end_date_str = patient.discharge_date.strftime('%Y年%m月%d日')
-    elif sessions.exists(): end_date_str = sessions.last().date.strftime('%Y年%m月%d日')
+    elif sessions.exists(): end_date_str = sessions.last().session_date.strftime('%Y年%m月%d日')
     else: end_date_str = "未定"
     total_count = sessions.count()
     admission_date_str = patient.admission_date.strftime('%Y年%m月%d日') if patient.admission_date else "不明"
@@ -1473,9 +1720,19 @@ def patient_summary_view(request, patient_id):
         'today': timezone.now().date(),
         'test_scores': test_scores,
         'trend_cols': trend_cols,
+        'discharge_sidebar': discharge_sidebar,
+        'total_count': total_count,
+        'end_date_str': end_date_str,
+        'start_date_str': start_date_str,
         'dashboard_date': dashboard_date,
         'floating_print_options': floating_print_options,
         'can_view_audit': can_view_audit(request.user),
+        # Unified plan bar variables
+        'treatment_plan_start': patient.first_treatment_date,
+        'treatment_plan_end': get_completion_date(patient.first_treatment_date),
+        'today_session_no': sessions.count() if sessions.exists() else 0,
+        'total_sessions': 30,
+        'week_no': None,
     })
     
 @login_required
@@ -1501,7 +1758,7 @@ def patient_add_view(request):
 
 @login_required
 def export_treatment_csv(request):
-    response = HttpResponse(content_type='text/csv; charset=utf-8-sig'); response['Content-Disposition'] = 'attachment; filename="treatment_data.csv"'; writer = csv.writer(response); writer.writerow(['ID', '氏名', '実施日時', 'MT(%)', '強度(%)', 'パルス数', '実施者', '副作用'])
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig'); response['Content-Disposition'] = 'attachment; filename="treatment_data.csv"'; writer = csv.writer(response); writer.writerow(['ID', '氏名', '実施日時', 'MT値', '刺激強度(%MT)', 'パルス数', '実施者', '副作用'])
     treatments = TreatmentSession.objects.all().select_related('patient', 'performer').order_by('date')
     rows = treatments.count()
     for t in treatments: se_str = json.dumps(t.side_effects, ensure_ascii=False) if t.side_effects else ""; writer.writerow([t.patient.card_id, t.patient.name, t.date.strftime('%Y-%m-%d %H:%M'), t.motor_threshold, t.intensity, t.total_pulses, t.performer.username if t.performer else "", se_str])
@@ -1609,40 +1866,22 @@ def patient_print_bundle(request, patient_id):
         if legacy_docs:
             raw_docs = legacy_docs.split(",")
 
-    legacy_map = {
-        "consent": "consent_pdf",
-    }
+    legacy_map = {"consent": "consent_pdf"}
     raw_docs = [legacy_map.get(doc, doc) for doc in raw_docs]
 
     DOC_DEFINITIONS = {
-        "admission": {
-            "label": "初診時サマリー",
-            "template": "rtms_app/print/admission_summary.html",
-        },
-        "suitability": {
-            "label": "rTMS問診票",
-            "template": "rtms_app/print/suitability_questionnaire.html",
-        },
-        "consent_pdf": {
-            "label": "説明同意書（PDF）",
-            "pdf_static": "rtms_app/docs/rtms_consent_latest.pdf",
-        },
-        "discharge": {
-            "label": "退院時サマリー",
-            "template": "rtms_app/print/discharge_summary.html",
-        },
-        "referral": {
-            "label": "紹介状",
-            "template": "rtms_app/print/referral.html",
-        },
+        "admission": {"label": "初診時サマリー", "template": "rtms_app/print/admission_summary.html"},
+        "suitability": {"label": "rTMS問診票", "template": "rtms_app/print/suitability_questionnaire.html"},
+        "consent_pdf": {"label": "説明同意書（PDF）", "pdf_static": "rtms_app/docs/rtms_consent_latest.pdf"},
+        "discharge": {"label": "退院時サマリー", "template": "rtms_app/print/discharge_summary.html"},
+        "hamd_detail": {"label": "HAMD詳細票", "template": "rtms_app/print/hamd_detail.html"},
+        "referral": {"label": "紹介状", "template": "rtms_app/print/referral.html"},
     }
-    DOC_ORDER = ["admission", "suitability", "consent_pdf", "discharge", "referral"]
+    DOC_ORDER = ["admission", "suitability", "consent_pdf", "discharge", "hamd_detail", "referral"]
 
     selected_doc_keys = [d for d in DOC_ORDER if d in raw_docs]
 
-    assessments = Assessment.objects.filter(
-        patient=patient
-    ).order_by("date")
+    assessments = Assessment.objects.filter(patient=patient).order_by("date")
 
     end_date_est = get_completion_date(patient.first_treatment_date)
     today = timezone.now().date()
@@ -1656,6 +1895,74 @@ def patient_print_bundle(request, patient_id):
         doc_info["key"] = key
         docs_to_render.append(doc_info)
 
+    # HAMD trend columns (baseline, 3週間目, 4週間目, 6週間目)
+    timing_order = [("baseline", "治療前"), ("week3", "3週間目"), ("week4", "4週間目"), ("week6", "6週間目")]
+    latest_by_timing = {t: assessments.filter(timing=t).order_by("-date").first() for t, _ in timing_order}
+    baseline_obj = latest_by_timing.get("baseline")
+    baseline_17 = getattr(baseline_obj, "total_score_17", None)
+    baseline_21 = getattr(baseline_obj, "total_score_21", None)
+    hamd_trend_cols = []
+    for t, label in timing_order:
+        a = latest_by_timing.get(t)
+        date_str = a.date.strftime("%Y/%-m/%-d") if a and getattr(a, "date", None) else "-"
+        hamd17 = getattr(a, "total_score_17", None)
+        hamd21 = getattr(a, "total_score_21", None)
+        improvement_pct_17 = None
+        improvement_pct_21 = None
+        if t != "baseline" and a:
+            if baseline_17 not in (None, 0) and hamd17 is not None:
+                improvement_pct_17 = round((baseline_17 - hamd17) / baseline_17 * 100.0, 1)
+            if baseline_21 not in (None, 0) and hamd21 is not None:
+                improvement_pct_21 = round((baseline_21 - hamd21) / baseline_21 * 100.0, 1)
+        hamd_trend_cols.append({
+            "timing": t,
+            "label": label,
+            "date_str": date_str,
+            "hamd17": hamd17,
+            "hamd21": hamd21,
+            "improvement_pct_17": improvement_pct_17,
+            "improvement_pct_21": improvement_pct_21,
+            "status_label": classify_hamd_response(hamd17, improvement_pct_17) if t != "baseline" else None,
+            "status_label_21": None,
+        })
+
+    # HAMD detail grid (per-item scores)
+    assess_map = {t: latest_by_timing.get(t) for t, _ in timing_order}
+    cols = []
+    for t, label in timing_order:
+        a = assess_map.get(t)
+        cols.append({
+            "key": t,
+            "label": label,
+            "date_str": a.date.strftime("%Y/%-m/%-d") if a and getattr(a, "date", None) else "-",
+        })
+    rows = []
+    ITEM_NAMES = [f"項目{i}" for i in range(1, 22)]
+    for i in range(1, 22):
+        name = ITEM_NAMES[i - 1]
+        scores_by_t = {}
+        for t, _ in timing_order:
+            a = assess_map.get(t)
+            val = None
+            if a and isinstance(a.scores, dict):
+                val = a.scores.get(f"q{i}")
+            scores_by_t[t] = val if val is not None else ""
+        rows.append({"no": i, "name": name, "scores": scores_by_t})
+    totals = {"hamd17": {}, "hamd21": {}, "improvement_pct": {}, "severity": {}, "status_label": {}}
+    baseline17 = getattr(assess_map.get("baseline"), "total_score_17", None)
+    for t, _ in timing_order:
+        a = assess_map.get(t)
+        t17 = getattr(a, "total_score_17", None)
+        t21 = getattr(a, "total_score_21", None)
+        totals["hamd17"][t] = t17
+        totals["hamd21"][t] = t21
+        totals["severity"][t] = classify_hamd17_severity(t17)
+        if t == "baseline" or (baseline17 in (None, 0) or t17 is None):
+            totals["improvement_pct"][t] = None
+        else:
+            totals["improvement_pct"][t] = round((baseline17 - t17) / baseline17 * 100.0, 1)
+        totals["status_label"][t] = classify_hamd_response(t17, totals["improvement_pct"].get(t)) if t != "baseline" else None
+
     context = {
         "patient": patient,
         "docs_to_render": docs_to_render,
@@ -1663,6 +1970,8 @@ def patient_print_bundle(request, patient_id):
         "selected_doc_keys": selected_doc_keys,
         "assessments": assessments,
         "test_scores": assessments,
+        "hamd_trend_cols": hamd_trend_cols,
+        "hamd_detail": {"cols": cols, "rows": rows, "totals": totals},
         "consent_copies": ["患者控え", "病院控え"],
         "end_date_est": end_date_est,
         "today": today,
@@ -1671,19 +1980,11 @@ def patient_print_bundle(request, patient_id):
 
     # 印刷ログ記録
     for doc_key in selected_doc_keys:
-        doc_label = DOC_DEFINITIONS.get(doc_key, {}).get('label', doc_key)
-        meta = {
-            'docs': selected_doc_keys,
-            'querystring': request.GET.urlencode(),
-            'return_to': return_to,
-        }
-        log_audit_action(patient, 'PRINT', 'Document', doc_key, f'{doc_label}印刷', meta)
+        doc_label = DOC_DEFINITIONS.get(doc_key, {}).get("label", doc_key)
+        meta = {"docs": selected_doc_keys, "querystring": request.GET.urlencode(), "return_to": return_to}
+        log_audit_action(patient, "PRINT", "Document", doc_key, f"{doc_label}印刷", meta)
 
-    return render(
-        request,
-        "rtms_app/print/bundle.html",
-        context,
-    )
+    return render(request, "rtms_app/print/bundle.html", context)
 
 @login_required
 def patient_clinical_path(request, patient_id):
@@ -1716,7 +2017,6 @@ def patient_clinical_path(request, patient_id):
         'today': timezone.now().date(),
         'dashboard_date': dashboard_date,
         'floating_print_options': floating_print_options,
-        'can_view_audit': can_view_audit(request.user)
     })
 
 @login_required
@@ -1761,3 +2061,67 @@ def latest_consent(request):
         return redirect(doc.file.url)
     # アップロードが無い / 初期化で消えた → 静的ファイルへフォールバック
     return redirect(static("rtms_app/docs/consent_default.pdf"))
+
+@login_required
+@require_http_methods(["POST"])
+def mapping_upsert_from_wizard(request, patient_id):
+    """
+    ウィザードから MT測定データを保存する エンドポイント
+    POST: { course_number, mt_value, a_x, a_y, b_x, b_y, mapping_date, note }
+    """
+    import json
+    from django.http import JsonResponse
+    
+    patient = get_object_or_404(Patient, pk=patient_id)
+    
+    try:
+        data = json.loads(request.body)
+    except:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+    
+    course_number = data.get('course_number', patient.course_number or 1)
+    mt_value = data.get('mt_value')
+    a_x = data.get('a_x', '3')
+    a_y = data.get('a_y', '1')
+    b_x = data.get('b_x', '9')
+    b_y = data.get('b_y', '1')
+    mapping_date_str = data.get('mapping_date')
+    note = data.get('note', '')
+    
+    # Validate MT value
+    try:
+        mt_value = int(mt_value)
+        if mt_value < 10 or mt_value > 100:
+            return JsonResponse({'success': False, 'error': 'MT value out of range (10-100)'}, status=400)
+    except:
+        return JsonResponse({'success': False, 'error': 'Invalid MT value'}, status=400)
+    
+    # Parse mapping_date
+    try:
+        mapping_date = parse_date(mapping_date_str) if mapping_date_str else timezone.now().date()
+    except:
+        mapping_date = timezone.now().date()
+    
+    # Upsert MappingSession
+    defaults = {
+        'resting_mt': mt_value,
+        'helmet_position_a_x': int(a_x),
+        'helmet_position_a_y': int(a_y),
+        'helmet_position_b_x': int(b_x),
+        'helmet_position_b_y': int(b_y),
+        'notes': note,
+    }
+    
+    mapping, created = MappingSession.objects.update_or_create(
+        patient=patient,
+        course_number=course_number,
+        date=mapping_date,
+        defaults=defaults
+    )
+    
+    return JsonResponse({
+        'success': True,
+        'mapping_id': mapping.id,
+        'created': created,
+        'mt_value': mapping.resting_mt,
+    })

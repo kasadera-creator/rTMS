@@ -152,6 +152,7 @@ class TreatmentSession(models.Model):
     intensity = models.IntegerField("強度", null=True, blank=True)
 
     side_effects = models.JSONField("副作用", default=dict, blank=True, null=True)
+    meta = models.JSONField("メタ", default=dict, blank=True, null=True)
     performer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
 
     class Meta:

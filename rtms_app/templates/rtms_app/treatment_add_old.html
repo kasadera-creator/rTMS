@@ -1,0 +1,631 @@
+{% extends "rtms_app/base.html" %}
+{% load static %}
+
+{% block body_class %}page-treatment{% endblock %}
+
+{% block header_breadcrumb %}
+  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
+  <span class="text-white-50 px-1">/</span>
+  <a href="#" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ID {{ patient.card_id }}</a>
+  <span class="text-white-50 px-1">/</span>
+  <span class="text-white px-1" style="font-size: 0.9rem;">治療実施</span>
+{% endblock header_breadcrumb %}
+
+{% block extrastyle %}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+    /* 印刷時の制御 */
+    @media print {
+        @page { size: A4; margin: 15mm; }
+        body * { visibility: hidden; }
+        .printable-area, .printable-area * { visibility: visible; }
+        .printable-area { position: absolute; left: 0; top: 0; width: 100%; color: #000; background: #fff; }
+        .no-print, .btn, header, nav, footer, .floating-toolbar { display: none !important; }
+        
+        /* 印刷用ヘッダー表示 */
+        .print-header-show { display: block !important; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 5px; text-align: center; }
+        .print-row-show { display: flex !important; justify-content: space-between; margin-bottom: 10px; font-size: 12px; }
+        
+        /* テーブルの印刷調整 */
+        table { width: 100%; border-collapse: collapse; font-size: 11pt; }
+        th, td { border: 1px solid #000 !important; padding: 6px; }
+        th { background-color: #f0f0f0 !important; -webkit-print-color-adjust: exact; text-align: center; }
+        
+        /* 入力フォームの見た目リセット */
+        textarea, input[type="text"], input[type="number"], select { border: none; background: transparent; resize: none; overflow: visible; font-size: inherit; width: auto; }
+        .form-check-input { border: 1px solid #000; }
+    }
+    
+    .print-header-show, .print-row-show { display: none; }
+    .check-row:hover { background-color: #f8f9fa; }
+
+    /* iPad Landscape Optimization (11-inch approx 1194px width) */
+    @media only screen and (min-width: 1000px) and (orientation: landscape) {
+        .container { max-width: 98vw; padding-top: 10px !important; padding-bottom: 80px !important; }
+        h3 { font-size: 1.2rem; margin-bottom: 0.5rem !important; }
+        .alert { padding: 0.25rem 0.5rem; margin-bottom: 0.5rem !important; font-size: 0.85rem; }
+        
+        /* Make top cards more compact */
+        .card-header { padding: 0.25rem 0.5rem; font-size: 0.9rem; }
+        .card-body { padding: 0.5rem; }
+        .row.g-4 { --bs-gutter-y: 0.5rem; --bs-gutter-x: 0.5rem; }
+        
+        /* Form elements compact */
+        .form-label { margin-bottom: 0; font-size: 0.8rem; }
+        .form-control, .form-select { padding: 0.15rem 0.3rem; font-size: 0.85rem; height: auto; }
+        .form-check { min-height: auto; margin-bottom: 0; }
+        .form-check-input { width: 0.9em; height: 0.9em; margin-top: 0.2em; }
+        .form-switch .form-check-input { width: 1.8em; margin-left: -2em; }
+        .form-switch { padding-left: 2em; }
+        
+        /* Reduce spacing in specific sections */
+        .mb-3 { margin-bottom: 0.4rem !important; }
+        .mt-3 { margin-top: 0.4rem !important; }
+        .mt-4 { margin-top: 0.5rem !important; }
+        .mb-5 { margin-bottom: 1rem !important; }
+
+        /* Additional compact tweaks for iPad landscape */
+        .card-body { padding: .5rem; }
+        h5, .section-title { margin-bottom: .5rem; }
+        textarea { min-height: 3.5rem; }
+        
+        /* Side Effect Widget Compact */
+        #sideEffectWidget { zoom: 1; }
+        #sideEffectWidget .table { font-size: 0.95rem !important; }
+        #sideEffectWidget th, #sideEffectWidget td { padding: 0.25rem 0.4rem !important; vertical-align: middle !important; }
+        #sideEffectWidget th { font-weight: bold !important; }
+        #sideEffectWidget tr td:first-child { font-weight: bold !important; }
+        #sideEffectWidget .form-control-sm { font-size: 0.9rem !important; padding: 0.1rem 0.3rem !important; height: auto !important; }
+        
+        /* Floating buttons */
+        .fab-stack { bottom: 15px; right: 15px; gap: 8px; }
+        .fab { padding: 6px 10px; font-size: 14px; }
+    }
+
+      /* Wizard modal typography (iPad-friendly) */
+      .wizard-body { font-size: 1.05rem; line-height: 1.7; }
+      .wizard-title { font-size: 1.25rem; font-weight: 700; }
+</style>
+
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+<div class="no-print">
+  <div class="page-title mb-2"><i class="fas fa-bolt page-title-icon"></i> 治療実施</div>
+  <div class="d-flex align-items-center gap-2 bg-primary text-white rounded p-2 flex-wrap">
+    <button type="button" class="btn btn-sm btn-light text-primary fw-bold" id="wizardModeBtn" data-bs-toggle="modal" data-bs-target="#procedureWizardModal">
+      <i class="fas fa-tasks me-1"></i>手順解説モード
+    </button>
+    <div class="d-flex align-items-center gap-3 flex-wrap" style="font-size: .95rem;">
+      <span><strong>ID</strong> {{ patient.card_id }} / <strong>氏名</strong> <span class="patient-name">{{ patient.name }}</span> / <strong>クール</strong> {{ patient.course_number|default:1 }}</span>
+      <span class="text-white-50">|</span>
+      <span><strong>治療予定</strong>: {% if plan_start_date %}{{ plan_start_date|date:"Y/m/d" }}{% else %}-{% endif %} 〜 {% if plan_end_date %}{{ plan_end_date|date:"Y/m/d" }}{% else %}-{% endif %}</span>
+      <span class="text-white-50">|</span>
+      <span><strong>本日</strong>: 第{% if today_session_no %}{{ today_session_no }}{% else %}-{% endif %}回 / 全{% if total_planned_sessions %}{{ total_planned_sessions }}{% else %}-{% endif %}回</span>
+      <span class="text-white-50">|</span>
+      <span><strong>週</strong>: 第{% if week_num %}{{ week_num }}{% else %}-{% endif %}週</span>
+      {% if patient.attending_physician %}
+        <span class="text-white-50">|</span>
+        <span><strong>担当医</strong>: {% if patient.attending_physician.last_name %}{{ patient.attending_physician.last_name }}{% else %}{{ patient.attending_physician.username }}{% endif %}</span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+    {% if alert_msg %}
+    <div class="alert alert-danger fw-bold shadow-sm no-print mb-3">
+        <i class="fas fa-exclamation-triangle"></i> {{ alert_msg }}
+    </div>
+    {% endif %}
+
+    {# 重複する患者情報バナーは本ページでは非表示 #}
+
+    <form method="post" id="treatmentForm">
+        {% csrf_token %}
+        
+        <div class="row g-4 no-print">
+            <!-- 安全確認 (幅を狭く: col-lg-4) -->
+            <div class="col-lg-4">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-light fw-bold text-success border-bottom">
+                        <i class="fas fa-clock me-1"></i> 実施日時・安全確認
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-12 mb-2">
+                                <label class="form-label fw-bold">実施日</label>
+                                {{ form.treatment_date }}
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-bold">開始時間</label>
+                                {{ form.treatment_time }}
+                            </div>
+                        </div>
+                        <div class="d-flex flex-column gap-2">
+                            <div class="form-check form-switch p-2 border rounded bg-white">
+                                {{ form.safety_sleep }} 
+                                <label class="form-check-label fw-bold ms-1" for="id_safety_sleep">睡眠不足なし</label>
+                            </div>
+                            <div class="form-check form-switch p-2 border rounded bg-white">
+                                {{ form.safety_alcohol }} 
+                                <label class="form-check-label fw-bold ms-1" for="id_safety_alcohol">アルコール・カフェイン過剰なし</label>
+                            </div>
+                            <div class="form-check form-switch p-2 border rounded bg-white">
+                                {{ form.safety_meds }} 
+                                <label class="form-check-label fw-bold ms-1" for="id_safety_meds">服薬変更なし</label>
+                            </div>
+                        </div>
+                        
+                        <!-- 安全性警告エリア -->
+                        <div id="safetyWarning" class="alert alert-warning alert-dismissible fade show mt-3 no-print" style="display: none;" role="alert">
+                            <strong><i class="fas fa-exclamation-circle me-2"></i>注意</strong>
+                            <div id="warningText" class="mt-2 fw-bold"></div>
+                            <div class="mt-2">
+                                <a href="#" id="mappingButton" class="btn btn-sm btn-outline-warning fw-bold">
+                                    <i class="fas fa-crosshairs me-1"></i>今すぐ位置決めを実施
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右ペイン：上段＝HAM-D評価に基づく指示、下段＝治療実施記録 -->
+            <div class="col-lg-8 d-flex flex-column gap-3">
+              <!-- 上段：HAM-D評価に基づく指示（第3週評価） -->
+              <div class="card shadow-sm border-0">
+                <div class="card-header bg-light fw-bold text-warning border-bottom d-flex justify-content-between align-items-center">
+                  <div><i class="fas fa-clipboard-check me-1"></i> HAM-D評価に基づく指示（第3週評価）</div>
+                </div>
+                <div class="card-body">
+                  <div class="row g-2 small">
+                    <div class="col-md-6">
+                      <div class="p-2 bg-light rounded border">
+                        <div><strong>HAM-D17（第3週）</strong>：{% if hamd_eval.score_17 is not None %}{{ hamd_eval.score_17 }} 点{% else %}-{% endif %}</div>
+                        <div><strong>改善率</strong>：{% if hamd_eval.improvement_pct is not None %}{{ hamd_eval.improvement_pct }}%{% else %}-{% endif %}</div>
+                        <div><strong>判定</strong>：{% if hamd_eval.status_label %}{{ hamd_eval.status_label }}{% else %}-{% endif %}</div>
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="p-2 bg-light rounded border h-100">
+                        <div class="fw-bold text-danger">指示</div>
+                        <div class="fw-bold">{% if hamd_eval.instruction %}{{ hamd_eval.instruction }}{% else %}未評価{% endif %}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 下段：治療実施記録（本日） -->
+              <div class="card shadow-sm border-0">
+                <div class="card-header bg-light fw-bold text-primary border-bottom d-flex justify-content-between align-items-center">
+                  <div><i class="fas fa-notes-medical me-1"></i> 治療実施記録（本日）</div>
+                </div>
+                <div class="card-body">
+                  <!-- 今週の設定（参考） -->
+                  <div class="bg-light p-2 rounded mb-2 border">
+                    <div class="d-flex justify-content-between mb-1">
+                      <small class="text-secondary fw-bold"><i class="fas fa-crosshairs"></i> 位置決め ({{ current_week_mapping.date|default:"-" }})</small>
+                      <small class="text-secondary fw-bold"><i class="fas fa-chart-line"></i> 今週の設定</small>
+                    </div>
+                    <div class="row g-1">
+                      <div class="col-6 border-end pe-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                          <span>MT（モーター閾値）: <strong class="fs-5">{{ current_week_mapping.resting_mt|default:"-" }}</strong></span>
+                          <span class="small text-muted">A({{ current_week_mapping.helmet_position_a_x|default:"-" }},{{ current_week_mapping.helmet_position_a_y|default:"-" }}) / B({{ current_week_mapping.helmet_position_b_x|default:"-" }},{{ current_week_mapping.helmet_position_b_y|default:"-" }})</span>
+                        </div>
+                      </div>
+                      <div class="col-6 ps-2">
+                        {% if judgment_info %}
+                          <div class="fw-bold text-primary small">{{ judgment_info }}</div>
+                          <div class="small text-danger fw-bold">{{ instruction_msg }}</div>
+                        {% else %}
+                          <div class="text-muted small">参考情報：未実施・対象外</div>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 確認用刺激（先に表示） -->
+                  <h6 class="fw-bold border-bottom pb-1 mb-2 small text-muted">・確認用刺激</h6>
+                  <div class="d-flex gap-3 mb-1">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="chk_discomfort" onchange="updateNotes()">
+                      <label class="form-check-label small fw-bold" for="chk_discomfort">過度な不快感</label>
+                    </div>
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="chk_movement" onchange="updateNotes()">
+                      <label class="form-check-label small fw-bold" for="chk_movement">過度な運動反応</label>
+                    </div>
+                  </div>
+                  <div class="small text-muted mb-2">確認刺激：<span id="confirmPreviewSeconds">{{ form.train_seconds.value|default:form.train_seconds.initial }}</span> 秒 / <span id="confirmPreviewPercent">{{ form.mt_percent.value|default:form.mt_percent.initial }}</span> %MT</div>
+                  <div class="d-flex justify-content-between align-items-start gap-2">
+                    <label class="form-label fw-bold small mb-0">メモ（確認刺激の所見）</label>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#confirmNotesModal">編集</button>
+                  </div>
+                  <!-- 隠し本体（既存フィールド） -->
+                  <div class="visually-hidden">{{ form.treatment_notes }}</div>
+
+                  <!-- 本日の設定 -->
+                  <h6 class="fw-bold border-bottom pb-1 mb-2 small text-muted mt-3">本日の設定</h6>
+                  <div class="row g-2">
+                    <div class="col-2">
+                      <label class="form-label fw-bold small">刺激強度（%MT）</label>
+                      {{ form.mt_percent }}
+                    </div>
+                    <div class="col-2">
+                      <label class="form-label fw-bold small">周波数(Hz)</label>
+                      {{ form.frequency_hz }}
+                    </div>
+                    <div class="col-2">
+                      <label class="form-label fw-bold small">刺激時間（秒）</label>
+                      {{ form.train_seconds }}
+                    </div>
+                    <div class="col-2">
+                      <label class="form-label fw-bold small">刺激間隔(s)</label>
+                      {{ form.intertrain_seconds }}
+                    </div>
+                    <div class="col-2">
+                      <label class="form-label fw-bold small">トレイン数</label>
+                      {{ form.train_count }}
+                    </div>
+                    <div class="col-2">
+                      <label class="form-label fw-bold small">総パルス</label>
+                      {{ form.total_pulses }}
+                    </div>
+                  </div>
+
+                  <!-- 副作用入力（強調） -->
+                  <div class="mt-3 pt-2 border-top">
+                    <button type="button" class="btn btn-warning w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#sideEffectModal">
+                      <i class="fas fa-exclamation-triangle me-1"></i> 副作用入力（必須：症状がなくても確認）
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+        </div>
+
+        <!-- 副作用入力: モーダルに移動（フォーム内） -->
+        {{ side_effect_rows_json|default:'[]'|json_script:"sideEffectInitialRows" }}
+        
+        <!-- 手順解説ウィザードモーダル -->
+        <div class="modal fade" id="procedureWizardModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title wizard-title">治療実施ガイド - 手順解説モード</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+              </div>
+              <div class="modal-body wizard-body">
+                <!-- ウィザード内容ダイナミック表示エリア -->
+                <div id="wizardContent"></div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" id="wizardPrevBtn" style="display:none;">
+                  <i class="fas fa-arrow-left me-1"></i>戻る
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" id="wizardNextBtn">
+                  <i class="fas fa-arrow-right me-1"></i>次へ
+                </button>
+                <button type="button" class="btn btn-success btn-sm" id="wizardCompleteBtn" style="display:none;">
+                  <i class="fas fa-check me-1"></i>完了（保存して閉じる）
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">閉じる</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal fade" id="sideEffectModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">副作用入力</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+              </div>
+              <div class="modal-body">
+                <div id="sideEffectWidget" data-initial-id="sideEffectInitialRows"></div>
+                <input type="hidden" name="side_effect_rows_json" id="sideEffectRowsJson" value="{{ side_effect_rows_json|default:'[]'|escape }}">
+                <div class="mt-2">
+                    <label class="form-label fw-bold">メモ（過剰な不快感、過剰な運動反応）</label>
+                    <textarea class="form-control form-control-sm" name="side_effect_memo" rows="4">{{ side_effect_memo|default:'' }}</textarea>
+                </div>
+                <div class="small text-muted mt-2">
+                    重症度：0=なし、1=軽度、2=中等度、3=重度 ／ 関連性：0=なし、1=低い、2=あり、3=高い
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">閉じる</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 確認刺激メモ編集モーダル -->
+        <div class="modal fade" id="confirmNotesModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-md modal-dialog-scrollable">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">確認用刺激メモ</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+              </div>
+              <div class="modal-body">
+                <textarea class="form-control" id="confirmNotesEditor" rows="4"></textarea>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary btn-sm" id="confirmNotesSaveBtn">保存</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {% url 'rtms_app:dashboard' as dashboard_url %}
+        <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
+        <script src="{% static 'rtms_app/floating.js' %}"></script>
+
+                <!-- 下部の印刷ブロック（通常ボタン） -->
+                <div class="mt-2 no-print d-flex align-items-center gap-2 flex-wrap">
+                    <button type="button" class="btn btn-primary btn-sm" data-role="print">印刷プレビュー</button>
+                </div>
+
+                {% if dashboard_date %}
+            {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+                <div class="fab-stack no-print">
+                  <!-- Single unified print preview button -->
+                                    <button type="button" class="btn btn-primary fab" data-role="print">
+                    <i class="fas fa-print"></i> 印刷プレビュー
+                  </button>
+
+                  <button type="submit" class="btn btn-treatment fab" form="treatmentForm">
+                    <i class="fas fa-save"></i> 保存
+                  </button>
+
+                  <a class="btn btn-secondary fab" href="{{ back_url }}">
+                    <i class="fas fa-undo"></i> 戻る
+                  </a>
+                </div>
+            {% endwith %}
+        {% else %}
+                        <div class="fab-stack no-print">
+              <!-- Single unified print preview button -->
+                            <button type="button" class="btn btn-primary fab" data-role="print">
+                <i class="fas fa-print"></i> 印刷プレビュー
+              </button>
+                
+              <button type="submit" class="btn btn-treatment fab" form="treatmentForm">
+                <i class="fas fa-save"></i> 保存
+              </button>
+                
+              <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
+                <i class="fas fa-undo"></i> 戻る
+              </a>
+            </div>
+        {% endif %}
+
+    </form>
+</div>
+
+<script src="{% static 'rtms_app/side_effect_widget_v2.js' %}"></script>
+<script>
+  // Pass previous abnormal alert message for Step6 into wizard
+  window.wizardConfirmAlertMessage = "{{ confirm_alert_message|default:''|escapejs }}";
+  // Provide accessors for today's parameters (display only)
+  window.getTodayTrainSeconds = () => {
+    const el = document.getElementById('id_train_seconds');
+    return el && el.value ? el.value : (el && el.getAttribute('value')) || '';
+  };
+  window.getTodayMtPercent = () => {
+    const el = document.getElementById('id_mt_percent');
+    return el && el.value ? el.value : (el && el.getAttribute('value')) || '';
+  };
+  // Ensure CSRF token utility if needed by wizard
+  window.getCSRFToken = () => document.querySelector('[name="csrfmiddlewaretoken"]').value;
+</script>
+<script src="{% static 'rtms_app/wizard.js' %}"></script>
+<script>
+  console.log('[treatment_add template] Script loaded');
+
+  // Update notes based on checkboxes
+  function updateNotes() {
+      const chkDiscomfort = document.getElementById('chk_discomfort');
+      const chkMovement = document.getElementById('chk_movement');
+      const notesField = document.getElementById('id_treatment_notes');
+      
+      let additions = [];
+      if (chkDiscomfort && chkDiscomfort.checked) additions.push("過度な不快感あり");
+      if (chkMovement && chkMovement.checked) additions.push("過度な運動反応あり");
+      
+      // Simple append logic (can be improved to toggle if needed, but append is safer for now)
+      // Ideally, we would parse the existing text, but for this requirement, we just ensure they are noted.
+      // A better UX might be to have these as real model fields, but we are using the notes field as requested.
+      
+      // Current implementation: Just append if checked. 
+      // Note: This simple logic might duplicate if checked/unchecked repeatedly. 
+      // For a robust "toggle" within a text field, we'd need more complex parsing.
+      // Given the instruction "default empty", we assume the user checks them once before saving.
+      
+      // Let's try a slightly smarter approach:
+      // We won't auto-remove text because the user might have edited it.
+      // We will only auto-insert.
+      
+      let currentText = notesField.value;
+      additions.forEach(term => {
+          if (!currentText.includes(term)) {
+              if (currentText.length > 0 && !currentText.endsWith('\n')) {
+                  currentText += '\n';
+              }
+              currentText += term;
+          }
+      });
+      notesField.value = currentText;
+  }
+
+  // Initialize Stimulation Intensity (MT %) defaults
+  document.addEventListener('DOMContentLoaded', () => {
+      const mtPercentInput = document.getElementById('id_mt_percent');
+      if (mtPercentInput) {
+          // Set step to 10 for up/down buttons
+          mtPercentInput.step = "10";
+        mtPercentInput.min = "80";
+        mtPercentInput.max = "140";
+          
+          // Set default value to 120 if empty
+          if (!mtPercentInput.value) {
+              mtPercentInput.value = "120";
+          }
+
+      // Set step=1 for other inputs
+      const stepOneInputs = [
+          'id_frequency_hz',
+          'id_train_seconds',
+          'id_intertrain_seconds',
+          'id_train_count',
+          'id_total_pulses'
+      ];
+      stepOneInputs.forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.step = "1";
+      });
+
+      // Adjust Remarks height
+      const notes = document.getElementById('id_treatment_notes');
+      if (notes) {
+          notes.rows = 2;
+          notes.style.height = 'auto';
+      }
+      }
+  });
+
+  // Sync confirm notes modal with hidden form field
+  document.addEventListener('DOMContentLoaded', () => {
+    const modalEl = document.getElementById('confirmNotesModal');
+    if (!modalEl) return;
+    const editor = document.getElementById('confirmNotesEditor');
+    const hiddenField = document.getElementById('id_treatment_notes');
+    const saveBtn = document.getElementById('confirmNotesSaveBtn');
+
+    modalEl.addEventListener('show.bs.modal', () => {
+      if (editor && hiddenField) editor.value = hiddenField.value || '';
+    });
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => {
+        if (editor && hiddenField) hiddenField.value = editor.value;
+        const bsModal = bootstrap.Modal.getInstance(modalEl);
+        if (bsModal) bsModal.hide();
+      });
+    }
+  });
+  
+  // Warning logic for safety conditions
+  function checkSafetyWarnings() {
+    const sleepCheckbox = document.getElementById('id_safety_sleep');
+    const alcoholCheckbox = document.getElementById('id_safety_alcohol');
+    const medsCheckbox = document.getElementById('id_safety_meds');
+    
+    const warningDiv = document.getElementById('safetyWarning');
+    if (!warningDiv) return;
+    
+    const warningText = document.getElementById('warningText');
+    const mappingButton = document.getElementById('mappingButton');
+    
+    if (!sleepCheckbox || !alcoholCheckbox || !medsCheckbox) return;
+    
+    if (!sleepCheckbox.checked || !alcoholCheckbox.checked || !medsCheckbox.checked) {
+      const mappingUrl = '{% url "rtms_app:mapping_add" patient.id %}?date={{ initial_date|date:"Y-m-d" }}';
+      warningText.innerHTML = '<i class="fas fa-bolt text-warning me-1"></i>適切な刺激強度が変わっている可能性があります。<br>位置決めを実施してください。';
+      mappingButton.href = mappingUrl;
+      mappingButton.target = '_self';
+      warningDiv.classList.remove('alert-info');
+      warningDiv.classList.add('alert-warning');
+      warningDiv.style.display = 'block';
+    } else {
+      warningDiv.style.display = 'none';
+    }
+  }
+  
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('[treatment_add template] DOMContentLoaded fired');
+    
+    const sleepElem = document.getElementById('id_safety_sleep');
+    const alcoholElem = document.getElementById('id_safety_alcohol');
+    const medsElem = document.getElementById('id_safety_meds');
+    
+    if (sleepElem) sleepElem.addEventListener('change', checkSafetyWarnings);
+    if (alcoholElem) alcoholElem.addEventListener('change', checkSafetyWarnings);
+    if (medsElem) medsElem.addEventListener('change', checkSafetyWarnings);
+    
+    checkSafetyWarnings();
+    console.log('[treatment_add template] Safety checks initialized');
+    
+    // Immediate sync on widget instance creation
+    if (typeof sideEffectWidgetInstance !== 'undefined' && sideEffectWidgetInstance) {
+      console.log('[treatment_add template] Widget instance exists, performing initial sync');
+      sideEffectWidgetInstance.updateHiddenInput();
+    }
+    
+    // Ensure side_effect_rows_json is synced before form submission
+    const treatmentForm = document.getElementById('treatmentForm');
+    if (treatmentForm) {
+      treatmentForm.addEventListener('submit', (e) => {
+        console.log('[treatment_add template] Form submit event');
+        
+        // Multiple sync attempts to ensure data is captured
+        if (typeof sideEffectWidgetInstance !== 'undefined' && sideEffectWidgetInstance) {
+          console.log('[treatment_add template] Syncing widget data (1st attempt)...');
+          sideEffectWidgetInstance.updateHiddenInput();
+          
+          // Wait a tick and sync again
+          setTimeout(() => {
+            console.log('[treatment_add template] Syncing widget data (2nd attempt)...');
+            sideEffectWidgetInstance.updateHiddenInput();
+            
+            const hiddenInput = document.getElementById('sideEffectRowsJson');
+            if (hiddenInput) {
+              console.log('[treatment_add template] Final sideEffectRowsJson value:', hiddenInput.value);
+            }
+          }, 0);
+        } else {
+          console.warn('[treatment_add template] Widget instance not available');
+        }
+      });
+      
+    // Attach handler for both print buttons (bottom and floating)
+    document.querySelectorAll('[data-role="print"]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('[treatment_add template] print trigger clicked');
+            if (typeof sideEffectWidgetInstance !== 'undefined' && sideEffectWidgetInstance) {
+                sideEffectWidgetInstance.updateHiddenInput();
+            }
+            let actionInput = document.getElementById('actionInput');
+            if (!actionInput) {
+                actionInput = document.createElement('input');
+                actionInput.type = 'hidden';
+                actionInput.id = 'actionInput';
+                actionInput.name = 'action';
+                treatmentForm.appendChild(actionInput);
+            }
+            actionInput.value = 'print';
+            console.log('[treatment_add template] Submitting form with action=print');
+            treatmentForm.submit();
+        });
+    });
+      
+      // Also sync when floating menu button is clicked
+      const submitBtn = treatmentForm.querySelector('button[type="submit"]');
+      if (submitBtn) {
+        submitBtn.addEventListener('click', (e) => {
+          console.log('[treatment_add template] Submit button clicked');
+          if (typeof sideEffectWidgetInstance !== 'undefined' && sideEffectWidgetInstance) {
+            console.log('[treatment_add template] Syncing before button click');
+            sideEffectWidgetInstance.updateHiddenInput();
+          }
+        });
+      }
+    }
+  });
+</script>
+{% endblock %}

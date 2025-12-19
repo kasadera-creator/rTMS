@@ -11,13 +11,13 @@
 }
 .fab{
   border-radius: 999px;
-  padding: 6px 12px;
+  padding: 10px 14px;
   box-shadow: 0 4px 12px rgba(0,0,0,.15);
   display:inline-flex;
   align-items:center;
   gap:6px;
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: 14px;
 }
 .fab i{ width: 14px; text-align:center; }
 @media print { .fab-stack{ display:none !important; } }

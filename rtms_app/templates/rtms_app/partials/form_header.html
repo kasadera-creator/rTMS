@@ -19,12 +19,5 @@
             <span class="badge bg-info ms-1">{{ today|date:"Y/n/j" }}</span>
         {% endif %}
     </div>
-    <div class="d-flex align-items-center">
-        {% if start_date and end_date_est %}
-            <span class="text-muted small me-3">期間: {{ start_date|date:"Y/n/j" }} ～ {{ end_date_est|date:"Y/n/j" }}</span>
-        {% endif %}
-        <div id="autoSaveStatus" class="text-muted small">
-            <i class="fas fa-save"></i> 未保存
-        </div>
-    </div>
+    {% comment %} 期間表示は plan_inline_bar.html に統一されたため非表示 {% endcomment %}
 </div>

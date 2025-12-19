@@ -55,29 +55,7 @@
                 {{ patient.summary_text|linebreaksbr }}
             </div>
 
-            {% if test_scores %}
-            <div class="mt-2">
-                <div style="font-weight: bold; font-size: 9pt; margin-bottom: 3px; border-bottom: 1px dashed #ccc; width: fit-content;">
-                    【参考】重症度評価推移 (HAMDスコア)
-                </div>
-                <table class="print-score-table">
-                    <tr>
-                        <th style="width: 25%;">実施日</th>
-                        <th style="width: 25%;">時期</th>
-                        <th style="width: 25%;">HAMD 17項目</th>
-                        <th style="width: 25%;">HAMD 21項目</th>
-                    </tr>
-                    {% for score in test_scores %}
-                    <tr>
-                        <td>{{ score.date|date:"Y/n/j" }}</td>
-                        <td>{{ score.get_timing_display|default:"-" }}</td>
-                        <td>{{ score.total_score_17 }}</td>
-                        <td>{{ score.total_score_21 }}</td>
-                    </tr>
-                    {% endfor %}
-                </table>
-            </div>
-            {% endif %}
+            {% include 'rtms_app/print/_hamd_trend_print_compact.html' %}
         </div>
 
         <div class="footer-area">

@@ -1,0 +1,20 @@
+<div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+  <div class="page-title d-flex align-items-center gap-2">
+    {% if title_icon %}<i class="fas {{ title_icon }} page-title-icon"></i>{% endif %} {{ page_title|default:"" }}
+  </div>
+  <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: nowrap; margin-left: auto;">
+    <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; font-weight: 600; white-space: nowrap;">
+      <span>ID {{ patient.card_id }}</span>
+      <span style="color: #999;">|</span>
+      <span class="patient-name">{{ patient.name }}</span>
+      <span style="color: #999;">|</span>
+      <span style="font-weight: 400;">{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）{{ patient.get_gender_display }}</span>
+      <span style="color: #999;">|</span>
+      <span style="font-weight: 600;">{{ patient.course_number|default:1 }}クール</span>
+      {% if patient.attending_physician %}
+      <span style="color: #999;">|</span>
+      <span style="font-weight: 400;">担当医：{% if patient.attending_physician.last_name %}{{ patient.attending_physician.last_name }}{% else %}{{ patient.attending_physician.username }}{% endif %}</span>
+      {% endif %}
+    </div>
+  </div>
+</div>

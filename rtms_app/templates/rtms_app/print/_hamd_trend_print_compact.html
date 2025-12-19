@@ -1,0 +1,47 @@
+<table class="table-basic hamd-trend-print" style="margin-top:8px;">
+  <thead>
+    <tr>
+      <th style="width: 34mm;">項目</th>
+      {% for c in hamd_trend_cols %}
+        <th class="text-center">
+          {{ c.label }}
+          <div class="small text-muted">{{ c.date_str|default:"-" }}</div>
+        </th>
+      {% endfor %}
+    </tr>
+  </thead>
+
+  <tbody>
+    <tr>
+      <td class="fw-bold">HAM-D17</td>
+      {% for c in hamd_trend_cols %}
+        <td class="text-center">
+          <div class="fw-bold">{% if c.hamd17 is not None %}{{ c.hamd17 }}{% else %}-{% endif %}</div>
+          {% if c.label != "治療前" %}
+            <div class="small">改善率: {% if c.improvement_pct_17 is not None %}{{ c.improvement_pct_17 }}%{% else %}-{% endif %}</div>
+            <div class="small">状態: {% if c.status_label %}{{ c.status_label }}{% else %}未評価{% endif %}</div>
+          {% endif %}
+        </td>
+      {% endfor %}
+    </tr>
+
+    <tr>
+      <td class="fw-bold">HAM-D21</td>
+      {% for c in hamd_trend_cols %}
+        <td class="text-center">
+          <div class="fw-bold">{% if c.hamd21 is not None %}{{ c.hamd21 }}{% else %}-{% endif %}</div>
+          {% if c.label != "治療前" %}
+            <div class="small">改善率: {% if c.improvement_pct_21 is not None %}{{ c.improvement_pct_21 }}%{% else %}-{% endif %}</div>
+            <div class="small">状態: {% if c.status_label_21 %}{{ c.status_label_21 }}{% else %}—{% endif %}</div>
+          {% endif %}
+        </td>
+      {% endfor %}
+    </tr>
+  </tbody>
+</table>
+
+<style>
+  .hamd-trend-print { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9pt; }
+  .hamd-trend-print th, .hamd-trend-print td { border: 1px solid #999; padding: 2px 3px; vertical-align: top; }
+  .hamd-trend-print .small { font-size: 8pt; line-height: 1.25; }
+</style>

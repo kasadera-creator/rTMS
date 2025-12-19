@@ -4,7 +4,11 @@
 {% block body_class %}page-assessment{% endblock %}
 
 {% block header_breadcrumb %}
-  <span class="text-white-50 ms-2">/ 尺度評価</span>
+  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
+  <span class="text-white-50 px-1">/</span>
+  <a href="#" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ID {{ patient.card_id }}</a>
+  <span class="text-white-50 px-1">/</span>
+  <span class="text-white px-1" style="font-size: 0.9rem;">尺度評価</span>
 {% endblock header_breadcrumb %}
 
 {% block extrastyle %}
@@ -24,38 +28,73 @@
   }
   .compact-label { font-size:.92rem; line-height:1.2; }
 
+  /* Force 2 columns layout using grid */
+  .card-body .row.g-2 {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr !important;
+      gap: 0.5rem !important;
+  }
+  @media (max-width: 767px) {
+      .card-body .row.g-2 {
+          grid-template-columns: 1fr !important;
+      }
+  }
+  .card-body .row.g-2 > .col-md-6 {
+      width: 100% !important;
+      max-width: 100% !important;
+  }
+
   /* iPad Landscape Optimization */
   @media only screen and (min-width: 1000px) and (orientation: landscape) {
-      .container { max-width: 98vw; padding-top: 10px !important; padding-bottom: 60px !important; }
-      h4 { font-size: 1.2rem; margin-bottom: 0.5rem !important; }
-      .alert { padding: 0.25rem 0.5rem; margin-bottom: 0.5rem !important; font-size: 0.85rem; }
+      .container { max-width: 98vw; padding-top: 6px !important; padding-bottom: 6px !important; }
+      .page-title { font-size: 1.1rem !important; }
+      .alert { padding: 0.2rem 0.4rem; margin-bottom: 0.4rem !important; font-size: 0.8rem; }
       
-      .card-header { padding: 0.25rem 0.5rem; font-size: 0.9rem; }
-      .card-body { padding: 0.5rem; }
+      .card { margin-bottom: 0.4rem !important; }
+      .card-header { padding: 0.2rem 0.4rem; font-size: 0.85rem; }
+      .card-body { padding: 0.4rem; }
       
-      .hamd-row { padding: 0.25rem !important; margin-bottom: 0.2rem; }
-      .q-badge { width: 22px; height: 22px; font-size: 0.7rem; }
-      .compact-label { font-size: 0.8rem; }
+      .hamd-row { padding: 0.2rem 0.3rem !important; margin-bottom: 0.15rem; }
+      .q-badge { width: 20px; height: 20px; font-size: 0.65rem; }
+      .compact-label { font-size: 0.75rem; line-height: 1.1; }
       
-      .btn-group-sm>.btn, .btn-sm { padding: 0.1rem 0.3rem; font-size: 0.75rem; }
+      .btn-group-sm>.btn, .btn-sm { padding: 0.08rem 0.25rem; font-size: 0.7rem; }
+      .form-control-sm { padding: 0.15rem 0.3rem; font-size: 0.8rem; }
       
-      /* Make 2 columns become 3 columns if space permits, or just tighter 2 columns */
-      .col-lg-6 { width: 50%; } 
+      /* Make 2 columns layout more compact */
+      .col-md-6 { width: 50%; }
+      .row.g-2 { gap: 0.3rem !important; }
       
-      .sticky-scorebar { padding: 5px 10px; }
-      .sticky-scorebar .h5 { font-size: 1rem; }
-      .sticky-scorebar .btn { padding: 0.25rem 0.5rem; font-size: 0.85rem; }
+      .sticky-scorebar { padding: 4px 8px; }
+      .sticky-scorebar .h5 { font-size: 0.9rem; margin-bottom: 0 !important; }
+      .sticky-scorebar .btn { padding: 0.2rem 0.4rem; font-size: 0.8rem; }
+      
+      /* Keep fab buttons normal size */
+      .fab { padding: 6px 12px !important; font-size: 0.85rem !important; }
   }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container py-3 mb-5">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="fw-bold mb-0"><i class="fas fa-chart-bar page-title-icon"></i> 尺度評価 (HAM-D)</h4>
+  <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+    <div class="page-title d-flex align-items-center gap-2"><i class="fas fa-chart-bar page-title-icon"></i> 尺度評価 (HAM-D) {% include "rtms_app/partials/recommendation_badge.html" %}</div>
+    <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: nowrap; margin-left: auto;">
+      <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; font-weight: 600; white-space: nowrap;">
+        <span>ID {{ patient.card_id }}</span>
+        <span style="color: #999;">|</span>
+        <span class="patient-name">{{ patient.name }}</span>
+        <span style="color: #999;">|</span>
+        <span style="font-weight: 400;">{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）{{ patient.get_gender_display }}</span>
+        <span style="color: #999;">|</span>
+        <span style="font-weight: 600;">{{ patient.course_number|default:1 }}クール</span>
+        {% if patient.attending_physician %}
+        <span style="color: #999;">|</span>
+        <span style="font-weight: 400;">担当医：{% if patient.attending_physician.last_name %}{{ patient.attending_physician.last_name }}{% else %}{{ patient.attending_physician.username }}{% endif %}</span>
+        {% endif %}
+      </div>
+    </div>
   </div>
-
-  {% include "rtms_app/partials/form_header.html" %}
 
   {% if recommendation %}
     <div class="alert alert-info fw-bold mb-3 shadow-sm"><i class="fas fa-comment-medical"></i> {{ recommendation }}</div>
@@ -89,7 +128,7 @@
 
       <div class="card-body bg-light">
         <div class="row g-2">
-          <div class="col-lg-6">
+          <div class="col-md-6">
             <div class="d-flex flex-column gap-2">
               {% for key, label, max, text in hamd_items_left %}
                 <div class="hamd-row p-2 d-flex align-items-center justify-content-between"
@@ -124,7 +163,7 @@
             </div>
           </div>
 
-          <div class="col-lg-6">
+          <div class="col-md-6">
             <div class="d-flex flex-column gap-2">
               {% for key, label, max, text in hamd_items_right %}
                 <div class="hamd-row p-2 d-flex align-items-center justify-content-between"

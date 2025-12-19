@@ -16,7 +16,12 @@
   /* デフォルト：1カラム（PC含む） */
   .fv-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-4); }
   
-  /* iPad横だけ 2カラム */
+  /* lg以上は常時 2:1 */
+  @media (min-width: 992px) {
+    .fv-grid { grid-template-columns: 2fr 1fr; align-items: start; }
+    .fv-right-scroll { max-height: calc(100vh - 180px); overflow: auto; }
+  }
+  /* iPad横だけ 2カラム（従来設定を維持。必要時に上書きされる） */
   @media (max-width: 1194px) and (orientation: landscape) {
     .fv-grid { grid-template-columns: 7fr 3fr; }
   }
@@ -228,7 +233,7 @@
       </div>
 
       <!-- ===== 2画面目: 短い入力・導線（右） ===== -->
-      <div class="stack-md">
+      <div class="stack-md fv-right-scroll">
         <div class="card-like">
           <div class="section-title" style="--theme-primary: var(--color-first-visit);">重症度評価 / 適正質問票</div>
 

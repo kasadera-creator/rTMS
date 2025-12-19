@@ -4,6 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.http import HttpResponseNotAllowed
 from urllib.parse import urlencode
+import logging
 
 from .models import Patient, Assessment, ConsentDocument, TreatmentSession, SideEffectCheck
 from .views import generate_calendar_weeks
@@ -14,20 +15,25 @@ DOC_TEMPLATES = {
 	"suitability": {"label": "rTMS問診票", "template": "rtms_app/print/suitability_questionnaire.html"},
 	"consent_pdf": {"label": "説明同意書（標準）", "pdf_static": "rtms_app/docs/consent_default.pdf"},
 	"discharge": {"label": "退院時サマリー", "template": "rtms_app/print/discharge_summary.html"},
+	"hamd_detail": {"label": "HAMD詳細票", "template": "rtms_app/print/hamd_detail.html"},
 	"referral": {"label": "紹介状", "template": "rtms_app/print/referral.html"},
 	"path": {"label": "臨床経過表", "template": "rtms_app/print/path.html"},
 }
+
+logger = logging.getLogger(__name__)
 
 
 @login_required
 def patient_print_bundle(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
 	questionnaire = patient.questionnaire_data or {}
-	assessments = Assessment.objects.filter(patient=patient, timing='baseline').order_by('date')
+	# 全期間の評価を使用（baseline限定ではなく）
+	assessments = Assessment.objects.filter(patient=patient).order_by('date')
 
 	# always use getlist to collect multiple docs from ?docs=...&docs=...
 	docs = request.GET.getlist("docs")
 	docs = [d for d in docs if d]
+	logger.info("print bundle docs=%s", docs)
 
 	# filter to allowed templates
 	valid_docs = [d for d in docs if d in DOC_TEMPLATES]
@@ -65,6 +71,115 @@ def patient_print_bundle(request, patient_id):
 		}
 		return render(request, 'rtms_app/print/bundle.html', context, status=400)
 
+	# HAMD trend columns with evaluation (severity, improvement, response)
+	def _severity_label_17(score:
+						   int | None):
+		if score is None:
+			return None
+		if score <= 7:
+			return "正常"
+		if score <= 13:
+			return "軽症"
+		if score <= 18:
+			return "中等症"
+		if score <= 22:
+			return "重症"
+		return "最重症"
+
+	def _response_label(timing: str, ham17: int | None, imp: float | None):
+		if timing == "baseline":
+			return None
+		if ham17 is not None and ham17 <= 7:
+			return "寛解（中止/漸減）" if timing == "week3" else "寛解"
+		if imp is not None and imp < 20.0:
+			return "無効（中止）" if timing == "week3" else "無効"
+		return "継続"
+
+	timing_order = [("baseline", "治療前"), ("week3", "3週"), ("week4", "4週"), ("week6", "6週")]
+	latest_by_timing = {t: Assessment.objects.filter(patient=patient, timing=t).order_by("-date").first() for t, _ in timing_order}
+	baseline_obj = latest_by_timing.get("baseline")
+	baseline_17 = getattr(baseline_obj, "total_score_17", None)
+	hamd_trend_cols = []
+	for t, label in timing_order:
+		_a = latest_by_timing.get(t)
+		_date_str = _a.date.strftime("%Y/%-m/%-d") if _a and getattr(_a, "date", None) else "-"
+		ham17 = getattr(_a, "total_score_17", None)
+		ham21 = getattr(_a, "total_score_21", None)
+		imp = None
+		if t != "baseline" and _a and baseline_17 not in (None, 0) and ham17 is not None:
+			imp = round((baseline_17 - ham17) / baseline_17 * 100.0, 1)
+		sev = _severity_label_17(ham17)
+		resp = _response_label(t, ham17, imp)
+		hamd_trend_cols.append({
+			"timing": t,
+			"label": label,
+			"date_str": _date_str,
+			"hamd17": ham17,
+			"hamd21": ham21,
+			"improvement_pct": imp,
+			"improvement_pct_17": imp,
+			"severity_label_17": sev,
+			"response_label": resp,
+		})
+
+	# HAMD detail grid (per-item scores for 21 items)
+	cols = []
+	for t, label in timing_order:
+		_a = latest_by_timing.get(t)
+		cols.append({
+			"key": t,
+			"label": label,
+			"date_str": _a.date.strftime("%Y/%-m/%-d") if _a and getattr(_a, "date", None) else "-",
+		})
+	# Human-readable Japanese names for HAMD-21 items
+	ITEM_NAMES = [
+		"抑うつ気分",
+		"罪責感",
+		"自殺念慮",
+		"入眠障害",
+		"中途覚醒",
+		"早朝覚醒",
+		"仕事と活動性（興味・意欲）",
+		"精神運動制止",
+		"焦燥（精神運動興奮）",
+		"不安（精神性）",
+		"不安（身体性）",
+		"胃腸症状",
+		"全身症状",
+		"性欲減退",
+		"心気症",
+		"体重減少",
+		"病識",
+		"日内変動",
+		"離人・現実感消失",
+		"妄想（被害・罪業など）",
+		"強迫症状",
+	]
+	rows = []
+	for i in range(1, 22):
+		# Safe fallback in case of index issues
+		name = ITEM_NAMES[i - 1] if 1 <= i <= len(ITEM_NAMES) else f"項目{i}"
+		scores_by_t = {}
+		for t, _ in timing_order:
+			_a = latest_by_timing.get(t)
+			val = None
+			if _a and isinstance(_a.scores, dict):
+				val = _a.scores.get(f"q{i}")
+			scores_by_t[t] = val if val is not None else ""
+		rows.append({"no": i, "name": name, "scores": scores_by_t})
+	_totals = {"hamd17": {}, "hamd21": {}, "improvement_pct": {}}
+	baseline17 = getattr(latest_by_timing.get("baseline"), "total_score_17", None)
+	for t, _ in timing_order:
+		_a = latest_by_timing.get(t)
+		t17 = getattr(_a, "total_score_17", None)
+		t21 = getattr(_a, "total_score_21", None)
+		_totals["hamd17"][t] = t17
+		_totals["hamd21"][t] = t21
+		if t == "baseline" or (baseline17 in (None, 0) or t17 is None):
+			_totals["improvement_pct"][t] = None
+		else:
+			_totals["improvement_pct"][t] = round((baseline17 - t17) / baseline17 * 100.0, 1)
+
 	context = {
 		'patient': patient,
 		'questionnaire': questionnaire,
@@ -73,6 +188,8 @@ def patient_print_bundle(request, patient_id):
 		'docs_to_render': docs_to_render,
 		'doc_templates': DOC_TEMPLATES,
 		'back_url': back_url,
+		'hamd_trend_cols': hamd_trend_cols,
+		'hamd_detail': {"cols": cols, "rows": rows, "totals": _totals},
 	}
 	return render(request, 'rtms_app/print/bundle.html', context)
 
@@ -103,11 +220,46 @@ def patient_print_discharge(request, patient_id):
 	for a in assessments_qs:
 		latest_by_date[a.date] = a
 	test_scores = [latest_by_date[d] for d in sorted(latest_by_date.keys())]
+
+	# Build hamd_trend_cols for partial rendering
+	timing_order = [("baseline", "治療前"), ("week3", "3週"), ("week4", "4週"), ("week6", "6週")]
+	latest_by_timing = {t: Assessment.objects.filter(patient=patient, timing=t).order_by("-date").first() for t, _ in timing_order}
+	baseline_obj = latest_by_timing.get("baseline")
+	baseline_17 = getattr(baseline_obj, "total_score_17", None)
+	def _sev(score):
+		if score is None: return None
+		return "正常" if score <= 7 else ("軽症" if score <= 13 else ("中等症" if score <= 18 else ("重症" if score <= 22 else "最重症")))
+	def _resp(t, s, imp):
+		if t == 'baseline': return None
+		if s is not None and s <= 7: return "寛解（中止/漸減)" if t == 'week3' else "寛解"
+		if imp is not None and imp < 20.0: return "無効（中止）" if t == 'week3' else "無効"
+		return "継続"
+	hamd_trend_cols = []
+	for t, label in timing_order:
+		a = latest_by_timing.get(t)
+		ds = a.date.strftime("%Y/%-m/%-d") if a and getattr(a, 'date', None) else '-'
+		s17 = getattr(a, 'total_score_17', None)
+		s21 = getattr(a, 'total_score_21', None)
+		imp = None
+		if t != 'baseline' and a and baseline_17 not in (None, 0) and s17 is not None:
+			imp = round((baseline_17 - s17) / baseline_17 * 100.0, 1)
+		hamd_trend_cols.append({
+			'timing': t,
+			'label': label,
+			'date_str': ds,
+			'hamd17': s17,
+			'hamd21': s21,
+			'improvement_pct': imp,
+			'improvement_pct_17': imp,
+			'severity_label_17': _sev(s17),
+			'response_label': _resp(t, s17, imp),
+		})
 	
 	context = {
 		'patient': patient,
 		'today': timezone.now().date(),
 		'test_scores': test_scores,
+		'hamd_trend_cols': hamd_trend_cols,
 		'back_url': back_url,
 	}
 	return render(request, 'rtms_app/print/discharge_summary.html', context)
@@ -147,10 +299,44 @@ def patient_print_referral(request, patient_id):
 	for a in assessments_qs:
 		latest_by_date[a.date] = a
 	test_scores = [latest_by_date[d] for d in sorted(latest_by_date.keys())]
+	# HAMD trend for referral
+	timing_order = [("baseline", "治療前"), ("week3", "3週"), ("week4", "4週"), ("week6", "6週")]
+	latest_by_timing = {t: Assessment.objects.filter(patient=patient, timing=t).order_by("-date").first() for t, _ in timing_order}
+	baseline_obj = latest_by_timing.get("baseline")
+	baseline_17 = getattr(baseline_obj, "total_score_17", None)
+	def _sev(score):
+		if score is None: return None
+		return "正常" if score <= 7 else ("軽症" if score <= 13 else ("中等症" if score <= 18 else ("重症" if score <= 22 else "最重症")))
+	def _resp(t, s, imp):
+		if t == 'baseline': return None
+		if s is not None and s <= 7: return "寛解（中止/漸減)" if t == 'week3' else "寛解"
+		if imp is not None and imp < 20.0: return "無効（中止）" if t == 'week3' else "無効"
+		return "継続"
+	hamd_trend_cols = []
+	for t, label in timing_order:
+		a = latest_by_timing.get(t)
+		ds = a.date.strftime("%Y/%-m/%-d") if a and getattr(a, 'date', None) else '-'
+		s17 = getattr(a, 'total_score_17', None)
+		s21 = getattr(a, 'total_score_21', None)
+		imp = None
+		if t != 'baseline' and a and baseline_17 not in (None, 0) and s17 is not None:
+			imp = round((baseline_17 - s17) / baseline_17 * 100.0, 1)
+		hamd_trend_cols.append({
+			'timing': t,
+			'label': label,
+			'date_str': ds,
+			'hamd17': s17,
+			'hamd21': s21,
+			'improvement_pct': imp,
+			'improvement_pct_17': imp,
+			'severity_label_17': _sev(s17),
+			'response_label': _resp(t, s17, imp),
+		})
 	context = {
 		'patient': patient,
 		'today': timezone.now().date(),
 		'test_scores': test_scores,
+		'hamd_trend_cols': hamd_trend_cols,
 		'back_url': back_url,
 	}
 	return render(request, 'rtms_app/print/referral.html', context)

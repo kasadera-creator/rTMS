@@ -1,0 +1,131 @@
+{% extends 'rtms_app/print/_print_base.html' %}
+{% load static %}
+{% load rtms_extras %}
+
+{% block title %}HAMD詳細票 - {{ patient.name }}{% endblock %}
+{% block toolbar_title %}HAMD詳細票 - {{ patient.name }} 様{% endblock %}
+
+{% block print_content %}
+<div class="page-container">
+  <div class="page-sheet">
+    <h1 class="doc-title">HAMD 詳細票</h1>
+    <div class="summary-header" style="margin-bottom: 8px;">
+      <div>作成日: {{ today|date:"Y年n月j日" }}</div>
+      <div>患者ID: {{ patient.card_id }} / 氏名: {{ patient.name }} 様</div>
+    </div>
+
+    <table class="hamd-detail-table">
+      <thead>
+        <tr>
+          <th class="col-item">項目</th>
+          {% for c in hamd_detail.cols %}
+            <th class="col-time">
+              <div class="th-label">{{ c.label }}</div>
+              <div class="small text-muted">{{ c.date_str }}</div>
+            </th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in hamd_detail.rows %}
+        <tr>
+          <td class="text-start">{{ r.no }}. {{ r.name }}</td>
+          {% for c in hamd_detail.cols %}
+            <td class="text-center">{{ r.scores|get_item:c.key }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+
+        <!-- HAMD17 合計＋評価（baselineは改善率/評価を表示しない） -->
+        <tr class="hamd-summary">
+          <td class="text-start fw-bold">HAMD17 合計</td>
+          {% for c in hamd_detail.cols %}
+            {% with total=hamd_detail.totals.hamd17|get_item:c.key pct=hamd_detail.totals.improvement_pct|get_item:c.key sev=hamd_detail.totals.severity|get_item:c.key status=hamd_detail.totals.status_label|get_item:c.key %}
+            <td class="text-center fw-bold">
+              {% if total is not None %}
+                {{ total }}（{% if sev %}{{ sev }}{% else %}-{% endif %}）<br>
+
+                {% if not forloop.first %}
+                  <span class="hamd-sub">改善率 {% if pct is not None %}{{ pct }}%{% else %}-{% endif %}</span>
+                  <span class="hamd-sub">（{% if status %}{{ status }}{% else %}-{% endif %}）</span>
+                {% endif %}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+            {% endwith %}
+          {% endfor %}
+        </tr>
+
+        <!-- HAMD21 合計（推移用） -->
+        <tr class="hamd-summary">
+          <td class="text-start fw-bold">HAMD21 合計</td>
+          {% for c in hamd_detail.cols %}
+            <td class="text-center fw-bold">{{ hamd_detail.totals.hamd21|get_item:c.key|default:"-" }}</td>
+          {% endfor %}
+        </tr>
+
+        <!-- フットノート（算定上の取扱い） -->
+        <tr class="hamd-footnote-row">
+          <td colspan="{{ hamd_detail.cols|length|add:1 }}">
+            【算定上の取扱い】<br>
+            第３週目の評価において、その合計スコアが HAMD17で7以下、HAMD24で9以下である場合は寛解と判断し、当該治療は中止又は漸減する。<br>
+            漸減する場合、第４週目は最大週3回、第５週目は最大週2回、第６週目は最大週1回まで算定できる。<br>
+            また、第３週目の評価において、HAMD17又はHAMD24の合計スコアで寛解と判断されず、かつ治療開始前の評価より改善が20％未満の場合には中止する。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+  .hamd-detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 8.5pt;
+  }
+  .hamd-detail-table th,
+  .hamd-detail-table td {
+    border: 1px solid #999;
+    padding: 1.5px 2px;
+    vertical-align: top;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .hamd-detail-table th {
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.15;
+  }
+  .hamd-summary td {
+    border-top: 2px solid #333;
+    background: #f5f5f5;
+  }
+  .hamd-sub {
+    display: block;
+    font-size: 7.8pt;
+    font-weight: normal;
+    color: #444;
+    margin-top: 2px;
+    line-height: 1.2;
+  }
+  .hamd-footnote-row td {
+    font-size: 8pt;
+    color: #444;
+    background: #fafafa;
+    line-height: 1.35;
+    padding-top: 4px;
+  }
+  .hamd-detail-table .small {
+    display: block;
+    font-size: 7.5pt;
+    color: #666;
+    white-space: nowrap;
+  }
+  .col-item { width: 38mm; }
+  .col-time { width: auto; }
+  .th-label { font-weight: 700; }
+</style>
+{% endblock %}

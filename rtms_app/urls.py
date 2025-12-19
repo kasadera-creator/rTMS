@@ -79,9 +79,19 @@ urlpatterns = [
         name="mapping_add",
     ),
     path(
+        "patient/<int:patient_id>/mapping/upsert-from-wizard/",
+        views.mapping_upsert_from_wizard,
+        name="mapping_upsert_from_wizard",
+    ),
+    path(
         "patient/<int:patient_id>/treatment/add/",
         views.treatment_add,
         name="treatment_add",
+    ),
+    path(
+        "patient/<int:patient_id>/mapping/upsert-from-wizard/",
+        views.mapping_upsert_from_wizard,
+        name="mapping_upsert_from_wizard",
     ),
     path(
         "patient/<int:patient_id>/assessment/week4/",

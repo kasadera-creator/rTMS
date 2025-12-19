@@ -56,8 +56,8 @@
         
         .rtms-app { height: 100vh; display: flex; flex-direction: column; }
         .rtms-header { flex: 0 0 56px; height: 56px; }
-        .rtms-main { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
-        .rtms-footer { flex: 0 0 28px; height: 28px; line-height: 28px; background-color: #343a40; color: #adb5bd; font-size: 0.75rem; text-align: center; padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rtms-main { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-bottom: 28px; }
+        .rtms-footer { position: fixed; bottom: 0; left: 0; right: 0; height: 28px; line-height: 28px; background-color: #343a40; color: #adb5bd; font-size: 0.75rem; text-align: center; padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 100; }
         .rtms-footer * { margin: 0 !important; padding: 0 !important; }
         .rtms-footer a { color: #adb5bd; text-decoration: none; }
         .rtms-footer a:hover { color: #fff; }
@@ -225,12 +225,12 @@
                         </li>
                         <li>
                             <a class="dropdown-item" href="{% url 'rtms_app:mapping_add' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
-                                <i class="fas fa-crosshairs me-2"></i>位置決め
+                                <i class="fas fa-crosshairs me-2"></i>位置決め・MT測定
                             </a>
                         </li>
                         <li>
                             <a class="dropdown-item" href="{% url 'rtms_app:treatment_add' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
-                                <i class="fas fa-bolt me-2"></i>rTMS治療
+                                <i class="fas fa-bolt me-2"></i>治療実施
                             </a>
                         </li>
                         <li><hr class="dropdown-divider"></li>

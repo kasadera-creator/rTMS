@@ -1,0 +1,22 @@
+{# 治療予定情報バー（共通化） #}
+{% if treatment_plan_start or treatment_plan_end or today_session_no or total_sessions or week_no %}
+<div class="no-print rounded p-2 mb-3" style="background: rgba(25,135,84,.08); border: 1px solid rgba(25,135,84,.25);">
+  <div class="d-flex flex-wrap align-items-center gap-2" style="font-weight:600; white-space:nowrap;">
+    <span class="fw-bold text-success">
+      治療予定：{% if treatment_plan_start %}{{ treatment_plan_start|date:"Y/n/j" }}{% else %}-{% endif %}
+      〜 {% if treatment_plan_end %}{{ treatment_plan_end|date:"Y/n/j" }}{% else %}-{% endif %}
+    </span>
+
+    <span style="color:#999;">|</span>
+
+    <span class="fw-bold">
+      本日：第{% if today_session_no %}{{ today_session_no }}{% else %}-{% endif %}回（全{% if total_sessions %}{{ total_sessions }}{% else %}-{% endif %}回中）
+    </span>
+
+    {% if week_no %}
+      <span style="color:#999;">|</span>
+      <span class="fw-bold">第{{ week_no }}週</span>
+    {% endif %}
+  </div>
+</div>
+{% endif %}

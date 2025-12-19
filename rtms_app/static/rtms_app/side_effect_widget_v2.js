@@ -98,7 +98,7 @@ class SideEffectWidget {
               <th rowspan="2" style="width: 16%; vertical-align: middle; text-align: center; font-size: 0.85rem; padding: 0.4rem;">症状</th>
               <th colspan="3" style="text-align: center; font-weight: bold; font-size: 0.85rem; padding: 0.4rem;">重症度</th>
               <th rowspan="2" style="width: 10%; vertical-align: middle; text-align: center; font-size: 0.85rem; padding: 0.4rem;">関連性</th>
-              <th rowspan="2" style="width: 22%; vertical-align: middle; text-align: center; font-size: 0.85rem; padding: 0.4rem;">メモ</th>
+              <th rowspan="2" style="width: 22%; vertical-align: middle; text-align: center; font-size: 0.85rem; padding: 0.4rem;">メモ（対処法など）</th>
             </tr>
             <tr>
               <th style="width: 9%; text-align: center; font-size: 0.8rem; padding: 0.3rem;">前</th>

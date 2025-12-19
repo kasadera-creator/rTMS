@@ -124,9 +124,9 @@ TreatmentSession {
   coil_type: CharField           # Coil model (e.g., "H1")
   target_site: CharField         # Stimulation target (e.g., "左背外側前頭前野")
   mt_percent: PositiveSmallInt   # Motor threshold (%)
-  intensity_percent: PositiveSmallInt  # Intensity as % of MT
+  intensity_percent: PositiveSmallInt  # Stimulation intensity (%MT)
   frequency_hz: Decimal          # Stimulation frequency (Hz)
-  train_seconds: Decimal         # Duration of stimulation (s)
+  train_seconds: Decimal         # Duration of stimulation (seconds)
   intertrain_seconds: Decimal    # Pause between trains (s)
   total_pulses: PositiveInt      # Total pulses delivered
   sessions_per_day: PositiveSmallInt  # Sessions in one day

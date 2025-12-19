@@ -150,7 +150,10 @@
         <div class="task-group-wrapper">
             <div class="card-task bg-white">
                 <div class="task-header {{ task_group.color_class }}">
-                    <span><i class="fas {{ task_group.icon }} me-2"></i>{{ task_group.title }}</span>
+                    <span>
+                        <i class="fas {{ task_group.icon }} me-2"></i>
+                        {% if task_group.title == "③ 位置決め" %}③ 位置決め・MT測定{% else %}{{ task_group.title }}{% endif %}
+                    </span>
                     <span class="badge bg-white text-dark rounded-pill opacity-75">{{ task_group.list|length }}</span>
                 </div>
                 <!-- 初診のみ新規登録ボタンを表示 -->
