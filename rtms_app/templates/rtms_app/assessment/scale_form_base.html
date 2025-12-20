@@ -1,0 +1,164 @@
+{% extends "rtms_app/base.html" %}
+{% load static %}
+
+{% block body_class %}page-assessment{% endblock %}
+
+{% block header_breadcrumb %}
+  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
+  <span class="text-white-50 px-1">/</span>
+  <a href="#" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ID {{ patient.card_id }}</a>
+  <span class="text-white-50 px-1">/</span>
+  <a href="{% url 'rtms_app:assessment_hub' patient.id initial_timing %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">評価尺度（{{ initial_timing_display }}）</a>
+  <span class="text-white-50 px-1">/</span>
+  <span class="text-white px-1" style="font-size: 0.9rem;">{{ scale_name }}</span>
+{% endblock header_breadcrumb %}
+
+{% block extrastyle %}
+<style>
+  .hamd-row { border: 1px solid #e9ecef; border-radius: 10px; background: #fff; }
+  .hamd-row:hover { border-color: var(--color-assessment); background: #fef8f8; }
+  .q-badge { width: 28px; height: 28px; background: #f1f3f5; color: #495057; border-radius: 999px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size: .8rem; }
+  .popover { max-width: 420px; }
+  .popover-body { white-space: pre-wrap; font-size: .95rem; line-height: 1.35; }
+  .sticky-scorebar {
+    position: sticky; bottom: 0; z-index: 1020;
+    background: #fff; border-top: 2px solid var(--color-assessment);
+    padding: 10px 12px;
+  }
+  .compact-label { font-size:.95rem; line-height:1.25; }
+
+  /* Force 2 columns layout using grid */
+  .card-body .row.g-2 {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr !important;
+      gap: 0.5rem !important;
+  }
+  @media (max-width: 767px) {
+      .card-body .row.g-2 { grid-template-columns: 1fr !important; }
+  }
+  .card-body .row.g-2 > .col-md-6 {
+      width: 100% !important;
+      max-width: 100% !important;
+  }
+
+  /* iPad Landscape Optimization */
+  @media only screen and (min-width: 1000px) and (orientation: landscape) {
+      .container { max-width: 98vw; padding-top: 6px !important; padding-bottom: 6px !important; }
+      .page-title { font-size: 1.1rem !important; }
+      .alert { padding: 0.2rem 0.4rem; margin-bottom: 0.4rem !important; font-size: 0.8rem; }
+
+      .card { margin-bottom: 0.4rem !important; }
+      .card-header { padding: 0.2rem 0.4rem; font-size: 0.85rem; }
+      .card-body { padding: 0.4rem; }
+
+      /* HAM-D: tapability first (match patient_first_visit modal scale) */
+      .hamd-row { padding: 0.5rem 0.6rem !important; margin-bottom: 0.4rem; }
+      .q-badge { width: 28px; height: 28px; font-size: 0.85rem; }
+      .compact-label { font-size: 1rem; line-height: 1.3; }
+
+      .btn-group-sm>.btn, .btn-sm { padding: 0.08rem 0.25rem; font-size: 0.7rem; }
+      .hamd-btn-group .btn {
+        padding: 0.4rem 0.65rem;
+        font-size: 1rem;
+        min-width: 44px;
+        min-height: 44px;
+        line-height: 1.05;
+      }
+      .form-control-sm { padding: 0.15rem 0.3rem; font-size: 0.8rem; }
+
+      .row.g-2 { gap: 0.3rem !important; }
+
+      .sticky-scorebar { padding: 4px 8px; }
+      .fab { padding: 6px 12px !important; font-size: 0.85rem !important; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-3 mb-5">
+  <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+    <div class="page-title d-flex align-items-center gap-2">
+      <i class="fas fa-chart-bar page-title-icon"></i>
+      尺度評価 ({{ scale_name }})
+    </div>
+    <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: nowrap; margin-left: auto;">
+      <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; font-weight: 600; white-space: nowrap;">
+        <span>ID {{ patient.card_id }}</span>
+        <span style="color: #999;">|</span>
+        <span class="patient-name">{{ patient.name }}</span>
+        <span style="color: #999;">|</span>
+        <span style="font-weight: 400;">{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）{{ patient.get_gender_display }}</span>
+        <span style="color: #999;">|</span>
+        <span style="font-weight: 600;">{{ patient.course_number|default:1 }}クール</span>
+        {% if patient.attending_physician %}
+        <span style="color: #999;">|</span>
+        <span style="font-weight: 400;">担当医：{% if patient.attending_physician.last_name %}{{ patient.attending_physician.last_name }}{% else %}{{ patient.attending_physician.username }}{% endif %}</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="alert alert-secondary mb-3 shadow-sm">
+    <i class="fas fa-calendar-alt me-1"></i>
+    <span class="fw-bold">評価予定日：</span>
+    {{ window_start|date:"Y年n月j日" }}〜{{ window_end|date:"Y年n月j日" }}
+    <span class="ms-2 text-muted small">（{{ initial_timing_display }}）</span>
+  </div>
+
+  <form method="post" id="assessmentForm">
+    {% csrf_token %}
+    {% block scale_form_inner %}{% endblock %}
+  </form>
+</div>
+
+{% url 'rtms_app:dashboard' as dashboard_url %}
+{% if dashboard_date %}
+  {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+    <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
+    <script src="{% static 'rtms_app/floating.js' %}"></script>
+
+    <div class="fab-stack no-print">
+      <button type="button" class="btn btn-assessment fab" onclick="RTMSFloating.submitFormById('assessmentForm')">
+        <i class="fas fa-save"></i> 保存
+      </button>
+      <a class="btn btn-secondary fab" href="{{ back_url }}">
+        <i class="fas fa-undo"></i> 戻る
+      </a>
+    </div>
+  {% endwith %}
+{% else %}
+  <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
+  <script src="{% static 'rtms_app/floating.js' %}"></script>
+
+  <div class="fab-stack no-print">
+    <button type="button" class="btn btn-assessment fab" onclick="RTMSFloating.submitFormById('assessmentForm')">
+      <i class="fas fa-save"></i> 保存
+    </button>
+    <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
+      <i class="fas fa-undo"></i> 戻る
+    </a>
+  </div>
+{% endif %}
+
+{# Embed scores safely and restore hidden inputs BEFORE loading scale widget scripts #}
+{% if existing_scores %}
+  {{ existing_scores|json_script:"assessmentScores" }}
+{% else %}
+  {{ "{}"|json_script:"assessmentScores" }}
+{% endif %}
+
+<script>
+  (function(){
+    const el = document.getElementById('assessmentScores');
+    if (!el) return;
+    let scores = {};
+    try { scores = JSON.parse(el.textContent || '{}'); } catch(e) { scores = {}; }
+    for (const [key, value] of Object.entries(scores)) {
+      const hidden = document.querySelector(`#assessmentForm input[name="${key}"][type="hidden"]`);
+      if (hidden) hidden.value = String(value);
+    }
+  })();
+</script>
+{% endblock %}
+
+{% block scripts %}{% endblock %}

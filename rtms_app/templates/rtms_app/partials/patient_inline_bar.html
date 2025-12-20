@@ -15,6 +15,11 @@
       <span style="color: #999;">|</span>
       <span style="font-weight: 400;">担当医：{% if patient.attending_physician.last_name %}{{ patient.attending_physician.last_name }}{% else %}{{ patient.attending_physician.username }}{% endif %}</span>
       {% endif %}
+
+      {% if right_controls_html %}
+      <span style="color: #999;">|</span>
+      <span class="no-print">{{ right_controls_html|safe }}</span>
+      {% endif %}
     </div>
   </div>
 </div>

@@ -19,7 +19,6 @@
   /* lg以上は常時 2:1 */
   @media (min-width: 992px) {
     .fv-grid { grid-template-columns: 2fr 1fr; align-items: start; }
-    .fv-right-scroll { max-height: calc(100vh - 180px); overflow: auto; }
   }
   /* iPad横だけ 2カラム（従来設定を維持。必要時に上書きされる） */
   @media (max-width: 1194px) and (orientation: landscape) {
@@ -119,6 +118,69 @@
     }
     #questionnaireModal .form-check-input { transform: scale(0.95); }
     #questionnaireModal textarea[name="q_details"] { min-height: 3.2em; }
+  }
+
+  /* iPad横：タップ領域拡大（質問票＆HAM-D） */
+  @media only screen and (min-width: 1000px) and (orientation: landscape) {
+    /* 質問票テーブル：行全体をタップ可能に */
+    #questionnaireModal .table-rtms td {
+      padding: 0.75rem 0.6rem;
+      font-size: 1rem;
+    }
+    #questionnaireModal .form-check-input {
+      transform: scale(1.3);
+      cursor: pointer;
+    }
+    #questionnaireModal .table-rtms tr {
+      cursor: pointer;
+    }
+
+    /* HAM-D：ボタングループを大きく */
+    #hamdModal .hamd-row {
+      padding: 0.5rem 0.6rem !important;
+      margin-bottom: 0.4rem;
+    }
+    #hamdModal .compact-label {
+      font-size: 1rem;
+      line-height: 1.3;
+    }
+    #hamdModal .q-badge {
+      width: 28px;
+      height: 28px;
+      font-size: 0.85rem;
+    }
+    #hamdModal .hamd-btn-group .btn {
+      padding: 0.4rem 0.65rem;
+      font-size: 1rem;
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    /* 診断名チェックボックス：タップ領域拡大 */
+    .page-first-visit .diag-check-group .form-check {
+      padding: 0.55rem 0.65rem;
+      margin-bottom: 0.35rem;
+      border: 1px solid rgba(0,0,0,.08);
+      border-radius: 0.4rem;
+      background: #fff;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .page-first-visit .diag-check-group .form-check:hover {
+      border-color: var(--color-first-visit);
+      background: #f8fbff;
+    }
+    .page-first-visit .diag-check-group .form-check-input {
+      transform: scale(1.2);
+      margin-top: 0.25rem;
+      cursor: pointer;
+    }
+    .page-first-visit .diag-check-group .form-check-label {
+      font-size: 1rem;
+      padding-left: 0.35rem;
+      cursor: pointer;
+      width: 100%;
+    }
   }
 </style>
 {% endblock extrastyle %}
@@ -630,6 +692,22 @@
   document.addEventListener('DOMContentLoaded', function() {
     const btn = document.getElementById('btnSaveHamd');
     if (btn) btn.addEventListener('click', saveHamdAjax);
+
+    // 質問票テーブル：行全体をクリック可能に（iPad横）
+    const ipadLandscape = window.matchMedia('(min-width: 1000px) and (orientation: landscape)');
+    if (ipadLandscape.matches) {
+      document.querySelectorAll('#questionnaireModal .table-rtms tbody tr').forEach(row => {
+        row.addEventListener('click', function(e) {
+          // tdクリックでラジオボタンを選択（inputクリックは除外）
+          if (e.target.tagName === 'INPUT') return;
+          const radio = row.querySelector('input[type="radio"]:not(:checked)');
+          if (radio) {
+            radio.checked = true;
+            radio.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        });
+      });
+    }
   });
 </script>
 <script>

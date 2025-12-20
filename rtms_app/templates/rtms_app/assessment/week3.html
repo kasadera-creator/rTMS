@@ -25,6 +25,34 @@
     padding: 10px 12px;
   }
   .compact-label { font-size:.92rem; line-height:1.2; }
+
+  @media only screen and (min-width: 1000px) and (orientation: landscape) {
+    .scale-page .hamd-row { 
+      padding: 0.6rem 0.75rem !important; 
+      margin-bottom: 0.5rem;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .scale-page .hamd-row:active { transform: scale(0.98); }
+    .scale-page .q-badge { width: 32px; height: 32px; font-size: 0.95rem; }
+    .scale-page .compact-label { font-size: 1.05rem; font-weight: 600; line-height: 1.4; }
+    .scale-page .hamd-btn-group .btn { 
+      padding: 0.5rem 0.75rem !important;
+      font-size: 1.1rem !important;
+      min-width: 48px;
+      min-height: 48px;
+      font-weight: 600;
+    }
+    .scale-page .anchor-sticky { position: sticky; top: 12px; }
+    .scale-page .list-group-item { 
+      font-size: 1.05rem; 
+      padding: 0.65rem 0.75rem;
+      cursor: pointer;
+    }
+    .scale-page .card-body { padding: .75rem; }
+    .scale-page .form-label { font-size: 1rem; }
+    .scale-page textarea.form-control { font-size: 1rem; padding: 0.6rem; }
+  }
 </style>
 {% endblock %}
 

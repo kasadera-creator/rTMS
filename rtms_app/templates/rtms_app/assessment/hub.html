@@ -1,0 +1,90 @@
+{% extends "rtms_app/base.html" %}
+{% load static %}
+
+{% block body_class %}page-assessment{% endblock %}
+
+{% block header_breadcrumb %}
+  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
+  <span class="text-white-50 px-1">/</span>
+  <a href="#" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ID {{ patient.card_id }}</a>
+  <span class="text-white-50 px-1">/</span>
+  <span class="text-white px-1" style="font-size: 0.9rem;">評価尺度（{{ initial_timing_display }}）</span>
+{% endblock header_breadcrumb %}
+
+{% block content %}
+<div class="container py-3 mb-5">
+  <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+    <div class="page-title d-flex align-items-center gap-2">
+      <i class="fas fa-clipboard-check page-title-icon"></i>
+      評価尺度（{{ initial_timing_display }}）
+    </div>
+    <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: nowrap; margin-left: auto;">
+      <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; font-weight: 600; white-space: nowrap;">
+        <span>ID {{ patient.card_id }}</span>
+        <span style="color: #999;">|</span>
+        <span class="patient-name">{{ patient.name }}</span>
+        <span style="color: #999;">|</span>
+        <span style="font-weight: 400;">{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）{{ patient.get_gender_display }}</span>
+        <span style="color: #999;">|</span>
+        <span style="font-weight: 600;">{{ patient.course_number|default:1 }}クール</span>
+        {% if patient.attending_physician %}
+        <span style="color: #999;">|</span>
+        <span style="font-weight: 400;">担当医：{% if patient.attending_physician.last_name %}{{ patient.attending_physician.last_name }}{% else %}{{ patient.attending_physician.username }}{% endif %}</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="alert alert-secondary mb-3 shadow-sm">
+    <i class="fas fa-calendar-alt me-1"></i>
+    <span class="fw-bold">評価予定日：</span>
+    {{ window_start|date:"Y年n月j日" }}〜{{ window_end|date:"Y年n月j日" }}
+  </div>
+
+  <div class="card shadow-sm border-0">
+    <div class="card-header text-white" style="background-color: var(--color-assessment);">
+      <div class="fw-bold"><i class="fas fa-list"></i> 入力する尺度を選択</div>
+    </div>
+    <div class="list-group list-group-flush">
+      {% for s in scales %}
+        <a href="{{ s.url }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3">
+          <div>
+            <div class="fw-bold">{{ s.name }}</div>
+            {% if s.is_done and s.date %}
+              <div class="small text-muted">保存日：{{ s.date|date:"Y-m-d" }}</div>
+            {% else %}
+              <div class="small text-muted">未入力</div>
+            {% endif %}
+          </div>
+          {% if s.is_done %}
+            <span class="badge bg-success">保存済</span>
+          {% else %}
+            <span class="badge bg-secondary">未</span>
+          {% endif %}
+        </a>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% url 'rtms_app:dashboard' as dashboard_url %}
+{% if dashboard_date %}
+  {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+    <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
+    <script src="{% static 'rtms_app/floating.js' %}"></script>
+    <div class="fab-stack no-print">
+      <a class="btn btn-secondary fab" href="{{ back_url }}">
+        <i class="fas fa-undo"></i> 戻る
+      </a>
+    </div>
+  {% endwith %}
+{% else %}
+  <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
+  <script src="{% static 'rtms_app/floating.js' %}"></script>
+  <div class="fab-stack no-print">
+    <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
+      <i class="fas fa-undo"></i> 戻る
+    </a>
+  </div>
+{% endif %}
+{% endblock %}

@@ -57,25 +57,33 @@
           {% endfor %}
         </tr>
 
-        <!-- HAMD21 合計（推移用） -->
         <tr class="hamd-summary">
           <td class="text-start fw-bold">HAMD21 合計</td>
           {% for c in hamd_detail.cols %}
-            <td class="text-center fw-bold">{{ hamd_detail.totals.hamd21|get_item:c.key|default:"-" }}</td>
+            {% with total=hamd_detail.totals.hamd21|get_item:c.key %}
+            <td class="text-center fw-bold">
+              {% if total is not None %}{{ total }}{% else %}-{% endif %}
+            </td>
+            {% endwith %}
           {% endfor %}
-        </tr>
-
-        <!-- フットノート（算定上の取扱い） -->
-        <tr class="hamd-footnote-row">
-          <td colspan="{{ hamd_detail.cols|length|add:1 }}">
-            【算定上の取扱い】<br>
-            第３週目の評価において、その合計スコアが HAMD17で7以下、HAMD24で9以下である場合は寛解と判断し、当該治療は中止又は漸減する。<br>
-            漸減する場合、第４週目は最大週3回、第５週目は最大週2回、第６週目は最大週1回まで算定できる。<br>
-            また、第３週目の評価において、HAMD17又はHAMD24の合計スコアで寛解と判断されず、かつ治療開始前の評価より改善が20％未満の場合には中止する。
-          </td>
         </tr>
       </tbody>
     </table>
+
+    <div class="hamd-notes">
+      <p class="mb-2">
+        <strong>HAM-D17 参考基準：</strong>
+        0-7:正常、8-13:軽症、14-18:中等症、19-22:重症、23-:最重症
+      </p>
+
+      <p class="mb-0">
+        {% if hamd_insurance_notice %}
+          {{ hamd_insurance_notice }}
+        {% else %}
+          第３週目の評価において、その合計スコアがＨＡＭＤ１７で７以下、ＨＡＭＤ２４で９以下である場合は寛解と判断し当該治療は中止又は漸減する。漸減する場合、第４週目は最大週３回、第５週目は最大週２回、第６週目は最大週１回まで算定できる。また、第３週目の評価において、ＨＡＭＤ１７又はＨＡＭＤ２４の合計スコアで寛解と判断されず、かつ治療開始前の評価より改善が 20％未満の場合には中止する。
+        {% endif %}
+      </p>
+    </div>
   </div>
 </div>
 
@@ -111,12 +119,11 @@
     margin-top: 2px;
     line-height: 1.2;
   }
-  .hamd-footnote-row td {
-    font-size: 8pt;
+  .hamd-notes {
+    margin-top: 8px;
+    font-size: 9pt;
     color: #444;
-    background: #fafafa;
     line-height: 1.35;
-    padding-top: 4px;
   }
   .hamd-detail-table .small {
     display: block;

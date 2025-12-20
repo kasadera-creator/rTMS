@@ -1,0 +1,111 @@
+{% extends "rtms_app/assessment/scale_form_base.html" %}
+{% load static %}
+
+{% block scale_form_inner %}
+  <div class="card shadow-sm border-0">
+    <div class="card-header text-white d-flex justify-content-between align-items-center" style="background-color: var(--color-assessment);">
+      <div class="fw-bold">
+        <i class="fas fa-pen"></i> {{ scale_name }}
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <div class="small">実施日</div>
+        <input type="date" name="date" class="form-control form-control-sm" value="{{ default_date|date:'Y-m-d' }}" style="width:auto;">
+      </div>
+    </div>
+
+    <div class="card-body bg-light">
+      <div class="row g-2">
+        <div class="col-md-6">
+          <div class="d-flex flex-column gap-2">
+            {% for key, label, max, text in hamd_items_left %}
+              <div class="hamd-row p-2 d-flex align-items-center justify-content-between"
+                   data-bs-toggle="popover"
+                   data-bs-placement="right"
+                   data-bs-trigger="click"
+                   data-bs-content="{{ text }}">
+                <div class="d-flex align-items-center gap-2 flex-grow-1 me-2">
+                  <div class="q-badge">Q{{ forloop.counter }}</div>
+                  <div class="fw-bold compact-label">{{ label }}</div>
+                </div>
+                <div class="text-end">
+                  <input type="hidden" name="{{ key }}" value="0">
+                  <div class="btn-group btn-group-sm hamd-btn-group" role="group" data-hamd-key="{{ key }}">
+                    {% if max == 2 %}
+                      {% for v in "012"|make_list %}
+                        <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
+                      {% endfor %}
+                    {% elif max == 3 %}
+                      {% for v in "0123"|make_list %}
+                        <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
+                      {% endfor %}
+                    {% else %}
+                      {% for v in "01234"|make_list %}
+                        <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
+                      {% endfor %}
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <div class="d-flex flex-column gap-2">
+            {% for key, label, max, text in hamd_items_right %}
+              <div class="hamd-row p-2 d-flex align-items-center justify-content-between"
+                   data-bs-toggle="popover"
+                   data-bs-placement="left"
+                   data-bs-trigger="click"
+                   data-bs-content="{{ text }}">
+                <div class="d-flex align-items-center gap-2 flex-grow-1 me-2">
+                  <div class="q-badge">Q{{ forloop.counter|add:11 }}</div>
+                  <div class="fw-bold compact-label">{{ label }}</div>
+                </div>
+                <div class="text-end">
+                  <input type="hidden" name="{{ key }}" value="0">
+                  <div class="btn-group btn-group-sm hamd-btn-group" role="group" data-hamd-key="{{ key }}">
+                    {% if max == 2 %}
+                      {% for v in "012"|make_list %}
+                        <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
+                      {% endfor %}
+                    {% elif max == 3 %}
+                      {% for v in "0123"|make_list %}
+                        <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
+                      {% endfor %}
+                    {% else %}
+                      {% for v in "01234"|make_list %}
+                        <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
+                      {% endfor %}
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-2 bg-white p-2 rounded border">
+        <label class="form-label fw-bold mb-1"><i class="fas fa-comment-dots me-1"></i>コメント・特記事項</label>
+        <textarea name="note" id="id_note" class="form-control" rows="2" placeholder="特記事項があれば入力してください">{{ existing_note|default:"" }}</textarea>
+      </div>
+    </div>
+
+    <div class="sticky-scorebar shadow">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div class="fw-bold">
+          HAMD17 合計：<span id="hamd17Total" style="color: var(--color-assessment);">0</span> 点
+          <span class="ms-2">重症度：<span id="hamd17Severity" class="text-primary">正常</span></span>
+        </div>
+        <div class="text-muted small">
+          HAMD17 参考基準: 0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23-:最重症
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'rtms_app/hamd_widget.js' %}"></script>
+{% endblock %}

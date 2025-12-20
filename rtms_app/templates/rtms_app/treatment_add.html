@@ -41,7 +41,6 @@
         .mt-3 { margin-top: 0.5rem !important; }
         .fab-stack { bottom: 15px; right: 15px; gap: 8px; }
         .fab { padding: 6px 10px; font-size: 14px; }
-      .right-col-scroll{ max-height: calc(100vh - 170px); overflow: auto; }
     }
 
     /* Wizard modal typography */
@@ -57,23 +56,7 @@
 {% block content %}
 <div class="container py-3">
 
-  {% include "rtms_app/partials/patient_inline_bar.html" with page_title="治療実施" title_icon="fa-bolt" %}
-
-  {% include "rtms_app/partials/plan_inline_bar.html" %}
-
-  <div class="mt-2 d-flex justify-content-end no-print">
-    <div class="btn-group" role="group" aria-label="mode-switch">
-      <input type="radio" class="btn-check" name="modeSwitch" id="modeRecord" autocomplete="off" checked>
-      <label class="btn btn-success btn-sm" for="modeRecord">
-        <i class="fas fa-pen me-1"></i>治療内容記入
-      </label>
-
-      <input type="radio" class="btn-check" name="modeSwitch" id="modeWizard" autocomplete="off">
-      <label class="btn btn-outline-success btn-sm" for="modeWizard">
-        <i class="fas fa-route me-1"></i>手順解説
-      </label>
-    </div>
-  </div>
+  {% include "rtms_app/partials/patient_inline_bar.html" with page_title="治療実施" title_icon="fa-bolt" right_controls_html=mode_switch_html %}
 
   {% if alert_msg %}
   <div class="alert alert-danger fw-bold shadow-sm no-print mt-2">
@@ -87,8 +70,11 @@
     <div class="row g-3 mt-1">
         <div class="col-12 col-lg-4">
         <div class="card shadow-sm">
-          <div class="card-header fw-bold" style="color: #198754; background: rgba(25,135,84,.1);">
-            <i class="fas fa-calendar-day me-1"></i>実施日時・安全確認
+          <div class="card-header fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2" style="color:#198754; background:rgba(25,135,84,.1);">
+            <div><i class="fas fa-calendar-day me-1"></i>実施日時・安全確認</div>
+            {% if plan_date_range_text %}
+              <div class="text-muted small">{{ plan_date_range_text }}</div>
+            {% endif %}
           </div>
           <div class="card-body">
 
@@ -105,20 +91,20 @@
 
             <hr class="my-2">
 
-            <div class="fw-bold mb-2">安全確認（問題があればOFF）</div>
-            <div class="d-flex flex-column gap-2">
-              <div class="form-check form-switch p-2 border rounded">
+            <div class="fw-bold text-success mb-1">安全確認（問題があればOFF）</div>
+            <div class="vstack gap-1">
+              <label class="form-check d-flex align-items-center gap-2 mb-0">
                 {{ form.safety_sleep }}
-                <label class="form-check-label ms-1" for="id_safety_sleep">睡眠不足なし</label>
-              </div>
-              <div class="form-check form-switch p-2 border rounded">
+                <span>睡眠不足なし</span>
+              </label>
+              <label class="form-check d-flex align-items-center gap-2 mb-0">
                 {{ form.safety_alcohol }}
-                <label class="form-check-label ms-1" for="id_safety_alcohol">アルコール・カフェイン過剰なし</label>
-              </div>
-              <div class="form-check form-switch p-2 border rounded">
+                <span>アルコール・カフェイン過剰なし</span>
+              </label>
+              <label class="form-check d-flex align-items-center gap-2 mb-0">
                 {{ form.safety_meds }}
-                <label class="form-check-label ms-1" for="id_safety_meds">服薬変更なし</label>
-              </div>
+                <span>服薬変更なし</span>
+              </label>
             </div>
 
           </div>
@@ -163,6 +149,15 @@
           </div>
           <div class="card-body">
 
+            {% if need_mapping %}
+              <div class="alert alert-warning py-2 px-2 mb-2">
+                <div class="fw-bold"><i class="fas fa-exclamation-triangle me-1"></i>位置決めをしてください</div>
+                <a class="btn btn-warning btn-sm mt-1 fw-bold" href="{{ mapping_url }}">
+                  <i class="fas fa-crosshairs me-1"></i>位置決め画面へ
+                </a>
+              </div>
+            {% endif %}
+
             {% if needs_mapping_today and not mapping_done %}
               <div class="alert alert-danger mb-2">
                 <div class="fw-bold">
@@ -201,17 +196,19 @@
 
       </div>
 
-      <div class="col-12 col-lg-8 right-col-scroll">
-        <div class="card shadow-sm mt-3">
-          <div class="card-header fw-bold text-success" style="background: rgba(25,135,84,.1); border-left: 4px solid #198754;">
-            <i class="fas fa-notes-medical me-1"></i>治療実施記録（本日）
+      <div class="col-12 col-lg-8">
+        <div class="card shadow-sm">
+          <div class="card-header fw-bold text-success d-flex justify-content-between align-items-center flex-wrap gap-2" style="background: rgba(25,135,84,.1); border-left: 4px solid #198754;">
+            <div><i class="fas fa-notes-medical me-1"></i>治療実施記録（本日）</div>
+            {% if course_session_text %}
+              <div class="text-muted small">{{ course_session_text }}</div>
+            {% endif %}
           </div>
           <div class="card-body">
 
             <div class="mb-3 p-2 rounded" style="border:1px solid rgba(25,135,84,.22);">
               <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div class="fw-bold">確認用刺激</div>
-                <span class="badge bg-success">司令：確認用刺激をしてください</span>
               </div>
 
               {% if confirm_alert_message %}
@@ -239,23 +236,22 @@
 
               <hr class="my-2">
 
-              <!-- 下段：不快感 / 運動反応 / 備考（3カラム） -->
+              <!-- 下段：チェック（縦まとめ） + 備考（4/8） -->
               <div class="row g-2 mt-2 align-items-end">
                 <div class="col-12 col-md-4">
-                  <div class="form-check" style="min-height: 2.4rem; display:flex; align-items:center;">
-                    <input class="form-check-input" type="checkbox" id="confirm_discomfort" name="confirm_discomfort" {% if confirm_discomfort_checked %}checked{% endif %}>
-                    <label class="form-check-label fw-bold ms-2" for="confirm_discomfort">過剰な不快感</label>
+                  <div class="d-flex flex-column gap-2">
+                    <div class="form-check" style="min-height: 2.4rem; display:flex; align-items:center;">
+                      <input class="form-check-input" type="checkbox" id="confirm_discomfort" name="confirm_discomfort" {% if confirm_discomfort_checked %}checked{% endif %}>
+                      <label class="form-check-label fw-bold ms-2" for="confirm_discomfort">過剰な不快感</label>
+                    </div>
+                    <div class="form-check" style="min-height: 2.4rem; display:flex; align-items:center;">
+                      <input class="form-check-input" type="checkbox" id="confirm_movement" name="confirm_movement" {% if confirm_movement_checked %}checked{% endif %}>
+                      <label class="form-check-label fw-bold ms-2" for="confirm_movement">過剰な運動反応</label>
+                    </div>
                   </div>
                 </div>
 
-                <div class="col-12 col-md-4">
-                  <div class="form-check" style="min-height: 2.4rem; display:flex; align-items:center;">
-                    <input class="form-check-input" type="checkbox" id="confirm_movement" name="confirm_movement" {% if confirm_movement_checked %}checked{% endif %}>
-                    <label class="form-check-label fw-bold ms-2" for="confirm_movement">過剰な運動反応</label>
-                  </div>
-                </div>
-
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-md-8">
                   <label class="form-label fw-bold">備考</label>
                   <textarea class="form-control" name="confirm_notes" id="confirm_notes" rows="2"
                             placeholder="必要があれば具体的に記載">{{ confirm_notes }}</textarea>
@@ -286,14 +282,12 @@
             <div class="mb-3 p-2 rounded" style="border:1px solid rgba(25,135,84,.22);">
               <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div class="fw-bold">実施した治療刺激</div>
-                <span class="badge bg-success">司令：治療刺激をしてください</span>
               </div>
 
               <div class="row g-2 mt-2">
                 <div class="col-12 col-md-4">
                   <label class="form-label fw-bold">刺激強度（%MT）</label>
                   {{ form.mt_percent }}
-                  <div class="form-text">初期値：120（10刻みで増減）</div>
                 </div>
 
                 <div class="col-12 col-md-4">
@@ -324,22 +318,21 @@
 
               <hr class="my-2">
 
-              <div class="row g-2 align-items-start">
+              <div class="row g-2 align-items-end">
                 <div class="col-12 col-md-4">
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="treat_discomfort" name="treat_discomfort" {% if treat_discomfort_checked %}checked{% endif %}>
-                    <label class="form-check-label fw-bold" for="treat_discomfort">過剰な不快感</label>
+                  <div class="d-flex flex-column gap-2">
+                    <div class="form-check" style="min-height: 2.4rem; display:flex; align-items:center;">
+                      <input class="form-check-input" type="checkbox" id="treat_discomfort" name="treat_discomfort" {% if treat_discomfort_checked %}checked{% endif %}>
+                      <label class="form-check-label fw-bold ms-2" for="treat_discomfort">過剰な不快感</label>
+                    </div>
+                    <div class="form-check" style="min-height: 2.4rem; display:flex; align-items:center;">
+                      <input class="form-check-input" type="checkbox" id="treat_movement" name="treat_movement" {% if treat_movement_checked %}checked{% endif %}>
+                      <label class="form-check-label fw-bold ms-2" for="treat_movement">過剰な運動反応</label>
+                    </div>
                   </div>
                 </div>
 
-                <div class="col-12 col-md-4">
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="treat_movement" name="treat_movement" {% if treat_movement_checked %}checked{% endif %}>
-                    <label class="form-check-label fw-bold" for="treat_movement">過剰な運動反応</label>
-                  </div>
-                </div>
-
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-md-8">
                   <label class="form-label fw-bold">備考</label>
                   <textarea class="form-control" name="treat_notes" id="treat_notes" rows="2"
                             placeholder="過剰な不快感・過剰な運動反応があれば具体的に記載">{{ treat_notes }}</textarea>
@@ -367,8 +360,8 @@
                 </div>
               </div>
 
-              <div class="d-grid mt-2">
-                <button type="button" class="btn btn-success fw-bold"
+              <div class="d-flex justify-content-end mt-2">
+                <button type="button" class="btn btn-success btn-sm fw-bold"
                         data-bs-toggle="modal" data-bs-target="#sideEffectModal">
                   <i class="fas fa-notes-medical me-1"></i>副作用入力
                 </button>
@@ -423,8 +416,8 @@
         <div id="sideEffectWidget" data-initial-id="sideEffectInitialRows"></div>
         <input type="hidden" name="side_effect_rows_json" id="sideEffectRowsJson" value="{{ side_effect_rows_json|default:'[]'|escape }}" form="treatmentForm">
         <div class="mt-2">
-            <label class="form-label fw-bold">メモ（対処法など）</label>
-            <textarea class="form-control form-control-sm" name="side_effect_memo" rows="4" form="treatmentForm">{{ side_effect_memo|default:'' }}</textarea>
+          <label class="form-label fw-bold">メモ（過剰な不快感、過剰な運動反応）</label>
+          <textarea class="form-control form-control-sm" name="side_effect_memo" rows="3" form="treatmentForm">{{ side_effect_memo|default:'' }}</textarea>
         </div>
         <div class="small text-muted mt-2">
             重症度：0=なし、1=軽度、2=中等度、3=重度 ／ 関連性：0=なし、1=低い、2=あり、3=高い
@@ -444,6 +437,15 @@
 {% if dashboard_date %}
   {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
     <div class="fab-stack no-print">
+      {% if side_effect_print_url %}
+      <a class="btn btn-primary fab" href="{{ side_effect_print_url }}">
+        <i class="fas fa-print"></i> 印刷プレビュー
+      </a>
+      {% else %}
+      <button type="submit" class="btn btn-primary fab" name="action" value="print" form="treatmentForm">
+        <i class="fas fa-print"></i> 印刷プレビュー
+      </button>
+      {% endif %}
       <button type="submit" class="btn btn-treatment fab" form="treatmentForm">
         <i class="fas fa-save"></i> 保存
       </button>
@@ -454,6 +456,15 @@
   {% endwith %}
 {% else %}
   <div class="fab-stack no-print">
+    {% if side_effect_print_url %}
+    <a class="btn btn-primary fab" href="{{ side_effect_print_url }}">
+      <i class="fas fa-print"></i> 印刷プレビュー
+    </a>
+    {% else %}
+    <button type="submit" class="btn btn-primary fab" name="action" value="print" form="treatmentForm">
+      <i class="fas fa-print"></i> 印刷プレビュー
+    </button>
+    {% endif %}
     <button type="submit" class="btn btn-treatment fab" form="treatmentForm">
       <i class="fas fa-save"></i> 保存
     </button>
@@ -488,8 +499,8 @@
 <script src="{% static 'rtms_app/wizard.js' %}"></script>
 <script>
   // ---- モード切替：手順解説を選ぶとモーダルを開き、閉じたら記入モードへ戻す ----
-  const modeRecord = document.getElementById('modeRecord');
-  const modeWizard = document.getElementById('modeWizard');
+  const modeRecord = document.getElementById('treatModeRecord');
+  const modeWizard = document.getElementById('treatModeWizard');
 
   modeWizard?.addEventListener('change', () => {
     if (!modeWizard.checked) return;

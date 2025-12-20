@@ -209,6 +209,96 @@ class Assessment(models.Model):
             models.UniqueConstraint(fields=['patient', 'course_number', 'timing', 'type'], name='unique_assessment_per_patient_course_timing_type')
         ]
 
+
+class ScaleDefinition(models.Model):
+    """Master data for assessment scales (e.g., HAM-D).
+
+    This exists to support multiple scales without changing core workflows.
+    """
+
+    code = models.SlugField("コード", max_length=32, unique=True)
+    name = models.CharField("名称", max_length=128)
+    description = models.TextField("説明", blank=True)
+    is_active = models.BooleanField("有効", default=True, db_index=True)
+    created_at = models.DateTimeField("作成日時", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "尺度定義"
+        verbose_name_plural = "尺度定義"
+        ordering = ["code"]
+
+    def __str__(self) -> str:
+        return f"{self.code}: {self.name}"
+
+
+class TimingScaleConfig(models.Model):
+    """Global configuration: which scales are enabled for each timing."""
+
+    timing = models.CharField("時期", max_length=20, choices=Assessment.TIMING_CHOICES, db_index=True)
+    scale = models.ForeignKey(ScaleDefinition, on_delete=models.CASCADE, related_name="timing_configs")
+    is_enabled = models.BooleanField("有効", default=True, db_index=True)
+    display_order = models.PositiveSmallIntegerField("表示順", default=0)
+
+    class Meta:
+        verbose_name = "尺度設定（時期）"
+        verbose_name_plural = "尺度設定（時期）"
+        ordering = ["timing", "display_order", "scale__code"]
+        constraints = [
+            models.UniqueConstraint(fields=["timing", "scale"], name="unique_timing_scale_config"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_timing_display()} - {self.scale.code} ({'ON' if self.is_enabled else 'OFF'})"
+
+
+class AssessmentRecord(models.Model):
+    """New extensible assessment record.
+
+    For compatibility, the legacy `Assessment` model remains in use elsewhere.
+    """
+
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE)
+    course_number = models.IntegerField("クール数", default=1, db_index=True)
+    timing = models.CharField("時期", max_length=20, choices=Assessment.TIMING_CHOICES, db_index=True)
+    scale = models.ForeignKey(ScaleDefinition, on_delete=models.PROTECT, related_name="records")
+    date = models.DateField("日", default=timezone.now)
+    scores = models.JSONField("スコア", default=dict)
+    total_score_21 = models.IntegerField("合計21", default=0)
+    total_score_17 = models.IntegerField("合計17", default=0)
+    note = models.TextField("特記", blank=True)
+    meta = models.JSONField("メタ", default=dict, blank=True, null=True)
+    created_at = models.DateTimeField("作成日時", auto_now_add=True)
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    def calculate_scores(self):
+        # Only HAM-D is supported initially
+        if not self.scale_id:
+            return
+        if self.scale.code != 'hamd':
+            return
+        keys17 = [f"q{i}" for i in range(1, 18)]
+        keys21 = [f"q{i}" for i in range(1, 22)]
+        self.total_score_17 = sum(int(self.scores.get(k, 0)) for k in keys17)
+        self.total_score_21 = sum(int(self.scores.get(k, 0)) for k in keys21)
+
+    def save(self, *args, **kwargs):
+        self.calculate_scores()
+        super().save(*args, **kwargs)
+
+    class Meta:
+        verbose_name = "評価（新）"
+        verbose_name_plural = "評価（新）"
+        constraints = [
+            models.UniqueConstraint(
+                fields=['patient', 'course_number', 'timing', 'scale'],
+                name='unique_assessment_record_per_patient_course_timing_scale',
+            )
+        ]
+        indexes = [
+            models.Index(fields=['patient', 'timing']),
+            models.Index(fields=['scale', 'timing']),
+        ]
+
 class AuditLog(models.Model):
     ACTION_CHOICES = [
         ('CREATE', '作成'),

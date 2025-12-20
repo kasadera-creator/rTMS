@@ -188,6 +188,7 @@ def patient_print_bundle(request, patient_id):
 		'docs_to_render': docs_to_render,
 		'doc_templates': DOC_TEMPLATES,
 		'back_url': back_url,
+		'hamd_insurance_notice': '第３週目の評価において、その合計スコアがＨＡＭＤ１７で７以下、ＨＡＭＤ２４で９以下である場合は寛解と判断し当該治療は中止又は漸減する。漸減する場合、第４週目は最大週３回、第５週目は最大週２回、第６週目は最大週１回まで算定できる。また、第３週目の評価において、ＨＡＭＤ１７又はＨＡＭＤ２４の合計スコアで寛解と判断されず、かつ治療開始前の評価より改善が 20％未満の場合には中止する。',
 		'hamd_trend_cols': hamd_trend_cols,
 		'hamd_detail': {"cols": cols, "rows": rows, "totals": _totals},
 	}

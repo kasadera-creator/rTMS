@@ -76,11 +76,15 @@
       try {
         const content = el.getAttribute('data-bs-content');
         console.log('[hamd_widget] Creating popover with content:', content ? content.substring(0, 50) + '...' : 'NO CONTENT');
+
+        // Respect template-level placement (e.g., left column -> right, right column -> left)
+        const placementAttr = el.getAttribute('data-bs-placement');
+        const placement = placementAttr || 'auto';
         
         new bootstrap.Popover(el, {
           trigger,
           container: "body",
-          placement: "auto",
+          placement,
         });
         createdCount++;
       } catch (e) {

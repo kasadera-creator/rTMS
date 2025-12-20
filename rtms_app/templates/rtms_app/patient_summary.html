@@ -13,18 +13,14 @@
 
 {% block extrastyle %}
 <style>
-    /* デフォルト：1カラム（PC含む） */
-    .dv-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+    /* 退院準備：常に 7:3 */
+    .dv-grid { display: grid; grid-template-columns: 7fr 3fr; gap: 1rem; align-items: start; }
 
-    /* lg以上は常時 2:1 */
-    @media (min-width: 992px) {
-      .dv-grid { grid-template-columns: 2fr 1fr; align-items: start; }
-      .dv-right-scroll { max-height: calc(100vh - 180px); overflow: auto; }
-    }
-    
-    /* iPad横だけ 7:3 2カラム */
+    /* 右カラムスクロール禁止（不要） */
+    .dv-right-scroll { max-height: none !important; overflow: visible !important; }
+
+    /* iPad横の微調整 */
     @media (max-width: 1194px) and (orientation: landscape) {
-      .dv-grid { grid-template-columns: 7fr 3fr; align-items: start; }
       .dv-aside .card { padding: 0.5rem; }
       .dv-aside .card .card-title { font-size: 0.95rem; margin-bottom: .25rem; }
       .dv-aside .small { font-size: .8rem; }
@@ -42,7 +38,6 @@
     .score-table td { text-align: center; font-size: 0.9rem; }
 
     .discharge-date-card { border-left: 0; background-color: #faf5ff; }
-    .dv-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
     .dv-main { min-width: 0; }
     .dv-aside { min-width: 0; }
 
@@ -77,13 +72,36 @@
     .page-discharge .dv-aside .score-table th {
       background: #f3e5f5;
     }
+
+    /* 退院準備ページ：section-title の左線は紫1本だけに完全固定（上書き最優先） */
+    .page-discharge .section-title {
+      border-left: 5px solid var(--color-discharge) !important;
+      box-shadow: none !important;
+      outline: none !important;
+      background: transparent !important;
+    }
+    .page-discharge .section-title::before,
+    .page-discharge .section-title::after,
+    .page-discharge h5.section-title::before,
+    .page-discharge h5.section-title::after,
+    .page-discharge .form-label.section-title::before,
+    .page-discharge .form-label.section-title::after {
+      content: none !important;
+      display: none !important;
+    }
+    .page-discharge h5.section-title,
+    .page-discharge .form-label.section-title {
+      border-right: none !important;
+      border-top: none !important;
+      border-bottom: none !important;
+      box-shadow: none !important;
+    }
 </style>
 {% endblock extrastyle %}
 
 {% block content %}
 <div class="container py-4">
     {% include "rtms_app/partials/patient_inline_bar.html" with page_title="退院準備" title_icon="fa-file-alt" %}
-    {% include "rtms_app/partials/plan_inline_bar.html" %}
     
     {% if recommendation and recommendation.status != 'pending' %}
     <div class="alert {% if recommendation.status == 'remission' %}alert-success{% elif recommendation.status == 'ineffective' %}alert-danger{% else %}alert-info{% endif %} fw-bold">
@@ -125,11 +143,11 @@
         <div style="height: 50px;"></div>
         </form>
       </div>
-      <aside class="dv-aside no-print dv-right-scroll">
+      <aside class="dv-aside no-print">
         <!-- 右カラム：治療要約カード（要約 + 30回モーダルボタン + 簡易HAMD推移表） -->
         <div class="card shadow-sm mb-3">
           <div class="card-body">
-            <h5 class="fw-bold section-title text-discharge mb-1"><i class="fas fa-notes-medical me-1"></i> 治療要約</h5>
+            <h4 class="fw-bold section-title text-discharge mb-1" style="font-size: 1.25rem;"><i class="fas fa-notes-medical me-1"></i> 治療要約</h4>
             <div class="small text-muted">
               全{% if total_count %}{{ total_count }}{% else %}0{% endif %}回治療実施
               （{% if start_date_str %}{{ start_date_str }}{% else %}-{% endif %}〜{% if end_date_str %}{{ end_date_str }}{% else %}-{% endif %}）
@@ -163,9 +181,8 @@
                     {% for c in trend_cols %}
                       <td class="text-center">
                         {% if c.hamd17 is not None %}
-                          <div class="fw-bold">
-                            {{ c.hamd17 }}（{% if c.severity_label_17 %}{{ c.severity_label_17 }}{% else %}-{% endif %}）
-                          </div>
+                          <div class="fw-bold">{{ c.hamd17 }}</div>
+                          <div class="small text-muted">（{% if c.severity_label_17 %}{{ c.severity_label_17 }}{% else %}-{% endif %}）</div>
 
                           {% if not forloop.first %}
                             <div class="small text-muted">改善率 {% if c.improvement_pct is not None %}{{ c.improvement_pct }}%{% else %}-{% endif %}</div>
@@ -179,7 +196,7 @@
                   </tr>
 
                   <tr>
-                    <td class="fw-bold">HAM-D21（合計点）</td>
+                    <td class="fw-bold">HAM-D21</td>
                     {% for c in trend_cols %}
                       <td class="text-center">{% if c.hamd21 is not None %}{{ c.hamd21 }}{% else %}-{% endif %}</td>
                     {% endfor %}
@@ -193,38 +210,36 @@
             </div>
           </div>
         </div>
-      </aside>
-    </div>
 
-    <div class="form-section">
         <div class="card mb-3">
-            <div class="card-header bg-light fw-bold">退院時 印刷</div>
-            <div class="card-body">
-                    <form id="bundlePrintFormDischarge"
-                      action="{% url 'rtms_app:print:patient_print_bundle' patient.id %}"
-                      method="get"
-                      target="_blank">
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" name="docs" value="discharge" id="docDischarge" checked>
-                        <label class="form-check-label" for="docDischarge">退院時サマリー</label>
-                    </div>
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" name="docs" value="referral" id="docReferral" checked>
-                        <label class="form-check-label" for="docReferral">紹介状</label>
-                    </div>
-                    <div class="form-check form-check-inline">
-                      <input class="form-check-input" type="checkbox" name="docs" value="hamd_detail" id="docHamdDetail" checked>
-                      <label class="form-check-label" for="docHamdDetail">HAM-D詳細票</label>
-                    </div>
+          <div class="card-header bg-light fw-bold">退院時 印刷</div>
+          <div class="card-body">
+            <form id="bundlePrintFormDischarge"
+                  action="{% url 'rtms_app:print:patient_print_bundle' patient.id %}"
+                  method="get"
+                  target="_blank">
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" name="docs" value="discharge" id="docDischarge" checked>
+                <label class="form-check-label" for="docDischarge">退院時サマリー</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" name="docs" value="referral" id="docReferral" checked>
+                <label class="form-check-label" for="docReferral">紹介状</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" name="docs" value="hamd_detail" id="docHamdDetail" checked>
+                <label class="form-check-label" for="docHamdDetail">HAM-D詳細票</label>
+              </div>
 
-                    {% if dashboard_date %}
-                        <input type="hidden" name="dashboard_date" value="{{ dashboard_date }}">
-                    {% endif %}
+              {% if dashboard_date %}
+                <input type="hidden" name="dashboard_date" value="{{ dashboard_date }}">
+              {% endif %}
 
-                    <button type="submit" class="btn btn-primary mt-2">印刷プレビュー</button>
-                </form>
-            </div>
+              <button type="submit" class="btn btn-primary mt-2">印刷プレビュー</button>
+            </form>
+          </div>
         </div>
+      </aside>
     </div>
 
     {% url 'rtms_app:dashboard' as dashboard_url %}

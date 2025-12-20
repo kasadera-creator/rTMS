@@ -30,10 +30,6 @@
       {% for c in hamd_trend_cols %}
         <td class="text-center">
           <div class="fw-bold">{% if c.hamd21 is not None %}{{ c.hamd21 }}{% else %}-{% endif %}</div>
-          {% if c.label != "治療前" %}
-            <div class="small">改善率: {% if c.improvement_pct_21 is not None %}{{ c.improvement_pct_21 }}%{% else %}-{% endif %}</div>
-            <div class="small">状態: {% if c.status_label_21 %}{{ c.status_label_21 }}{% else %}—{% endif %}</div>
-          {% endif %}
         </td>
       {% endfor %}
     </tr>

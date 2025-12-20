@@ -104,6 +104,18 @@ urlpatterns = [
         name="assessment_add",
     ),
 
+    # ---- New assessment flow (hub + scale forms) ----
+    path(
+        "patient/<int:patient_id>/assessment/<str:timing>/",
+        views.assessment_hub,
+        name="assessment_hub",
+    ),
+    path(
+        "patient/<int:patient_id>/assessment/<str:timing>/<str:scale_code>/",
+        views.assessment_scale_form,
+        name="assessment_scale",
+    ),
+
     # =========================
     # Path / Calendar
     # =========================

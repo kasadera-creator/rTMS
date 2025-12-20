@@ -5,6 +5,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
 from django.urls import reverse
 from django.templatetags.static import static
+from django.utils.safestring import mark_safe
 from datetime import timedelta, date
 import datetime
 from django.http import HttpResponse, FileResponse, JsonResponse
@@ -16,7 +17,18 @@ import csv
 import json
 from urllib.parse import urlencode
 
-from .models import Patient, TreatmentSession, MappingSession, Assessment, ConsentDocument, AuditLog, SideEffectCheck
+from .models import (
+    Patient,
+    TreatmentSession,
+    MappingSession,
+    Assessment,
+    ConsentDocument,
+    AuditLog,
+    SideEffectCheck,
+    ScaleDefinition,
+    TimingScaleConfig,
+    AssessmentRecord,
+)
 from .forms import (
     PatientFirstVisitForm, MappingForm, TreatmentForm,
     PatientRegistrationForm, PatientBasicEditForm, AdmissionProcedureForm
@@ -460,6 +472,33 @@ HAMD_ANCHORS = {
     "q20": "0. なし\n1. 疑念をもっている\n2. 関係念慮\n3. 被害関係妄想",
     "q21": "0. なし\n1. 軽度\n2. 重度",
 }
+
+
+def _hamd_items():
+    items = [
+        ('q1', '1. 抑うつ気分', 4, HAMD_ANCHORS['q1']),
+        ('q2', '2. 罪責感', 4, HAMD_ANCHORS['q2']),
+        ('q3', '3. 自殺', 4, HAMD_ANCHORS['q3']),
+        ('q4', '4. 入眠障害', 2, HAMD_ANCHORS['q4']),
+        ('q5', '5. 熟眠障害', 2, HAMD_ANCHORS['q5']),
+        ('q6', '6. 早朝睡眠障害', 2, HAMD_ANCHORS['q6']),
+        ('q7', '7. 仕事と活動', 4, HAMD_ANCHORS['q7']),
+        ('q8', '8. 精神運動抑制', 4, HAMD_ANCHORS['q8']),
+        ('q9', '9. 精神運動激越', 4, HAMD_ANCHORS['q9']),
+        ('q10', '10. 不安, 精神症状', 4, HAMD_ANCHORS['q10']),
+        ('q11', '11. 不安, 身体症状', 4, HAMD_ANCHORS['q11']),
+        ('q12', '12. 身体症状, 消化器系', 2, HAMD_ANCHORS['q12']),
+        ('q13', '13. 身体症状, 一般的', 2, HAMD_ANCHORS['q13']),
+        ('q14', '14. 生殖器症状', 2, HAMD_ANCHORS['q14']),
+        ('q15', '15. 心気症', 4, HAMD_ANCHORS['q15']),
+        ('q16', '16. 体重減少', 2, HAMD_ANCHORS['q16']),
+        ('q17', '17. 病識', 2, HAMD_ANCHORS['q17']),
+        ('q18', '18. 日内変動', 2, HAMD_ANCHORS['q18']),
+        ('q19', '19. 現実感喪失・離人症', 4, HAMD_ANCHORS['q19']),
+        ('q20', '20. 妄想症状', 3, HAMD_ANCHORS['q20']),
+        ('q21', '21. 強迫症状', 2, HAMD_ANCHORS['q21']),
+    ]
+    return items, items[:11], items[11:]
 
 # ==========================================
 # ビュー関数
@@ -957,6 +996,7 @@ def questionnaire_edit(request, patient_id):
 @login_required
 def treatment_add(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id); dashboard_date = request.GET.get('dashboard_date')
+    course_number = patient.course_number or 1
     target_date_str = request.GET.get('date'); now = timezone.localtime(timezone.now())
     if target_date_str:
         t = parse_date(target_date_str)
@@ -969,6 +1009,29 @@ def treatment_add(request, patient_id):
     week_num = 1
     current_week_mapping = None
     mapping_alert = None
+
+    # 画面表示用：治療予定サマリ（独立バー廃止の代替）
+    plan_summary_text = None
+    plan_date_range_text = None
+    course_session_text = None
+
+    # 上部患者バー右側：モード切替（治療画面専用）
+    mode_switch_html = mark_safe(
+        """
+        <div class=\"btn-group\" role=\"group\" aria-label=\"mode-switch\">
+          <input type=\"radio\" class=\"btn-check\" name=\"modeSwitch\" id=\"treatModeRecord\" autocomplete=\"off\" checked>
+          <label class=\"btn btn-success btn-sm\" for=\"treatModeRecord\">
+            <i class=\"fas fa-pen me-1\"></i>治療内容記入
+          </label>
+
+          <input type=\"radio\" class=\"btn-check\" name=\"modeSwitch\" id=\"treatModeWizard\" autocomplete=\"off\">
+          <label class=\"btn btn-outline-success btn-sm\" for=\"treatModeWizard\">
+            <i class=\"fas fa-route me-1\"></i>手順解説
+          </label>
+        </div>
+        """
+    )
+
     if patient.first_treatment_date:
         tdates = generate_treatment_dates(patient.first_treatment_date, total=30, holidays=JP_HOLIDAYS)
         if initial_date in tdates:
@@ -982,9 +1045,16 @@ def treatment_add(request, patient_id):
         plan_start_date = None
         plan_end_date = None
         total_planned_sessions = 30
+
+    if plan_start_date and plan_end_date and session_num and week_num:
+        plan_date_range_text = (
+            f"治療予定：{plan_start_date.strftime('%Y/%m/%d')}〜{plan_end_date.strftime('%Y/%m/%d')}"
+        )
+        course_session_text = f"{course_number}クール第{session_num}回（第{week_num}週）"
+        # Backward-compatible combined form (used by older template fragments)
+        plan_summary_text = f"{plan_date_range_text}｜{course_session_text}"
     
     # Fetch current week mapping: same date first, then same week
-    course_number = patient.course_number or 1
     same_date_mapping = MappingSession.objects.filter(patient=patient, course_number=course_number, date=initial_date).first()
     if same_date_mapping:
         current_week_mapping = same_date_mapping
@@ -1200,6 +1270,24 @@ def treatment_add(request, patient_id):
 
     side_effect_rows_json = json.dumps(side_effect_rows, ensure_ascii=False)
 
+    # 印刷プレビューURL（既存セッションがある場合のみ）
+    side_effect_print_url = None
+    try:
+        if existing_session:
+            back_params = {'date': initial_date.isoformat()}
+            if dashboard_date:
+                back_params['dashboard_date'] = dashboard_date
+            back_url = f"{reverse('rtms_app:treatment_add', args=[patient.id])}?{urlencode(back_params)}"
+
+            print_params = {'back_url': back_url}
+            if dashboard_date:
+                print_params['dashboard_date'] = dashboard_date
+            side_effect_print_url = (
+                f"{reverse('rtms_app:print:print_side_effect_check', args=[patient.id, existing_session.id])}?{urlencode(print_params)}"
+            )
+    except Exception:
+        side_effect_print_url = None
+
     # Build Step6 previous abnormal alert message (latest within recent 5 sessions)
     confirm_alert_message = ''
     try:
@@ -1301,6 +1389,9 @@ def treatment_add(request, patient_id):
             mapping_reason += " / 安全確認で要再測定の項目があります"
         else:
             mapping_reason = "安全確認で要再測定の項目があります"
+
+    # 治療画面UI用：今週の位置決めが未設定 or 安全確認がOFFなら「位置決めをしてください」を表示
+    need_mapping = (current_week_mapping is None) or (not (safety_sleep and safety_alcohol and safety_meds))
     
     # 位置決めURL
     mapping_url = reverse('rtms_app:mapping_add', args=[patient.id])
@@ -1353,6 +1444,12 @@ def treatment_add(request, patient_id):
         'today': timezone.now().date(),
         'initial_timing_display': '',
         'can_view_audit': can_view_audit(request.user),
+        # Treatment header/controls
+        'plan_summary_text': plan_summary_text,
+        'plan_date_range_text': plan_date_range_text,
+        'course_session_text': course_session_text,
+        'mode_switch_html': mode_switch_html,
+        'side_effect_print_url': side_effect_print_url,
         # Summary bar (both legacy names and new unified names)
         'plan_start_date': plan_start_date,
         'plan_end_date': plan_end_date,
@@ -1374,6 +1471,7 @@ def treatment_add(request, patient_id):
         'confirm_alert_message': confirm_alert_message,
         # Mapping alert
         'needs_mapping_today': needs_mapping_today,
+        'need_mapping': need_mapping,
         'mapping_done': mapping_done,
         'mapping_reason': mapping_reason,
         'mapping_url': mapping_url,
@@ -1388,93 +1486,188 @@ def treatment_add(request, patient_id):
     })
 
 def assessment_add(request, patient_id, timing):
+    # Legacy endpoint kept for backward compatibility.
+    # Redirect to new hub while preserving query params.
+    q = request.GET.dict()
+    return redirect(build_url('assessment_hub', args=[patient_id, timing], query=q))
+
+def assessment_week4(request, patient_id):
+    """
+    第4週目評価用のラッパービュー
+    """
+    q = request.GET.dict()
+    return redirect(build_url('assessment_hub', args=[patient_id, 'week4'], query=q))
+
+
+@login_required
+def assessment_hub(request, patient_id, timing):
     patient = get_object_or_404(Patient, pk=patient_id)
     dashboard_date = request.GET.get('dashboard_date')
-    from_page = request.GET.get('from')  # 'clinical_path' などを想定
+    from_page = request.GET.get('from')
 
-    # Validate timing against model choices to prevent tampering
     allowed = [c[0] for c in Assessment.TIMING_CHOICES]
     if timing not in allowed:
         return HttpResponse(status=400)
 
-    history = Assessment.objects.filter(patient=patient).order_by('date')
-
-    # hamd_items with anchor text from HAMD_ANCHORS
-    hamd_items = [
-        ('q1', '1. 抑うつ気分', 4, HAMD_ANCHORS['q1']),
-        ('q2', '2. 罪責感', 4, HAMD_ANCHORS['q2']),
-        ('q3', '3. 自殺', 4, HAMD_ANCHORS['q3']),
-        ('q4', '4. 入眠障害', 2, HAMD_ANCHORS['q4']),
-        ('q5', '5. 熟眠障害', 2, HAMD_ANCHORS['q5']),
-        ('q6', '6. 早朝睡眠障害', 2, HAMD_ANCHORS['q6']),
-        ('q7', '7. 仕事と活動', 4, HAMD_ANCHORS['q7']),
-        ('q8', '8. 精神運動抑制', 4, HAMD_ANCHORS['q8']),
-        ('q9', '9. 精神運動激越', 4, HAMD_ANCHORS['q9']),
-        ('q10', '10. 不安, 精神症状', 4, HAMD_ANCHORS['q10']),
-        ('q11', '11. 不安, 身体症状', 4, HAMD_ANCHORS['q11']),
-        ('q12', '12. 身体症状, 消化器系', 2, HAMD_ANCHORS['q12']),
-        ('q13', '13. 身体症状, 一般的', 2, HAMD_ANCHORS['q13']),
-        ('q14', '14. 生殖器症状', 2, HAMD_ANCHORS['q14']),
-        ('q15', '15. 心気症', 4, HAMD_ANCHORS['q15']),
-        ('q16', '16. 体重減少', 2, HAMD_ANCHORS['q16']),
-        ('q17', '17. 病識', 2, HAMD_ANCHORS['q17']),
-        ('q18', '18. 日内変動', 2, HAMD_ANCHORS['q18']),
-        ('q19', '19. 現実感喪失・離人症', 4, HAMD_ANCHORS['q19']),
-        ('q20', '20. 妄想症状', 3, HAMD_ANCHORS['q20']),
-        ('q21', '21. 強迫症状', 2, HAMD_ANCHORS['q21']),
-    ]
-    hamd_items_left = hamd_items[:11]
-    hamd_items_right = hamd_items[11:]
-
-    # Calculate assessment window
+    timing_display = dict(Assessment.TIMING_CHOICES).get(timing, timing)
     window_start, window_end = get_assessment_window(patient, timing)
-    
-    
-    existing_assessment = Assessment.objects.filter(patient=patient, timing=timing).order_by('-date').first()
-    
-    # Determine initial date priority:
-    # 1) explicit `date` GET param (calendar/dashboard click)
-    # 2) `dashboard_date` GET param
-    # 3) fallback to today
-    # Later, if an existing assessment exists and no explicit GET date was provided,
-    # prefer the saved assessment date so saved dates are persistent.
+
+    # Pass through selected date (calendar/dashboard) for first open.
+    date_param = (
+        request.GET.get('date')
+        or request.GET.get('dashboard_date')
+        or request.GET.get('selected_date')
+        or request.GET.get('calendar_date')
+    )
+
+    configs = (
+        TimingScaleConfig.objects.select_related('scale')
+        .filter(timing=timing, is_enabled=True, scale__is_active=True)
+        .order_by('display_order', 'scale__code')
+    )
+    if not configs.exists():
+        hamd = ScaleDefinition.objects.filter(code='hamd').first()
+        configs = []
+        if hamd:
+            class _C:  # minimal placeholder
+                scale = hamd
+            configs = [_C()]
+
+    course_number = patient.course_number or 1
+    scales = []
+    for cfg in configs:
+        scale = cfg.scale
+        record = (
+            AssessmentRecord.objects.filter(
+                patient=patient,
+                course_number=course_number,
+                timing=timing,
+                scale=scale,
+            )
+            .order_by('-date')
+            .first()
+        )
+
+        legacy = None
+        if scale.code == 'hamd':
+            legacy = (
+                Assessment.objects.filter(
+                    patient=patient,
+                    course_number=course_number,
+                    timing=timing,
+                    type='HAM-D',
+                )
+                .order_by('-date')
+                .first()
+            )
+
+        existing = record or legacy
+        query = {}
+        if dashboard_date:
+            query['dashboard_date'] = dashboard_date
+        if from_page:
+            query['from'] = from_page
+        if date_param:
+            query['date'] = date_param
+
+        scales.append({
+            'code': scale.code,
+            'name': scale.name,
+            'is_done': existing is not None,
+            'date': getattr(existing, 'date', None),
+            'url': build_url('assessment_scale', args=[patient.id, timing, scale.code], query=query or None),
+        })
+
+    return render(request, 'rtms_app/assessment/hub.html', {
+        'patient': patient,
+        'dashboard_date': dashboard_date,
+        'initial_timing': timing,
+        'initial_timing_display': timing_display,
+        'window_start': window_start,
+        'window_end': window_end,
+        'scales': scales,
+        'can_view_audit': can_view_audit(request.user),
+    })
+
+
+@login_required
+def assessment_scale_form(request, patient_id, timing, scale_code):
+    patient = get_object_or_404(Patient, pk=patient_id)
+    dashboard_date = request.GET.get('dashboard_date')
+    from_page = request.GET.get('from')
+
+    allowed = [c[0] for c in Assessment.TIMING_CHOICES]
+    if timing not in allowed:
+        return HttpResponse(status=400)
+
+    scale = get_object_or_404(ScaleDefinition, code=scale_code)
+
+    timing_display = dict(Assessment.TIMING_CHOICES).get(timing, timing)
+    window_start, window_end = get_assessment_window(patient, timing)
+
+    course_number = patient.course_number or 1
+
+    record = (
+        AssessmentRecord.objects.filter(
+            patient=patient,
+            course_number=course_number,
+            timing=timing,
+            scale=scale,
+        )
+        .order_by('-date')
+        .first()
+    )
+
+    legacy = None
+    if scale.code == 'hamd':
+        legacy = (
+            Assessment.objects.filter(
+                patient=patient,
+                course_number=course_number,
+                timing=timing,
+                type='HAM-D',
+            )
+            .order_by('-date')
+            .first()
+        )
+
+    # Determine initial date priority
     initial_date = timezone.now().date()
-    # Accept multiple GET param names for compatibility
-    date_param = request.GET.get('date') or request.GET.get('dashboard_date') or request.GET.get('selected_date') or request.GET.get('calendar_date')
+    date_param = (
+        request.GET.get('date')
+        or request.GET.get('dashboard_date')
+        or request.GET.get('selected_date')
+        or request.GET.get('calendar_date')
+    )
     if date_param:
         try:
             initial_date = datetime.datetime.strptime(date_param, '%Y-%m-%d').date()
-        except:
+        except Exception:
             pass
 
-    # If there is an existing saved assessment and the user didn't explicitly pass a date,
-    # prefer the saved assessment date so it remains fixed after saving.
-    if existing_assessment and not date_param:
-        initial_date = existing_assessment.date
+    existing_for_default = record or legacy
+    if existing_for_default and not date_param:
+        initial_date = existing_for_default.date
 
-    # Use `default_date` (date object) in context and for POST fallbacks
     default_date = initial_date
-    
-    # Get timing display name
-    timing_display = dict(Assessment.TIMING_CHOICES).get(timing, timing)
 
     if request.method == 'POST':
         try:
-            # date/timing: if the form left date empty, fall back to default_date
             date_str = (request.POST.get('date') or '').strip()
             try:
-                date = datetime.date.fromisoformat(date_str) if date_str else default_date
+                assessed_date = datetime.date.fromisoformat(date_str) if date_str else default_date
             except Exception:
-                date = default_date
+                assessed_date = default_date
 
-            timing_post = request.POST.get('timing') or timing
-            if timing_post not in allowed:
-                timing_post = timing
+            note = (request.POST.get('note') or '').strip()
 
-            # scores from hidden inputs
+            if scale.code != 'hamd':
+                return HttpResponse(status=400)
+
+            hamd_items, _left, _right = _hamd_items()
             scores = {}
-            for key, _, maxv, _ in hamd_items:
-                v = request.POST.get(key, "0")
+            for key, _label, maxv, _text in hamd_items:
+                v = request.POST.get(key, '0')
                 try:
                     iv = int(v)
                 except Exception:
@@ -1482,37 +1675,49 @@ def assessment_add(request, patient_id, timing):
                 iv = max(0, min(iv, maxv))
                 scores[key] = iv
 
-            note = (request.POST.get('note') or "").strip()
-
-            # Upsert assessment by natural key: patient + course_number + timing + type
-            course_number = patient.course_number or 1
-            defaults = {
-                'date': date,
+            rec_defaults = {
+                'date': assessed_date,
                 'scores': scores,
                 'note': note,
-                'type': 'HAM-D',
                 'course_number': course_number,
             }
-            assessment, created = Assessment.objects.update_or_create(
+            new_record, _created = AssessmentRecord.objects.update_or_create(
                 patient=patient,
                 course_number=course_number,
-                timing=timing_post,
-                type='HAM-D',
-                defaults=defaults,
+                timing=timing,
+                scale=scale,
+                defaults=rec_defaults,
             )
 
-            # Ajax の場合は JSON を返す
+            # Keep legacy table in sync (so existing dashboards/flows continue to work)
+            if scale.code == 'hamd':
+                legacy_defaults = {
+                    'date': assessed_date,
+                    'scores': scores,
+                    'note': note,
+                    'type': 'HAM-D',
+                    'course_number': course_number,
+                }
+                legacy_obj, _legacy_created = Assessment.objects.update_or_create(
+                    patient=patient,
+                    course_number=course_number,
+                    timing=timing,
+                    type='HAM-D',
+                    defaults=legacy_defaults,
+                )
+            else:
+                legacy_obj = None
+
             if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-                # total_17 を返す（first_visitのサマリー更新で使う想定）
+                total_17 = new_record.total_score_17
                 return JsonResponse({
                     'status': 'success',
-                    'id': assessment.id,
-                    'total_17': assessment.total_score_17,
+                    'id': new_record.id,
+                    'total_17': total_17,
                 })
 
-            # ---- 戻りURLは build_url に統一（/path/&focus=... を絶対に作らない） ----
             if from_page == 'clinical_path':
-                q = {'focus': assessment.date.strftime('%Y-%m-%d')}
+                q = {'focus': assessed_date.strftime('%Y-%m-%d')}
                 if dashboard_date:
                     q['dashboard_date'] = dashboard_date
                 return redirect(build_url('patient_clinical_path', args=[patient.id], query=q))
@@ -1526,33 +1731,41 @@ def assessment_add(request, patient_id, timing):
             traceback.print_exc()
             if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                 return JsonResponse({'status': 'error', 'message': '保存に失敗しました。'}, status=400)
-            return HttpResponse("保存に失敗しました。", status=400)
+            return HttpResponse('保存に失敗しました。', status=400)
 
-    # JSON-serialize existing scores for safe embedding in JS
-    existing_scores_json = json.dumps(existing_assessment.scores) if existing_assessment and getattr(existing_assessment, 'scores', None) else '{}'
+    existing_scores = {}
+    if record and getattr(record, 'scores', None):
+        existing_scores = record.scores
+    elif legacy and getattr(legacy, 'scores', None):
+        existing_scores = legacy.scores
 
-    ctx = {
-        'patient': patient,
-        'default_date': default_date,
-        'dashboard_date': dashboard_date,
-        'initial_timing': timing,
-        'initial_timing_display': timing_display,
-        'existing_assessment': existing_assessment,
-        'history': history,
-        'hamd_items_left': hamd_items_left,
-        'hamd_items_right': hamd_items_right,
-        'window_start': window_start,
-        'window_end': window_end,
-        'recommendation': None,
-    }
-    ctx['can_view_audit'] = can_view_audit(request.user)
-    return render(request, 'rtms_app/assessment_add.html', ctx)
+    existing_note = ''
+    if record and getattr(record, 'note', None):
+        existing_note = record.note
+    elif legacy and getattr(legacy, 'note', None):
+        existing_note = legacy.note
 
-def assessment_week4(request, patient_id):
-    """
-    第4週目評価用のラッパービュー
-    """
-    return assessment_add(request, patient_id, timing='week4')
+    if scale.code == 'hamd':
+        _items, hamd_items_left, hamd_items_right = _hamd_items()
+        return render(request, 'rtms_app/assessment/scales/hamd.html', {
+            'patient': patient,
+            'dashboard_date': dashboard_date,
+            'scale': scale,
+            'scale_name': scale.name,
+            'scale_code': scale.code,
+            'initial_timing': timing,
+            'initial_timing_display': timing_display,
+            'window_start': window_start,
+            'window_end': window_end,
+            'default_date': default_date,
+            'hamd_items_left': hamd_items_left,
+            'hamd_items_right': hamd_items_right,
+            'existing_scores': existing_scores,
+            'existing_note': existing_note,
+            'can_view_audit': can_view_audit(request.user),
+        })
+
+    return HttpResponse(status=404)
 
 @login_required
 def patient_summary_view(request, patient_id):
@@ -1713,6 +1926,18 @@ def patient_summary_view(request, patient_id):
             "docs_form_id": "bundlePrintFormDischarge",
         },
     ]
+
+    plan_week_no = None
+    if patient.first_treatment_date:
+        ref_date = None
+        if patient.discharge_date:
+            ref_date = patient.discharge_date
+        elif sessions.exists():
+            ref_date = sessions.last().session_date
+        else:
+            ref_date = timezone.localdate()
+        plan_week_no = get_current_week_number(patient.first_treatment_date, ref_date)
+
     return render(request, 'rtms_app/patient_summary.html', {
         'patient': patient,
         'summary_text': summary_text,
@@ -1732,7 +1957,7 @@ def patient_summary_view(request, patient_id):
         'treatment_plan_end': get_completion_date(patient.first_treatment_date),
         'today_session_no': sessions.count() if sessions.exists() else 0,
         'total_sessions': 30,
-        'week_no': None,
+        'week_no': plan_week_no,
     })
     
 @login_required

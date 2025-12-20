@@ -1,7 +1,16 @@
 from django.contrib import admin
 from django.db import models
 from django_jsonform.widgets import JSONFormWidget
-from .models import Patient, TreatmentSession, Assessment, ConsentDocument, AuditLog
+from .models import (
+    Patient,
+    TreatmentSession,
+    Assessment,
+    ConsentDocument,
+    AuditLog,
+    ScaleDefinition,
+    TimingScaleConfig,
+    AssessmentRecord,
+)
 
 # --- 1. 適正に関する質問票 (初診時) ---
 QUESTIONNAIRE_SCHEMA = {
@@ -132,6 +141,28 @@ class TreatmentSessionAdmin(admin.ModelAdmin):
     # formfield_overrides ...
 
 admin.site.register(Assessment)
+
+
+@admin.register(ScaleDefinition)
+class ScaleDefinitionAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("code", "name")
+
+
+@admin.register(TimingScaleConfig)
+class TimingScaleConfigAdmin(admin.ModelAdmin):
+    list_display = ("timing", "scale", "is_enabled", "display_order")
+    list_filter = ("timing", "is_enabled")
+    search_fields = ("scale__code", "scale__name")
+    ordering = ("timing", "display_order", "scale__code")
+
+
+@admin.register(AssessmentRecord)
+class AssessmentRecordAdmin(admin.ModelAdmin):
+    list_display = ("date", "patient", "course_number", "timing", "scale", "total_score_17")
+    list_filter = ("timing", "scale")
+    search_fields = ("patient__name", "patient__card_id")
 
 
 @admin.register(ConsentDocument)
