@@ -2,13 +2,13 @@
 {% load static %}
 {% load rtms_extras %}
 
-{% block title %}HAMD詳細票 - {{ patient.name }}{% endblock %}
-{% block toolbar_title %}HAMD詳細票 - {{ patient.name }} 様{% endblock %}
+{% block title %}HAM-D詳細票 - {{ patient.name }}{% endblock %}
+{% block toolbar_title %}HAM-D詳細票 - {{ patient.name }} 様{% endblock %}
 
 {% block print_content %}
 <div class="page-container">
   <div class="page-sheet">
-    <h1 class="doc-title">HAMD 詳細票</h1>
+    <h1 class="doc-title">HAM-D 詳細票</h1>
     <div class="summary-header" style="margin-bottom: 8px;">
       <div>作成日: {{ today|date:"Y年n月j日" }}</div>
       <div>患者ID: {{ patient.card_id }} / 氏名: {{ patient.name }} 様</div>
@@ -36,9 +36,9 @@
         </tr>
         {% endfor %}
 
-        <!-- HAMD17 合計＋評価（baselineは改善率/評価を表示しない） -->
+        <!-- HAM-D17 合計＋評価（baselineは改善率/評価を表示しない） -->
         <tr class="hamd-summary">
-          <td class="text-start fw-bold">HAMD17 合計</td>
+          <td class="text-start fw-bold">HAM-D17 合計</td>
           {% for c in hamd_detail.cols %}
             {% with total=hamd_detail.totals.hamd17|get_item:c.key pct=hamd_detail.totals.improvement_pct|get_item:c.key sev=hamd_detail.totals.severity|get_item:c.key status=hamd_detail.totals.status_label|get_item:c.key %}
             <td class="text-center fw-bold">
@@ -58,7 +58,7 @@
         </tr>
 
         <tr class="hamd-summary">
-          <td class="text-start fw-bold">HAMD21 合計</td>
+          <td class="text-start fw-bold">HAM-D21 合計</td>
           {% for c in hamd_detail.cols %}
             {% with total=hamd_detail.totals.hamd21|get_item:c.key %}
             <td class="text-center fw-bold">
@@ -80,7 +80,7 @@
         {% if hamd_insurance_notice %}
           {{ hamd_insurance_notice }}
         {% else %}
-          第３週目の評価において、その合計スコアがＨＡＭＤ１７で７以下、ＨＡＭＤ２４で９以下である場合は寛解と判断し当該治療は中止又は漸減する。漸減する場合、第４週目は最大週３回、第５週目は最大週２回、第６週目は最大週１回まで算定できる。また、第３週目の評価において、ＨＡＭＤ１７又はＨＡＭＤ２４の合計スコアで寛解と判断されず、かつ治療開始前の評価より改善が 20％未満の場合には中止する。
+          第３週目の評価において、その合計スコアがHAM-D17で７以下、HAM-D24で９以下である場合は寛解と判断し当該治療は中止又は漸減する。漸減する場合、第４週目は最大週３回、第５週目は最大週２回、第６週目は最大週１回まで算定できる。また、第３週目の評価において、HAM-D17又はHAM-D24の合計スコアで寛解と判断されず、かつ治療開始前の評価より改善が 20％未満の場合には中止する。
         {% endif %}
       </p>
     </div>

@@ -44,19 +44,19 @@ QUESTIONNAIRE_SCHEMA = {
         },
         'medication_change': {
             'type': 'string',
-            'title': '5. 最近お薬の変更はありましたか？',
+            'title': '薬剤変更',
             'enum': ['いいえ', 'はい'],
             'widget': 'radio'
         },
         'sleep_deprivation': {
             'type': 'string',
-            'title': '6. 昨夜は十分睡眠がとれましたか？（睡眠不足ではないですか？）',
+            'title': '睡眠時間',
             'enum': ['はい (十分とれた)', 'いいえ (睡眠不足)'],
             'widget': 'radio'
         },
         'alcohol_caffeine': {
             'type': 'string',
-            'title': '7. アルコールやカフェインを過剰に摂取していませんか？',
+            'title': '飲酒、過量のカフェイン',
             'enum': ['いいえ', 'はい'],
             'widget': 'radio'
         },

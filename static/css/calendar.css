@@ -1,0 +1,89 @@
+.calendar-container { background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 16px; }
+
+/* Table layout to match clinical path */
+.calendar-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.calendar-table th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 8px; text-align: center; color: #495057; font-weight: 700; }
+.calendar-table td { border: 1px solid #dee2e6; padding: 4px; vertical-align: top; height: 88px; min-height: 64px; background-color: #fff; transition: background 0.1s; }
+.calendar-table td.day-sat { background-color: #f8fbff; color: #0d6efd; }
+.calendar-table td.day-sun { background-color: #fff5f5; color: #dc3545; }
+.calendar-table td.cell-muted { background: #f8f9fa; color: #adb5bd; }
+.calendar-table col.col-mon,
+.calendar-table col.col-tue,
+.calendar-table col.col-wed,
+.calendar-table col.col-thu,
+.calendar-table col.col-fri { width: 16%; }
+.calendar-table col.col-sat { width: 10%; }
+.calendar-table col.col-sun { width: 10%; }
+
+.date-row { display: flex; gap: 4px; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.date-num { font-weight: 800; font-size: 0.95rem; }
+.count-pills { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.count-pill { background: #eef2f7; border: 1px solid #dde2ea; border-radius: 999px; padding: 0 8px; font-size: 0.72rem; font-weight: 700; color: #4b5563; }
+
+/* Event badges aligned with clinical path */
+.event-item { font-size: 0.78rem; margin-bottom: 3px; padding: 3px 6px; border-radius: 4px; display: block; line-height: 1.2; text-decoration: none; color: inherit; font-weight: 700; }
+.event-item:hover { filter: brightness(0.97); }
+.evt-admission { background-color: var(--color-admission-bg, #e3f2fd); color: var(--color-admission, #1976d2); border: 1px solid var(--color-admission, #1976d2); }
+.evt-treatment { background-color: var(--color-treatment-bg, #e6f4ea); color: var(--color-treatment, #388e3c); border: 1px solid var(--color-treatment, #388e3c); }
+.evt-planned { background-color: #f2fbf4; color: #2f7a34; border: 1px dashed #2f7a34; }
+.evt-first-visit { background-color: #e8f0fe; color: #1a73e8; border: 1px solid #1a73e8; }
+.evt-more { color: #6c757d; text-decoration: underline; background: #f8f9fa; border: 1px dashed #d0d5db; }
+
+.calendar-table td[data-day-url]:hover { cursor: pointer; background: rgba(0,0,0,0.02); }
+.event-item { cursor: pointer; }
+
+.calendar-table { table-layout: fixed; width: 100%; }
+.calendar-table tbody tr { height: 110px; }
+
+/* Holiday styling */
+.is-holiday { background: rgba(255, 0, 0, 0.04) !important; }
+.holiday-date { color: #c00 !important; font-weight: 900 !important; }
+.cal-holiday-name { font-size: 0.7rem; color: #c00; margin-left: 4px; white-space: nowrap; }
+
+@media print {
+  @page { size: A4 landscape; margin: 8mm; }
+  
+  .calendar-table {
+    border-collapse: collapse !important;
+  }
+  .calendar-table th,
+  .calendar-table td {
+    border: 1.3px solid #333 !important;
+  }
+  .calendar-table th {
+    background: #f2f2f2 !important;
+    font-weight: 800;
+  }
+  
+  .calendar-table tbody tr { height: 22mm; }
+  .calendar-table td { padding: 4px 5px !important; }
+  .event-item { font-size: 8.5pt; line-height: 1.15; margin-top: 1px; }
+  .date-row { margin-bottom: 2px; }
+  .count-pill { font-size: 8pt; padding: 1px 4px; }
+  .cell-events { margin-top: 2px; display: flex; flex-direction: column; gap: 2px; }
+  
+  /* Holiday styling for print */
+  .cal-holiday-name { font-size: 0.65rem; }
+}
+.evt-discharge { background-color: var(--color-discharge-bg, #f3e5f5); color: var(--color-discharge, #7b1fa2); border: 1px solid var(--color-discharge, #7b1fa2); }
+.evt-discharge-planned { background-color: #ede7f6; color: #5e35b1; border: 1px solid #5e35b1; }
+
+.legend .chip { padding: 3px 8px; border-radius: 12px; font-weight: 700; color: #fff; }
+.legend .chip-admission { background: var(--color-admission, #1976d2); }
+.legend .chip-treatment { background: var(--color-treatment, #388e3c); }
+.legend .chip-discharge { background: var(--color-discharge, #7b1fa2); }
+
+@media (max-width: 1000px) {
+  .calendar-table th { padding: 6px; font-size: 0.85rem; }
+  .calendar-table td { padding: 3px; min-height: 56px; font-size: 0.8rem; }
+  .date-num { font-size: 0.85rem; }
+  .event-item { font-size: 0.72rem; padding: 2px 4px; margin-bottom: 2px; }
+}
+
+@media print {
+  .calendar-container { box-shadow: none; padding: 0; }
+  .calendar-table th { padding: 6px; }
+  .calendar-table td { padding: 3px; height: 80px; min-height: 50px; }
+  .count-pill { font-size: 10px; }
+  .event-item { font-size: 10px; }
+}

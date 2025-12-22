@@ -7,7 +7,7 @@
 <style>
     @page {
         size: A4 landscape;
-        margin: 10mm;
+        margin: 6mm 10mm 10mm 10mm; /* tighter top margin */
     }
 
     body {
@@ -21,8 +21,8 @@
 
     .page-sheet {
         width: 100%;
-        min-height: calc(210mm - 20mm);
-        padding: 10mm;
+        min-height: calc(210mm - 16mm);
+        padding: 6mm 10mm 10mm 10mm; /* tighter top padding */
         box-sizing: border-box;
         background: #fff;
     }
@@ -35,6 +35,18 @@
     .cal-table { width: 100%; border-collapse: collapse; margin-top: 5px; table-layout: fixed; }
     .cal-table th { background-color: #f0f0f0; border: 1px solid #000; padding: 3px; text-align: center; font-size: 10pt; font-weight: bold; }
     .cal-table td { border: 1px solid #000; padding: 3px; vertical-align: top; height: 55px; font-size: 9.5pt; }
+    /* Title + header compact spacing */
+    .title-row { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 3mm; padding-bottom: 1mm; }
+    .title-row .title { margin: 0; line-height: 1.05; }
+    .title-row .info { font-size: 10pt; text-align: right; }
+    /* Column widths: weekdays wide, weekends narrow */
+    .cal-table col.mon,
+    .cal-table col.tue,
+    .cal-table col.wed,
+    .cal-table col.thu,
+    .cal-table col.fri { width: 16%; }
+    .cal-table col.sat { width: 10%; }
+    .cal-table col.sun { width: 10%; }
     .day-sat { color: #007bff; background-color: #f0f8ff !important; }
     .day-sun { color: #dc3545; background-color: #fff0f0 !important; }
     .day-holiday { color: #dc3545; background-color: #ffe8e8 !important; }
@@ -72,12 +84,23 @@
 <div class="page-container">
     <!-- 1ページ目 -->
     <div class="page-sheet page-break-after">
-        <h2 class="text-center fw-bold mb-2">rTMS治療スケジュール</h2>
-        <div class="d-flex justify-content-between mb-2 border-bottom border-dark pb-1" style="font-size: 10.5pt;">
-            <div>氏名: <strong>{{ patient.name }} 様</strong>　ID: {{ patient.card_id }} {% if patient.course_number > 1 %}({{ patient.course_number }}クール目){% endif %}　担当医: {{ patient.attending_physician.last_name }} 先生</div>
+        <div class="title-row border-bottom border-dark">
+            <h2 class="title fw-bold">rTMS治療スケジュール</h2>
+            <div class="info">
+                ID: {{ patient.card_id }} {% if patient.course_number > 1 %}({{ patient.course_number }}クール目){% endif %} 　氏名: <strong>{{ patient.name }} 様</strong> 　担当医: {{ patient.attending_physician.last_name }} 先生
+            </div>
         </div>
 
         <table class="cal-table">
+            <colgroup>
+                <col class="mon">
+                <col class="tue">
+                <col class="wed">
+                <col class="thu">
+                <col class="fri">
+                <col class="sat">
+                <col class="sun">
+            </colgroup>
             <thead>
                 <tr>
                     <th class="text-primary">月</th>

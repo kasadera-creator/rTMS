@@ -14,6 +14,11 @@
     <i class="fas fa-notes-medical me-1"></i> 治療経過・退院準備
   </a>
 
+  <a class="btn btn-outline-secondary btn-sm btn-nav"
+     href="{% url 'rtms_app:calendar_month' %}">
+    <i class="fas fa-calendar-alt me-1"></i> カレンダー
+  </a>
+
   {% if can_view_audit %}
   <a class="btn btn-patient-list btn-sm btn-nav"
      href="{% url 'rtms_app:audit_logs' patient.id %}">

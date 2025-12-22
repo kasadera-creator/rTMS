@@ -1,0 +1,109 @@
+{% extends "rtms_app/base.html" %}
+{% load static %}
+{% block body_class %}page-patient-list{% endblock %}
+
+{% block extrastyle %}
+<link rel="stylesheet" href="{% static 'css/calendar.css' %}">
+{% endblock %}
+
+{% block header_breadcrumb %}
+  <span class="text-white px-1" style="font-size: 0.9rem;">月間カレンダー</span>
+{% endblock header_breadcrumb %}
+
+{% block content %}
+<div class="stack-md">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div class="page-title d-flex align-items-center gap-2">
+      <i class="fas fa-calendar-alt page-title-icon"></i>
+      {{ year }}年 {{ month }}月 カレンダー
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'rtms_app:calendar_month' %}?year={{ prev_year }}&month={{ prev_month }}"><i class="fas fa-chevron-left me-1"></i>前月</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'rtms_app:calendar_month' %}?year={{ next_year }}&month={{ next_month }}">次月<i class="fas fa-chevron-right ms-1"></i></a>
+      <a class="btn btn-outline-dark btn-sm" href="{% url 'rtms_app:calendar_month' %}?year={{ today.year }}&month={{ today.month }}"><i class="fas fa-calendar-day me-1"></i>今月</a>
+      <a class="btn btn-outline-primary btn-sm" target="_blank" rel="noopener" href="{% url 'rtms_app:calendar_month_print' %}?year={{ year }}&month={{ month }}"><i class="fas fa-print me-1"></i>印刷（A4横）</a>
+    </div>
+  </div>
+
+  <div class="calendar-container card-like">
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+      <div class="text-muted small">入院中ピーク: {{ peak_inpatients }} / rTMS件数ピーク: {{ peak_rtms }}</div>
+      <div class="legend d-flex flex-wrap gap-2 small">
+        <span class="chip chip-admission">入院</span>
+        <span class="chip chip-treatment">治療</span>
+        <span class="chip chip-discharge">退院/退院予定</span>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="calendar-table">
+        <colgroup>
+          <col class="col-mon">
+          <col class="col-tue">
+          <col class="col-wed">
+          <col class="col-thu">
+          <col class="col-fri">
+          <col class="col-sat">
+          <col class="col-sun">
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="text-primary">月</th>
+            <th class="text-primary">火</th>
+            <th class="text-primary">水</th>
+            <th class="text-primary">木</th>
+            <th class="text-primary">金</th>
+            <th class="text-primary">土</th>
+            <th class="text-danger">日</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for week in weeks %}
+          <tr>
+            {% for day in week %}
+              <td data-day-url="{{ day.day_url }}" class="{% if day.is_holiday %}is-holiday{% elif day.weekday == 5 %}day-sat{% elif day.weekday == 6 %}day-sun{% endif %} {% if not day.is_current_month %}cell-muted{% endif %}">
+                <div class="date-row">
+                  <span class="date-num{% if day.is_holiday %} holiday-date{% endif %}">{{ day.date|date:"n/j" }}</span>
+                  {% if day.holiday_name %}
+                    <span class="cal-holiday-name">{{ day.holiday_name }}</span>
+                  {% endif %}
+                  <div class="count-pills">
+                    <span class="count-pill">入院中 {{ day.inpatient_count }}</span>
+                    <span class="count-pill">rTMS {{ day.rtms_count }}件</span>
+                  </div>
+                </div>
+                {% for ev in day.events_visible %}
+                  <a class="event-item evt-{{ ev.kind }}{% if ev.is_planned %} evt-planned{% endif %}" href="{{ ev.url }}" title="{{ ev.label }}">
+                    {% if ev.kind == 'admission' %}<i class="fas fa-procedures me-1"></i>{% endif %}
+                    {% if ev.kind == 'discharge' %}<i class="fas fa-home me-1"></i>{% endif %}
+                    {% if ev.kind == 'treatment' %}<i class="fas fa-bolt me-1"></i>{% endif %}
+                    {% if ev.kind == 'first-visit' %}<i class="fas fa-user-plus me-1"></i>{% endif %}
+                    {{ ev.label }}
+                  </a>
+                {% endfor %}
+
+                {% if day.events_hidden_count > 0 %}
+                  <a class="event-item evt-more" href="{{ day.day_url }}">（他 {{ day.events_hidden_count }}件）</a>
+                {% endif %}
+              </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('click', function(e){
+  const td = e.target.closest('td[data-day-url]');
+  if (!td) return;
+  if (e.target.closest('a, button, input, label, textarea, select')) return;
+  const url = td.getAttribute('data-day-url');
+  if (url) window.location.href = url;
+});
+</script>
+{% endblock %}

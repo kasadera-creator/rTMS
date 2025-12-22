@@ -117,6 +117,20 @@ urlpatterns = [
     ),
 
     # =========================
+    # Multi-patient calendar
+    # =========================
+    path(
+        "app/calendar/",
+        views.calendar_month_view,
+        name="calendar_month",
+    ),
+    path(
+        "app/calendar/print/",
+        views.calendar_month_print_view,
+        name="calendar_month_print",
+    ),
+
+    # =========================
     # Path / Calendar
     # =========================
     path(

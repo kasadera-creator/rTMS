@@ -11,11 +11,18 @@ import datetime
 from django.http import HttpResponse, FileResponse, JsonResponse
 from django.conf import settings
 from django.contrib.auth import logout
-from django.db.models import Q
+from django.db.models import Q, Count
+from calendar import monthrange
+from collections import defaultdict
 import os
 import csv
 import json
 from urllib.parse import urlencode
+
+try:
+    import jpholiday
+except ImportError:
+    jpholiday = None
 
 from .models import (
     Patient,
@@ -1497,6 +1504,252 @@ def assessment_week4(request, patient_id):
     """
     q = request.GET.dict()
     return redirect(build_url('assessment_hub', args=[patient_id, 'week4'], query=q))
+
+
+def _planned_discharge_date(patient):
+    """Return planned discharge date (30th treatment + 1 day) if actual discharge is missing."""
+    if patient.discharge_date:
+        return patient.discharge_date
+    if not patient.first_treatment_date:
+        return None
+    planned_dates = generate_treatment_dates(patient.first_treatment_date, total=30, holidays=JP_HOLIDAYS)
+    if not planned_dates:
+        return None
+    return planned_dates[-1] + timedelta(days=1)
+
+
+def _build_month_calendar(year: int, month: int, is_print: bool = False):
+    MAX_EVENTS_PRINT = 3
+    MAX_EVENTS_SCREEN = 6
+    MAX_EVENTS_PER_DAY = MAX_EVENTS_PRINT if is_print else MAX_EVENTS_SCREEN
+    today = timezone.localdate()
+    first_day = date(year, month, 1)
+    last_day = date(year, month, monthrange(year, month)[1])
+
+    # Grid start/end (Mon-Sun)
+    grid_start = first_day - timedelta(days=first_day.weekday())
+    grid_end = last_day + timedelta(days=(6 - last_day.weekday()))
+
+    # All sessions in range (for counts + per-day events)
+    sessions_qs = (
+        TreatmentSession.objects
+        .filter(session_date__range=[grid_start, grid_end])
+        .select_related('patient', 'performer')
+        .order_by('patient_id', 'course_number', 'session_date', 'date', 'id')
+    )
+
+    # Assign session numbers per patient+course in chronological order
+    session_numbers = {}
+    last_key = None
+    counter = 0
+    for s in sessions_qs:
+        key = (s.patient_id, s.course_number)
+        if key != last_key:
+            counter = 0
+            last_key = key
+        counter += 1
+        session_numbers[s.id] = counter
+
+    rtms_counts = defaultdict(int)
+    day_treatment_events = defaultdict(list)
+    actual_session_numbers = defaultdict(set)  # (pid, course) -> set of session numbers
+    for s in sessions_qs:
+        rtms_counts[s.session_date] += 1
+        session_no = session_numbers.get(s.id, 0)
+        actual_session_numbers[(s.patient_id, s.course_number)].add(session_no)
+        day_treatment_events[s.session_date].append({
+            'label': f"治療{session_no}回 {s.patient.name}",
+            'kind': 'treatment',
+            'patient_id': s.patient_id,
+            'session_id': s.id,
+            'url': build_url('treatment_add', [s.patient_id], {'date': s.session_date.isoformat()}),
+            'is_planned': False,
+            'sort_key': 30 + session_no,  # treatment order later
+        })
+
+    # Patients possibly overlapping this grid
+    patients = Patient.objects.filter(
+        Q(admission_date__isnull=False) | Q(first_treatment_date__isnull=False)
+    )
+
+    inpatient_counts = defaultdict(int)
+    events_by_date = defaultdict(list)
+
+    for p in patients:
+        # 初診（登録日）
+        first_visit = p.created_at.date() if hasattr(p, "created_at") and p.created_at else None
+        if first_visit and grid_start <= first_visit <= grid_end:
+            events_by_date[first_visit].append({
+                'label': f"初診 {p.name}",
+                'kind': 'first-visit',
+                'patient_id': p.id,
+                'url': build_url('patient_first_visit', [p.id])
+            })
+
+        planned_discharge = _planned_discharge_date(p)
+        # Inpatient window
+        if p.admission_date and planned_discharge:
+            start = max(p.admission_date, grid_start)
+            end_excl = min(planned_discharge, grid_end + timedelta(days=1))
+            cur = start
+            while cur < end_excl:
+                inpatient_counts[cur] += 1
+                cur += timedelta(days=1)
+
+        # Events
+        if p.admission_date and grid_start <= p.admission_date <= grid_end:
+            events_by_date[p.admission_date].append({
+                'label': f"入院 {p.name}",
+                'kind': 'admission',
+                'patient_id': p.id,
+                'url': build_url('admission_procedure', [p.id])
+            })
+
+        # Planned treatments up to 30 (skip those already done)
+        if p.first_treatment_date:
+            planned_dates = generate_treatment_dates(p.first_treatment_date, total=30, holidays=JP_HOLIDAYS)
+            actual_nos = actual_session_numbers.get((p.id, p.course_number), set())
+            for idx, d in enumerate(planned_dates, start=1):
+                if idx in actual_nos:
+                    continue
+                if grid_start <= d <= grid_end:
+                    events_by_date[d].append({
+                        'label': f"治療{idx}回 (予定) {p.name}",
+                        'kind': 'treatment',
+                        'patient_id': p.id,
+                        'url': build_url('treatment_add', [p.id], {'date': d.isoformat()}),
+                        'is_planned': True,
+                        'sort_key': 30 + idx,
+                    })
+
+        if p.discharge_date and grid_start <= p.discharge_date <= grid_end:
+            events_by_date[p.discharge_date].append({
+                'label': f"退院 {p.name}",
+                'kind': 'discharge',
+                'patient_id': p.id,
+                'url': build_url('patient_home', [p.id]),
+                'is_planned': False,
+                'sort_key': 20,
+            })
+        elif planned_discharge and grid_start <= planned_discharge <= grid_end:
+            events_by_date[planned_discharge].append({
+                'label': f"退院予定 {p.name}",
+                'kind': 'discharge',
+                'patient_id': p.id,
+                'url': build_url('patient_home', [p.id]),
+                'is_planned': True,
+                'sort_key': 20,
+            })
+
+    # Build day cells
+    days = []
+    cur = grid_start
+    while cur <= grid_end:
+        day_events = events_by_date.get(cur, [])
+        day_events.extend(day_treatment_events.get(cur, []))
+
+        # Normalize to 4 kinds only
+        normalized = []
+        for ev in day_events:
+            kind = ev.get('kind')
+            is_planned = ev.get('is_planned', False)
+            sort_key = ev.get('sort_key')
+            if sort_key is None:
+                if kind == 'admission':
+                    sort_key = 10
+                elif kind == 'discharge':
+                    sort_key = 20
+                elif kind == 'treatment':
+                    sort_key = 30
+                elif kind == 'first-visit':
+                    sort_key = 90
+                else:
+                    sort_key = 99
+            normalized.append({**ev, 'kind': kind, 'is_planned': is_planned, 'sort_key': sort_key})
+
+        normalized.sort(key=lambda x: (x.get('sort_key', 99), x.get('label', '')))
+
+        # Limit visible events
+        visible = normalized[:MAX_EVENTS_PER_DAY]
+        hidden_count = max(len(normalized) - MAX_EVENTS_PER_DAY, 0)
+
+        # Check if holiday
+        holiday_name = None
+        is_holiday = False
+        if jpholiday:
+            holiday_name = jpholiday.is_holiday_name(cur)
+            is_holiday = holiday_name is not None
+
+        days.append({
+            'date': cur,
+            'is_current_month': cur.month == month,
+            'weekday': cur.weekday(),
+            'rtms_count': rtms_counts.get(cur, 0),
+            'inpatient_count': inpatient_counts.get(cur, 0),
+            'events_visible': visible,
+            'events_hidden_count': hidden_count,
+            'day_url': build_url('dashboard', query={'date': cur.isoformat()}),
+            'is_holiday': is_holiday,
+            'holiday_name': holiday_name,
+        })
+        cur += timedelta(days=1)
+
+    weeks = []
+    for i in range(0, len(days), 7):
+        weeks.append(days[i:i+7])
+
+    peak_rtms = max(rtms_counts.values()) if rtms_counts else 0
+    peak_inpatients = max(inpatient_counts.values()) if inpatient_counts else 0
+
+    prev_month_date = first_day - timedelta(days=1)
+    next_month_date = last_day + timedelta(days=1)
+
+    return {
+        'year': year,
+        'month': month,
+        'first_day': first_day,
+        'last_day': last_day,
+        'grid_start': grid_start,
+        'grid_end': grid_end,
+        'weeks': weeks,
+        'peak_rtms': peak_rtms,
+        'peak_inpatients': peak_inpatients,
+        'prev_year': prev_month_date.year,
+        'prev_month': prev_month_date.month,
+        'next_year': next_month_date.year,
+        'next_month': next_month_date.month,
+        'today': today,
+    }
+
+
+@login_required
+def calendar_month_view(request):
+    today = timezone.localdate()
+    try:
+        year = int(request.GET.get('year', today.year))
+        month = int(request.GET.get('month', today.month))
+        first_day = date(year, month, 1)  # validation
+    except Exception:
+        year = today.year
+        month = today.month
+
+    data = _build_month_calendar(year, month, is_print=False)
+    return render(request, "rtms_app/calendar_month.html", data)
+
+
+@login_required
+def calendar_month_print_view(request):
+    today = timezone.localdate()
+    try:
+        year = int(request.GET.get('year', today.year))
+        month = int(request.GET.get('month', today.month))
+        _ = date(year, month, 1)
+    except Exception:
+        year = today.year
+        month = today.month
+
+    data = _build_month_calendar(year, month, is_print=True)
+    return render(request, "rtms_app/print/calendar_month.html", data)
 
 
 @login_required

@@ -160,7 +160,7 @@
               </button>
             </div>
 
-            <!-- 右カラム用：指定形式の HAMD 推移表 -->
+            <!-- 右カラム用：指定形式の HAM-D 推移表 -->
             <div class="mt-3">
               {% with last_col=trend_cols|last %}
               <div class="fw-bold mb-1" style="color:#7b1fa2;">HAM-D（{{ last_col.date_str }}）</div>
@@ -169,9 +169,9 @@
               <table class="table table-sm score-table w-100 mb-0" style="table-layout: fixed;">
                 <thead>
                   <tr>
-                    <th style="width: 42%;"> </th>
+                    <th style="width: 28%;"> </th>
                     {% for c in trend_cols %}
-                      <th class="text-center" style="width: 14.5%;">{{ c.label }}</th>
+                      <th class="text-center">{{ c.label }}</th>
                     {% endfor %}
                   </tr>
                 </thead>
@@ -204,7 +204,7 @@
                 </tbody>
               </table>
               <div class="mt-2 p-2 bg-light border rounded small text-muted">
-                <strong>※HAMD17 参考基準:</strong>
+                <strong>※HAM-D17 参考基準:</strong>
                 0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23-:最重症
               </div>
             </div>

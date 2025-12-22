@@ -135,6 +135,9 @@
                 <a href="{% url 'rtms_app:patient_add' %}" class="btn btn-first-visit btn-sm text-nowrap">
                     <i class="fas fa-user-plus me-1"></i> 新規患者登録
                 </a>
+                <a href="{% url 'rtms_app:calendar_month' %}" class="btn btn-outline-primary btn-sm fw-bold text-nowrap">
+                    <i class="fas fa-calendar-alt me-1"></i> 月間カレンダー
+                </a>
                 <a href="{% url 'rtms_app:patient_list' %}?dashboard_date={{ today|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm fw-bold text-nowrap">
                     <i class="fas fa-users me-1"></i> 患者一覧
                 </a>

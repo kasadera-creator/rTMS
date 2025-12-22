@@ -1,0 +1,142 @@
+{% extends "rtms_app/base.html" %}
+{% load static %}
+{% block extrastyle %}
+<link rel="stylesheet" href="{% static 'css/calendar.css' %}">
+<style>
+@page {
+  size: A4 landscape;
+  margin: 10mm;
+}
+@media print {
+  @page { size: A4 landscape; margin: 8mm; }
+
+  .no-print, .btn, .navbar, .floating-actions { display: none !important; }
+  body { background: #fff; }
+  .rtms-main { padding: 0; }
+  .calendar-container { box-shadow: none; padding: 0; }
+
+  .cal-print-header { margin-bottom: 3mm; text-align: center; }
+  .cal-print-title { 
+    font-size: 20pt; 
+    font-weight: 900; 
+    line-height: 1.1; 
+    margin: 0 0 2mm 0;
+    text-align: center;
+  }
+  .cal-print-sub { 
+    font-size: 9.5pt; 
+    color: #444; 
+    margin: 0 0 3mm 0;
+    text-align: center;
+  }
+
+  .calendar-table { table-layout: fixed; width: 100%; }
+  .calendar-table tbody tr { height: 22mm; }
+  .calendar-table td { padding: 3px; vertical-align: top; }
+  .event-item { font-size: 8.5pt; line-height: 1.1; margin-top: 1px; }
+  .count-pill { font-size: 8pt; padding: 1px 4px; }
+  .date-row { margin-bottom: 1px; }
+
+  .cal-print-legend {
+    position: fixed;
+    right: 8mm;
+    bottom: 8mm;
+    display: flex;
+    gap: 6px;
+    font-size: 9pt;
+  }
+  .legend-item {
+    padding: 2px 6px;
+    border-radius: 10px;
+    border: 1px solid #999;
+    background: #fff;
+    white-space: nowrap;
+  }
+  .legend-admission { border-color: var(--color-admission, #1976d2); color: var(--color-admission, #1976d2); }
+  .legend-discharge { border-color: var(--color-discharge, #7b1fa2); color: var(--color-discharge, #7b1fa2); }
+  .legend-treatment { border-color: var(--color-treatment, #388e3c); color: var(--color-treatment, #388e3c); }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="calendar-container card-like page-calendar-print">
+  <div class="cal-print-header">
+    <div class="cal-print-title">{{ year }}年{{ month }}月 rTMS予定カレンダー</div>
+    <div class="cal-print-sub">
+      出力日：{{ today|date:"Y/m/d" }} 　入院中ピーク：{{ peak_inpatients }}名 　rTMSピーク：{{ peak_rtms }}件
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="calendar-table">
+      <colgroup>
+        <col class="col-mon">
+        <col class="col-tue">
+        <col class="col-wed">
+        <col class="col-thu">
+        <col class="col-fri">
+        <col class="col-sat">
+        <col class="col-sun">
+      </colgroup>
+      <thead>
+        <tr>
+          <th class="text-primary">月</th>
+          <th class="text-primary">火</th>
+          <th class="text-primary">水</th>
+          <th class="text-primary">木</th>
+          <th class="text-primary">金</th>
+          <th class="text-primary">土</th>
+          <th class="text-danger">日</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for week in weeks %}
+        <tr>
+          {% for day in week %}
+            <td class="{% if day.is_holiday %}is-holiday{% elif day.weekday == 5 %}day-sat{% elif day.weekday == 6 %}day-sun{% endif %} {% if not day.is_current_month %}cell-muted{% endif %}">
+              <div class="date-row">
+                <span class="date-num{% if day.is_holiday %} holiday-date{% endif %}">{{ day.date|date:"n/j" }}</span>
+                {% if day.holiday_name %}
+                  <span class="cal-holiday-name">{{ day.holiday_name }}</span>
+                {% endif %}
+                <div class="count-pills">
+                  <span class="count-pill">入院中 {{ day.inpatient_count }}</span>
+                  <span class="count-pill">rTMS {{ day.rtms_count }}件</span>
+                </div>
+              </div>
+              {% for ev in day.events_visible %}
+                <a class="event-item evt-{{ ev.kind }}{% if ev.is_planned %} evt-planned{% endif %}" href="{{ ev.url }}">
+                  {% if ev.kind == 'admission' %}<i class="fas fa-procedures me-1"></i>{% endif %}
+                  {% if ev.kind == 'discharge' %}<i class="fas fa-home me-1"></i>{% endif %}
+                  {% if ev.kind == 'treatment' %}<i class="fas fa-bolt me-1"></i>{% endif %}
+                  {% if ev.kind == 'first-visit' %}<i class="fas fa-user-plus me-1"></i>{% endif %}
+                  {{ ev.label }}
+                </a>
+              {% endfor %}
+              {% if day.events_hidden_count > 0 %}
+                <a class="event-item evt-more" href="{{ day.day_url }}">（他 {{ day.events_hidden_count }}件）</a>
+              {% endif %}
+            </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cal-print-legend">
+    <span class="legend-item legend-admission">入院</span>
+    <span class="legend-item legend-discharge">退院（予定含む）</span>
+    <span class="legend-item legend-treatment">治療</span>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+window.addEventListener('load', function() {
+  window.print();
+});
+</script>
+{% endblock %}

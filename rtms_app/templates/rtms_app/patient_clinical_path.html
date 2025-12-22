@@ -17,11 +17,19 @@
     .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
     
     .calendar-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .calendar-table th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; text-align: center; color: #495057; width: 14.28%; }
+    .calendar-table th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; text-align: center; color: #495057; }
     .calendar-table td { 
         border: 1px solid #dee2e6; padding: 5px; vertical-align: top; height: auto; min-height: 60px; 
         background-color: #fff; cursor: default; transition: background 0.1s;
     }
+    /* Column widths: weekdays wide, weekends narrow */
+    .calendar-table col.col-mon,
+    .calendar-table col.col-tue,
+    .calendar-table col.col-wed,
+    .calendar-table col.col-thu,
+    .calendar-table col.col-fri { width: 16%; }
+    .calendar-table col.col-sat { width: 10%; }
+    .calendar-table col.col-sun { width: 10%; }
     .calendar-table td.clickable { cursor: pointer; }
     .calendar-table td.clickable:hover { background-color: #f8f9fa; }
     
@@ -103,6 +111,15 @@
 
         <div class="table-responsive">
             <table class="calendar-table">
+                <colgroup>
+                    <col class="col-mon">
+                    <col class="col-tue">
+                    <col class="col-wed">
+                    <col class="col-thu">
+                    <col class="col-fri">
+                    <col class="col-sat">
+                    <col class="col-sun">
+                </colgroup>
                 <thead>
                     <tr>
                         <th class="text-primary">月</th>
