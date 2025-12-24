@@ -11,6 +11,11 @@ class Patient(models.Model):
     card_id = models.CharField("カルテ番号", max_length=20) 
     # ★追加: 何クール目か
     course_number = models.IntegerField("クール数", default=1)
+    PROTOCOL_CHOICES = [
+        ("INSURANCE", "保険診療プロトコル"),
+        ("PMS", "市販後調査プロトコル"),
+    ]
+    protocol_type = models.CharField("プロトコル", max_length=16, choices=PROTOCOL_CHOICES, default="INSURANCE")
     
     name = models.CharField("氏名", max_length=100)
     birth_date = models.DateField("生年月日")
@@ -155,6 +160,10 @@ class TreatmentSession(models.Model):
     meta = models.JSONField("メタ", default=dict, blank=True, null=True)
     performer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
 
+    def has_sae(self):
+        """重篤有害事象レコードが存在するかを判定"""
+        return hasattr(self, 'sae_records') and self.sae_records.exists()
+
     class Meta:
         verbose_name = "治療セッション"
         verbose_name_plural = "治療セッション"
@@ -265,6 +274,8 @@ class AssessmentRecord(models.Model):
     scores = models.JSONField("スコア", default=dict)
     total_score_21 = models.IntegerField("合計21", default=0)
     total_score_17 = models.IntegerField("合計17", default=0)
+    improvement_rate_17 = models.FloatField("改善率17", null=True, blank=True)
+    status_label = models.CharField("判定", max_length=16, blank=True, default="")
     note = models.TextField("特記", blank=True)
     meta = models.JSONField("メタ", default=dict, blank=True, null=True)
     created_at = models.DateTimeField("作成日時", auto_now_add=True)
@@ -299,6 +310,39 @@ class AssessmentRecord(models.Model):
             models.Index(fields=['scale', 'timing']),
         ]
 
+class SeriousAdverseEvent(models.Model):
+    """Serious adverse event tied to a treatment session.
+
+    Captures the event types and a snapshot of conditions at the time.
+    """
+    EVENT_CHOICES = [
+        ("seizure", "けいれん発作"),
+        ("finger_muscle", "手指の筋収縮"),
+        ("syncope", "失神"),
+        ("mania", "躁病・軽躁病の出現"),
+        ("suicide_attempt", "自殺企図"),
+        ("other", "その他"),
+    ]
+
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE)
+    course_number = models.IntegerField("クール数", default=1, db_index=True)
+    session = models.ForeignKey(TreatmentSession, on_delete=models.CASCADE, related_name="sae_records")
+    event_types = models.JSONField("イベント種別", default=list, blank=True)
+    other_text = models.TextField("その他詳細", blank=True, default="")
+    auto_snapshot = models.JSONField("スナップショット", default=dict, blank=True, null=True)
+    created_at = models.DateTimeField("作成日時", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "重篤有害事象"
+        verbose_name_plural = "重篤有害事象"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["patient", "course_number", "session"], name="unique_sae_per_session")
+        ]
+
+    def __str__(self) -> str:
+        return f"SAE patient={self.patient_id} session={self.session_id} {self.event_types}"
+
 class AuditLog(models.Model):
     ACTION_CHOICES = [
         ('CREATE', '作成'),
@@ -331,3 +375,91 @@ class AuditLog(models.Model):
             models.Index(fields=['patient']),
             models.Index(fields=['action']),
         ]
+
+
+class AdverseEventReport(models.Model):
+    """有害事象報告書（1セッション=1報告書想定）"""
+    
+    DIAGNOSIS_CHOICES = [
+        ("depressive_episode", "うつ病エピソード"),
+        ("recurrent_depressive_disorder", "反復性うつ病性障害"),
+        ("other", "その他"),
+    ]
+    
+    OUTCOME_CHOICES = [
+        ("recovery", "回復"),
+        ("improvement", "軽快"),
+        ("not_recovered", "未回復"),
+        ("sequelae", "後遺症"),
+        ("death", "死亡"),
+        ("unknown", "不明"),
+    ]
+    
+    SITE_CHOICES = [
+        ("left_dlpfc", "左DLPFC"),
+        ("other", "その他"),
+    ]
+    
+    # ForeignKey
+    session = models.OneToOneField(TreatmentSession, on_delete=models.CASCADE, related_name="adverse_event_report", verbose_name="治療セッション")
+    
+    # 事象タイプ（複数選択を保持）
+    event_types = models.JSONField("有害事象種別", default=list, blank=True, help_text="['seizure', 'finger_muscle', 'syncope', 'mania', 'suicide_attempt', 'other'] など")
+    
+    # 基本情報
+    adverse_event_name = models.CharField("有害事象名", max_length=200, blank=True)
+    onset_date = models.DateField("発現日", null=True, blank=True)
+    
+    # 患者情報
+    age = models.IntegerField("年齢", null=True, blank=True)
+    sex = models.CharField("性別", max_length=10, blank=True)
+    initials = models.CharField("イニシャル", max_length=20, blank=True)
+    
+    # 診断
+    diagnosis_category = models.CharField("診断分類", max_length=40, choices=DIAGNOSIS_CHOICES, default="depressive_episode")
+    diagnosis_other_text = models.CharField("診断その他", max_length=200, blank=True)
+    
+    # 併用情報
+    concomitant_meds_text = models.TextField("併用薬", blank=True)
+    substance_intake_text = models.TextField("薬物・アルコール・カフェイン摂取", blank=True)
+    
+    # 既往情報
+    seizure_history_flag = models.BooleanField("てんかん・けいれん発作既往", default=False)
+    seizure_history_date_text = models.CharField("けいれん発作既往時期", max_length=200, blank=True)
+    
+    # 治療パラメータ
+    rmt_value = models.IntegerField("安静運動閾値", null=True, blank=True, help_text="% 単位は不要")
+    intensity_value = models.IntegerField("刺激強度", null=True, blank=True, help_text="% 単位は不要")
+    stimulation_site_category = models.CharField("刺激部位分類", max_length=20, choices=SITE_CHOICES, default="left_dlpfc")
+    stimulation_site_other_text = models.CharField("刺激部位その他", max_length=100, blank=True)
+    
+    # 治療進捗
+    treatment_course_number = models.IntegerField("通算治療回数", null=True, blank=True, help_text="course 内での通算セッション番号")
+    
+    # 転帰
+    outcome_flags = models.JSONField("転帰", default=list, blank=True, help_text="['recovery', 'improvement'] など複数可")
+    outcome_sequelae_text = models.CharField("後遺症詳細", max_length=300, blank=True)
+    outcome_date = models.DateField("転帰日", null=True, blank=True)
+    
+    # その他
+    special_notes = models.TextField("特記事項", blank=True)
+    physician_comment = models.TextField("医師コメント", blank=True)
+    
+    # スナップショット（自動入力元を保存）
+    prefilled_snapshot = models.JSONField("プリフィル元スナップショット", default=dict, blank=True, null=True)
+    
+    # 管理
+    created_at = models.DateTimeField("作成日時", auto_now_add=True)
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+    
+    class Meta:
+        verbose_name = "有害事象報告書"
+        verbose_name_plural = "有害事象報告書"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["session"]),
+            models.Index(fields=["created_at"]),
+        ]
+    
+    def __str__(self):
+        return f"AdverseEventReport(session={self.session_id}) - {self.adverse_event_name or '未入力'}"

@@ -236,8 +236,17 @@
 
               <hr class="my-2">
 
+              <!-- 副作用入力ボタンを直上に配置 -->
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="fw-bold text-muted small">副作用チェック（確認刺激）</div>
+                <button type="button" class="btn btn-success btn-sm fw-bold"
+                        data-bs-toggle="modal" data-bs-target="#sideEffectModal">
+                  <i class="fas fa-notes-medical me-1"></i>副作用入力
+                </button>
+              </div>
+
               <!-- 下段：チェック（縦まとめ） + 備考（4/8） -->
-              <div class="row g-2 mt-2 align-items-end">
+              <div class="row g-2 align-items-end">
                 <div class="col-12 col-md-4">
                   <div class="d-flex flex-column gap-2">
                     <div class="form-check" style="min-height: 2.4rem; display:flex; align-items:center;">
@@ -318,6 +327,15 @@
 
               <hr class="my-2">
 
+              <!-- 副作用入力ボタンを直上に配置 -->
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="fw-bold text-muted small">副作用チェック</div>
+                <button type="button" class="btn btn-success btn-sm fw-bold"
+                        data-bs-toggle="modal" data-bs-target="#sideEffectModal">
+                  <i class="fas fa-notes-medical me-1"></i>副作用入力
+                </button>
+              </div>
+
               <div class="row g-2 align-items-end">
                 <div class="col-12 col-md-4">
                   <div class="d-flex flex-column gap-2">
@@ -360,11 +378,35 @@
                 </div>
               </div>
 
-              <div class="d-flex justify-content-end mt-2">
-                <button type="button" class="btn btn-success btn-sm fw-bold"
-                        data-bs-toggle="modal" data-bs-target="#sideEffectModal">
-                  <i class="fas fa-notes-medical me-1"></i>副作用入力
-                </button>
+              <hr class="my-2">
+
+              <div class="alert alert-danger" id="adverse-event-section">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <div class="fw-bold">重篤を含む有害事象（該当する場合チェック）</div>
+                  <button type="button" class="btn btn-danger btn-sm fw-bold" id="saeInputBtn"
+                          data-bs-toggle="modal" data-bs-target="#saeModal">
+                    <i class="fas fa-exclamation-triangle me-1"></i>有害事象入力・報告書
+                  </button>
+                </div>
+                <div class="small mb-2">※ 以下のいずれかがチェックされた場合、Brainsway社への報告書作成が必要です</div>
+                <div class="d-flex flex-wrap gap-2">
+                  <label class="form-check"><input class="form-check-input sae-check" type="checkbox" name="sae_seizure" id="sae_seizure" {% if sae_event_types_checked.sae_seizure %}checked{% endif %}><span class="form-check-label">けいれん発作</span></label>
+                  <label class="form-check"><input class="form-check-input sae-check" type="checkbox" name="sae_finger_muscle" id="sae_finger_muscle" {% if sae_event_types_checked.sae_finger_muscle %}checked{% endif %}><span class="form-check-label">手指の筋収縮</span></label>
+                  <label class="form-check"><input class="form-check-input sae-check" type="checkbox" name="sae_syncope" id="sae_syncope" {% if sae_event_types_checked.sae_syncope %}checked{% endif %}><span class="form-check-label">失神</span></label>
+                  <label class="form-check"><input class="form-check-input sae-check" type="checkbox" name="sae_mania" id="sae_mania" {% if sae_event_types_checked.sae_mania %}checked{% endif %}><span class="form-check-label">躁病・軽躁病の出現</span></label>
+                  <label class="form-check"><input class="form-check-input sae-check" type="checkbox" name="sae_suicide_attempt" id="sae_suicide_attempt" {% if sae_event_types_checked.sae_suicide_attempt %}checked{% endif %}><span class="form-check-label">自殺企図</span></label>
+                  <label class="form-check"><input class="form-check-input sae-check" type="checkbox" name="sae_other" id="sae_other" {% if sae_event_types_checked.sae_other %}checked{% endif %}><span class="form-check-label">その他</span></label>
+                </div>
+                <div class="mt-2">
+                  <label class="form-label small">その他 詳細</label>
+                  <input type="text" class="form-control form-control-sm" name="sae_other_text" id="sae_other_text" placeholder="その他の詳細を入力" value="{{ sae_other_text_value }}">
+                </div>
+              </div>
+
+              <div id="sae_notice" class="d-none alert alert-warning mt-2">
+                <div class="fw-bold"><i class="fas fa-bell me-1"></i>重篤を含む有害事象が発現した場合、速やかに報告書を作成し送付してください</div>
+                <div class="small">送付先：<a href="mailto:brainsway_saeinfo@cmi.co.jp">brainsway_saeinfo@cmi.co.jp</a></div>
+                <div class="small mt-1">上部の「有害事象入力・報告書」ボタンから詳細を入力し、報告書を印刷してください。</div>
               </div>
             </div>
 
@@ -377,7 +419,7 @@
 
 </div>
 
-<div class="modal fade" id="procedureWizardModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+<div class="modal fade" id="procedureWizardModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-session-id="{{ session.id|default:'' }}">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
@@ -430,22 +472,208 @@
   </div>
 </div>
 
+<!-- SAE入力モーダル -->
+<div class="modal fade" id="saeModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title"><i class="fas fa-exclamation-triangle me-2"></i>重篤を含む有害事象 報告書</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info">
+          <div class="fw-bold mb-1"><i class="fas fa-info-circle me-1"></i>送付先メールアドレス</div>
+          <div class="d-flex align-items-center gap-2">
+            <code class="bg-white px-2 py-1 rounded">brainsway_saeinfo@cmi.co.jp</code>
+            <small class="text-muted">印刷後、このアドレスへメールで送付してください</small>
+          </div>
+        </div>
+
+        <!-- チェックされた事象 -->
+        <div class="mb-3 border rounded p-2 bg-light">
+          <label class="form-label fw-bold small mb-2">該当する有害事象（チェック済み）</label>
+          <div id="saeCheckedEvents" class="d-flex flex-wrap gap-2">
+            <span class="text-muted small">事象をチェックしてください</span>
+          </div>
+        </div>
+
+        <!-- 基本情報 -->
+        <div class="row g-2 mb-3">
+          <div class="col-md-6">
+            <label class="form-label small mb-1 fw-bold">有害事象名 <span class="text-danger">*</span></label>
+            <input type="text" class="form-control form-control-sm" id="saeEventName" placeholder="具体的な事象名を入力">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small mb-1 fw-bold">発現日 <span class="text-danger">*</span></label>
+            <input type="date" class="form-control form-control-sm" id="saeOnsetDate" value="{{ sae_prefill.onset_date }}">
+          </div>
+        </div>
+
+        <!-- 患者情報 -->
+        <div class="row g-2 mb-3">
+          <div class="col-md-4">
+            <label class="form-label small mb-1">年齢</label>
+            <input type="number" class="form-control form-control-sm bg-light" id="saeAge" value="{{ sae_prefill.age }}" readonly>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small mb-1">性別</label>
+            <input type="text" class="form-control form-control-sm bg-light" id="saeGender" value="{{ sae_prefill.gender }}" readonly>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small mb-1">イニシャル</label>
+            <input type="text" class="form-control form-control-sm" id="saeInitials" placeholder="例: T.K." maxlength="10" value="{{ sae_prefill.initials }}">
+          </div>
+        </div>
+
+        <!-- 診断・併用薬 -->
+        <div class="mb-3">
+          <label class="form-label small mb-1 fw-bold">診断名</label>
+          <div class="d-flex gap-2 mb-2">
+            <label class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="saeDiagnosis" value="うつ病エピソード" {% if not sae_prefill.diagnosis or sae_prefill.diagnosis == 'うつ病エピソード' or 'うつ病' in sae_prefill.diagnosis %}checked{% endif %}>
+              <span class="form-check-label small">うつ病エピソード</span>
+            </label>
+            <label class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="saeDiagnosis" value="反復性うつ病性障害" {% if sae_prefill.diagnosis == '反復性うつ病性障害' %}checked{% endif %}>
+              <span class="form-check-label small">反復性うつ病性障害</span>
+            </label>
+            <label class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="saeDiagnosis" value="その他" {% if sae_prefill.diagnosis and sae_prefill.diagnosis != 'うつ病エピソード' and sae_prefill.diagnosis != '反復性うつ病性障害' and 'うつ病' not in sae_prefill.diagnosis %}checked{% endif %}>
+              <span class="form-check-label small">その他</span>
+            </label>
+          </div>
+          <input type="text" class="form-control form-control-sm" id="saeDiagnosisOther" placeholder="「その他」の場合、詳細を入力" value="{% if sae_prefill.diagnosis and sae_prefill.diagnosis != 'うつ病エピソード' and sae_prefill.diagnosis != '反復性うつ病性障害' and 'うつ病' not in sae_prefill.diagnosis %}{{ sae_prefill.diagnosis }}{% endif %}">
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label small mb-1">併用薬（向精神薬に限る）</label>
+          <textarea class="form-control form-control-sm" id="saeConcomitantMeds" rows="2" placeholder="薬剤名と用量を記載（複数可）">{{ sae_prefill.concomitant_meds }}</textarea>
+        </div>
+
+        <!-- 薬物・既往 -->
+        <div class="row g-2 mb-3">
+          <div class="col-md-6">
+            <label class="form-label small mb-1">薬物・アルコール・カフェイン摂取</label>
+            <input type="text" class="form-control form-control-sm" id="saeSubstanceUse" placeholder="摂取時間・量など" value="{{ sae_prefill.substance_use }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small mb-1">てんかん・けいれん発作の既往</label>
+            <div class="input-group input-group-sm">
+              <select class="form-select" id="saeSeizureHistory">
+                <option value="なし" selected>なし</option>
+                <option value="あり">あり</option>
+              </select>
+              <input type="text" class="form-control" id="saeSeizureHistoryDetail" placeholder="ありの場合、時期を記載">
+            </div>
+          </div>
+        </div>
+
+        <!-- 治療パラメータ -->
+        <div class="row g-2 mb-3">
+          <div class="col-md-3">
+            <label class="form-label small mb-1">安静運動閾値</label>
+            <input type="number" class="form-control form-control-sm" id="saeRMT" value="{{ sae_prefill.rmt }}" step="0.1">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">刺激強度（%MT）</label>
+            <input type="number" class="form-control form-control-sm" id="saeIntensity" value="{{ sae_prefill.intensity }}" step="0.1">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">刺激部位</label>
+            <select class="form-select form-select-sm" id="saeSite">
+              <option value="左前頭前野" {% if sae_prefill.site == '左前頭前野' %}selected{% endif %}>左前頭前野</option>
+              <option value="左DLPFC" {% if sae_prefill.site == '左DLPFC' %}selected{% endif %}>左DLPFC</option>
+              <option value="その他" {% if sae_prefill.site and sae_prefill.site != '左前頭前野' and sae_prefill.site != '左DLPFC' %}selected{% endif %}>その他</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-1">治療回数（○回目）</label>
+            <input type="number" class="form-control form-control-sm" id="saeTreatmentNumber" value="{{ sae_prefill.treatment_number }}">
+          </div>
+        </div>
+
+        <!-- 転帰 -->
+        <div class="row g-2 mb-3">
+          <div class="col-md-6">
+            <label class="form-label small mb-1 fw-bold">転帰 <span class="text-danger">*</span></label>
+            <select class="form-select form-select-sm" id="saeOutcome">
+              <option value="">選択してください</option>
+              <option value="回復">回復</option>
+              <option value="軽快">軽快</option>
+              <option value="未回復">未回復</option>
+              <option value="後遺症">後遺症（症状）</option>
+              <option value="死亡">死亡</option>
+              <option value="不明">不明</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small mb-1">転帰日</label>
+            <input type="date" class="form-control form-control-sm" id="saeOutcomeDate">
+          </div>
+        </div>
+
+        <!-- 特記事項・その他 -->
+        <div class="mb-3">
+          <label class="form-label small mb-1">特記事項など</label>
+          <textarea class="form-control form-control-sm" id="saeNotes" rows="2" placeholder="その他特記すべき事項を記載"></textarea>
+        </div>
+
+        <!-- 医師コメント -->
+        <div class="mb-3">
+          <label class="form-label small mb-1 fw-bold">医師コメント欄（発現から転帰までの補足説明など）</label>
+          <textarea class="form-control form-control-sm" id="saeDoctorComment" rows="4" placeholder="発現時の状況、対応内容、経過などを詳しく記載"></textarea>
+        </div>
+
+        <div class="alert alert-warning small">
+          <i class="fas fa-exclamation-triangle me-1"></i>
+          <span class="text-danger fw-bold">*</span> 印の項目は必須です。印刷プレビューで内容を確認後、印刷してメール送付してください。
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">閉じる</button>
+        <button type="button" class="btn btn-primary btn-sm" id="saePrintPreviewBtn">
+          <i class="fas fa-print me-1"></i>印刷プレビュー
+        </button>
+        <button type="button" class="btn btn-danger btn-sm" id="saeSaveBtn">
+          <i class="fas fa-save me-1"></i>データを保存
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% url 'rtms_app:dashboard' as dashboard_url %}
 <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
 <script src="{% static 'rtms_app/floating.js' %}"></script>
 
+<!-- Print Menu Modal -->
+<div class="modal fade" id="printMenuModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">印刷の種類を選択</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-grid gap-2">
+          <button type="button" class="btn btn-outline-primary" id="printSideEffectBtn">
+            <i class="fas fa-print me-2"></i>副作用チェック表印刷
+          </button>
+          <button type="button" class="btn btn-outline-danger" id="printAdverseEventBtn">
+            <i class="fas fa-exclamation-triangle me-2"></i>有害事象報告書印刷
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% if dashboard_date %}
   {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
     <div class="fab-stack no-print">
-      {% if side_effect_print_url %}
-      <a class="btn btn-primary fab" href="{{ side_effect_print_url }}">
-        <i class="fas fa-print"></i> 印刷プレビュー
-      </a>
-      {% else %}
-      <button type="submit" class="btn btn-primary fab" name="action" value="print" form="treatmentForm">
-        <i class="fas fa-print"></i> 印刷プレビュー
+      <button type="button" class="btn btn-primary fab" id="printTreatmentRecordBtn" onclick="window.printTreatmentRecord();">
+        <i class="fas fa-print"></i> 治療実施記録票（副作用チェック票）印刷
       </button>
-      {% endif %}
       <button type="submit" class="btn btn-treatment fab" form="treatmentForm">
         <i class="fas fa-save"></i> 保存
       </button>
@@ -456,15 +684,9 @@
   {% endwith %}
 {% else %}
   <div class="fab-stack no-print">
-    {% if side_effect_print_url %}
-    <a class="btn btn-primary fab" href="{{ side_effect_print_url }}">
-      <i class="fas fa-print"></i> 印刷プレビュー
-    </a>
-    {% else %}
-    <button type="submit" class="btn btn-primary fab" name="action" value="print" form="treatmentForm">
-      <i class="fas fa-print"></i> 印刷プレビュー
+    <button type="button" class="btn btn-primary fab" id="printTreatmentRecordBtn" onclick="window.printTreatmentRecord();">
+      <i class="fas fa-print"></i> 治療実施記録票（副作用チェック票）印刷
     </button>
-    {% endif %}
     <button type="submit" class="btn btn-treatment fab" form="treatmentForm">
       <i class="fas fa-save"></i> 保存
     </button>
@@ -476,6 +698,22 @@
 
 <script src="{% static 'rtms_app/side_effect_widget_v2.js' %}"></script>
 <script>
+  // 治療実施記録票（副作用チェック票）印刷
+  window.printTreatmentRecord = function() {
+    const form = document.getElementById('treatmentForm');
+    if (!form) {
+      alert('フォームが見つかりません');
+      return;
+    }
+    
+    const actionInput = document.createElement('input');
+    actionInput.type = 'hidden';
+    actionInput.name = 'action';
+    actionInput.value = 'print';
+    form.appendChild(actionInput);
+    form.submit();
+  };
+
   // Pass previous abnormal alert message for Step6 into wizard
   window.wizardConfirmAlertMessage = "{{ confirm_alert_message|default:''|escapejs }}";
   // Wizard context flags
@@ -514,6 +752,305 @@
     }, { once: true });
   });
 
+  // ---- SAE notice: show if any checkbox is checked ----
+  function updateSAENotice() {
+    const checks = document.querySelectorAll('.sae-check');
+    const notice = document.getElementById('sae_notice');
+    const saeBtn = document.getElementById('saeInputBtn');
+    const any = Array.from(checks).some(c => c.checked);
+    if (notice) notice.classList.toggle('d-none', !any);
+    // ボタンを強調表示
+    if (saeBtn) {
+      if (any) {
+        saeBtn.classList.add('btn-danger');
+        saeBtn.classList.remove('btn-outline-danger');
+      } else {
+        saeBtn.classList.remove('btn-danger');
+        saeBtn.classList.add('btn-outline-danger');
+      }
+    }
+  }
+
+  document.querySelectorAll('.sae-check').forEach(el => {
+    el.addEventListener('change', updateSAENotice);
+  });
+
+  document.addEventListener('DOMContentLoaded', updateSAENotice);
+
+  // セッションID（各処理で共有）
+  const sessionId = '{{ session.id|default:"" }}';
+
+  // ---- SAEモーダル：チェック状態を表示 ----
+  function updateSAEModal() {
+    const checks = document.querySelectorAll('.sae-check');
+    const checkedDiv = document.getElementById('saeCheckedEvents');
+    const checkedEvents = [];
+    
+    checks.forEach(c => {
+      if (c.checked) {
+        const label = c.parentElement.querySelector('.form-check-label');
+        if (label) checkedEvents.push(label.textContent);
+      }
+    });
+
+    if (checkedEvents.length > 0) {
+      checkedDiv.innerHTML = checkedEvents.map(e => 
+        `<span class="badge bg-danger me-1">${e}</span>`
+      ).join('');
+    } else {
+      checkedDiv.innerHTML = '<span class="text-muted small">事象をチェックしてください</span>';
+    }
+  }
+
+  // チェックボックス変更時にもバッジ表示を更新
+  document.querySelectorAll('.sae-check').forEach(check => {
+    check.addEventListener('change', () => {
+      if (document.getElementById('saeModal')?.classList.contains('show')) {
+        updateSAEModal();
+      }
+    });
+  });
+
+  // SAEモーダル表示時にチェック状態を更新
+  const saeModal = document.getElementById('saeModal');
+  if (saeModal) {
+    saeModal.addEventListener('show.bs.modal', () => {
+      updateSAEModal();
+    });
+  }
+
+  // SAE保存ボタン
+  const saeSaveBtn = document.getElementById('saeSaveBtn');
+  if (saeSaveBtn) {
+    saeSaveBtn.addEventListener('click', () => {
+      // バリデーション
+      const eventName = (document.getElementById('saeEventName')?.value || '').trim();
+      const onsetDate = document.getElementById('saeOnsetDate')?.value;
+      const outcome = document.getElementById('saeOutcome')?.value;
+      
+      if (!eventName) {
+        alert('有害事象名を入力してください。');
+        return;
+      }
+      if (!onsetDate) {
+        alert('発現日を入力してください。');
+        return;
+      }
+      if (!outcome) {
+        alert('転帰を選択してください。');
+        return;
+      }
+
+      // モーダルからデータを取得
+      const formData = new FormData();
+      formData.append('event_name', eventName);
+      formData.append('onset_date', onsetDate);
+      formData.append('age', document.getElementById('saeAge')?.value || '');
+      formData.append('gender', document.getElementById('saeGender')?.value || '');
+      formData.append('initials', document.getElementById('saeInitials')?.value || '');
+      formData.append('diagnosis', document.querySelector('input[name="saeDiagnosis"]:checked')?.value || '');
+      formData.append('diagnosis_other', document.getElementById('saeDiagnosisOther')?.value || '');
+      formData.append('concomitant_meds', document.getElementById('saeConcomitantMeds')?.value || '');
+      formData.append('substance_use', document.getElementById('saeSubstanceUse')?.value || '');
+      formData.append('seizure_history', document.getElementById('saeSeizureHistory')?.value || '');
+      formData.append('seizure_history_detail', document.getElementById('saeSeizureHistoryDetail')?.value || '');
+      formData.append('rmt', document.getElementById('saeRMT')?.value || '');
+      formData.append('intensity', document.getElementById('saeIntensity')?.value || '');
+      formData.append('site', document.getElementById('saeSite')?.value || '');
+      formData.append('treatment_number', document.getElementById('saeTreatmentNumber')?.value || '');
+      formData.append('outcome', outcome);
+      formData.append('outcome_date', document.getElementById('saeOutcomeDate')?.value || '');
+      formData.append('notes', document.getElementById('saeNotes')?.value || '');
+      formData.append('doctor_comment', document.getElementById('saeDoctorComment')?.value || '');
+      
+      // セッションIDを取得（グローバル定義を利用）
+      if (!sessionId) {
+        alert('セッション情報が見つかりません。');
+        return;
+      }
+
+      // CSRF token を追加
+      const csrfToken = document.querySelector('[name="csrfmiddlewaretoken"]')?.value;
+      if (csrfToken) {
+        formData.append('csrfmiddlewaretoken', csrfToken);
+      }
+
+      // POSTリクエストを送信
+      fetch(`/app/session/${sessionId}/adverse-event/`, {
+        method: 'POST',
+        body: formData,
+      })
+        .then(res => {
+          if (res.ok) {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('saeModal'));
+            if (modal) modal.hide();
+            alert('有害事象報告書が保存されました。印刷プレビューから確認してください。');
+            
+            // 印刷プレビューボタンを有効化
+            const printBtn = document.getElementById('saePrintPreviewBtn');
+            if (printBtn) {
+              printBtn.disabled = false;
+              printBtn.classList.remove('disabled');
+            }
+          } else {
+            alert('保存に失敗しました。もう一度お試しください。');
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          alert('保存中にエラーが発生しました。');
+        });
+    });
+  }
+
+  // 印刷メニュー処理
+  const sideEffectPrintUrl = '{{ side_effect_print_url|default:"" }}';
+
+  // 副作用チェック表印刷ボタン
+  const printSideEffectBtn = document.getElementById('printSideEffectBtn');
+  if (printSideEffectBtn) {
+    printSideEffectBtn.addEventListener('click', () => {
+      // モーダルを閉じて副作用チェック表へ遷移
+      const printMenuModal = bootstrap.Modal.getInstance(document.getElementById('printMenuModal'));
+      if (printMenuModal) printMenuModal.hide();
+
+      if (sideEffectPrintUrl) {
+        window.location.href = sideEffectPrintUrl;
+      } else {
+        // フォーム送信で副作用チェック表を出力
+        const form = document.getElementById('treatmentForm');
+        if (form) {
+          const actionInput = document.createElement('input');
+          actionInput.type = 'hidden';
+          actionInput.name = 'action';
+          actionInput.value = 'print';
+          form.appendChild(actionInput);
+          form.submit();
+          // 送信後に input を削除（念のため）
+          actionInput.remove();
+        } else {
+          alert('フォームが見つかりません');
+        }
+      }
+    });
+  }
+
+  // 有害事象報告書印刷ボタン
+  const printAdverseEventBtn = document.getElementById('printAdverseEventBtn');
+  if (printAdverseEventBtn) {
+    printAdverseEventBtn.addEventListener('click', () => {
+      // モーダルを閉じて、有害事象報告書の処理へ
+      const printMenuModal = bootstrap.Modal.getInstance(document.getElementById('printMenuModal'));
+      if (printMenuModal) printMenuModal.hide();
+
+      if (!sessionId) {
+        alert('セッションが見つかりません。');
+        return;
+      }
+
+      // 有害事象報告書が既に存在するか確認（GET）
+      fetch(`/app/session/${sessionId}/adverse-event/print/`)
+        .then(response => {
+          if (response.ok) {
+            // 報告書が存在 → 印刷ページへ
+            window.location.href = `/app/session/${sessionId}/adverse-event/print/`;
+          } else if (response.status === 404) {
+            // 報告書が未作成 → 入力画面へ
+            window.location.href = `/app/session/${sessionId}/adverse-event/`;
+          } else {
+            throw new Error('有害事象報告書の確認でエラーが発生しました');
+          }
+        })
+        .catch(() => {
+          alert('有害事象報告書の確認に失敗しました。');
+        });
+    });
+  }
+
+  // SAE印刷プレビューボタン（モーダル内の古いボタン）
+  const saePrintPreviewBtn = document.getElementById('saePrintPreviewBtn');
+  if (saePrintPreviewBtn) {
+    saePrintPreviewBtn.addEventListener('click', () => {
+      // モーダルからデータを収集
+      const formData = new FormData();
+      const checks = document.querySelectorAll('.sae-check:checked');
+      checks.forEach(c => {
+        const label = c.parentElement.querySelector('.form-check-label');
+        if (label) formData.append('checked_events[]', label.textContent);
+      });
+      
+      // 各フィールドの値を収集
+      const fields = {
+        'event_name': 'saeEventName',
+        'onset_date': 'saeOnsetDate',
+        'age': 'saeAge',
+        'gender': 'saeGender',
+        'initials': 'saeInitials',
+        'diagnosis': 'saeDiagnosis',
+        'diagnosis_other': 'saeDiagnosisOther',
+        'concomitant_meds': 'saeConcomitantMeds',
+        'substance_use': 'saeSubstanceUse',
+        'seizure_history': 'saeSeizureHistory',
+        'seizure_history_detail': 'saeSeizureHistoryDetail',
+        'rmt': 'saeRMT',
+        'intensity': 'saeIntensity',
+        'site': 'saeSite',
+        'treatment_number': 'saeTreatmentNumber',
+        'outcome': 'saeOutcome',
+        'outcome_date': 'saeOutcomeDate',
+        'notes': 'saeNotes',
+        'doctor_comment': 'saeDoctorComment'
+      };
+      
+      // 診断名の処理（ラジオボタン）
+      const diagnosisRadio = document.querySelector('input[name="saeDiagnosis"]:checked');
+      if (diagnosisRadio) {
+        let diagnosis = diagnosisRadio.value;
+        if (diagnosis === 'その他') {
+          const diagnosisOther = document.getElementById('saeDiagnosisOther');
+          if (diagnosisOther && diagnosisOther.value) {
+            diagnosis = diagnosisOther.value;
+          }
+        }
+        formData.append('diagnosis', diagnosis);
+      }
+      
+      // 他のフィールドを収集
+      Object.keys(fields).forEach(key => {
+        if (key === 'diagnosis' || key === 'diagnosis_other') return; // 既に処理済み
+        const element = document.getElementById(fields[key]);
+        if (element) {
+          formData.append(key, element.value || '');
+        }
+      });
+      
+      // CSRFトークンを追加
+      const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+      formData.append('csrfmiddlewaretoken', csrfToken);
+      formData.append('patient_id', '{{ patient.id }}');
+      formData.append('session_id', '{{ session.id|default:"" }}');
+      
+      // 新しいウィンドウで印刷プレビューを開く
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '{% url "rtms_app:adverse_event_report_print_preview" %}';
+      form.target = '_blank';
+      
+      // FormDataをフォームに追加
+      for (let [key, value] of formData.entries()) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = value;
+        form.appendChild(input);
+      }
+      
+      document.body.appendChild(form);
+      form.submit();
+      document.body.removeChild(form);
+    });
+  }
+
   // ---- 確認/治療刺激：チェックONで対処表示 ----
   function updateActions() {
     const cd = document.getElementById('confirm_discomfort')?.checked;
@@ -543,6 +1080,41 @@
   
   document.addEventListener('DOMContentLoaded', () => {
     updateActions();
+
+    // SAE prefill: site/diagnosis/initials
+    const saeSiteSelect = document.getElementById('saeSite');
+    const prefillSite = "{{ sae_prefill.site|default:''|escapejs }}";
+    if (saeSiteSelect && prefillSite) {
+      const hasOption = Array.from(saeSiteSelect.options || []).some(o => o.value === prefillSite);
+      if (!hasOption) {
+        saeSiteSelect.add(new Option(prefillSite, prefillSite, true, true), 0);
+      } else {
+        saeSiteSelect.value = prefillSite;
+      }
+    }
+
+    const diagnosisValue = "{{ sae_prefill.diagnosis|default:''|escapejs }}";
+    if (diagnosisValue) {
+      const radios = document.querySelectorAll('input[name="saeDiagnosis"]');
+      let matched = false;
+      radios.forEach(r => {
+        if (r.value === diagnosisValue) {
+          r.checked = true;
+          matched = true;
+        }
+      });
+      if (!matched) {
+        const other = Array.from(radios).find(r => r.value === 'その他');
+        if (other) other.checked = true;
+        const otherInput = document.getElementById('saeDiagnosisOther');
+        if (otherInput) otherInput.value = diagnosisValue;
+      }
+    }
+
+    const initialsInput = document.getElementById('saeInitials');
+    if (initialsInput && !initialsInput.value) {
+      initialsInput.value = "{{ sae_prefill.initials|default:''|escapejs }}";
+    }
     
     // MT percent defaults
     const mtPercentInput = document.getElementById('id_mt_percent');

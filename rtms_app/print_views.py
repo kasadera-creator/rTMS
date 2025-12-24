@@ -429,5 +429,10 @@ def print_side_effect_check(request, patient_id, session_id):
 		'side_effect_signature': signature,
 		'today': timezone.now().date(),
 		'back_url': back_url,
+		# Treatment parameters for display
+		'coil_type': getattr(session, 'coil_type', 'BrainsWay H1 coil') or 'BrainsWay H1 coil',
+		'frequency_hz': getattr(session, 'frequency_hz', ''),
+		'mt_percent': getattr(session, 'mt_percent', ''),
+		'total_pulses': getattr(session, 'total_pulses', ''),
 	}
 	return render(request, 'rtms_app/print/side_effect_check.html', context)

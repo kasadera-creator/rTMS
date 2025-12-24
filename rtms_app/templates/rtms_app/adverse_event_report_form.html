@@ -1,0 +1,207 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>有害事象報告書</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .form-label { font-weight: 500; font-size: 0.9rem; }
+        .readonly-field { background-color: #f8f9fa; }
+        .section-title { font-weight: bold; background-color: #e2e3e5; padding: 8px; margin-top: 15px; }
+        @media print {
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container py-4">
+        <h2 class="mb-3"><i class="fas fa-clipboard"></i>有害事象報告書</h2>
+        
+        <form method="post" id="reportForm" class="bg-white p-4 rounded shadow-sm">
+            {% csrf_token %}
+            
+            <!-- 基本情報 -->
+            <div class="section-title">基本情報</div>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">有害事象名 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" name="adverse_event_name" required>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">発現日 <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" name="onset_date" value="{{ prefill.onset_date }}" required>
+                </div>
+            </div>
+            
+            <!-- 患者情報 -->
+            <div class="section-title">患者情報</div>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">年齢</label>
+                    <input type="number" class="form-control readonly-field" name="age" value="{{ prefill.age }}" readonly>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">性別</label>
+                    <input type="text" class="form-control readonly-field" name="sex" value="{{ prefill.sex }}" readonly>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">イニシャル</label>
+                    <input type="text" class="form-control" name="initials" value="{{ prefill.initials }}" maxlength="20">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">診断</label>
+                    <select class="form-select" name="diagnosis_category" required>
+                        <option value="depressive_episode" {% if prefill.diagnosis == 'depressive_episode' %}selected{% endif %}>うつ病エピソード</option>
+                        <option value="recurrent_depressive_disorder">反復性うつ病性障害</option>
+                        <option value="other">その他</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- 診断その他 -->
+            <div class="row g-3 mt-1">
+                <div class="col-12">
+                    <label class="form-label">診断その他</label>
+                    <input type="text" class="form-control" name="diagnosis_other_text" placeholder="「その他」の場合詳細を入力">
+                </div>
+            </div>
+            
+            <!-- 併用薬・摂取 -->
+            <div class="section-title">併用薬・摂取</div>
+            <div class="row g-3">
+                <div class="col-12">
+                    <label class="form-label">併用薬（向精神薬に限る）</label>
+                    <textarea class="form-control" name="concomitant_meds_text" rows="2">{{ prefill.concomitant_meds }}</textarea>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">薬物・アルコール・カフェイン摂取</label>
+                    <textarea class="form-control" name="substance_intake_text" rows="2">{{ prefill.substance_use }}</textarea>
+                </div>
+            </div>
+            
+            <!-- 既往情報 -->
+            <div class="section-title">既往情報</div>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="seizure_history" name="seizure_history_flag">
+                        <label class="form-check-label" for="seizure_history">てんかん・けいれん発作既往</label>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">けいれん発作既往時期</label>
+                    <input type="text" class="form-control" name="seizure_history_date_text" placeholder="時期を記載">
+                </div>
+            </div>
+            
+            <!-- 治療パラメータ -->
+            <div class="section-title">治療パラメータ</div>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">安静運動閾値</label>
+                    <input type="number" class="form-control" name="rmt_value" value="{{ prefill.rmt }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">刺激強度</label>
+                    <input type="number" class="form-control" name="intensity_value" value="{{ prefill.intensity }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">刺激部位</label>
+                    <select class="form-select" name="stimulation_site_category">
+                        <option value="left_dlpfc" selected>左DLPFC</option>
+                        <option value="other">その他</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">治療回数</label>
+                    <input type="number" class="form-control readonly-field" name="treatment_course_number" value="{{ prefill.treatment_number }}" readonly>
+                </div>
+            </div>
+            
+            <!-- 刺激部位その他 -->
+            <div class="row g-3 mt-1">
+                <div class="col-12">
+                    <label class="form-label">刺激部位その他</label>
+                    <input type="text" class="form-control" name="stimulation_site_other_text">
+                </div>
+            </div>
+            
+            <!-- 転帰 -->
+            <div class="section-title">転帰</div>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">転帰</label>
+                    <select class="form-select" name="outcome_flags">
+                        <option value="">選択してください</option>
+                        <option value="recovery">回復</option>
+                        <option value="improvement">軽快</option>
+                        <option value="not_recovered">未回復</option>
+                        <option value="sequelae">後遺症</option>
+                        <option value="death">死亡</option>
+                        <option value="unknown">不明</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">転帰日</label>
+                    <input type="date" class="form-control" name="outcome_date">
+                </div>
+            </div>
+            
+            <!-- 後遺症詳細 -->
+            <div class="row g-3 mt-1">
+                <div class="col-12">
+                    <label class="form-label">後遺症詳細</label>
+                    <input type="text" class="form-control" name="outcome_sequelae_text">
+                </div>
+            </div>
+            
+            <!-- 特記事項 -->
+            <div class="section-title">特記事項</div>
+            <div class="row g-3">
+                <div class="col-12">
+                    <textarea class="form-control" name="special_notes" rows="3" placeholder="特記事項を入力"></textarea>
+                </div>
+            </div>
+            
+            <!-- 医師コメント -->
+            <div class="section-title">医師コメント</div>
+            <div class="row g-3">
+                <div class="col-12">
+                    <textarea class="form-control" name="physician_comment" rows="4" placeholder="発現から転帰までの補足説明を入力"></textarea>
+                </div>
+            </div>
+            
+            <!-- 施設情報（固定表示） -->
+            <div class="section-title">施設情報（固定）</div>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">施設名</label>
+                    <input type="text" class="form-control readonly-field" value="{{ facility_name }}" readonly>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">TEL</label>
+                    <input type="text" class="form-control readonly-field" value="{{ facility_phone }}" readonly>
+                </div>
+            </div>
+            
+            <!-- フッタボタン -->
+            <div class="no-print mt-4 d-flex gap-2 justify-content-between">
+                <div>
+                    <a href="javascript:window.history.back()" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>戻る
+                    </a>
+                </div>
+                <div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>保存して印刷プレビューへ
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -97,6 +97,10 @@
         <div class="fw-bold">
           HAM-D17 合計：<span id="hamd17Total" style="color: var(--color-assessment);">0</span> 点
           <span class="ms-2">重症度：<span id="hamd17Severity" class="text-primary">正常</span></span>
+          {% if initial_timing != 'baseline' %}
+            <span class="ms-2">改善率：<span id="hamd17Improvement" class="text-success">-</span></span>
+            <span class="ms-2">判定：<span id="hamd17Status" class="text-danger">-</span></span>
+          {% endif %}
         </div>
         <div class="text-muted small">
           HAM-D17 参考基準: 0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23-:最重症
@@ -108,4 +112,17 @@
 
 {% block scripts %}
 <script src="{% static 'rtms_app/hamd_widget.js' %}"></script>
+<script>
+  {% if initial_timing == 'baseline' %}
+    window.HAMD_SHOW_IMPROVEMENT = false;
+    window.HAMD_BASELINE_17 = null;
+  {% else %}
+    window.HAMD_SHOW_IMPROVEMENT = true;
+    {% if baseline_score_17 is not None %}
+      window.HAMD_BASELINE_17 = {{ baseline_score_17 }};
+    {% else %}
+      window.HAMD_BASELINE_17 = null;
+    {% endif %}
+  {% endif %}
+</script>
 {% endblock %}

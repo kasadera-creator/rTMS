@@ -1,0 +1,335 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>重篤を含む有害事象 報告書</title>
+
+  <style>
+    /* ===== 印刷設定 ===== */
+    @page { size: A4; margin: 12mm; }
+    html, body { height: 100%; }
+    body {
+      font-family: "Yu Gothic", "游ゴシック", "Hiragino Sans", "ヒラギノ角ゴシック", sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.35;
+      color: #000;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* 画面表示の見やすさ（印刷には影響させない） */
+    @media screen {
+      body { background: #eee; padding: 16px; }
+      .sheet { background: #fff; max-width: 210mm; margin: 0 auto; padding: 12mm; box-shadow: 0 0 10px rgba(0,0,0,.12); }
+      .no-print { position: sticky; top: 12px; display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 10px; }
+      .btn { padding: 8px 12px; border: 1px solid #999; background: #fff; cursor: pointer; border-radius: 6px; }
+      .btn.primary { border-color: #1a73e8; color: #1a73e8; }
+    }
+    @media print {
+      .no-print { display: none !important; }
+      .sheet { padding: 0; box-shadow: none; }
+      a { color: #000; text-decoration: none; }
+    }
+
+    /* ===== 見出し ===== */
+    .topline { text-align: right; font-size: 9.5pt; margin-bottom: 4px; }
+    .system-title { text-align: center; font-size: 12pt; margin: 2px 0; }
+    .guideline { text-align: center; font-size: 10pt; margin: 0 0 8px; }
+
+    .main-title-box {
+      border: 2px solid #1f4e79; /* PDFの青枠っぽく */
+      padding: 10px 8px;
+      text-align: center;
+      margin: 8px 0 6px;
+    }
+    .main-title {
+      font-size: 16pt;
+      font-weight: 700;
+      letter-spacing: .5px;
+      margin: 0;
+    }
+    .event-checkline {
+      margin-top: 6px;
+      font-size: 10pt;
+    }
+    .event-checkline .box { display:inline-block; margin: 0 6px 0 0; }
+    .checkbox {
+      display:inline-block; width: 10px; height: 10px; border: 1px solid #000;
+      margin-right: 4px; vertical-align: -1px;
+    }
+    .checkbox.checked { background: #000; }
+
+    /* ===== 注意枠（赤枠） ===== */
+    .notice {
+      border: 2px solid #d00000;
+      padding: 8px 10px;
+      margin: 8px 0 10px;
+      font-size: 10pt;
+    }
+    .notice .email {
+      font-weight: 700;
+      text-decoration: underline;
+    }
+
+    /* ===== メイン表 ===== */
+    table.form {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      margin-top: 4px;
+    }
+    table.form th, table.form td {
+      border: 1px solid #000;
+      padding: 6px 6px;
+      vertical-align: top;
+      word-break: break-word;
+    }
+    table.form th {
+      background: #efefef;
+      font-weight: 700;
+      text-align: center;
+    }
+    .mini { font-size: 9.5pt; }
+    .value { min-height: 18px; }
+    .muted { color: #666; }
+
+    /* 各セル内の"区切り見出し" */
+    .blk-title { font-weight: 700; margin: 0 0 4px; }
+    .opt { margin: 1px 0; }
+    .opt .checkbox { margin-right: 6px; }
+
+    /* ===== コメント罫線 ===== */
+    .comment-title { margin: 10px 0 6px; font-size: 10pt; }
+    .comment-box {
+      border: 1px solid #000;
+      min-height: 85mm;
+      position: relative;
+      padding: 8px;
+      /* 罫線：点線を繰り返す */
+      background-image: repeating-linear-gradient(
+        to bottom,
+        transparent,
+        transparent 15px,
+        rgba(0,0,0,.25) 15px,
+        rgba(0,0,0,.25) 16px
+      );
+      background-clip: content-box;
+    }
+    .comment-text {
+      white-space: pre-wrap;
+      position: relative;
+      z-index: 1;
+      min-height: 65mm;
+    }
+
+    /* ===== フッタ（施設情報） ===== */
+    .footer {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin: 10px 0 6px;
+      font-size: 10pt;
+    }
+    .footer .item { white-space: nowrap; }
+    .contact-missing {
+      background-color: #ffe6e6;
+      color: #d9534f;
+      font-weight: bold;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="no-print">
+    <button class="btn primary" onclick="window.print()">印刷</button>
+    <button class="btn" onclick="window.close()">閉じる</button>
+  </div>
+
+  <div class="sheet">
+    <div class="topline">別紙</div>
+    <div class="system-title">Brainsway TMS システム</div>
+    <div class="guideline">〔経頭蓋治療用磁気刺激装置(rTMS)の適正使用指針〕</div>
+
+    <div class="main-title-box">
+      <div class="main-title">重篤を含む有害事象　報告書</div>
+
+      <div class="event-checkline">
+        （
+        <span class="box">
+          {% if checked_events and 'けいれん発作' in checked_events %}
+            <span class="checkbox checked"></span>けいれん発作
+          {% else %}
+            <span class="checkbox"></span>けいれん発作
+          {% endif %}
+        </span>
+        <span class="box">
+          {% if checked_events and '手指の筋収縮' in checked_events %}
+            <span class="checkbox checked"></span>手指の筋収縮
+          {% else %}
+            <span class="checkbox"></span>手指の筋収縮
+          {% endif %}
+        </span>
+        <span class="box">
+          {% if checked_events and '失神' in checked_events %}
+            <span class="checkbox checked"></span>失神
+          {% else %}
+            <span class="checkbox"></span>失神
+          {% endif %}
+        </span>
+        <span class="box">
+          {% if checked_events and '躁病・軽躁病の出現' in checked_events %}
+            <span class="checkbox checked"></span>躁病・軽躁病の出現
+          {% else %}
+            <span class="checkbox"></span>躁病・軽躁病の出現
+          {% endif %}
+        </span>
+        <span class="box">
+          {% if checked_events and '自殺企図' in checked_events %}
+            <span class="checkbox checked"></span>自殺企図
+          {% else %}
+            <span class="checkbox"></span>自殺企図
+          {% endif %}
+        </span>
+        <span class="box">
+          {% if checked_events and 'その他' in checked_events %}
+            <span class="checkbox checked"></span>その他
+          {% else %}
+            <span class="checkbox"></span>その他
+          {% endif %}
+        </span>
+        ）
+      </div>
+    </div>
+
+    <div class="notice">
+      けいれん発作、手指の筋収縮、失神、躁病・軽躁病の出現、自殺企図など、重篤を含む有害事象が発現した場合、
+      速やかに報告書を作成し、Brainsway 使用成績調査窓口まで送付してください。<br>
+      ＜送付先メールアドレス＞ <span class="email">brainsway_saeinfo@cmi.co.jp</span>（Brainsway 使用成績調査 窓口）
+    </div>
+
+    <!-- 上段：有害事象名 / 発現日 -->
+    <table class="form">
+      <tr>
+        <th style="width: 22%;">有害事象名</th>
+        <td style="width: 50%;">
+          <div class="value">{{ event_name|default:"" }}</div>
+        </td>
+        <th style="width: 12%;">発現日</th>
+        <td style="width: 16%;">
+          <div class="value">{{ onset_date|default:"" }}</div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- メイン表：PDFの大きい表を再現 -->
+    <table class="form">
+      <colgroup>
+        <col style="width: 14%;">
+        <col style="width: 28%;">
+        <col style="width: 18%;">
+        <col style="width: 14%;">
+        <col style="width: 26%;">
+      </colgroup>
+      <tr>
+        <th>年齢<br>性別<br>イニシャル</th>
+        <th>診断名<br>併用薬<br>薬物・アルコール・カフェイン摂取<br>てんかん・けいれん発作の既往</th>
+        <th>安静運動閾値<br>刺激強度<br>刺激部位<br>治療回数</th>
+        <th>転　帰</th>
+        <th>特記事項など</th>
+      </tr>
+
+      <tr>
+        <!-- 年齢/性別/イニシャル -->
+        <td class="mini">
+          <div class="value">{{ age|default:"" }}{% if age %} 歳{% endif %}</div>
+          <div class="value">
+            {{ gender|default:"" }}
+          </div>
+          <div class="value">{{ initials|default:"" }}</div>
+        </td>
+
+        <!-- 診断/薬/摂取/既往 -->
+        <td class="mini">
+          <div class="blk-title">[診断名]</div>
+          <div class="opt"><span class="checkbox {% if diagnosis == 'うつ病エピソード' %}checked{% endif %}"></span>うつ病エピソード</div>
+          <div class="opt"><span class="checkbox {% if diagnosis == '反復性うつ病性障害' %}checked{% endif %}"></span>反復性うつ病性障害</div>
+          <div class="opt"><span class="checkbox {% if diagnosis != 'うつ病エピソード' and diagnosis != '反復性うつ病性障害' and diagnosis %}checked{% endif %}"></span>その他（{% if diagnosis != 'うつ病エピソード' and diagnosis != '反復性うつ病性障害' %}{{ diagnosis }}{% endif %}）</div>
+
+          <div style="height:6px;"></div>
+          <div class="blk-title">[併用薬] <span class="muted">（向精神薬に限る）</span></div>
+          <div class="value" style="white-space:pre-wrap;">{{ concomitant_meds|default:"" }}</div>
+
+          <div style="height:6px;"></div>
+          <div class="blk-title">[摂取]</div>
+          <div class="value" style="white-space:pre-wrap;">{{ substance_use|default:"" }}</div>
+
+          <div style="height:6px;"></div>
+          <div class="blk-title">[てんかん・けいれん発作の既往]</div>
+          <div class="opt"><span class="checkbox {% if seizure_history == 'あり' %}checked{% endif %}"></span>あり（{{ seizure_history_detail|default:"" }}）</div>
+          <div class="opt"><span class="checkbox {% if seizure_history == 'なし' or not seizure_history %}checked{% endif %}"></span>なし</div>
+        </td>
+
+        <!-- RMT/強度/部位/回数 -->
+        <td class="mini">
+          <div class="blk-title">[安静運動閾値]</div>
+          <div class="value">出力{{ rmt|default:"" }}</div>
+
+          <div style="height:6px;"></div>
+          <div class="blk-title">[刺激強度]</div>
+          <div class="value">出力{{ intensity|default:"" }}%MT</div>
+
+          <div style="height:6px;"></div>
+          <div class="blk-title">[刺激部位]</div>
+          <div class="opt"><span class="checkbox {% if site == '左前頭前野' or site == '左DLPFC' %}checked{% endif %}"></span>左前頭前野</div>
+          <div class="opt"><span class="checkbox {% if site != '左前頭前野' and site != '左DLPFC' and site %}checked{% endif %}"></span>その他（{% if site != '左前頭前野' and site != '左DLPFC' %}{{ site }}{% endif %}）</div>
+
+          <div style="height:6px;"></div>
+          <div class="blk-title">[治療回数]</div>
+          <div class="value">{{ treatment_number|default:"" }}回目に発生</div>
+        </td>
+
+        <!-- 転帰 -->
+        <td class="mini">
+          <div class="opt"><span class="checkbox {% if outcome == '回復' %}checked{% endif %}"></span>回復</div>
+          <div class="opt"><span class="checkbox {% if outcome == '軽快' %}checked{% endif %}"></span>軽快</div>
+          <div class="opt"><span class="checkbox {% if outcome == '未回復' %}checked{% endif %}"></span>未回復</div>
+          <div class="opt"><span class="checkbox {% if outcome == '後遺症' %}checked{% endif %}"></span>後遺症（症状：{{ outcome_sequelae|default:"" }}）</div>
+          <div class="opt"><span class="checkbox {% if outcome == '死亡' %}checked{% endif %}"></span>死亡</div>
+          <div class="opt"><span class="checkbox {% if outcome == '不明' %}checked{% endif %}"></span>不明</div>
+
+          <div style="height:6px;"></div>
+          <div class="blk-title">[転帰日]</div>
+          <div class="value">{{ outcome_date|default:"" }}</div>
+        </td>
+
+        <!-- 特記事項 -->
+        <td class="mini">
+          <div class="value" style="min-height: 120px; white-space:pre-wrap;">{{ notes|default:"" }}</div>
+        </td>
+      </tr>
+    </table>
+
+    <div class="footer">
+      <div class="item">施設名：{{ facility_name }}</div>
+      <div class="item">TEL: {{ facility_phone }}</div>
+      <div class="item">
+        担当者：
+        {% if contact_missing %}
+          <span class="contact-missing">未設定</span>
+        {% else %}
+          {{ contact_person }}
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="comment-title">〔医師コメント欄：発現から転帰までの補足説明など〕</div>
+    <div class="comment-box">
+      <div class="comment-text">{{ doctor_comment|default:"" }}</div>
+    </div>
+  </div>
+</body>
+</html>

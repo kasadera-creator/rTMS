@@ -610,23 +610,70 @@ class ProcedureWizard {
   }
 
   renderStep8() {
+    // 有害事象チェック状態（治療画面のチェックも併用）
+    const baseChecks = document.querySelectorAll('.sae-check');
+    const anyChecked = Array.from(baseChecks).some(cb => cb.checked);
+    const alertClass = anyChecked ? 'alert-warning' : 'alert-info';
+    const alertIcon = anyChecked ? 'fa-exclamation-triangle text-danger' : 'fa-info-circle';
+    const alertText = anyChecked ? '<strong class="text-danger">有害事象がチェックされています。報告書の作成・印刷を行ってください。</strong>' : '';
+
     return `
-      <h5 class="mb-3">Step 8: 片付け</h5>
+      <h5 class="mb-3">Step 8: 片付け・副作用／有害事象の確認</h5>
       <div class="alert alert-info small">
-        <strong>手順</strong>
+        <strong>片付け手順</strong>
         <ul class="mb-0 mt-2">
           <li>ヘルメット・ヘッドキャップを外す</li>
           <li>冷却装置をOFF</li>
           <li>患者さんから装置を全て外す</li>
         </ul>
       </div>
+
       <div class="mt-3 p-3 bg-warning bg-opacity-10 rounded">
-        <strong class="text-danger">重要:</strong>
-        <span class="small">下のボタンから副作用チェック表を開き、入力してください。</span>
-        <div class="mt-2">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-bold text-danger"><i class="fas fa-exclamation-circle me-1"></i>副作用・有害事象の確認</div>
+          <div class="small text-muted">副作用チェック表 → 必要なら有害事象報告へ</div>
+        </div>
+
+        <div class="mb-3">
           <button type="button" class="btn btn-sm btn-outline-danger" onclick="window.currentWizard.openSideEffectModal();">
             <i class="fas fa-check-circle me-1"></i>副作用入力（モーダルを開く）
           </button>
+          <div class="small text-muted mt-1">副作用チェック表を先に入力してください。</div>
+        </div>
+
+        <div class="alert ${alertClass} small mb-2">
+          <div class="fw-bold mb-1"><i class="fas ${alertIcon} me-1"></i>重篤を含む有害事象の確認</div>
+          <p class="mb-2">該当する場合はチェックし、報告書を作成・送付してください。</p>
+          <div class="d-flex flex-wrap gap-3" id="wizardSaeChecks">
+            ${[
+              ['sae_seizure','けいれん発作'],
+              ['sae_finger_muscle','手指の筋収縮'],
+              ['sae_syncope','失神'],
+              ['sae_mania','躁病・軽躁病の出現'],
+              ['sae_suicide_attempt','自殺企図'],
+              ['sae_other','その他']
+            ].map(([id,label]) => {
+              const checked = document.getElementById(id)?.checked ? 'checked' : '';
+              return `<label class="form-check form-check-inline">
+                        <input class="form-check-input wizard-sae-check" type="checkbox" data-target-id="${id}" ${checked}>
+                        <span class="form-check-label">${label}</span>
+                      </label>`;
+            }).join('')}
+          </div>
+          <div class="mt-2 p-2 bg-white bg-opacity-50 rounded">
+            <div class="small fw-bold">送付先メールアドレス</div>
+            <code class="user-select-all">brainsway_saeinfo@cmi.co.jp</code>
+          </div>
+          ${alertText ? `<div class="mt-2 text-danger small">${alertText}</div>` : ''}
+        </div>
+
+        <div class="d-flex flex-column gap-2">
+          <button type="button" class="btn btn-sm btn-danger" id="wizardOpenAEModalBtn" onclick="window.currentWizard.openAdverseEventModal()">
+            <i class="fas fa-file-medical me-1"></i>有害事象入力・報告書を開く
+          </button>
+        </div>
+        <div class="mt-2 small text-muted">
+          ※ 有害事象チェックがある場合は報告書を作成し、印刷して送付してください。
         </div>
       </div>
     `;
@@ -674,6 +721,32 @@ class ProcedureWizard {
       // initial update
       this.updateS7Boxes();
     }
+
+    // Step8: SAEチェックの同期とボタン活性/非活性
+    if (this.currentStep === 8) {
+      const wizardChecks = document.querySelectorAll('.wizard-sae-check');
+      const update = () => {
+        wizardChecks.forEach(cb => {
+          const targetId = cb.dataset.targetId;
+          if (targetId) {
+            const target = document.getElementById(targetId);
+            if (target) {
+              target.checked = cb.checked;
+            }
+          }
+        });
+
+        const any = Array.from(wizardChecks).some(c => c.checked);
+        const btnModal = document.getElementById('wizardOpenAEModalBtn');
+        const btnPreview = document.getElementById('wizardAEPvwBtn');
+        if (btnModal) btnModal.disabled = !any;
+        if (btnPreview) btnPreview.disabled = !any;
+      };
+
+      wizardChecks.forEach(cb => cb.addEventListener('change', update));
+      // 初期反映
+      update();
+    }
   }
 
   updateS6Boxes() {
@@ -708,6 +781,41 @@ class ProcedureWizard {
       const modal = bootstrap.Modal.getOrCreateInstance(sideEffectModal);
       modal.show();
     }
+  }
+
+  /**
+   * 有害事象報告書モーダルを開く
+   */
+  openAdverseEventModal() {
+    const saeModal = document.getElementById('saeModal');
+    if (saeModal) {
+      const modal = bootstrap.Modal.getOrCreateInstance(saeModal);
+      modal.show();
+    }
+  }
+
+  /**
+   * 有害事象報告書印刷プレビューを開く
+   */
+  openAdverseEventPreview() {
+    const modal = document.getElementById('procedureWizardModal');
+    const sessionId = modal?.dataset?.sessionId;
+    if (!sessionId) {
+      alert('セッション情報が見つかりません。');
+      return;
+    }
+    // 存在確認
+    fetch(`/app/session/${sessionId}/adverse-event/print/`)
+      .then(res => {
+        if (res.ok) {
+          window.open(`/app/session/${sessionId}/adverse-event/print/`, '_blank');
+        } else {
+          alert('有害事象報告書がまだ作成されていません。先に「有害事象入力・報告書を開く」から作成してください。');
+        }
+      })
+      .catch(() => {
+        alert('報告書の確認に失敗しました。');
+      });
   }
 
   /**

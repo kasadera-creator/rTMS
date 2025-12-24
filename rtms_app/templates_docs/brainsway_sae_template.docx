@@ -1,0 +1,33 @@
+This is a placeholder template for the Brainsway SAE report.
+
+Due to the complexity of the Word document structure (tables, checkboxes, multi-column layout),
+a proper .docx template should be created based on the PDF attachment using Microsoft Word or LibreOffice.
+
+The template should include placeholders in the form:
+{PATIENT_INITIAL}
+{PATIENT_AGE}
+{PATIENT_GENDER}
+{DIAGNOSIS}
+{EVENT_DATE}
+{EVENT_TYPES}
+{EVENT_OTHER}
+{MEDICATION}
+{MT_VALUE}
+{STIMULUS_INTENSITY}
+{STIMULUS_SITE}
+{SESSION_COUNT}
+{COIL_TYPE}
+{FREQUENCY_HZ}
+{TRAIN_SECONDS}
+{TRAIN_COUNT}
+{TOTAL_PULSES}
+{INGESTION_STATUS}
+{OUTCOME}
+{OUTCOME_DATE}
+{FACILITY_NAME}
+{FACILITY_PHONE}
+{REPORTER_NAME}
+{PHYSICIAN_COMMENT}
+{EMAIL}
+
+For production, replace this file with an actual .docx template created from the Brainsway form.

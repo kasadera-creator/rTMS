@@ -1,4 +1,7 @@
 from django.contrib import admin
+from django.urls import path
+from django.shortcuts import render
+from django.core.exceptions import PermissionDenied
 from django.db import models
 from django_jsonform.widgets import JSONFormWidget
 from .models import (
@@ -140,7 +143,11 @@ class TreatmentSessionAdmin(admin.ModelAdmin):
     list_filter = ('date',)
     # formfield_overrides ...
 
-admin.site.register(Assessment)
+
+class AssessmentAdmin(admin.ModelAdmin):
+    list_display = ('patient', 'date')
+    list_filter = ('date',)
+    search_fields = ('patient__name', 'patient__card_id')
 
 
 @admin.register(ScaleDefinition)
@@ -174,5 +181,69 @@ class AuditLogAdmin(admin.ModelAdmin):
     list_display = ('created_at', 'user', 'patient', 'action', 'target_model', 'target_pk', 'summary')
     list_filter = ('action', 'target_model', 'created_at')
     search_fields = ('user__username', 'patient__name', 'summary')
+
+
+# ========================
+# カスタム AdminSite
+# ========================
+
+class RTMSAdminSite(admin.AdminSite):
+    site_header = "rTMS 管理画面"
+    site_title = "rTMS Admin"
+    index_title = "ホーム"
+    index_template = 'admin/rtms_index.html'
+
+    def research_export_view(self, request):
+        """研究用データ出力ページ（superuser のみ）"""
+        if not request.user.is_superuser:
+            raise PermissionDenied
+        
+        context = {
+            'title': '研究用データ出力',
+            'site_header': self.site_header,
+        }
+        return render(request, 'admin/research_export.html', context)
+
+    def admin_backup_view(self, request):
+        """バックアップ管理ページ（staff のみ）"""
+        if not request.user.is_staff:
+            raise PermissionDenied
+        
+        context = {
+            'title': 'バックアップ管理',
+            'site_header': self.site_header,
+        }
+        return render(request, 'admin/admin_backup.html', context)
+
+    def index(self, request, extra_context=None):
+        """カスタムインデックスに研究用データ出力とバックアップ管理へのリンクを追加"""
+        extra_context = extra_context or {}
+        extra_context['research_export_url'] = '/admin/research-export/'
+        extra_context['admin_backup_url'] = '/admin/backup/'
+        extra_context['show_research_export'] = request.user.is_superuser
+        extra_context['show_admin_backup'] = request.user.is_staff
+        return super().index(request, extra_context)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('research-export/', self.admin_view(self.research_export_view), name='research-export'),
+            path('backup/', self.admin_view(self.admin_backup_view), name='admin-backup'),
+        ]
+        return custom_urls + urls
+
+
+rtms_admin_site = RTMSAdminSite(name='rtms_admin')
+
+# 既存の ModelAdmin を新しい AdminSite に登録
+rtms_admin_site.register(Patient, PatientAdmin)
+rtms_admin_site.register(TreatmentSession, TreatmentSessionAdmin)
+rtms_admin_site.register(Assessment, AssessmentAdmin)
+rtms_admin_site.register(ConsentDocument, ConsentDocumentAdmin)
+rtms_admin_site.register(AuditLog, AuditLogAdmin)
+rtms_admin_site.register(ScaleDefinition, ScaleDefinitionAdmin)
+rtms_admin_site.register(TimingScaleConfig, TimingScaleConfigAdmin)
+rtms_admin_site.register(AssessmentRecord, AssessmentRecordAdmin)
+
 
 

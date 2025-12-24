@@ -89,6 +89,26 @@ urlpatterns = [
         name="treatment_add",
     ),
     path(
+        "app/session/<int:session_id>/sae_report.docx",
+        views.sae_report_docx,
+        name="sae_report_docx",
+    ),
+    path(
+        "app/adverse-event-report/print-preview/",
+        views.adverse_event_report_print_preview,
+        name="adverse_event_report_print_preview",
+    ),
+    path(
+        "app/session/<int:session_id>/adverse-event/",
+        views.adverse_event_report_form,
+        name="adverse_event_report_form",
+    ),
+    path(
+        "app/session/<int:session_id>/adverse-event/print/",
+        views.adverse_event_report_print,
+        name="adverse_event_report_print",
+    ),
+    path(
         "patient/<int:patient_id>/mapping/upsert-from-wizard/",
         views.mapping_upsert_from_wizard,
         name="mapping_upsert_from_wizard",
@@ -137,6 +157,20 @@ urlpatterns = [
         "patient/<int:patient_id>/path/",
         views.patient_clinical_path,
         name="patient_clinical_path",
+    ),
+
+    # =========================
+    # Export & Backup
+    # =========================
+    path(
+        "export/research_csv/",
+        views.export_research_csv,
+        name="export_research_csv",
+    ),
+    path(
+        "admin/backup/",
+        views.admin_backup,
+        name="admin_backup",
     ),
 
     # =========================

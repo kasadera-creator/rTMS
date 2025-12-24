@@ -27,6 +27,28 @@
     const sevEl = document.getElementById("hamd17Severity");
     if (totalEl) totalEl.textContent = String(total);
     if (sevEl) sevEl.textContent = getSeverity(total);
+
+    // Improvement / status
+    const improvEl = document.getElementById("hamd17Improvement");
+    const statusEl = document.getElementById("hamd17Status");
+    const baseline = window.HAMD_BASELINE_17 || null;
+
+    if (baseline !== null && baseline > 0 && total !== null && window.HAMD_SHOW_IMPROVEMENT) {
+      const improv = ((baseline - total) / baseline) * 100;
+      if (improvEl) improvEl.textContent = improv.toFixed(1) + "%";
+
+      // Status logic: remission <= 7, response >= 50%, else no response
+      let status = "反応なし";
+      if (total <= 7) {
+        status = "寛解";
+      } else if (improv >= 50) {
+        status = "反応";
+      }
+      if (statusEl) statusEl.textContent = status;
+    } else {
+      if (improvEl) improvEl.textContent = "-";
+      if (statusEl) statusEl.textContent = "-";
+    }
   }
 
   function initButtonGroups() {

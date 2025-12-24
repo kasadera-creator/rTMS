@@ -1,0 +1,35 @@
+{% extends "admin/index.html" %}
+{% load i18n static admin_urls %}
+
+{% block content %}
+{{ block.super }}
+
+{% if show_admin_backup %}
+<div style="margin-top: 30px; padding: 20px; background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+  <h2 style="margin-top: 0; color: #333; font-size: 18px;">
+    💾 バックアップ管理
+  </h2>
+  <p style="margin: 10px 0; color: #666;">
+    データベースのバックアップとダンプを管理します。
+  </p>
+  <a href="{{ admin_backup_url }}" class="button" style="display: inline-block; padding: 10px 20px; background-color: #ffc107; color: #333; text-decoration: none; border-radius: 4px; margin-top: 10px; font-weight: bold;">
+    バックアップ管理へ →
+  </a>
+</div>
+{% endif %}
+
+{% if show_research_export %}
+<div style="margin-top: 30px; padding: 20px; background-color: #f0f7ff; border-left: 4px solid #007bff; border-radius: 4px;">
+  <h2 style="margin-top: 0; color: #333; font-size: 18px;">
+    📊 研究用機能
+  </h2>
+  <p style="margin: 10px 0; color: #666;">
+    スーパーユーザーのみ利用可能な研究用データ出力機能です。
+  </p>
+  <a href="{{ research_export_url }}" class="button" style="display: inline-block; padding: 10px 20px; background-color: #417690; color: white; text-decoration: none; border-radius: 4px; margin-top: 10px; font-weight: bold;">
+    研究用データ出力へ →
+  </a>
+</div>
+{% endif %}
+
+{% endblock %}

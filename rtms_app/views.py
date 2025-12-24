@@ -12,11 +12,14 @@ from django.http import HttpResponse, FileResponse, JsonResponse
 from django.conf import settings
 from django.contrib.auth import logout
 from django.db.models import Q, Count
+from django.core.exceptions import PermissionDenied
+from functools import wraps
 from calendar import monthrange
 from collections import defaultdict
 import os
 import csv
 import json
+import io
 from urllib.parse import urlencode
 
 try:
@@ -48,6 +51,21 @@ from .services.rtms_schedule import (
     format_rtms_label,
 )
 from .utils.hamd import classify_hamd_response, classify_hamd17_severity
+
+
+def superuser_required(view_func):
+    """
+    Decorator to require superuser authentication for a view.
+    Redirects unauthenticated users to login and raises PermissionDenied for non-superusers.
+    """
+    @wraps(view_func)
+    def _wrapped_view(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect(f"{reverse('admin:login')}?next={request.path}")
+        if not request.user.is_superuser:
+            raise PermissionDenied("スーパーユーザーのみこの機能にアクセスできます。")
+        return view_func(request, *args, **kwargs)
+    return _wrapped_view
 
 
 def _questionnaire_questions():
@@ -245,6 +263,157 @@ def get_weekly_session_count(patient, target_date):
     week_start_date = start_date + timedelta(days=week_start_offset)
     week_end_date = week_start_date + timedelta(days=6)
     return TreatmentSession.objects.filter(patient=patient, date__date__range=[week_start_date, week_end_date]).count()
+
+
+def compute_initials_from_name(name: str) -> str:
+    """Generate initials from a patient's name (surname + given name first characters)."""
+    if not name:
+        return ''
+    parts = [p for p in name.replace('　', ' ').split(' ') if p]
+    if not parts:
+        return ''
+    initials = []
+    for p in parts[:2]:
+        c = p[0]
+        initials.append(c.upper() if c.isalpha() else c)
+    return '.'.join(initials)
+
+
+def build_substance_use_summary(session: TreatmentSession | None) -> str:
+    """Summarize alcohol/caffeine and medication change flags from a session."""
+    if not session:
+        return ''
+    labels = []
+    if session.safety_alcohol is False:
+        labels.append("飲酒/過量カフェイン: 摂取あり")
+    else:
+        labels.append("飲酒/過量カフェイン: 摂取なし")
+    if session.safety_meds is False:
+        labels.append("薬剤変更あり")
+    else:
+        labels.append("薬剤変更なし")
+    return " / ".join(labels)
+
+
+def resolve_contact_person(patient: Patient | None, session: TreatmentSession | None, user) -> str:
+    """Resolve the contact/attending person name with fallbacks."""
+    candidates = []
+    if session and session.performer:
+        candidates.append(session.performer)
+    if patient and patient.attending_physician:
+        candidates.append(patient.attending_physician)
+    if user and getattr(user, 'is_authenticated', False):
+        candidates.append(user)
+
+    for cand in candidates:
+        name = cand.get_full_name() if hasattr(cand, 'get_full_name') else ''
+        if name:
+            return name
+        if hasattr(cand, 'username') and cand.username:
+            return cand.username
+    return ''
+
+
+def get_latest_resting_mt(patient: Patient | None, course_number: int | None, session_date: date | None, week_num: int | None = None):
+    """Fetch the most recent resting MT for the same course/week up to the session date."""
+    if not patient:
+        return None
+    qs = MappingSession.objects.filter(patient=patient)
+    if course_number:
+        qs = qs.filter(course_number=course_number)
+    if session_date:
+        qs = qs.filter(date__lte=session_date)
+    if week_num:
+        qs = qs.filter(week_number=week_num)
+    mapping = qs.order_by('-date').first()
+    return mapping.resting_mt if mapping else None
+
+
+def get_daily_treatment_number(patient: Patient | None, course_number: int | None, session_date: date | None):
+    """Return the count of sessions for the patient on the given date (per course)."""
+    if not patient or not session_date:
+        return None
+    qs = TreatmentSession.objects.filter(patient=patient, session_date=session_date)
+    if course_number:
+        qs = qs.filter(course_number=course_number)
+    return qs.count() or None
+
+
+def get_cumulative_treatment_number(patient: Patient | None, course_number: int | None, session_id: int | None):
+    """Get cumulative (ordinal) treatment session number within the course."""
+    if not patient or not session_id:
+        return None
+    try:
+        session = TreatmentSession.objects.get(pk=session_id)
+    except TreatmentSession.DoesNotExist:
+        return None
+    
+    qs = TreatmentSession.objects.filter(patient=patient, course_number=course_number or session.course_number)
+    qs = qs.order_by('session_date', 'date', 'id')
+    
+    cumulative_no = 1
+    for ts in qs:
+        if ts.id == session.id:
+            return cumulative_no
+        cumulative_no += 1
+    return None
+
+
+def convert_to_romaji_initials(name_ja: str) -> str:
+    """
+    Estimate romaji initials from Japanese name.
+    Priority: existing romaji field if available, else simplified hiragana→romaji, else take first 2 chars as X.X.
+    """
+    if not name_ja:
+        return ''
+    
+    # Simple hiragana→romaji mapping (subset, for common names)
+    hiragana_map = {
+        'あ': 'a', 'い': 'i', 'う': 'u', 'え': 'e', 'お': 'o',
+        'か': 'ka', 'き': 'ki', 'く': 'ku', 'け': 'ke', 'こ': 'ko',
+        'が': 'ga', 'ぎ': 'gi', 'ぐ': 'gu', 'げ': 'ge', 'ご': 'go',
+        'さ': 'sa', 'し': 'si', 'す': 'su', 'せ': 'se', 'そ': 'so',
+        'ざ': 'za', 'じ': 'zi', 'ず': 'zu', 'ぜ': 'ze', 'ぞ': 'zo',
+        'た': 'ta', 'ち': 'ti', 'つ': 'tu', 'て': 'te', 'と': 'to',
+        'だ': 'da', 'ぢ': 'di', 'づ': 'du', 'で': 'de', 'ど': 'do',
+        'な': 'na', 'に': 'ni', 'ぬ': 'nu', 'ね': 'ne', 'の': 'no',
+        'は': 'ha', 'ひ': 'hi', 'ふ': 'hu', 'へ': 'he', 'ほ': 'ho',
+        'ば': 'ba', 'び': 'bi', 'ぶ': 'bu', 'べ': 'be', 'ぼ': 'bo',
+        'ぱ': 'pa', 'ぴ': 'pi', 'ぷ': 'pu', 'ぺ': 'pe', 'ぽ': 'po',
+        'ま': 'ma', 'み': 'mi', 'む': 'mu', 'め': 'me', 'も': 'mo',
+        'や': 'ya', 'ゆ': 'yu', 'よ': 'yo',
+        'ら': 'ra', 'り': 'ri', 'る': 'ru', 'れ': 're', 'ろ': 'ro',
+        'わ': 'wa', 'を': 'wo', 'ん': 'n',
+    }
+    
+    # Try to convert to romaji and extract initials
+    parts = name_ja.replace('　', ' ').split(' ')
+    initials = []
+    for part in parts[:2]:
+        if not part:
+            continue
+        # For each part, take first char and try to romanize
+        first_char = part[0]
+        if first_char in hiragana_map:
+            rom = hiragana_map[first_char]
+            initials.append(rom[0].upper())
+        elif ord(first_char) >= 0x4E00 and ord(first_char) <= 0x9FFF:  # Kanji
+            # Kanji: fallback to just first character
+            initials.append(first_char)
+        else:
+            # Alphabet or other: use as-is
+            initials.append(first_char.upper() if first_char.isalpha() else first_char)
+    
+    if not initials:
+        # Fallback: take first 2 chars from name as X.X.
+        try:
+            return f"{name_ja[0]}.{name_ja[1]}" if len(name_ja) >= 2 else f"{name_ja[0]}"
+        except:
+            return ''
+    
+    if len(initials) == 1:
+        return initials[0]
+    return '.'.join(initials[:2])
 
 def get_assessment_timing_for_date(patient, target_date):
     """
@@ -897,6 +1066,10 @@ def patient_first_visit(request, patient_id):
             q_data['q_details'] = (request.POST.get('q_details') or '').strip()
             p.questionnaire_data = q_data
 
+            # Save protocol_type (form or POST override)
+            protocol_type = request.POST.get('protocol_type') or 'INSURANCE'
+            p.protocol_type = protocol_type
+
             p.save()
 
             action = request.POST.get('action')
@@ -1001,6 +1174,241 @@ def questionnaire_edit(request, patient_id):
     })
 
 @login_required
+def sae_report_docx(request, session_id):
+    """Generate and download SAE report as Word document."""
+    from django.http import HttpResponse
+    from .models import TreatmentSession, SeriousAdverseEvent
+    from .services.sae_report import build_sae_context, render_sae_docx, get_missing_fields
+    import os
+
+    session = get_object_or_404(TreatmentSession, pk=session_id)
+    patient = session.patient
+    sae_record = SeriousAdverseEvent.objects.filter(patient=patient, session=session).first()
+
+    if not sae_record:
+        return HttpResponse("SAE record not found for this session.", status=404)
+
+    # Build context
+    context = build_sae_context(session, sae_record)
+    missing = get_missing_fields(context)
+
+    # Template path
+    template_path = os.path.join(
+        settings.BASE_DIR, "rtms_app", "templates_docs", "brainsway_sae_template.docx"
+    )
+    if not os.path.exists(template_path):
+        return HttpResponse("SAE report template not found.", status=500)
+
+    # Render docx
+    try:
+        docx_bytes = render_sae_docx(template_path, context)
+    except Exception as e:
+        return HttpResponse(f"Failed to render SAE report: {e}", status=500)
+
+    # Return as download
+    response = HttpResponse(docx_bytes, content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    response["Content-Disposition"] = f'attachment; filename="SAE_Report_{patient.card_id}_{session.session_date}.docx"'
+    return response
+
+
+@login_required
+def adverse_event_report_print_preview(request):
+    """Generate print preview for adverse event report."""
+    from datetime import date
+    patient_id = request.POST.get('patient_id')
+    session_id = request.POST.get('session_id')
+    patient = Patient.objects.filter(pk=patient_id).first() if patient_id else None
+    session = TreatmentSession.objects.filter(pk=session_id).first() if session_id else None
+    course_number = getattr(patient, 'course_number', None) or getattr(session, 'course_number', None)
+    session_date = getattr(session, 'session_date', None)
+    week_num = get_current_week_number(patient.first_treatment_date, session_date) if patient and session_date else None
+
+    contact_person = resolve_contact_person(patient, session, request.user)
+    contact_missing = not bool(contact_person)
+    facility_name = "笠寺精治寮病院"
+    facility_phone = "052-821-1229"
+
+    age = request.POST.get('age') or (patient.age if patient else '')
+    gender = request.POST.get('gender') or (patient.get_gender_display() if patient else '')
+    initials = request.POST.get('initials') or compute_initials_from_name(getattr(patient, 'name', ''))
+    diagnosis = request.POST.get('diagnosis') or getattr(patient, 'diagnosis', '')
+    concomitant_meds = request.POST.get('concomitant_meds') or getattr(patient, 'medication_history', '')
+    substance_use = request.POST.get('substance_use') or build_substance_use_summary(session) or 'なし'
+    rmt_value = request.POST.get('rmt') or get_latest_resting_mt(patient, course_number, session_date, week_num)
+    intensity_value = request.POST.get('intensity') or (getattr(session, 'mt_percent', None) or getattr(session, 'intensity_percent', None) or '')
+    site_value = request.POST.get('site') or getattr(session, 'target_site', '')
+    treatment_number_value = request.POST.get('treatment_number') or get_daily_treatment_number(patient, course_number, session_date) or ''
+    onset_date_value = request.POST.get('onset_date') or (session_date.isoformat() if session_date else '')
+
+    context = {
+        'checked_events': request.POST.getlist('checked_events[]', []),
+        'event_name': request.POST.get('event_name', ''),
+        'onset_date': onset_date_value,
+        'age': age,
+        'gender': gender,
+        'initials': initials,
+        'diagnosis': diagnosis,
+        'concomitant_meds': concomitant_meds,
+        'substance_use': substance_use,
+        'seizure_history': request.POST.get('seizure_history', ''),
+        'seizure_history_detail': request.POST.get('seizure_history_detail', ''),
+        'rmt': rmt_value or '',
+        'intensity': intensity_value,
+        'site': site_value,
+        'treatment_number': treatment_number_value,
+        'outcome': request.POST.get('outcome', ''),
+        'outcome_sequelae': request.POST.get('outcome_sequelae', ''),
+        'outcome_date': request.POST.get('outcome_date', ''),
+        'notes': request.POST.get('notes', ''),
+        'doctor_comment': request.POST.get('doctor_comment', ''),
+        'report_date': date.today().strftime('%Y年%m月%d日'),
+        'facility_name': facility_name,
+        'facility_phone': facility_phone,
+        'contact_person': contact_person,
+        'contact_missing': contact_missing,
+    }
+
+    return render(request, 'rtms_app/print/adverse_event_report.html', context)
+
+
+@login_required
+def adverse_event_report_form(request, session_id):
+    """GET/POST modal for editing adverse event report."""
+    from .models import AdverseEventReport
+    from datetime import date as dt_date
+    
+    session = get_object_or_404(TreatmentSession, pk=session_id)
+    patient = session.patient
+    course_number = patient.course_number or 1
+    
+    existing_report = AdverseEventReport.objects.filter(session=session).first()
+    
+    # Build prefill/initial data
+    age_at_event = None
+    if session.session_date and patient.birth_date:
+        today_for_calc = session.session_date
+        age_at_event = today_for_calc.year - patient.birth_date.year - (
+            (today_for_calc.month, today_for_calc.day) < (patient.birth_date.month, patient.birth_date.day)
+        )
+    
+    treatment_no = get_cumulative_treatment_number(patient, course_number, session_id)
+    mapping_rmt = get_latest_resting_mt(patient, course_number, session.session_date, None)
+    romaji_initials = convert_to_romaji_initials(patient.name)
+    
+    # Determine diagnosis default (うつ病 → うつ病エピソード)
+    diagnosis_default = 'depressive_episode'  # default
+    if 'うつ病' in (patient.diagnosis or ''):
+        diagnosis_default = 'depressive_episode'
+    
+    prefill = {
+        'age': age_at_event or '',
+        'sex': patient.get_gender_display(),
+        'initials': romaji_initials,
+        'diagnosis': diagnosis_default,
+        'concomitant_meds': patient.medication_history or '',
+        'substance_use': build_substance_use_summary(session) or 'なし',
+        'rmt': mapping_rmt or '',
+        'intensity': session.mt_percent or session.intensity_percent or '',
+        'site': session.target_site or '左DLPFC',
+        'treatment_number': treatment_no or '',
+        'onset_date': session.session_date.isoformat() if session.session_date else '',
+        'contact_person': resolve_contact_person(patient, session, request.user),
+    }
+    
+    if request.method == 'GET':
+        # Render prefilled form HTML
+        context = {
+            'session': session,
+            'patient': patient,
+            'existing_report': existing_report,
+            'prefill': prefill,
+            'facility_name': '笠寺精治寮病院',
+            'facility_phone': '052-821-1229',
+        }
+        return render(request, 'rtms_app/adverse_event_report_form.html', context)
+    
+    elif request.method == 'POST':
+        # Save to database
+        from .models import AdverseEventReport
+        
+        event_types_raw = request.POST.getlist('event_types', [])
+        event_types = [e for e in event_types_raw if e]
+        
+        defaults = {
+            'adverse_event_name': request.POST.get('event_name', '').strip(),
+            'onset_date': request.POST.get('onset_date') or None,
+            'age': int(request.POST.get('age')) if request.POST.get('age', '').isdigit() else None,
+            'sex': request.POST.get('gender', ''),
+            'initials': request.POST.get('initials', ''),
+            'diagnosis_category': request.POST.get('diagnosis', 'depressive_episode'),
+            'diagnosis_other_text': request.POST.get('diagnosis_other', ''),
+            'concomitant_meds_text': request.POST.get('concomitant_meds', ''),
+            'substance_intake_text': request.POST.get('substance_use', ''),
+            'seizure_history_flag': request.POST.get('seizure_history') != '0',
+            'seizure_history_date_text': request.POST.get('seizure_history_detail', ''),
+            'rmt_value': int(request.POST.get('rmt')) if request.POST.get('rmt', '').replace('.', '', 1).isdigit() else None,
+            'intensity_value': int(request.POST.get('intensity')) if request.POST.get('intensity', '').replace('.', '', 1).isdigit() else None,
+            'stimulation_site_category': request.POST.get('site', 'left_dlpfc'),
+            'stimulation_site_other_text': '',
+            'treatment_course_number': treatment_no,
+            'outcome_flags': event_types,
+            'outcome_sequelae_text': '',
+            'outcome_date': request.POST.get('outcome_date') or None,
+            'special_notes': request.POST.get('notes', ''),
+            'physician_comment': request.POST.get('doctor_comment', ''),
+            'event_types': event_types,
+            'prefilled_snapshot': {
+                'patient_age': age_at_event,
+                'cumulative_treatment_no': treatment_no,
+                'mapping_rmt': mapping_rmt,
+            },
+        }
+        
+        report, created = AdverseEventReport.objects.update_or_create(
+            session=session,
+            defaults=defaults
+        )
+        
+        # Return JSON with success and redirect URL
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            print_url = reverse('rtms_app:adverse_event_report_print', args=[session.id])
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Report saved successfully',
+                'print_url': print_url,
+            })
+        
+        # Redirect to print preview
+        return redirect('rtms_app:adverse_event_report_print', session_id=session.id)
+
+
+@login_required
+def adverse_event_report_print(request, session_id):
+    """Print preview for saved adverse event report."""
+    session = get_object_or_404(TreatmentSession, pk=session_id)
+    patient = session.patient
+    report = get_object_or_404(AdverseEventReport, session=session)
+    
+    facility_name = '笠寺精治寮病院'
+    facility_phone = '052-821-1229'
+    contact_person = resolve_contact_person(patient, session, request.user)
+    contact_missing = not bool(contact_person)
+    
+    context = {
+        'report': report,
+        'patient': patient,
+        'session': session,
+        'facility_name': facility_name,
+        'facility_phone': facility_phone,
+        'contact_person': contact_person,
+        'contact_missing': contact_missing,
+        'report_date': dt_date.today().strftime('%Y年%m月%d日'),
+    }
+    
+    return render(request, 'rtms_app/print/adverse_event_report_db.html', context)
+
+
+@login_required
 def treatment_add(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id); dashboard_date = request.GET.get('dashboard_date')
     course_number = patient.course_number or 1
@@ -1026,15 +1434,15 @@ def treatment_add(request, patient_id):
     mode_switch_html = mark_safe(
         """
         <div class=\"btn-group\" role=\"group\" aria-label=\"mode-switch\">
-          <input type=\"radio\" class=\"btn-check\" name=\"modeSwitch\" id=\"treatModeRecord\" autocomplete=\"off\" checked>
-          <label class=\"btn btn-success btn-sm\" for=\"treatModeRecord\">
-            <i class=\"fas fa-pen me-1\"></i>治療内容記入
-          </label>
+            <input type=\"radio\" class=\"btn-check\" name=\"modeSwitch\" id=\"treatModeRecord\" autocomplete=\"off\" checked>
+            <label class=\"btn btn-success btn-sm\" for=\"treatModeRecord\">
+                <i class=\"fas fa-pen me-1\"></i>治療内容記入
+            </label>
 
-          <input type=\"radio\" class=\"btn-check\" name=\"modeSwitch\" id=\"treatModeWizard\" autocomplete=\"off\">
-          <label class=\"btn btn-outline-success btn-sm\" for=\"treatModeWizard\">
-            <i class=\"fas fa-route me-1\"></i>手順解説
-          </label>
+            <input type=\"radio\" class=\"btn-check\" name=\"modeSwitch\" id=\"treatModeWizard\" autocomplete=\"off\">
+            <label class=\"btn btn-outline-success btn-sm\" for=\"treatModeWizard\">
+                <i class=\"fas fa-route me-1\"></i>手順解説
+            </label>
         </div>
         """
     )
@@ -1191,6 +1599,59 @@ def treatment_add(request, patient_id):
             sec.memo = memo or sec.memo or ""
             sec.physician_signature = signature or sec.physician_signature or ""
             sec.save()
+
+            # Upsert SeriousAdverseEvent if any SAE checkbox is checked
+            from .models import SeriousAdverseEvent
+            sae_fields = ['sae_seizure', 'sae_finger_muscle', 'sae_syncope', 'sae_mania', 'sae_suicide_attempt', 'sae_other']
+            sae_event_types = []
+            sae_map = {
+                'sae_seizure': 'seizure',
+                'sae_finger_muscle': 'finger_muscle',
+                'sae_syncope': 'syncope',
+                'sae_mania': 'mania',
+                'sae_suicide_attempt': 'suicide_attempt',
+                'sae_other': 'other',
+            }
+            for f in sae_fields:
+                if request.POST.get(f) == 'on':
+                    sae_event_types.append(sae_map[f])
+            
+            sae_other_text = (request.POST.get('sae_other_text') or '').strip()
+
+            if sae_event_types:
+                # Build snapshot: key info at time of SAE
+                try:
+                    snapshot = {
+                        'date': session_date.isoformat(),
+                        'mt_percent': s.mt_percent,
+                        'frequency_hz': str(s.frequency_hz),
+                        'train_seconds': str(s.train_seconds),
+                        'train_count': s.train_count,
+                        'total_pulses': s.total_pulses,
+                        'coil_type': s.coil_type,
+                        'target_site': s.target_site,
+                        'diagnosis': patient.diagnosis,
+                        # Medication snapshot (placeholder, adjust for your medication model)
+                        'medication_history': patient.medication_history,
+                        'age': patient.age,
+                        'gender': patient.get_gender_display(),
+                    }
+                except Exception:
+                    snapshot = {}
+
+                SeriousAdverseEvent.objects.update_or_create(
+                    patient=patient,
+                    course_number=course_number,
+                    session=s,
+                    defaults={
+                        'event_types': sae_event_types,
+                        'other_text': sae_other_text,
+                        'auto_snapshot': snapshot,
+                    }
+                )
+            else:
+                # No SAE events checked: delete existing record if any
+                SeriousAdverseEvent.objects.filter(patient=patient, course_number=course_number, session=s).delete()
             
             # Check if print action is requested
             action = request.POST.get('action')
@@ -1429,9 +1890,59 @@ def treatment_add(request, patient_id):
         confirm_notes = m.get('confirm_notes', '')
         treat_notes = m.get('treat_notes', '')
 
+    # 既存SAEデータの読み込み
+    existing_sae = None
+    sae_event_types_checked = {}
+    sae_other_text_value = ''
+    if existing_session:
+        from .models import SeriousAdverseEvent
+        existing_sae = SeriousAdverseEvent.objects.filter(
+            patient=patient, 
+            course_number=course_number, 
+            session=existing_session
+        ).first()
+        if existing_sae:
+            # チェックボックスの状態を復元
+            for event_code in existing_sae.event_types:
+                sae_event_types_checked[f'sae_{event_code}'] = True
+            sae_other_text_value = existing_sae.other_text or ''
+
+    # Prefill values for adverse event report modal
+    mapping_rmt_value = current_week_mapping.resting_mt if current_week_mapping else None
+    session_rmt_value = getattr(existing_session, 'motor_threshold', None) if existing_session else None
+    intensity_value = None
+    if existing_session:
+        intensity_value = existing_session.mt_percent or existing_session.intensity_percent
+    site_value = ''
+    if existing_session and existing_session.target_site:
+        site_value = existing_session.target_site
+    elif current_week_mapping and current_week_mapping.stimulation_site:
+        site_value = current_week_mapping.stimulation_site
+    else:
+        site_value = '左DLPFC'
+
+    onset_date_prefill = existing_session.session_date.isoformat() if existing_session else initial_date.isoformat()
+    treatment_number_today = session_num or get_cumulative_treatment_number(patient, course_number, existing_session.id if existing_session else None) or ''
+    contact_person_prefill = resolve_contact_person(patient, existing_session, request.user)
+    sae_prefill = {
+        'age': patient.age,
+        'gender': patient.get_gender_display(),
+        'initials': compute_initials_from_name(patient.name),
+        'diagnosis': patient.diagnosis or '',
+        'concomitant_meds': patient.medication_history or '',
+        'substance_use': build_substance_use_summary(existing_session) if existing_session else '飲酒/過量カフェイン: 摂取なし / 薬剤変更なし',
+        'rmt': mapping_rmt_value or session_rmt_value or '',
+        'intensity': intensity_value or '',
+        'site': site_value,
+        'treatment_number': treatment_number_today,
+        'onset_date': onset_date_prefill,
+        'contact_person': contact_person_prefill,
+    }
+
     return render(request, 'rtms_app/treatment_add.html', {
         'patient': patient,
         'form': form,
+        'session': existing_session,  # SAEダウンロード用
         'current_week_mapping': current_week_mapping,
         'mapping_alert': mapping_alert,
         'initial_date': initial_date,
@@ -1490,6 +2001,13 @@ def treatment_add(request, patient_id):
         'treat_movement_checked': treat_movement_checked,
         'confirm_notes': confirm_notes,
         'treat_notes': treat_notes,
+        # SAE data
+        'existing_sae': existing_sae,
+        'sae_event_types_checked': sae_event_types_checked,
+        'sae_other_text_value': sae_other_text_value,
+        'sae_prefill': sae_prefill,
+        'sae_contact_person': contact_person_prefill,
+        'sae_contact_missing': not bool(contact_person_prefill),
     })
 
 def assessment_add(request, patient_id, timing):
@@ -1934,6 +2452,27 @@ def assessment_scale_form(request, patient_id, timing, scale_code):
                 'note': note,
                 'course_number': course_number,
             }
+
+            # Calculate improvement/status for non-baseline
+            if timing != 'baseline':
+                from .assessment_rules import compute_improvement_rate, classify_response_status
+                baseline_obj = Assessment.objects.filter(
+                    patient=patient, course_number=course_number, timing='baseline', type='HAM-D'
+                ).order_by('-date').first()
+                if baseline_obj:
+                    baseline_17 = baseline_obj.total_score_17
+                else:
+                    baseline_17 = None
+
+                # Compute improvement
+                keys17 = [f"q{i}" for i in range(1, 18)]
+                current_17 = sum(int(scores.get(k, 0)) for k in keys17)
+                improv_rate = compute_improvement_rate(baseline_17, current_17)
+                status = classify_response_status(current_17, improv_rate)
+
+                rec_defaults['improvement_rate_17'] = improv_rate
+                rec_defaults['status_label'] = status
+
             new_record, _created = AssessmentRecord.objects.update_or_create(
                 patient=patient,
                 course_number=course_number,
@@ -1963,10 +2502,24 @@ def assessment_scale_form(request, patient_id, timing, scale_code):
 
             if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                 total_17 = new_record.total_score_17
+                improvement = new_record.improvement_rate_17
+                status = new_record.status_label
+                msg = ""
+                # Week-3 messages
+                if timing == 'week3':
+                    if status == '寛解':
+                        msg = "寛解と判定されました。漸減プロトコルへの移行を検討してください。"
+                    elif status == '反応なし':
+                        msg = "反応が見られません。治療の継続または中止を検討してください。"
+                    else:
+                        msg = "反応が見られます。治療を継続してください。"
                 return JsonResponse({
                     'status': 'success',
                     'id': new_record.id,
                     'total_17': total_17,
+                    'improvement_rate': improvement,
+                    'status_label': status,
+                    'message': msg,
                 })
 
             if from_page == 'clinical_path':
@@ -2000,6 +2553,19 @@ def assessment_scale_form(request, patient_id, timing, scale_code):
 
     if scale.code == 'hamd':
         _items, hamd_items_left, hamd_items_right = _hamd_items()
+
+        # Fetch baseline for improvement calculation (if not baseline itself)
+        baseline_score_17 = None
+        if timing != 'baseline':
+            baseline_obj = Assessment.objects.filter(
+                patient=patient,
+                course_number=course_number,
+                timing='baseline',
+                type='HAM-D',
+            ).order_by('-date').first()
+            if baseline_obj:
+                baseline_score_17 = baseline_obj.total_score_17
+
         return render(request, 'rtms_app/assessment/scales/hamd.html', {
             'patient': patient,
             'dashboard_date': dashboard_date,
@@ -2015,6 +2581,7 @@ def assessment_scale_form(request, patient_id, timing, scale_code):
             'hamd_items_right': hamd_items_right,
             'existing_scores': existing_scores,
             'existing_note': existing_note,
+            'baseline_score_17': baseline_score_17,
             'can_view_audit': can_view_audit(request.user),
         })
 
@@ -2603,3 +3170,134 @@ def mapping_upsert_from_wizard(request, patient_id):
         'created': created,
         'mt_value': mapping.resting_mt,
     })
+
+
+@superuser_required
+@require_http_methods(['GET', 'POST'])
+def export_research_csv(request):
+    """
+    Export research CSV in wide format.
+    GET: Show checkbox form to select columns/categories
+    POST: Generate and download CSV with selected columns
+    
+    Restricted to superusers only.
+    """
+    from .services.export_research import ResearchCSVExporter
+    
+    exporter = ResearchCSVExporter()
+    
+    if request.method == 'GET':
+        # Show category selection form
+        categories = exporter.get_category_choices()
+        context = {
+            'categories': categories,
+            'title': '研究用CSVエクスポート',
+        }
+        return render(request, 'rtms_app/export_research_csv.html', context)
+    
+    elif request.method == 'POST':
+        # Get selected categories from POST
+        selected_categories = request.POST.getlist('categories')
+        if not selected_categories:
+            selected_categories = list(exporter.CATEGORIES.keys())
+        
+        # Create exporter with selected categories
+        exporter = ResearchCSVExporter(selected_categories=selected_categories)
+        
+        # Fetch all patients (consider pagination for large datasets)
+        patients = Patient.objects.all().order_by('card_id', 'course_number')
+        
+        # Prepare data: list of (patient, related_data) tuples
+        patients_data = [(p, None) for p in patients]
+        
+        # Generate CSV
+        csv_content = exporter.generate_csv(patients_data)
+        
+        # Log action
+        log_audit_action(
+            None, 'EXPORT', 'ResearchCSV', '',
+            f'研究用CSV: {len(selected_categories)}カテゴリ選択',
+            {'selected_categories': selected_categories, 'patient_count': len(patients)}
+        )
+        
+        # Return as downloadable file
+        response = HttpResponse(csv_content, content_type='text/csv; charset=utf-8-sig')
+        response['Content-Disposition'] = f'attachment; filename="research_data_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+        return response
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def admin_backup(request):
+    """
+    Admin backup management screen.
+    GET: Show backup/export options
+    POST: Handle dumpdata JSON export
+    """
+    if not request.user.is_staff:
+        return redirect('login')
+    
+    if request.method == 'GET':
+        context = {
+            'title': 'バックアップ管理',
+        }
+        return render(request, 'rtms_app/admin_backup.html', context)
+    
+    elif request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'dumpdata':
+            # Generate dumpdata JSON
+            from django.core.management import call_command
+            import json
+            
+            output = io.StringIO()
+            try:
+                call_command('dumpdata', 'rtms_app', stdout=output, indent=2)
+                json_content = output.getvalue()
+                
+                # Log action
+                log_audit_action(
+                    None, 'EXPORT', 'DatabaseDumpData', '',
+                    'データベースダンプ（JSON）をエクスポート'
+                )
+                
+                # Return as downloadable file
+                response = HttpResponse(json_content, content_type='application/json; charset=utf-8')
+                response['Content-Disposition'] = f'attachment; filename="dumpdata_{timezone.now().strftime("%Y%m%d_%H%M%S")}.json"'
+                return response
+            except Exception as e:
+                context = {
+                    'title': 'バックアップ管理',
+                    'error': f'ダンプデータ生成エラー: {str(e)}',
+                }
+                return render(request, 'rtms_app/admin_backup.html', context, status=500)
+        
+        elif action == 'download_db':
+            # Download SQLite database file
+            db_path = settings.DATABASES['default']['NAME']
+            if not os.path.exists(db_path):
+                context = {
+                    'title': 'バックアップ管理',
+                    'error': 'データベースファイルが見つかりません',
+                }
+                return render(request, 'rtms_app/admin_backup.html', context, status=404)
+            
+            log_audit_action(
+                None, 'EXPORT', 'DatabaseFile', '',
+                'SQLiteデータベースファイルをダウンロード'
+            )
+            
+            response = FileResponse(open(db_path, 'rb'))
+            response['Content-Disposition'] = f'attachment; filename="db_{timezone.now().strftime("%Y%m%d_%H%M%S")}.sqlite3"'
+            response['Content-Type'] = 'application/octet-stream'
+            return response
+        
+        else:
+            context = {
+                'title': 'バックアップ管理',
+                'error': '不正なアクション',
+            }
+            return render(request, 'rtms_app/admin_backup.html', context, status=400)
+
+

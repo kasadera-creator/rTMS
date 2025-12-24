@@ -1,0 +1,75 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}バックアップ管理 | {{ site_title|default:_('Django administration') }}{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>バックアップ・管理機能</h1>
+  
+  <p>このページでは、データベースのバックアップとダンプを管理できます。</p>
+
+  <div style="margin-top: 20px; padding: 20px; background-color: #f8f9fa; border-left: 4px solid #ffc107; border-radius: 4px;">
+    <h2 style="margin-top: 0; color: #333;">💾 バックアップオプション</h2>
+    
+    <p>以下のバックアップ形式が利用可能です：</p>
+    
+    <ul style="margin: 15px 0;">
+      <li><strong>SQLite データベースダウンロード</strong>：現在のデータベースファイル全体をダウンロード</li>
+      <li><strong>JSON ダンプ</strong>：Django dumpdata による JSON 形式のデータエクスポート</li>
+      <li><strong>研究用 CSV</strong>：カテゴリ選択式の研究用データエクスポート（スーパーユーザーのみ）</li>
+    </ul>
+
+    <p>
+      <a href="/app/admin/backup/" class="button" style="display: inline-block; padding: 10px 20px; background-color: #ffc107; color: #333; text-decoration: none; border-radius: 4px; margin-top: 10px;">
+        バックアップ管理ページへ →
+      </a>
+    </p>
+  </div>
+
+  <div style="margin-top: 30px; padding: 20px; background-color: #e7f3ff; border-left: 4px solid #2196F3; border-radius: 4px;">
+    <h3 style="margin-top: 0; color: #1976D2;">📋 その他の管理機能</h3>
+    <p>
+      <a href="/admin/" style="color: #0066cc; text-decoration: none;">
+        ← 管理画面ホームに戻る
+      </a>
+    </p>
+  </div>
+</div>
+
+<style>
+  #content-main h1 {
+    margin-bottom: 20px;
+    font-size: 28px;
+    color: #333;
+  }
+  
+  #content-main h2 {
+    font-size: 20px;
+    color: #333;
+    margin-bottom: 10px;
+  }
+  
+  #content-main h3 {
+    font-size: 16px;
+    margin-bottom: 10px;
+  }
+  
+  #content-main ul {
+    list-style-type: none;
+    padding-left: 20px;
+  }
+  
+  #content-main li {
+    margin-bottom: 10px;
+    line-height: 1.6;
+  }
+  
+  #content-main li:before {
+    content: "✓ ";
+    color: #ffc107;
+    font-weight: bold;
+    margin-right: 8px;
+  }
+</style>
+{% endblock %}

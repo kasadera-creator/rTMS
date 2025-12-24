@@ -1,0 +1,165 @@
+{% extends "rtms_app/base.html" %}
+{% load static %}
+
+{% block body_class %}page-admin-backup{% endblock %}
+
+{% block header_breadcrumb %}
+  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
+  <span class="text-white-50 px-1">/</span>
+  <span class="text-white px-1" style="font-size: 0.9rem;">バックアップ管理</span>
+{% endblock header_breadcrumb %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row">
+    <div class="col-lg-8">
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-warning text-dark">
+          <h5 class="mb-0"><i class="fas fa-database me-2"></i>バックアップ・エクスポート</h5>
+        </div>
+        <div class="card-body">
+          {% if error %}
+          <div class="alert alert-danger">
+            <i class="fas fa-exclamation-triangle me-1"></i>
+            {{ error }}
+          </div>
+          {% endif %}
+
+          <p class="text-muted">
+            以下の方法でデータをバックアップ・エクスポートできます。
+          </p>
+
+          <div class="row">
+            <!-- Option 1: Download Database -->
+            <div class="col-md-6 mb-3">
+              <div class="card border-light h-100">
+                <div class="card-body">
+                  <h6 class="card-title"><i class="fas fa-database me-1"></i>SQLiteデータベース</h6>
+                  <p class="small text-muted">
+                    db.sqlite3 ファイルをダウンロードします。<br>
+                    別環境での復旧に使用できます。
+                  </p>
+                  <form method="post" class="mt-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="download_db">
+                    <button type="submit" class="btn btn-outline-primary btn-sm w-100">
+                      <i class="fas fa-download me-1"></i>ダウンロード
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+
+            <!-- Option 2: Dumpdata JSON -->
+            <div class="col-md-6 mb-3">
+              <div class="card border-light h-100">
+                <div class="card-body">
+                  <h6 class="card-title"><i class="fas fa-file-code me-1"></i>ダンプデータ (JSON)</h6>
+                  <p class="small text-muted">
+                    Django dumpdata 形式でエクスポートします。<br>
+                    スキーマ変更時の移行に適しています。
+                  </p>
+                  <form method="post" class="mt-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="dumpdata">
+                    <button type="submit" class="btn btn-outline-info btn-sm w-100">
+                      <i class="fas fa-download me-1"></i>ダウンロード
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Option 3: Research CSV -->
+          <div class="row mt-3">
+            <div class="col-md-6 mb-3">
+              <div class="card border-light h-100">
+                <div class="card-body">
+                  <h6 class="card-title"><i class="fas fa-table me-1"></i>研究用CSV</h6>
+                  <p class="small text-muted">
+                    カテゴリ選択可能な横持ちCSVをエクスポートします。<br>
+                    研究/分析用途に適しています。
+                  </p>
+                  <a href="{% url 'rtms_app:export_research_csv' %}" class="btn btn-outline-success btn-sm w-100">
+                    <i class="fas fa-external-link-alt me-1"></i>CSVエクスポート
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Info & Notes -->
+      <div class="card shadow-sm">
+        <div class="card-header bg-light">
+          <h6 class="mb-0"><i class="fas fa-info-circle me-1"></i>注意事項・ガイダンス</h6>
+        </div>
+        <div class="card-body">
+          <h6 class="fw-bold text-primary">各バックアップ形式について</h6>
+          <ul class="small">
+            <li>
+              <strong>SQLiteデータベース (.sqlite3)</strong><br>
+              最も完全なバックアップです。同じバージョンの Django + SQLite 環境なら直接利用可能です。
+            </li>
+            <li class="mt-2">
+              <strong>ダンプデータ (JSON)</strong><br>
+              スキーマが変わった際の移行、または PostgreSQL などの別 DB への移行に適しています。<br>
+              復旧時は <code>python manage.py loaddata</code> を使用します。
+            </li>
+            <li class="mt-2">
+              <strong>研究用CSV</strong><br>
+              Excel での分析や統計ソフト（R、Python）での処理に適した形式です。<br>
+              カテゴリ単位で列を選択できます。
+            </li>
+          </ul>
+
+          <h6 class="fw-bold text-danger mt-4">セキュリティ・運用上の注意</h6>
+          <ul class="small">
+            <li>バックアップファイルには全患者データが含まれます。取扱い厳重注意。</li>
+            <li>定期バックアップは自動化を推奨します。</li>
+            <li>本番環境では PostgreSQL 等の DBMS 推奨（故障時復旧・同時アクセス対応）。</li>
+            <li>すべてのバックアップ・エクスポート操作は監査ログに記録されます。</li>
+          </ul>
+
+          <h6 class="fw-bold text-success mt-4">将来の PostgreSQL 移行について</h6>
+          <p class="small mb-0">
+            本番環境では PostgreSQL への移行を推奨します。
+            本システムは既に環境変数での DATABASE_URL 切替に対応しており、
+            Django migrations で スキーマ管理が行われているため、
+            DB 本体の切替は比較的簡単です。
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar: Recent Backups / System Info -->
+    <div class="col-lg-4">
+      <div class="card shadow-sm">
+        <div class="card-header bg-light">
+          <h6 class="mb-0"><i class="fas fa-cogs me-1"></i>システム情報</h6>
+        </div>
+        <div class="card-body small">
+          <div class="mb-3">
+            <strong>Django Version</strong><br>
+            <code>5.0</code>
+          </div>
+          <div class="mb-3">
+            <strong>Database</strong><br>
+            <code>SQLite3</code>
+          </div>
+          <div class="mb-3">
+            <strong>Python Version</strong><br>
+            <code>3.12+</code>
+          </div>
+          <div>
+            <strong>最終バックアップ操作</strong><br>
+            <span class="text-muted">このセッション内で実行なし</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

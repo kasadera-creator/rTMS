@@ -1,0 +1,86 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}研究用データ出力 | {{ site_title|default:_('Django administration') }}{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>研究用データ出力システム</h1>
+  
+  <p>このページでは、スーパーユーザーのみが研究用のデータを出力できます。</p>
+
+  <div style="margin-top: 20px; padding: 20px; background-color: #f8f9fa; border-left: 4px solid #007bff; border-radius: 4px;">
+    <h2 style="margin-top: 0; color: #333;">📊 データエクスポート</h2>
+    
+    <p>以下のデータ出力フォーマットが利用可能です：</p>
+    
+    <ul style="margin: 15px 0;">
+      <li><strong>患者基本情報</strong>：ID、名前、性別、年齢、プロトコルタイプなど</li>
+      <li><strong>治療サマリー</strong>：治療セッション数、治療期間、最後の治療日など</li>
+      <li><strong>HAM-D スコア</strong>：17項目版/21項目版、タイミング別スコア、改善率</li>
+      <li><strong>有害事象</strong>：重大有害事象の有無、報告内容</li>
+    </ul>
+
+    <p>
+      <a href="{% url 'rtms_app:export_research_csv' %}" class="button" style="display: inline-block; padding: 10px 20px; background-color: #417690; color: white; text-decoration: none; border-radius: 4px; margin-top: 10px;">
+        CSVエクスポートページへ →
+      </a>
+    </p>
+  </div>
+
+  <div style="margin-top: 30px; padding: 20px; background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+    <h3 style="margin-top: 0; color: #856404;">⚠️ セキュリティに関する注意</h3>
+    <ul style="margin: 10px 0; color: #856404;">
+      <li>このページはスーパーユーザー権限を保有するユーザーのみアクセス可能です</li>
+      <li>エクスポートされたデータには個人情報（患者IDなど）が含まれます</li>
+      <li>すべてのエクスポート操作は監査ログに記録されます</li>
+      <li>ダウンロード後のデータ取り扱いについては、各施設のセキュリティポリシーに従ってください</li>
+    </ul>
+  </div>
+
+  <div style="margin-top: 30px; padding: 20px; background-color: #e7f3ff; border-left: 4px solid #2196F3; border-radius: 4px;">
+    <h3 style="margin-top: 0; color: #1976D2;">📋 その他のバックアップオプション</h3>
+    <p>
+      データベースのフルバックアップやJSON形式でのダンプが必要な場合は、
+      <a href="/app/admin/backup/" target="_blank">バックアップ管理ページ</a>
+      をご利用ください。
+    </p>
+  </div>
+</div>
+
+<style>
+  #content-main h1 {
+    margin-bottom: 20px;
+    font-size: 28px;
+    color: #333;
+  }
+  
+  #content-main h2 {
+    font-size: 20px;
+    color: #333;
+    margin-bottom: 10px;
+  }
+  
+  #content-main h3 {
+    font-size: 16px;
+    margin-bottom: 10px;
+  }
+  
+  #content-main ul {
+    list-style-type: none;
+    padding-left: 20px;
+  }
+  
+  #content-main li {
+    margin-bottom: 10px;
+    line-height: 1.6;
+  }
+  
+  #content-main li:before {
+    content: "✓ ";
+    color: #007bff;
+    font-weight: bold;
+    margin-right: 8px;
+  }
+</style>
+{% endblock %}

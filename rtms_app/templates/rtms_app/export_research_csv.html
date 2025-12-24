@@ -1,0 +1,81 @@
+{% extends "rtms_app/base.html" %}
+{% load static %}
+
+{% block body_class %}page-export{% endblock %}
+
+{% block header_breadcrumb %}
+  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
+  <span class="text-white-50 px-1">/</span>
+  <span class="text-white px-1" style="font-size: 0.9rem;">研究用CSVエクスポート</span>
+{% endblock header_breadcrumb %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="card shadow-sm">
+    <div class="card-header bg-primary text-white">
+      <h5 class="mb-0"><i class="fas fa-download me-2"></i>研究用CSVエクスポート</h5>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">
+        出力したいカテゴリを選択して、「CSVダウンロード」をクリックしてください。<br>
+        <strong>1行 = (カルテ番号, クール数) 単位</strong>で、選択された項目が横に展開されます。
+      </p>
+
+      <form method="post" id="exportForm">
+        {% csrf_token %}
+
+        <div class="row">
+          {% for cat_key, cat_label in categories %}
+          <div class="col-md-6 mb-3">
+            <div class="card border-light">
+              <div class="card-body">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="categories" value="{{ cat_key }}" 
+                         id="cat_{{ cat_key }}" checked>
+                  <label class="form-check-label fw-bold" for="cat_{{ cat_key }}">
+                    {{ cat_label }}
+                  </label>
+                </div>
+                <small class="text-muted d-block mt-2">
+                  {% if cat_key == 'patient_basic' %}
+                    カルテ番号、クール数、氏名、生年月日など患者基本情報
+                  {% elif cat_key == 'treatment_summary' %}
+                    初回治療日、実施回数、期間など治療進捗サマリ
+                  {% elif cat_key == 'hamd' %}
+                    HAM-D合計スコア（17/21）、改善率、判定（各時期別）
+                  {% elif cat_key == 'adverse_events' %}
+                    有害事象数、重篤有害事象の有無と種別
+                  {% endif %}
+                </small>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+        <hr>
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-download me-1"></i>CSVダウンロード
+          </button>
+          <a href="{% url 'rtms_app:dashboard' %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-1"></i>戻る
+          </a>
+        </div>
+      </form>
+
+      <hr class="my-4">
+
+      <div class="alert alert-info">
+        <h6 class="alert-heading"><i class="fas fa-info-circle me-1"></i>注意事項</h6>
+        <ul class="mb-0 small">
+          <li>CSVは UTF-8-SIG（Excel で文字化けしません）で出力されます</li>
+          <li>エクスポート操作は監査ログに記録されます</li>
+          <li>大規模データセットの場合、生成に時間がかかる場合があります</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

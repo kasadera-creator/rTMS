@@ -1,0 +1,377 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>有害事象報告書 印刷</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 10mm;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "Yu Gothic", "游ゴシック", "Hiragino Sans", sans-serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            color: #000;
+        }
+
+        .report-page {
+            width: 100%;
+            max-width: 210mm;
+            margin: 0 auto;
+            background: white;
+            padding: 10mm;
+            page-break-after: always;
+        }
+
+        .title-box {
+            text-align: center;
+            font-size: 16pt;
+            font-weight: bold;
+            border: 3px solid #dc3545;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .caution-box {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 8px;
+            margin-bottom: 10px;
+            font-size: 9pt;
+            line-height: 1.5;
+        }
+
+        .caution-title {
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+            font-size: 10pt;
+        }
+
+        th {
+            background-color: #f0f0f0;
+            border: 1px solid #000;
+            padding: 5px;
+            text-align: left;
+            font-weight: bold;
+            width: 25%;
+        }
+
+        td {
+            border: 1px solid #000;
+            padding: 5px;
+            vertical-align: top;
+        }
+
+        .event-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+            margin: 3px 0;
+        }
+
+        .badge {
+            background-color: #dc3545;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 2px;
+            font-size: 9pt;
+            display: inline-block;
+        }
+
+        .section-title {
+            font-weight: bold;
+            background-color: #f0f0f0;
+            border: 1px solid #000;
+            padding: 5px;
+            margin-top: 8px;
+        }
+
+        .footer-section {
+            margin-top: 15px;
+            page-break-inside: avoid;
+        }
+
+        .footer-info {
+            font-size: 10pt;
+            line-height: 1.6;
+        }
+
+        .contact-missing {
+            background-color: #ffe6e6;
+            color: #d9534f;
+            font-weight: bold;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+
+        .print-date {
+            text-align: right;
+            font-size: 9pt;
+            color: #666;
+            margin-top: 15px;
+        }
+
+        .no-print {
+            display: none;
+        }
+
+        @media screen {
+            body {
+                background-color: #e9ecef;
+                padding: 20px;
+            }
+
+            .report-page {
+                box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
+                margin-bottom: 30px;
+            }
+
+            .print-controls {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 100;
+            }
+
+            .print-controls button {
+                margin-left: 5px;
+                padding: 8px 16px;
+                font-size: 14px;
+            }
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+                margin: 0;
+            }
+
+            .report-page {
+                box-shadow: none;
+                margin: 0;
+                padding: 10mm;
+                page-break-after: always;
+            }
+
+            .print-controls {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="print-controls no-print">
+        <button class="btn btn-primary" onclick="window.print()">
+            <i class="fas fa-print"></i> 印刷
+        </button>
+        <button class="btn btn-secondary" onclick="window.history.back()">
+            <i class="fas fa-arrow-left"></i> 戻る
+        </button>
+    </div>
+
+    <div class="report-page">
+        <!-- タイトル -->
+        <div class="title-box">
+            重篤を含む有害事象 報告書
+        </div>
+
+        <!-- 注意文＆送付先 -->
+        <div class="caution-box">
+            <div class="caution-title">送付先メールアドレス</div>
+            <div>brainsway_saeinfo@cmi.co.jp</div>
+            <div style="margin-top: 5px; font-size: 9pt;">
+                けいれん発作、手指の筋収縮、失神、躁病・軽躁病の出現、自殺企図など、重篤を含む有害事象が発現した場合、速やかに報告書を作成し、Brainsway 使用成績調査…までメール送付してください。
+            </div>
+        </div>
+
+        <!-- 有害事象 -->
+        <div class="section-title">該当する有害事象</div>
+        <div class="event-badges">
+            {% for event in report.event_types %}
+                <span class="badge">{{ event }}</span>
+            {% empty %}
+                <span style="color: #999;">（記載なし）</span>
+            {% endfor %}
+        </div>
+
+        <!-- 基本情報テーブル -->
+        <div class="section-title">基本情報</div>
+        <table>
+            <tr>
+                <th>有害事象名</th>
+                <td>{{ report.adverse_event_name|default:"" }}</td>
+            </tr>
+            <tr>
+                <th>発現日</th>
+                <td>{{ report.onset_date|date:"Y年m月d日" }}</td>
+            </tr>
+        </table>
+
+        <!-- 患者情報テーブル -->
+        <div class="section-title">患者情報</div>
+        <table>
+            <tr>
+                <th>年齢</th>
+                <td>{{ report.age|default:"" }}</td>
+            </tr>
+            <tr>
+                <th>性別</th>
+                <td>{{ report.sex|default:"" }}</td>
+            </tr>
+            <tr>
+                <th>イニシャル</th>
+                <td>{{ report.initials|default:"" }}</td>
+            </tr>
+        </table>
+
+        <!-- 診断・治療情報テーブル -->
+        <div class="section-title">診断・治療情報</div>
+        <table>
+            <tr>
+                <th>診断名</th>
+                <td>
+                    {% if report.diagnosis_category == 'depressive_episode' %}
+                        うつ病エピソード
+                    {% elif report.diagnosis_category == 'recurrent_depressive_disorder' %}
+                        反復性うつ病性障害
+                    {% else %}
+                        {{ report.diagnosis_other_text|default:"" }}
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <th>併用薬（向精神薬）</th>
+                <td style="white-space: pre-wrap;">{{ report.concomitant_meds_text|default:"" }}</td>
+            </tr>
+            <tr>
+                <th>薬物・アルコール・カフェイン摂取</th>
+                <td>{{ report.substance_intake_text|default:"" }}</td>
+            </tr>
+            <tr>
+                <th>てんかん・けいれん発作既往</th>
+                <td>
+                    {% if report.seizure_history_flag %}
+                        あり（{{ report.seizure_history_date_text|default:"" }}）
+                    {% else %}
+                        なし
+                    {% endif %}
+                </td>
+            </tr>
+        </table>
+
+        <!-- 治療パラメータテーブル -->
+        <div class="section-title">治療パラメータ</div>
+        <table>
+            <tr>
+                <th>安静運動閾値</th>
+                <td>{{ report.rmt_value|default:"" }}</td>
+            </tr>
+            <tr>
+                <th>刺激強度</th>
+                <td>{{ report.intensity_value|default:"" }}</td>
+            </tr>
+            <tr>
+                <th>刺激部位</th>
+                <td>
+                    {% if report.stimulation_site_category == 'left_dlpfc' %}
+                        左DLPFC
+                    {% else %}
+                        {{ report.stimulation_site_other_text|default:"" }}
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <th>治療回数</th>
+                <td>{{ report.treatment_course_number|default:"" }}回目</td>
+            </tr>
+        </table>
+
+        <!-- 転帰テーブル -->
+        <div class="section-title">転帰</div>
+        <table>
+            <tr>
+                <th>転帰</th>
+                <td>
+                    {% for outcome in report.outcome_flags %}
+                        {% if outcome == 'recovery' %}回復
+                        {% elif outcome == 'improvement' %}軽快
+                        {% elif outcome == 'not_recovered' %}未回復
+                        {% elif outcome == 'sequelae' %}後遺症: {{ report.outcome_sequelae_text|default:"" }}
+                        {% elif outcome == 'death' %}死亡
+                        {% elif outcome == 'unknown' %}不明
+                        {% endif %}
+                    {% endfor %}
+                </td>
+            </tr>
+            <tr>
+                <th>転帰日</th>
+                <td>{{ report.outcome_date|date:"Y年m月d日"|default:"" }}</td>
+            </tr>
+        </table>
+
+        <!-- 特記事項テーブル -->
+        <div class="section-title">特記事項</div>
+        <table>
+            <tr>
+                <td style="white-space: pre-wrap; min-height: 40px;">{{ report.special_notes|default:"" }}</td>
+            </tr>
+        </table>
+
+        <!-- 医師コメント テーブル -->
+        <div class="section-title">医師コメント欄（発現から転帰までの補足説明など）</div>
+        <table>
+            <tr>
+                <td style="white-space: pre-wrap; min-height: 80px;">{{ report.physician_comment|default:"" }}</td>
+            </tr>
+        </table>
+
+        <!-- フッタ：施設情報 -->
+        <div class="footer-section">
+            <div class="section-title">施設・担当者情報</div>
+            <div class="footer-info">
+                <div><strong>施設名：</strong> {{ facility_name }}</div>
+                <div><strong>TEL：</strong> {{ facility_phone }}</div>
+                <div>
+                    <strong>担当者：</strong>
+                    {% if contact_missing %}
+                        <span class="contact-missing">未設定</span>
+                    {% else %}
+                        {{ contact_person }}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 作成日 -->
+        <div class="print-date">
+            作成日：{{ report_date }}
+        </div>
+    </div>
+
+    <script>
+        // If URL indicates "print=1", auto-print on load
+        if (new URLSearchParams(window.location.search).get('print') === '1') {
+            window.addEventListener('load', function() {
+                setTimeout(() => window.print(), 500);
+            });
+        }
+    </script>
+</body>
+</html>

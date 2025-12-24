@@ -48,13 +48,19 @@ class PatientFirstVisitForm(forms.ModelForm):
         queryset=User.objects.filter(groups__name='医師'),
         label="担当医", required=False, widget=forms.Select(attrs={'class': 'form-select'})
     )
+    protocol_type = forms.ChoiceField(
+        label="プロトコル",
+        choices=[('INSURANCE', '保険診療プロトコル'), ('PMS', '市販後調査プロトコル')],
+        initial='INSURANCE',
+        widget=forms.RadioSelect(attrs={'class': 'form-check-input'})
+    )
     
     diagnosis = forms.CharField(widget=forms.HiddenInput(), required=False)
 
     class Meta:
         model = Patient
         fields = [
-            'card_id', 'name', 'birth_date', 'gender', 'attending_physician', 
+            'card_id', 'name', 'birth_date', 'gender', 'attending_physician', 'protocol_type',
             'referral_source', 'referral_doctor',
             'chief_complaint', 'diagnosis', 
             'life_history', 'past_history', 'present_illness', 'medication_history', 
