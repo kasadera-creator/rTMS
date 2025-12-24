@@ -335,7 +335,7 @@
             <div class="d-flex flex-column gap-2">
               {% for value, label in form.fields.protocol_type.choices %}
                 <label class="form-check">
-                  <input class="form-check-input" type="radio" name="protocol_type" value="{{ value }}" {% if form.protocol_type.value == value or (not form.protocol_type.value and value == "INSURANCE") %}checked{% endif %}>
+                  <input class="form-check-input" type="radio" name="protocol_type" value="{{ value }}" {% if form.protocol_type.value == value %}checked{% elif not form.protocol_type.value and value == "INSURANCE" %}checked{% endif %}>
                   <span class="form-check-label">{{ label }}{% if value == "INSURANCE" %} （デフォルト）{% endif %}</span>
                 </label>
               {% endfor %}
