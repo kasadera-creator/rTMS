@@ -77,7 +77,8 @@
                   </div>
                 </div>
                 {% for ev in day.events_visible %}
-                  <a class="event-item evt-{{ ev.kind }}{% if ev.is_planned %} evt-planned{% endif %}" href="{{ ev.url }}" title="{{ ev.label }}">
+                  <a class="event-item evt-{{ ev.kind }}{% if ev.is_planned %} evt-planned{% endif %}{% if ev.is_skipped %} evt-skipped{% endif %}" href="{{ ev.url }}" title="{{ ev.label }}">
+                    {% if ev.is_skipped %}<span class="badge bg-danger me-1 small">中止</span>{% endif %}
                     {% if ev.kind == 'admission' %}<i class="fas fa-procedures me-1"></i>{% endif %}
                     {% if ev.kind == 'discharge' %}<i class="fas fa-home me-1"></i>{% endif %}
                     {% if ev.kind == 'treatment' %}<i class="fas fa-bolt me-1"></i>{% endif %}

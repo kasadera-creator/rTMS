@@ -201,3 +201,17 @@ class TestSkipSessions(TestCase):
         self.assertEqual(skip.get('by_username'), self.user.username)
         loc = resp.get('Location', '')
         self.assertIn(f'focus={day2.isoformat()}', loc)
+
+    def test_calendar_shows_skipped_label(self):
+        from datetime import date
+        from rtms_app.models import TreatmentSession
+
+        day = date(2026, 2, 10)
+        s = TreatmentSession.objects.create(patient=self.patient, session_date=day, status='skipped')
+
+        url = reverse('rtms_app:calendar_month') + f'?year={day.year}&month={day.month}'
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode('utf-8')
+        # The calendar should contain the skipped label/badge text
+        self.assertIn('中止', content)

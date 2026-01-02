@@ -2155,13 +2155,18 @@ def _build_month_calendar(year: int, month: int, is_print: bool = False):
         rtms_counts[s.session_date] += 1
         session_no = session_numbers.get(s.id, 0)
         actual_session_numbers[(s.patient_id, s.course_number)].add(session_no)
+        is_skipped = (s.status == 'skipped')
+        label = f"治療{session_no}回 {s.patient.name}"
+        if is_skipped:
+            label = f"【中止】{label}"
         day_treatment_events[s.session_date].append({
-            'label': f"治療{session_no}回 {s.patient.name}",
+            'label': label,
             'kind': 'treatment',
             'patient_id': s.patient_id,
             'session_id': s.id,
             'url': build_url('treatment_add', [s.patient_id], {'date': s.session_date.isoformat()}),
             'is_planned': False,
+            'is_skipped': is_skipped,
             'sort_key': 30 + session_no,  # treatment order later
         })
 
