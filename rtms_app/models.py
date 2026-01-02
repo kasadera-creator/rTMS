@@ -149,6 +149,14 @@ class TreatmentSession(models.Model):
     train_count = models.PositiveSmallIntegerField("トレイン数", default=55)
     total_pulses = models.PositiveIntegerField(default=1980)
     sessions_per_day = models.PositiveSmallIntegerField(default=1)
+    # 治療時ヘルメット移動量（cm、前方+）。通常は +6cm。
+    helmet_shift_cm = models.IntegerField(
+        "治療時ヘルメット移動（cm、前方+）",
+        default=6,
+        null=True,
+        blank=True,
+        help_text="MT測定位置から治療位置への移動量。通常は前方+6cm。",
+    )
 
     treatment_notes = models.TextField(blank=True, default="")
 
@@ -159,6 +167,30 @@ class TreatmentSession(models.Model):
     side_effects = models.JSONField("副作用", default=dict, blank=True, null=True)
     meta = models.JSONField("メタ", default=dict, blank=True, null=True)
     performer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+
+    @property
+    def stimulation_minutes(self):
+        """総刺激時間（分）を算出: ((train_seconds + intertrain_seconds) * train_count - intertrain_seconds) / 60
+
+        例: ((2 + 20) * 55 - 20) / 60 -> 19.833...
+        """
+        try:
+            ts = float(self.train_seconds or 0)
+            iti = float(self.intertrain_seconds or 0)
+            n = int(self.train_count or 0)
+            if n <= 0:
+                return 0.0
+            total_seconds = (ts + iti) * n - iti
+            return total_seconds / 60.0
+        except Exception:
+            return None
+
+    @property
+    def stimulation_minutes_display(self):
+        v = self.stimulation_minutes
+        if v is None:
+            return ''
+        return f"{v:.2f}"
 
     def has_sae(self):
         """重篤有害事象レコードが存在するかを判定"""

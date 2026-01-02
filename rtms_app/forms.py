@@ -89,6 +89,19 @@ class PatientFirstVisitForm(forms.ModelForm):
         if not self.instance.medication_history:
             self.instance.medication_history = default_medication_text
             self.initial['medication_history'] = default_medication_text
+        # 初診フォームの挙動改善:
+        # インスタンスに `first_treatment_date` が未設定の場合、
+        # `admission_date` があればそれをフォームの initial に設定する。
+        # （既に first_treatment_date がある患者は上書きしない）
+        patient = getattr(self, 'instance', None)
+        if patient and not getattr(patient, 'first_treatment_date', None):
+            fallback = getattr(patient, 'admission_date', None)
+            if fallback:
+                try:
+                    self.fields['first_treatment_date'].initial = fallback
+                except Exception:
+                    # 安全のため失敗しても無視
+                    pass
     
     # ★追加: 保存時のバリデーション
     def clean(self):
@@ -143,17 +156,19 @@ class TreatmentForm(forms.ModelForm):
             'mt_percent',
             'train_seconds', 'frequency_hz', 'intertrain_seconds',
             'train_count', 'total_pulses',
+            'helmet_shift_cm',
             'treatment_notes',
         ]
         widgets = {
             'coil_type': forms.TextInput(attrs={'class': 'form-control', 'required': True, 'value': 'BrainsWay H1'}),
             'target_site': forms.TextInput(attrs={'class': 'form-control', 'required': True, 'value': '左DLPFC'}),
-            'mt_percent': forms.NumberInput(attrs={'class': 'form-control', 'required': True, 'min': 0}),
+            'mt_percent': forms.NumberInput(attrs={'class': 'form-control', 'required': True, 'min': 0, 'step': '1'}),
             'train_seconds': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1', 'required': True, 'value': 2}),
             'frequency_hz': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1', 'required': True, 'value': 18}),
             'intertrain_seconds': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1', 'required': True, 'value': 20}),
             'train_count': forms.NumberInput(attrs={'class': 'form-control', 'required': True, 'min': 1, 'value': 55}),
             'total_pulses': forms.NumberInput(attrs={'class': 'form-control', 'required': True, 'min': 0, 'value': 1980}),
+            'helmet_shift_cm': forms.NumberInput(attrs={'class': 'form-control', 'step': '1'}),
             'treatment_notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
 

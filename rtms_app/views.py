@@ -1528,6 +1528,7 @@ def treatment_add(request, patient_id):
                 'train_seconds': cleaned.get('train_seconds'),
                 'intertrain_seconds': cleaned.get('intertrain_seconds'),
                 'train_count': cleaned.get('train_count'),
+                'helmet_shift_cm': cleaned.get('helmet_shift_cm'),
                 'total_pulses': cleaned.get('total_pulses'),
                 'treatment_notes': cleaned.get('treatment_notes',''),
                 'motor_threshold': cleaned.get('mt_percent'),
@@ -1599,6 +1600,19 @@ def treatment_add(request, patient_id):
             sec.memo = memo or sec.memo or ""
             sec.physician_signature = signature or sec.physician_signature or ""
             sec.save()
+
+            # Consolidate side-effect memo into session meta so UI-unified memo appears
+            try:
+                smemo = sec.memo or ""
+                if smemo:
+                    meta = s.meta or {}
+                    # keep legacy keys for backward compatibility but set from unified memo
+                    meta['confirm_notes'] = smemo
+                    meta['treat_notes'] = smemo
+                    s.meta = meta
+                    s.save(update_fields=['meta'])
+            except Exception:
+                pass
 
             # Upsert SeriousAdverseEvent if any SAE checkbox is checked
             from .models import SeriousAdverseEvent
@@ -1723,6 +1737,7 @@ def treatment_add(request, patient_id):
                 'intertrain_seconds': existing_session.intertrain_seconds,
                 'train_count': existing_session.train_count,
                 'total_pulses': existing_session.total_pulses,
+                'helmet_shift_cm': getattr(existing_session, 'helmet_shift_cm', None),
                 'treatment_notes': existing_session.treatment_notes or '',
             })
         
@@ -1862,9 +1877,13 @@ def treatment_add(request, patient_id):
     need_mapping = (current_week_mapping is None) or (not (safety_sleep and safety_alcohol and safety_meds))
     
     # 位置決めURL
+    # Include the current initial_date when linking to mapping_add so the mapping form
+    # opens for the same session date (allows editing existing mapping on that date).
     mapping_url = reverse('rtms_app:mapping_add', args=[patient.id])
+    mapping_query = {'date': initial_date.isoformat()}
     if dashboard_date:
-        mapping_url = build_url('mapping_add', args=[patient.id], query={'dashboard_date': dashboard_date})
+        mapping_query['dashboard_date'] = dashboard_date
+    mapping_url = build_url('mapping_add', args=[patient.id], query=mapping_query)
     
     # 確認刺激のデフォルト値
     confirm_defaults = {
