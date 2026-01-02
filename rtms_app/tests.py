@@ -165,3 +165,39 @@ class TestSkipSessions(TestCase):
         new_last = expected_second
         delta = new_last - original_last
         self.assertEqual(self.patient.discharge_date, date(2026,1,31) + delta)
+
+    def test_skip_records_reason_and_audit_meta(self):
+        from datetime import date, timedelta
+        from rtms_app.models import TreatmentSession
+
+        day1 = date(2026,1,20)
+        day2 = date(2026,1,21)
+        s1 = TreatmentSession.objects.create(patient=self.patient, session_date=day1)
+        s2 = TreatmentSession.objects.create(patient=self.patient, session_date=day2)
+
+        url = reverse('rtms_app:treatment_add', args=[self.patient.id])
+        post = {
+            'treatment_date': day2.isoformat(),
+            'treatment_time': '09:00',
+            'mt_percent': '120',
+            'frequency_hz': '18.0',
+            'train_seconds': '2.0',
+            'intertrain_seconds': '20.0',
+            'train_count': '55',
+            'total_pulses': '1980',
+            'action': 'skip',
+            'skip_reason': '患者欠席',
+        }
+        resp = self.client.post(url, post, follow=False)
+        self.assertIn(resp.status_code, (302,303))
+
+        s2.refresh_from_db()
+        self.assertEqual(s2.status, 'skipped')
+        meta = s2.meta or {}
+        self.assertIn('skip', meta)
+        skip = meta['skip']
+        self.assertEqual(skip.get('reason'), '患者欠席')
+        self.assertEqual(skip.get('by_user_id'), self.user.id)
+        self.assertEqual(skip.get('by_username'), self.user.username)
+        loc = resp.get('Location', '')
+        self.assertIn(f'focus={day2.isoformat()}', loc)

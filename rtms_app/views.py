@@ -1708,12 +1708,29 @@ def treatment_add(request, patient_id):
             # Skip action: mark this session as skipped and shift future planned sessions
             if action == 'skip':
                 try:
+                    # Save skip audit info into session.meta
+                    meta = s.meta or {}
+                    reason = (request.POST.get('skip_reason') or '').strip()
+                    skip_info = {
+                        'by_user_id': request.user.id if getattr(request.user, 'id', None) else None,
+                        'by_username': request.user.username if getattr(request.user, 'username', None) else '',
+                        'at': timezone.localtime(timezone.now()).isoformat(),
+                        'reason': reason,
+                    }
+                    meta['skip'] = skip_info
+                    s.meta = meta
                     s.status = 'skipped'
-                    s.save(update_fields=['status'])
+                    s.save(update_fields=['meta', 'status'])
                 except Exception:
                     pass
                 try:
                     shift_future_sessions(patient, session_date)
+                except Exception:
+                    pass
+
+                # Audit log entry for reviewers (optional)
+                try:
+                    log_audit_action(patient, 'SKIP', 'TreatmentSession', str(s.id), summary='Session skipped', meta={'skip': s.meta.get('skip')})
                 except Exception:
                     pass
 

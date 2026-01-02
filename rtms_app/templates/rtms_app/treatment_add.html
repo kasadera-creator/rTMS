@@ -671,6 +671,29 @@
       </div>
     </div>
   </div>
+
+        <!-- Skip Confirm Modal -->
+        <div class="modal fade" id="skipConfirmModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">スキップの確認</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">
+                <p>本当にこのセッションをスキップしますか？</p>
+                <div class="mb-2">
+                  <label class="form-label">理由（任意）</label>
+                  <input type="text" class="form-control" id="skipReasonInput" placeholder="例: 患者欠席、機器不具合など">
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-warning" id="confirmSkipBtn">スキップ確定</button>
+              </div>
+            </div>
+          </div>
+        </div>
 </div>
 
 {% if dashboard_date %}
@@ -685,7 +708,7 @@
       <a class="btn btn-secondary fab" href="{{ back_url }}">
         <i class="fas fa-undo"></i> 戻る
       </a>
-      <button type="submit" class="btn btn-outline-warning fab" form="treatmentForm" onclick="(function(){ const f=document.getElementById('treatmentForm'); let a = f.querySelector('[name=action]'); if(!a){ a=document.createElement('input'); a.type='hidden'; a.name='action'; f.appendChild(a);} a.value='skip'; })()">
+      <button type="button" class="btn btn-outline-warning fab" id="openSkipModalBtn">
         <i class="fas fa-forward"></i> スキップ
       </button>
     </div>
@@ -701,7 +724,7 @@
     <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
       <i class="fas fa-undo"></i> 戻る
     </a>
-    <button type="submit" class="btn btn-outline-warning fab" form="treatmentForm" onclick="(function(){ const f=document.getElementById('treatmentForm'); let a = f.querySelector('[name=action]'); if(!a){ a=document.createElement('input'); a.type='hidden'; a.name='action'; f.appendChild(a);} a.value='skip'; })()">
+    <button type="button" class="btn btn-outline-warning fab" id="openSkipModalBtn2">
       <i class="fas fa-forward"></i> スキップ
     </button>
   </div>
@@ -746,6 +769,31 @@
   window.getCSRFToken = () => document.querySelector('[name="csrfmiddlewaretoken"]').value;
 </script>
 <script src="{% static 'rtms_app/wizard.js' %}"></script>
+<script>
+  // Skip modal handling
+  (function(){
+    const openBtns = [document.getElementById('openSkipModalBtn'), document.getElementById('openSkipModalBtn2')];
+    const modalEl = document.getElementById('skipConfirmModal');
+    const reasonInput = document.getElementById('skipReasonInput');
+    const confirmBtn = document.getElementById('confirmSkipBtn');
+    const form = document.getElementById('treatmentForm');
+    let modalInstance = null;
+    function ensureModal(){ if(!modalEl) return null; return bootstrap.Modal.getOrCreateInstance(modalEl); }
+    openBtns.forEach(b => { if(b) b.addEventListener('click', () => { modalInstance = ensureModal(); modalInstance.show(); }); });
+    if(confirmBtn && form){
+      confirmBtn.addEventListener('click', () => {
+        // set hidden action and skip_reason
+        let a = form.querySelector('[name=action]');
+        if(!a){ a = document.createElement('input'); a.type='hidden'; a.name='action'; form.appendChild(a); }
+        a.value = 'skip';
+        let r = form.querySelector('[name=skip_reason]');
+        if(!r){ r = document.createElement('input'); r.type='hidden'; r.name='skip_reason'; form.appendChild(r); }
+        r.value = (reasonInput && reasonInput.value) ? reasonInput.value : '';
+        form.submit();
+      });
+    }
+  })();
+</script>
 <script>
   // ---- モード切替：手順解説を選ぶとモーダルを開き、閉じたら記入モードへ戻す ----
   const modeRecord = document.getElementById('treatModeRecord');
