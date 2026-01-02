@@ -4,6 +4,8 @@ from django.shortcuts import render
 from django.core.exceptions import PermissionDenied
 from django.db import models
 from django_jsonform.widgets import JSONFormWidget
+from django.contrib.auth.models import User, Group
+from django.contrib.auth.admin import UserAdmin, GroupAdmin
 from .models import (
     Patient,
     TreatmentSession,
@@ -244,6 +246,15 @@ rtms_admin_site.register(AuditLog, AuditLogAdmin)
 rtms_admin_site.register(ScaleDefinition, ScaleDefinitionAdmin)
 rtms_admin_site.register(TimingScaleConfig, TimingScaleConfigAdmin)
 rtms_admin_site.register(AssessmentRecord, AssessmentRecordAdmin)
+
+
+# Ensure core auth models are available in the custom admin site
+try:
+    rtms_admin_site.register(User, UserAdmin)
+    rtms_admin_site.register(Group, GroupAdmin)
+except Exception:
+    # If registration fails (e.g., already registered), ignore to avoid import-time errors
+    pass
 
 
 
