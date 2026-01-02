@@ -4,6 +4,10 @@
 
 {% block extrastyle %}
 <link rel="stylesheet" href="{% static 'css/calendar.css' %}">
+<style>
+  /* Highlight focused day when ?focus=YYYY-MM-DD is present */
+  .focus-day { outline: 3px solid rgba(25,135,84,0.6); background: rgba(25,135,84,0.06) !important; border-radius: 6px; }
+</style>
 {% endblock %}
 
 {% block header_breadcrumb %}
@@ -61,7 +65,7 @@
           {% for week in weeks %}
           <tr>
             {% for day in week %}
-              <td data-day-url="{{ day.day_url }}" class="{% if day.is_holiday %}is-holiday{% elif day.weekday == 5 %}day-sat{% elif day.weekday == 6 %}day-sun{% endif %} {% if not day.is_current_month %}cell-muted{% endif %}">
+              <td data-day-url="{{ day.day_url }}" data-date="{{ day.date|date:'Y-m-d' }}" class="{% if day.is_holiday %}is-holiday{% elif day.weekday == 5 %}day-sat{% elif day.weekday == 6 %}day-sun{% endif %} {% if not day.is_current_month %}cell-muted{% endif %}">
                 <div class="date-row">
                   <span class="date-num{% if day.is_holiday %} holiday-date{% endif %}">{{ day.date|date:"n/j" }}</span>
                   {% if day.holiday_name %}
@@ -98,6 +102,21 @@
 
 {% block scripts %}
 <script>
+// Centralized calendar focus handler
+// Use the shared static module if available
+if (typeof applyCalendarFocus === 'function') {
+  // run scoped to document
+  applyCalendarFocus({ calendar: window.calendar, rootEl: document });
+} else {
+  // If module not yet loaded, attempt to load it dynamically
+  try {
+    const s = document.createElement('script');
+    s.src = "{% static 'rtms_app/calendar_focus.js' %}";
+    s.onload = function() { if (typeof applyCalendarFocus === 'function') applyCalendarFocus({ calendar: window.calendar, rootEl: document }); };
+    document.body.appendChild(s);
+  } catch (e) {}
+}
+
 document.addEventListener('click', function(e){
   const td = e.target.closest('td[data-day-url]');
   if (!td) return;

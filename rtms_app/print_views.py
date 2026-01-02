@@ -434,5 +434,7 @@ def print_side_effect_check(request, patient_id, session_id):
 		'frequency_hz': getattr(session, 'frequency_hz', ''),
 		'mt_percent': getattr(session, 'mt_percent', ''),
 		'total_pulses': getattr(session, 'total_pulses', ''),
+		# Computed stimulation time (minutes) for printing
+		'stimulation_minutes': getattr(session, 'stimulation_minutes_display', ''),
 	}
 	return render(request, 'rtms_app/print/side_effect_check.html', context)

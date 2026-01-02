@@ -112,7 +112,7 @@ class SideEffectWidget {
         </table>
       </div>
       <div class="mt-2 d-flex justify-content-end gap-3" style="font-size: 0.75rem; color: #999;">
-        <span><strong>操作:</strong> クリックで 0→1→2→3→0</span>
+        <span><strong>操作:</strong> クリックで －→1→2→3→－</span>
         <span><strong>重症度:</strong> 0(なし)～3(重度)</span>
         <span><strong>関連性:</strong> 0(なし)～3(高い)</span>
       </div>

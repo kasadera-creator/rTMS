@@ -21,6 +21,7 @@ import csv
 import json
 import io
 from urllib.parse import urlencode
+import logging
 
 try:
     import jpholiday
@@ -50,6 +51,7 @@ from .services.rtms_schedule import (
     session_info_for_date,
     format_rtms_label,
 )
+from .services.schedule import shift_future_sessions
 from .utils.hamd import classify_hamd_response, classify_hamd17_severity
 
 
@@ -643,7 +645,8 @@ HAMD_ANCHORS = {
     "q15": "0. なし（不適切な心配はない、あるいは完全に安心できる）\n1. 体のことが気がかりである（自分の健康に関する多少の不適切な心配、または大丈夫だと言われているにも関わらず、わずかに心配している）\n2. 健康にこだわっている（しばしば自身の健康に対し過剰に心配する、あるいは医学的に大丈夫だと明言されているにも関わらず、特別な病気があると思い込んでいる）\n3. 訴えや助けを求めること等が頻繁にみられる（医師が確認できていない身体的問題があると確信している：身体的な健康についての誇張された、現実的でない心配）\n4. 心気妄想（例えば、体の一部が衰え、腐ってしまうと感じる、など、外来患者ではまれである）",
     "q16": "現病歴による評価の場合：\n0. 体重減少なし、あるいは今回の病気による減少ではない\n1. 今回のうつ病により、おそらく体重が減少している\n2. （患者によると）うつ病により、明らかに体重が減少している",
     "q17": "0. うつ状態であり病気であることを認める、または現在うつ状態でない\n1. 病気であることを認めるが、原因を粗食、働き過ぎ、ウィルス、休息の必要性などのせいにする（病気を否定するが、病気である可能性は認める、例えば「私はどこも悪いところはないと思います、でも他の人には悪く見えるようです」）\n2. 病気であることを全く認めない（病気であることを完全に否定する、例えば「私はうつ病ではありません、私は元気です」）",
-    "q18": "A. 症状が悪化するのは朝方なのか夕方なのかを記録し、日内変動のない場合は「なし」にマークする。\n0. なし\n1. 午前に悪い\n2. 午後に悪い\n\nB. 日内変動がある場合、変動の程度をマークする。\n0. なし\n1. 軽度\n2. 重度",
+    # Q18: only B (degree of diurnal variation) is relevant for scoring/UI — A (timing) removed from display
+    "q18": "B. 日内変動がある場合、変動の程度をマークする。\n0. なし\n1. 軽度\n2. 重度",
     "q19": "0. なし\n1. 軽度\n2. 中等度\n3. 重度\n4. 何もできなくなる",
     "q20": "0. なし\n1. 疑念をもっている\n2. 関係念慮\n3. 被害関係妄想",
     "q21": "0. なし\n1. 軽度\n2. 重度",
@@ -851,7 +854,14 @@ def admission_procedure(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id); dashboard_date = request.GET.get('dashboard_date')
     if request.method == 'POST':
         form = AdmissionProcedureForm(request.POST, instance=patient)
-        if form.is_valid(): proc = form.save(commit=False); proc.is_admission_procedure_done = True; proc.save(); return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
+        if form.is_valid():
+            proc = form.save(commit=False)
+            proc.is_admission_procedure_done = True
+            # Ensure patient status reflects admission: set to inpatient when admission procedure completed
+            if getattr(proc, 'status', None) != 'inpatient':
+                proc.status = 'inpatient'
+            proc.save(update_fields=['is_admission_procedure_done', 'status'])
+            return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
     else: form = AdmissionProcedureForm(instance=patient)
     return render(request, 'rtms_app/admission_procedure.html', {'patient': patient, 'form': form, 'dashboard_date': dashboard_date})
 
@@ -1685,14 +1695,48 @@ def treatment_add(request, patient_id):
             # Wizard action or normal save
             if action == 'save_from_wizard':
                 # ウィザードから保存：成功した旨をJSONで返す or 通常リダイレクト
+                # Redirect back to dashboard, include focus for client-side calendar handling
+                focus_date = session_date.isoformat()
                 if dashboard_date:
-                    return redirect(build_url('dashboard', query={'date': dashboard_date}))
-                return redirect(build_url('dashboard'))
+                    url = build_url('dashboard', query={'date': dashboard_date, 'focus': focus_date})
+                else:
+                    url = build_url('dashboard', query={'focus': focus_date})
+                if settings.DEBUG:
+                    logging.getLogger(__name__).debug(f"treatment_add.save_from_wizard POST date={d} saved={s.session_date} redirect={url}")
+                return redirect(url)
 
-            # Normal save -> go back to dashboard
+            # Skip action: mark this session as skipped and shift future planned sessions
+            if action == 'skip':
+                try:
+                    s.status = 'skipped'
+                    s.save(update_fields=['status'])
+                except Exception:
+                    pass
+                try:
+                    shift_future_sessions(patient, session_date)
+                except Exception:
+                    pass
+
+                # redirect back to dashboard with focus on the skipped date
+                focus_date = session_date.isoformat()
+                if dashboard_date:
+                    url = build_url('dashboard', query={'date': dashboard_date, 'focus': focus_date})
+                else:
+                    url = build_url('dashboard', query={'focus': focus_date})
+                if settings.DEBUG:
+                    import logging
+                    logging.getLogger(__name__).debug(f"treatment_add.skip POST date={d} skipped session={s.id} redirect={url}")
+                return redirect(url)
+
+            # Normal save -> go back to dashboard (include focus param so client calendar can jump)
+            focus_date = session_date.isoformat()
             if dashboard_date:
-                return redirect(build_url('dashboard', query={'date': dashboard_date}))
-            return redirect(build_url('dashboard'))
+                url = build_url('dashboard', query={'date': dashboard_date, 'focus': focus_date})
+            else:
+                url = build_url('dashboard', query={'focus': focus_date})
+            if settings.DEBUG:
+                logging.getLogger(__name__).debug(f"treatment_add.save POST date={d} saved={s.session_date} redirect={url}")
+            return redirect(url)
         else:
             pass
     else:

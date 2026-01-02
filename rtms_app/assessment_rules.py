@@ -7,7 +7,7 @@ from typing import Optional
 
 
 # Thresholds (currently protocol-independent; can be extended later)
-RESPONSE_RATE_THRESHOLD = 0.50  # 50%
+RESPONSE_RATE_THRESHOLD = 0.20  # 20% (protocol requires >=20% to count as response)
 REMISSION_HAMD17_THRESHOLD = 7
 REMISSION_HAMD21_THRESHOLD = 9
 

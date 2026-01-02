@@ -20,7 +20,9 @@
         body * { visibility: hidden; }
         .printable-area, .printable-area * { visibility: visible; }
         .printable-area { position: absolute; left: 0; top: 0; width: 100%; color: #000; background: #fff; }
-        .no-print, .btn, header, nav, footer, .floating-toolbar { display: none !important; }
+      .no-print, .btn, header, nav, footer, .floating-toolbar { display: none !important; }
+      /* Hide modal close buttons and other non-essential UI during print */
+      .js-hide-on-print { display: none !important; }
         
         table { width: 100%; border-collapse: collapse; font-size: 11pt; }
         th, td { border: 1px solid #000 !important; padding: 6px; }
@@ -429,7 +431,7 @@
         <h5 class="modal-title wizard-title">
           <i class="fas fa-route me-2"></i>治療手順解説モード
         </h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+        <button type="button" class="btn-close js-hide-on-print" data-bs-dismiss="modal" aria-label="閉じる"></button>
       </div>
       <div class="modal-body wizard-body">
         <div id="wizardContent"></div>
@@ -444,7 +446,7 @@
         <button type="button" class="btn btn-success btn-sm" id="wizardCompleteBtn" style="display:none;">
           <i class="fas fa-check me-1"></i>完了（保存して閉じる）
         </button>
-        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">閉じる</button>
+        <button type="button" class="btn btn-secondary btn-sm js-hide-on-print" data-bs-dismiss="modal">閉じる</button>
       </div>
     </div>
   </div>
@@ -683,6 +685,9 @@
       <a class="btn btn-secondary fab" href="{{ back_url }}">
         <i class="fas fa-undo"></i> 戻る
       </a>
+      <button type="submit" class="btn btn-outline-warning fab" form="treatmentForm" onclick="(function(){ const f=document.getElementById('treatmentForm'); let a = f.querySelector('[name=action]'); if(!a){ a=document.createElement('input'); a.type='hidden'; a.name='action'; f.appendChild(a);} a.value='skip'; })()">
+        <i class="fas fa-forward"></i> スキップ
+      </button>
     </div>
   {% endwith %}
 {% else %}
@@ -696,6 +701,9 @@
     <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
       <i class="fas fa-undo"></i> 戻る
     </a>
+    <button type="submit" class="btn btn-outline-warning fab" form="treatmentForm" onclick="(function(){ const f=document.getElementById('treatmentForm'); let a = f.querySelector('[name=action]'); if(!a){ a=document.createElement('input'); a.type='hidden'; a.name='action'; f.appendChild(a);} a.value='skip'; })()">
+      <i class="fas fa-forward"></i> スキップ
+    </button>
   </div>
 {% endif %}
 
@@ -1139,10 +1147,22 @@
         if (el) el.classList.add('form-control-sm');
       });
 
-    // Sync side effect widget before form submission
+    // Sync side effect widget before form submission and prevent double-submit
     const treatmentForm = document.getElementById('treatmentForm');
     if (treatmentForm) {
       treatmentForm.addEventListener('submit', (e) => {
+        // Prevent double submit
+        if (treatmentForm.dataset.submitting === '1') {
+          e.preventDefault();
+          return;
+        }
+        treatmentForm.dataset.submitting = '1';
+
+        // Disable submit buttons
+        const submits = treatmentForm.querySelectorAll('button[type="submit"], input[type="submit"]');
+        submits.forEach(b => { try { b.disabled = true; } catch (err) {} });
+
+        // Ensure side effect widget state is persisted to hidden input
         if (typeof sideEffectWidgetInstance !== 'undefined' && sideEffectWidgetInstance) {
           sideEffectWidgetInstance.updateHiddenInput();
         }

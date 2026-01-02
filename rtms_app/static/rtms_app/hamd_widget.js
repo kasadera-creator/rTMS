@@ -34,14 +34,19 @@
     const baseline = window.HAMD_BASELINE_17 || null;
 
     if (baseline !== null && baseline > 0 && total !== null && window.HAMD_SHOW_IMPROVEMENT) {
-      const improv = ((baseline - total) / baseline) * 100;
-      if (improvEl) improvEl.textContent = improv.toFixed(1) + "%";
+      // improvement as fraction (e.g., 0.25 for 25%) to match server-side compute_improvement_rate
+      const improvFraction = (baseline - total) / baseline;
+      const improvPercent = improvFraction * 100;
+      if (improvEl) improvEl.textContent = improvPercent.toFixed(1) + "%";
 
-      // Status logic: remission <= 7, response >= 50%, else no response
+      // Status logic aligned with server-side rules:
+      // - remission: total <= 7
+      // - response: improvement fraction >= 0.20 (20%)
+      // - else: no response
       let status = "反応なし";
       if (total <= 7) {
         status = "寛解";
-      } else if (improv >= 50) {
+      } else if (improvFraction !== null && improvFraction >= 0.20) {
         status = "反応";
       }
       if (statusEl) statusEl.textContent = status;

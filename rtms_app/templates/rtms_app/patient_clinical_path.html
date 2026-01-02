@@ -209,13 +209,10 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{% static 'rtms_app/calendar_focus.js' %}"></script>
 <script>
-  window.addEventListener("load", function() {
-    const params = new URLSearchParams(window.location.search);
-    const focus = params.get("focus");
-    if (!focus) return;
-    const el = document.querySelector(`[data-date="${focus}"]`);
-    if (el) el.scrollIntoView({behavior:"smooth", block:"center"});
-  });
+    if (typeof applyCalendarFocus === 'function') {
+        applyCalendarFocus({ calendar: window.calendar, rootEl: document });
+    }
 </script>
 {% endblock %}

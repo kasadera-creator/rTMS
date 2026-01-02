@@ -160,6 +160,13 @@ class TreatmentSession(models.Model):
 
     treatment_notes = models.TextField(blank=True, default="")
 
+    STATUS_CHOICES = [
+        ("planned", "予定"),
+        ("done", "実施"),
+        ("skipped", "スキップ"),
+    ]
+    status = models.CharField("ステータス", max_length=16, choices=STATUS_CHOICES, default="planned", db_index=True)
+
     # 互換性確保（旧UIの値を上書き）
     motor_threshold = models.IntegerField("MT", null=True, blank=True)
     intensity = models.IntegerField("強度", null=True, blank=True)
