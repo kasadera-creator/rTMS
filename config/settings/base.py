@@ -18,7 +18,10 @@ def env_bool(key: str, default="0"):
 SECRET_KEY = env("DJANGO_SECRET_KEY", env("SECRET_KEY", "dev-insecure-secret-key"))
 DEBUG = env_bool("DJANGO_DEBUG", "0")
 
-ALLOWED_HOSTS = [h.strip() for h in env("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if h.strip()]
+ALLOWED_HOSTS = os.environ.get(
+    "DJANGO_ALLOWED_HOSTS",
+    "localhost,127.0.0.1"
+).split(",")
 
 INSTALLED_APPS = [
     "jazzmin",
