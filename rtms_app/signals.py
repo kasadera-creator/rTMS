@@ -1,6 +1,7 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db import transaction
+from django.contrib.auth import get_user_model
 from .models import AuditLog, TreatmentSession, Assessment, ConsentDocument, Patient
 from .utils.request_context import get_current_request, get_client_ip, get_user_agent
 
@@ -63,3 +64,59 @@ def audit_log_delete(sender, instance, **kwargs):
     
     summary = f"{instance.__class__.__name__} deleted"
     create_audit_log(instance, 'DELETE', summary)
+
+
+# --- AuditLog for User model actions ---
+User = get_user_model()
+
+
+@receiver(post_save, sender=User)
+def audit_log_user_save(sender, instance, created, **kwargs):
+    """Log user create/update actions to AuditLog."""
+    request = get_current_request()
+    if not request or not request.user.is_authenticated:
+        return
+
+    action = 'CREATE' if created else 'UPDATE'
+    ip = get_client_ip(request)
+    user_agent = get_user_agent(request)
+
+    def _create_user_log():
+        AuditLog.objects.create(
+            user=request.user,
+            patient=None,
+            target_model='User',
+            target_pk=str(instance.pk),
+            action=action,
+            summary=f"User {'created' if created else 'updated'}: {getattr(instance, 'username', str(instance.pk))}",
+            meta={},
+            ip=ip,
+            user_agent=user_agent,
+        )
+
+    transaction.on_commit(_create_user_log)
+
+
+@receiver(post_delete, sender=User)
+def audit_log_user_delete(sender, instance, **kwargs):
+    request = get_current_request()
+    if not request or not request.user.is_authenticated:
+        return
+
+    ip = get_client_ip(request)
+    user_agent = get_user_agent(request)
+
+    def _create_user_delete_log():
+        AuditLog.objects.create(
+            user=request.user,
+            patient=None,
+            target_model='User',
+            target_pk=str(getattr(instance, 'pk', '')),
+            action='DELETE',
+            summary=f"User deleted: {getattr(instance, 'username', str(getattr(instance, 'pk', '')))}",
+            meta={},
+            ip=ip,
+            user_agent=user_agent,
+        )
+
+    transaction.on_commit(_create_user_delete_log)
