@@ -1,5 +1,6 @@
 __pycache__/
 *.py[cod]
+*.pyc
 *.egg-info/
 .venv/
 venv/
@@ -12,4 +13,11 @@ staticfiles/
 
 # OS
 .DS_Store
+
+
+# Logs
+*.log
+
+# Test caches
+.pytest_cache/
 
