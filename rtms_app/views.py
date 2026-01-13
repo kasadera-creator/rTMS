@@ -1204,7 +1204,7 @@ def sae_report_docx(request, session_id):
 
     # Template path
     template_path = os.path.join(
-        settings.BASE_DIR, "rtms_app", "templates_docs", "brainsway_sae_template.docx"
+        settings.BASE_DIR, "docs", "templates", "brainsway_sae_template.docx"
     )
     if not os.path.exists(template_path):
         return HttpResponse("SAE report template not found.", status=500)
