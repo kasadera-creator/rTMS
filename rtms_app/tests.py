@@ -165,3 +165,78 @@ class TestSkipSessions(TestCase):
         new_last = expected_second
         delta = new_last - original_last
         self.assertEqual(self.patient.discharge_date, date(2026,1,31) + delta)
+
+    def test_skip_undo_restores_original_dates(self):
+        from datetime import date
+        from rtms_app.models import TreatmentSkip
+        # create sessions
+        d1 = date(2026,1,5)
+        d2 = date(2026,1,6)
+        d3 = date(2026,1,7)
+        from rtms_app.models import TreatmentSession
+        s1 = TreatmentSession.objects.create(patient=self.patient, session_date=d1)
+        s2 = TreatmentSession.objects.create(patient=self.patient, session_date=d2)
+        s3 = TreatmentSession.objects.create(patient=self.patient, session_date=d3)
+
+        # perform skip via POST (simulate UI)
+        url = reverse('rtms_app:treatment_add', args=[self.patient.id])
+        post = {
+            'treatment_date': d2.isoformat(),
+            'treatment_time': '09:00',
+            'mt_percent': '120',
+            'frequency_hz': '18.0',
+            'train_seconds': '2.0',
+            'intertrain_seconds': '20.0',
+            'train_count': '55',
+            'total_pulses': '1980',
+            'action': 'skip',
+            'skip_reason': 'test undo',
+        }
+        resp = self.client.post(url, post, follow=False)
+        self.assertIn(resp.status_code, (302,303))
+
+        # there should be a TreatmentSkip record
+        sk = TreatmentSkip.objects.filter(treatment__patient=self.patient).first()
+        self.assertIsNotNone(sk)
+
+        # Now undo via POST
+        undo_url = reverse('rtms_app:treatment_skip_undo', args=[sk.id])
+        resp = self.client.post(undo_url, {}, follow=False)
+        self.assertIn(resp.status_code, (302,303))
+
+        # Refresh skip and sessions
+        sk.refresh_from_db()
+        s1.refresh_from_db(); s2.refresh_from_db(); s3.refresh_from_db()
+
+        # Skip record should remain but be marked undone
+        self.assertIsNotNone(sk.undone_by)
+        self.assertIsNotNone(sk.undone_at)
+
+        # All sessions should be planned and restored to original dates
+        self.assertEqual(s1.session_date, d1)
+        self.assertEqual(s2.session_date, d2)
+        self.assertEqual(s3.session_date, d3)
+
+
+class TestScheduleTasks(TestCase):
+    def test_compute_task_definitions_and_dashboard(self):
+        from rtms_app.services.schedule_tasks import compute_task_definitions, compute_dashboard_tasks
+        from datetime import date
+
+        p = Patient.objects.create(card_id='SCH1', name='Sched Test', birth_date=date(1990,1,1), first_treatment_date=date(2026,1,5))
+
+        defs = compute_task_definitions(p, holidays=set())
+        # Expect mapping and several assessment entries
+        keys = {d['key'] for d in defs}
+        self.assertIn('mapping', keys)
+        self.assertIn('assessment_baseline', keys)
+        self.assertIn('assessment_week3', keys)
+
+        # Find mapping planned date and ensure compute_dashboard_tasks returns it when today==planned
+        mapping = next((d for d in defs if d['key'] == 'mapping'), None)
+        self.assertIsNotNone(mapping)
+        planned = mapping['planned_date']
+
+        todo = compute_dashboard_tasks(p, today=planned, holidays=set())
+        todo_keys = {t['key'] for t in todo}
+        self.assertIn('mapping', todo_keys)

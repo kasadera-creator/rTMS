@@ -1446,12 +1446,12 @@ def treatment_add(request, patient_id):
         <div class=\"btn-group\" role=\"group\" aria-label=\"mode-switch\">
             <input type=\"radio\" class=\"btn-check\" name=\"modeSwitch\" id=\"treatModeRecord\" autocomplete=\"off\" checked>
             <label class=\"btn btn-success btn-sm\" for=\"treatModeRecord\">
-                <i class=\"fas fa-pen me-1\"></i>治療内容記入
+                <i class=\"fas fa-pen me-1\"></i>治療内容記入モード
             </label>
 
             <input type=\"radio\" class=\"btn-check\" name=\"modeSwitch\" id=\"treatModeWizard\" autocomplete=\"off\">
             <label class=\"btn btn-outline-success btn-sm\" for=\"treatModeWizard\">
-                <i class=\"fas fa-route me-1\"></i>手順解説
+                <i class=\"fas fa-route me-1\"></i>手順解説モード
             </label>
         </div>
         """
@@ -1701,12 +1701,12 @@ def treatment_add(request, patient_id):
                     url = build_url('dashboard', query={'date': dashboard_date, 'focus': focus_date})
                 else:
                     url = build_url('dashboard', query={'focus': focus_date})
-                if settings.DEBUG:
                     logging.getLogger(__name__).debug(f"treatment_add.save_from_wizard POST date={d} saved={s.session_date} redirect={url}")
                 return redirect(url)
 
             # Skip action: mark this session as skipped and shift future planned sessions
             if action == 'skip':
+                from rtms_app.models import TreatmentSkip
                 try:
                     s.status = 'skipped'
                     s.save(update_fields=['status'])
@@ -1716,25 +1716,35 @@ def treatment_add(request, patient_id):
                     shift_future_sessions(patient, session_date)
                 except Exception:
                     pass
-
+            
+                # Create TreatmentSkip record
+                try:
+                    reason = (request.POST.get('skip_reason') or '').strip()
+                    sk = TreatmentSkip.objects.create(
+                        treatment=s,
+                        action_type='postpone',
+                        effective_date=session_date,
+                        reason=reason,
+                        performed_by=request.user,
+                    )
+                except Exception as e:
+                    pass
+            
                 # redirect back to dashboard with focus on the skipped date
                 focus_date = session_date.isoformat()
                 if dashboard_date:
                     url = build_url('dashboard', query={'date': dashboard_date, 'focus': focus_date})
                 else:
                     url = build_url('dashboard', query={'focus': focus_date})
-                if settings.DEBUG:
-                    import logging
                     logging.getLogger(__name__).debug(f"treatment_add.skip POST date={d} skipped session={s.id} redirect={url}")
                 return redirect(url)
-
+            
             # Normal save -> go back to dashboard (include focus param so client calendar can jump)
             focus_date = session_date.isoformat()
             if dashboard_date:
                 url = build_url('dashboard', query={'date': dashboard_date, 'focus': focus_date})
             else:
                 url = build_url('dashboard', query={'focus': focus_date})
-            if settings.DEBUG:
                 logging.getLogger(__name__).debug(f"treatment_add.save POST date={d} saved={s.session_date} redirect={url}")
             return redirect(url)
         else:
@@ -2072,6 +2082,89 @@ def treatment_add(request, patient_id):
         'sae_contact_person': contact_person_prefill,
         'sae_contact_missing': not bool(contact_person_prefill),
     })
+
+
+
+@login_required
+def treatment_skip_list(request, patient_id):
+    """List all skip records for a patient."""
+    patient = get_object_or_404(Patient, pk=patient_id)
+    skips = TreatmentSkip.objects.filter(treatment__patient=patient).select_related('treatment', 'performed_by').order_by('-created_at')
+    return render(request, 'rtms_app/skip_list.html', {'patient': patient, 'skips': skips})
+
+
+@login_required
+def treatment_skip_undo(request, skip_id):
+    """Undo a skip action and restore the treatment session to 'planned' status."""
+    if request.method != 'POST':
+        return redirect('rtms_app:dashboard')
+    
+    sk = get_object_or_404(__import__('rtms_app.models', fromlist=['TreatmentSkip']).TreatmentSkip, pk=skip_id)
+    patient = sk.treatment.patient
+    
+    try:
+        # If a snapshot exists, restore affected sessions and patient discharge_date
+        snap = sk.snapshot or {}
+        affected = snap.get('affected_sessions') if isinstance(snap, dict) else None
+        if affected:
+            for item in affected:
+                try:
+                    ts = TreatmentSession.objects.filter(pk=item.get('id')).first()
+                    if not ts:
+                        continue
+                    orig_sd = item.get('session_date')
+                    orig_dt = item.get('date')
+                    if orig_sd:
+                        from datetime import date as _d, datetime as _dt
+                        # parse date
+                        ts.session_date = _dt.fromisoformat(orig_sd).date() if 'T' in orig_sd else _d.fromisoformat(orig_sd)
+                    if orig_dt:
+                        # parse datetime
+                        try:
+                            ts.date = _dt.fromisoformat(orig_dt)
+                        except Exception:
+                            # fallback to date only
+                            try:
+                                ts.date = _dt.combine(_d.fromisoformat(orig_dt), _dt.min.time())
+                            except Exception:
+                                pass
+                    ts.save(update_fields=['session_date', 'date'])
+                except Exception:
+                    continue
+        
+        # restore patient discharge_date if snapshot provided
+        try:
+            pdd = snap.get('patient_discharge_date') if isinstance(snap, dict) else None
+            if pdd:
+                from datetime import date as _d
+                patient.discharge_date = _d.fromisoformat(pdd)
+                patient.save(update_fields=['discharge_date'])
+        except Exception:
+            pass
+
+        # restore status of the skipped session to planned
+        t = sk.treatment
+        t.status = 'planned'
+        t.save(update_fields=['status'])
+
+        # mark skip as undone (preserve record for audit)
+        try:
+            sk.undone_by = request.user
+            sk.undone_at = timezone.now()
+            sk.save(update_fields=['undone_by', 'undone_at'])
+        except Exception:
+            pass
+        
+        try:
+            log_audit_action(patient, 'undo_skip', 'TreatmentSkip', skip_id, summary=f"undo skip via UI by {request.user.username}")
+        except Exception:
+            pass
+    except Exception:
+        pass
+    
+    # redirect back to patient skips page
+    return redirect('rtms_app:treatment_skip_list', patient_id=patient.id)
+
 
 def assessment_add(request, patient_id, timing):
     # Legacy endpoint kept for backward compatibility.
@@ -2608,8 +2701,6 @@ def assessment_scale_form(request, patient_id, timing, scale_code):
             return redirect(build_url('dashboard'))
 
         except Exception:
-            import traceback
-            traceback.print_exc()
             if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                 return JsonResponse({'status': 'error', 'message': '保存に失敗しました。'}, status=400)
             return HttpResponse('保存に失敗しました。', status=400)

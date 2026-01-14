@@ -51,6 +51,32 @@
     /* 緑基調の強調色 */
     .btn-treatment { background-color: #198754; border-color: #198754; color: white; }
     .btn-treatment:hover { background-color: #157347; border-color: #146c43; color: white; }
+
+    /* Modal vertical centering and consistent height for XL/LG modals
+       Ensures multiple modals have the same visual height so footer/buttons align. */
+    .modal-dialog.modal-xl,
+    .modal-dialog.modal-lg {
+      min-height: 60vh; /* minimum visible height */
+      display: flex;
+      align-items: center; /* helps vertical centering fallback */
+    }
+    .modal-dialog.modal-xl .modal-content,
+    .modal-dialog.modal-lg .modal-content {
+      max-height: 85vh;
+      min-height: 60vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    }
+    .modal-body {
+      overflow: auto;
+      flex: 1 1 auto;
+    }
+    .modal-footer {
+      flex: 0 0 auto;
+    }
+    /* Small modals should remain compact */
+    .modal-dialog.modal-sm .modal-content { max-height: none; min-height: auto; }
 </style>
 {% endblock %}
 
@@ -58,6 +84,9 @@
 <div class="container py-3">
 
   {% include "rtms_app/partials/patient_inline_bar.html" with page_title="治療実施" title_icon="fa-bolt" title_controls_html=mode_switch_html %}
+  <div class="mt-2">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'rtms_app:treatment_skip_list' patient.id %}">スキップ履歴</a>
+  </div>
 
   {# print toolbar is only for print preview pages; remove from regular screen #}
 
@@ -69,6 +98,7 @@
 
   <form method="post" id="treatmentForm">
     {% csrf_token %}
+    <input type="hidden" name="skip_reason" id="id_skip_reason" value="">
 
     <div class="row g-3 mt-1">
         <div class="col-12 col-lg-4">
@@ -325,7 +355,7 @@
 </div>
 
 <div class="modal fade" id="procedureWizardModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-session-id="{{ session.id|default:'' }}">
-  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title wizard-title">
@@ -353,7 +383,7 @@
 </div>
 
 <div class="modal fade" id="sideEffectModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">治療実施記録票（副作用チェック票）入力</h5>
@@ -381,7 +411,7 @@
 
 <!-- SAE入力モーダル -->
 <div class="modal fade" id="saeModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header bg-danger text-white">
         <h5 class="modal-title"><i class="fas fa-exclamation-triangle me-2"></i>重篤を含む有害事象 報告書</h5>
@@ -587,7 +617,7 @@
       <a class="btn btn-secondary fab" href="{{ back_url }}">
         <i class="fas fa-undo"></i> 戻る
       </a>
-      <button type="submit" class="btn btn-outline-warning fab" form="treatmentForm" onclick="(function(){ const f=document.getElementById('treatmentForm'); let a = f.querySelector('[name=action]'); if(!a){ a=document.createElement('input'); a.type='hidden'; a.name='action'; f.appendChild(a);} a.value='skip'; })()">
+      <button type="button" class="btn btn-outline-warning fab" id="openSkipModalBtn">
         <i class="fas fa-forward"></i> スキップ
       </button>
     </div>
@@ -603,11 +633,34 @@
     <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
       <i class="fas fa-undo"></i> 戻る
     </a>
-    <button type="submit" class="btn btn-outline-warning fab" form="treatmentForm" onclick="(function(){ const f=document.getElementById('treatmentForm'); let a = f.querySelector('[name=action]'); if(!a){ a=document.createElement('input'); a.type='hidden'; a.name='action'; f.appendChild(a);} a.value='skip'; })()">
+    <button type="button" class="btn btn-outline-warning fab" id="openSkipModalBtn2">
       <i class="fas fa-forward"></i> スキップ
     </button>
   </div>
 {% endif %}
+
+<!-- Skip Reason Modal -->
+<div class="modal fade" id="skipModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">スキップの理由</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2">
+          <label class="form-label small">理由（任意）</label>
+          <textarea class="form-control form-control-sm" id="skipReasonText" rows="3" placeholder="例: 患者都合で本日欠席"></textarea>
+        </div>
+        <div class="small text-muted">スキップは予定を順送りします。取り消す場合は管理画面から復元してください。</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-warning btn-sm" id="confirmSkipBtn">スキップ実行</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="{% static 'rtms_app/side_effect_widget_v2.js' %}"></script>
 <script>
@@ -694,6 +747,34 @@
   };
   window.getTodayMtPercent = () => {
     const el = document.getElementById('id_mt_percent');
+  <script>
+    // Skip modal wiring: open buttons and confirm
+    document.getElementById('openSkipModalBtn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      const m = new bootstrap.Modal(document.getElementById('skipModal'));
+      m.show();
+    });
+    document.getElementById('openSkipModalBtn2')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      const m = new bootstrap.Modal(document.getElementById('skipModal'));
+      m.show();
+    });
+
+    document.getElementById('confirmSkipBtn')?.addEventListener('click', () => {
+      const reason = document.getElementById('skipReasonText')?.value || '';
+      const form = document.getElementById('treatmentForm');
+      if (!form) return;
+      // Ensure action hidden input exists
+      let a = form.querySelector('[name=action]');
+      if (!a) { a = document.createElement('input'); a.type = 'hidden'; a.name = 'action'; form.appendChild(a); }
+      a.value = 'skip';
+      // Set reason
+      const r = document.getElementById('id_skip_reason');
+      if (r) r.value = reason;
+
+      form.submit();
+    });
+  </script>
     return el && el.value ? el.value : (el && el.getAttribute('value')) || '';
   };
   window.getCSRFToken = () => document.querySelector('[name="csrfmiddlewaretoken"]').value;

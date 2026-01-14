@@ -60,7 +60,7 @@
 {% endblock %}
 
 {% block content %}
-{% include 'rtms_app/print/_print_toolbar.html' %}
+{% include 'rtms_app/print/_print_toolbar.html' with back_url=request.META.HTTP_REFERER|default:'/' pdf_filename='calendar' %}
 
 <div id="print-root">
 <div class="calendar-container card-like page-calendar-print">
@@ -137,10 +137,4 @@
 </div>
 {% endblock %}
 
-{% block scripts %}
-<script>
-window.addEventListener('load', function() {
-  window.print();
-});
-</script>
-{% endblock %}
+{% block scripts %}{% endblock %}

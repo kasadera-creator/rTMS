@@ -10,6 +10,7 @@ from .models import (
     Patient,
     TreatmentSession,
     Assessment,
+    TreatmentSkip,
     ConsentDocument,
     AuditLog,
     ScaleDefinition,
@@ -250,6 +251,15 @@ rtms_admin_site.register(AuditLog, AuditLogAdmin)
 rtms_admin_site.register(ScaleDefinition, ScaleDefinitionAdmin)
 rtms_admin_site.register(TimingScaleConfig, TimingScaleConfigAdmin)
 rtms_admin_site.register(AssessmentRecord, AssessmentRecordAdmin)
+
+
+@admin.register(TreatmentSkip)
+class TreatmentSkipAdmin(admin.ModelAdmin):
+    list_display = ('treatment', 'action_type', 'effective_date', 'performed_by', 'undone_by', 'undone_at', 'created_at')
+    list_filter = ('action_type', 'created_at', 'undone_at')
+    search_fields = ('treatment__patient__name', 'reason')
+
+rtms_admin_site.register(TreatmentSkip, TreatmentSkipAdmin)
 
 
 # Ensure core auth models are available in the custom admin site

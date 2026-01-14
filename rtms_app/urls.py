@@ -84,6 +84,7 @@ urlpatterns = [
         views.treatment_add,
         name="treatment_add",
     ),
+    
     path(
         "patient/<int:patient_id>/assessment/week4/",
         views.assessment_week4,
@@ -158,5 +159,11 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# Register skip-related URLs unconditionally so reverse() works during tests
+urlpatterns += [
+    path("patient/<int:patient_id>/skips/", views.treatment_skip_list, name="treatment_skip_list"),
+    path("patient/skip/<int:skip_id>/undo/", views.treatment_skip_undo, name="treatment_skip_undo"),
+]
 
 

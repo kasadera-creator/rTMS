@@ -235,6 +235,55 @@ class TreatmentSession(models.Model):
         ]
 
 
+class TreatmentSkip(models.Model):
+    """Record of a skip/postpone/finish action applied to a TreatmentSession.
+
+    This is intentionally minimal: it records who performed the action, when,
+    which treatment was affected, the effective_date (the session_date it applies to),
+    and a free-text reason.
+    """
+    ACTION_CHOICES = [
+        ('postpone', '順延'),
+        ('finish', '終了'),
+        ('cancel', '中止'),
+    ]
+
+    treatment = models.ForeignKey(TreatmentSession, on_delete=models.CASCADE, related_name='skips')
+    action_type = models.CharField('種別', max_length=16, choices=ACTION_CHOICES)
+    effective_date = models.DateField('対象実施日', null=True, blank=True)
+    reason = models.TextField('理由', blank=True, default='')
+    performed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField('作成日時', auto_now_add=True)
+    # snapshot: store affected session ids and their original dates to allow undo
+    snapshot = models.JSONField('影響スナップショット', default=dict, blank=True, null=True, help_text='skip 実行前のセッション日・日時のスナップショット')
+    # undo metadata
+    undone_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='skips_undone')
+    undone_at = models.DateTimeField('取り消し日時', null=True, blank=True)
+
+    class Meta:
+        verbose_name = '治療スキップ'
+        verbose_name_plural = '治療スキップ'
+
+    def __str__(self):
+        return f"TreatmentSkip({self.treatment_id} {self.action_type} by {self.performed_by})"
+
+
+# Debugging aid: log when TreatmentSkip rows are saved
+try:
+    from django.db.models.signals import post_save
+    from django.dispatch import receiver
+
+    @receiver(post_save, sender=TreatmentSkip)
+    def _log_treatmentskip_save(sender, instance, created, **kwargs):
+        try:
+            with open('/tmp/rtms_treatmentskip.log', 'a') as f:
+                f.write(f"TREATMENTSKIP_SAVE created={created} id={getattr(instance,'id',None)} treatment_id={getattr(instance,'treatment_id',None)} performed_by={getattr(instance,'performed_by_id',None)}\n")
+        except Exception:
+            pass
+except Exception:
+    pass
+
+
 class SideEffectCheck(models.Model):
     session = models.OneToOneField("TreatmentSession", on_delete=models.CASCADE, related_name="side_effect_check")
     rows = models.JSONField(default=list, blank=True)
@@ -257,6 +306,8 @@ class Assessment(models.Model):
     # クール数を記録（自然キーの一部）
     course_number = models.IntegerField("クール数", default=1, db_index=True)
     date = models.DateField("日", default=timezone.now)
+    # 実際に評価が記録された日（データ移行後はこちらを参照）
+    performed_date = models.DateField("実施日(記録)", null=True, blank=True, help_text="記録上の実施日。マイグレーションで既存の date をコピー予定")
     type = models.CharField("種別", max_length=20, default='HAM-D')
     scores = models.JSONField("スコア", default=dict)
     total_score_21 = models.IntegerField("合計21", default=0)

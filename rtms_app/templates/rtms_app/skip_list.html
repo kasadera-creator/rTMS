@@ -1,0 +1,50 @@
+{% extends "rtms_app/base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container py-3">
+  {% include "rtms_app/partials/patient_inline_bar.html" with page_title="スキップ履歴" title_icon="fa-forward" %}
+
+  <div class="card shadow-sm mt-3">
+    <div class="card-body">
+      <h5 class="card-title">スキップ / 順延 履歴</h5>
+      <p class="text-muted small">最近のスキップ操作の履歴と復元（取り消し）機能です。</p>
+
+      {% if skips %}
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>日時</th>
+              <th>対象治療日</th>
+              <th>操作</th>
+              <th>実行者</th>
+              <th>理由</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in skips %}
+            <tr>
+              <td>{{ s.created_at }}</td>
+              <td>{{ s.effective_date }}</td>
+              <td>{{ s.get_action_type_display }}</td>
+              <td>{{ s.performed_by.get_full_name|default:s.performed_by.username }}</td>
+              <td>{{ s.reason|default:'-' }}</td>
+              <td>
+                <form method="post" action="{% url 'rtms_app:treatment_skip_undo' s.id %}" style="display:inline">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-outline-secondary" type="submit">復元</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="text-muted">スキップ記録はありません。</div>
+      {% endif %}
+
+    </div>
+  </div>
+</div>
+{% endblock %}

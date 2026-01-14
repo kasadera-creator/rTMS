@@ -11,7 +11,3 @@ ALLOWED_HOSTS = [
     "seichiryo.jp",       # ここが重要
     "www.seichiryo.jp"    # www ありも念のため追加
 ]
-
-# ▼ 修正2：SECRET_KEYを強制的に設定
-# .env読み込みに失敗しても動くように、ここに直接書きます
-SECRET_KEY = "3NEjM25yrLww1MiJxT_FE3yhh5eQYeZg1O47likj_YTi5Wq10fBC3mfbvQIF2F69"
