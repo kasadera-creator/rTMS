@@ -7,6 +7,15 @@
 <style>
   /* Highlight focused day when ?focus=YYYY-MM-DD is present */
   .focus-day { outline: 3px solid rgba(25,135,84,0.6); background: rgba(25,135,84,0.06) !important; border-radius: 6px; }
+  
+  /* === カレンダー用カード統一 === */
+  .calendar-container {
+    border: 0;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(25, 38, 54, 0.06);
+    background: #fff;
+    padding: 1rem;
+  }
 </style>
 {% endblock %}
 
@@ -15,17 +24,19 @@
 {% endblock header_breadcrumb %}
 
 {% block content %}
-<div class="stack-md">
-  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-    <div class="page-title d-flex align-items-center gap-2">
-      <i class="fas fa-calendar-alt page-title-icon"></i>
-      {{ year }}年 {{ month }}月 カレンダー
+<div class="stack-md" data-theme="calendar">
+  <!-- 月間カレンダーページタイトル + ナビゲーション -->
+  <div class="app-card">
+    <div class="app-card__header">
+      <i class="fas fa-calendar-alt me-2"></i>{{ year }}年 {{ month }}月 カレンダー
     </div>
-    <div class="d-flex align-items-center gap-2 flex-wrap">
-      <a class="btn btn-outline-secondary btn-sm" href="{% url 'rtms_app:calendar_month' %}?year={{ prev_year }}&month={{ prev_month }}"><i class="fas fa-chevron-left me-1"></i>前月</a>
-      <a class="btn btn-outline-secondary btn-sm" href="{% url 'rtms_app:calendar_month' %}?year={{ next_year }}&month={{ next_month }}">次月<i class="fas fa-chevron-right ms-1"></i></a>
-      <a class="btn btn-outline-dark btn-sm" href="{% url 'rtms_app:calendar_month' %}?year={{ today.year }}&month={{ today.month }}"><i class="fas fa-calendar-day me-1"></i>今月</a>
-      <a class="btn btn-outline-primary btn-sm" target="_blank" rel="noopener" href="{% url 'rtms_app:calendar_month_print' %}?year={{ year }}&month={{ month }}"><i class="fas fa-print me-1"></i>印刷（A4横）</a>
+    <div class="app-card__body">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'rtms_app:calendar_month' %}?year={{ prev_year }}&month={{ prev_month }}"><i class="fas fa-chevron-left me-1"></i>前月</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'rtms_app:calendar_month' %}?year={{ next_year }}&month={{ next_month }}">次月<i class="fas fa-chevron-right ms-1"></i></a>
+        <a class="btn btn-outline-dark btn-sm" href="{% url 'rtms_app:calendar_month' %}?year={{ today.year }}&month={{ today.month }}"><i class="fas fa-calendar-day me-1"></i>今月</a>
+        <a class="btn btn-outline-primary btn-sm" target="_blank" rel="noopener" href="{% url 'rtms_app:calendar_month_print' %}?year={{ year }}&month={{ month }}"><i class="fas fa-print me-1"></i>印刷（A4横）</a>
+      </div>
     </div>
   </div>
 
