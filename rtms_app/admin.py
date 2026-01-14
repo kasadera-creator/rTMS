@@ -131,11 +131,15 @@ class PatientAdmin(admin.ModelAdmin):
         ('birth_date', 'gender'),
         ('diagnosis', 'attending_physician'),
         ('referral_source'),
-        # medical_history を削除し、詳細項目へ
+        # detailed history
         'life_history', 'past_history', 'present_illness', 'medication_history',
-        # スケジュール
+        # new fields
+        'is_all_case_survey', ('estimated_onset_year', 'estimated_onset_month'),
+        ('weight_kg', 'is_weight_unknown'),
+        'has_other_psychiatric_history', 'psychiatric_history', 'psychiatric_history_other_text',
+        # schedule
         ('admission_date', 'mapping_date', 'first_treatment_date'),
-        'mapping_notes', # 追加
+        'mapping_notes',
         'questionnaire_data'
     )
 

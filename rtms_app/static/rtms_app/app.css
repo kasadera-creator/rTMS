@@ -1,0 +1,120 @@
+/* ============================================
+   rtms_app/static/rtms_app/app.css
+   共通スタイル・カード統一クラス
+   ============================================ */
+
+/* === カード基本スタイル === */
+.app-card {
+  border: 0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(25, 38, 54, 0.06);
+  background: #fff;
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.app-card__header {
+  padding: 0.875rem 1rem;
+  border-left: 6px solid var(--card-accent, #7b1fa2);
+  background: var(--card-bg, #f3e5f5);
+  color: var(--card-accent, #7b1fa2);
+  font-weight: 700;
+  font-size: 0.95rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  margin: 0;
+}
+
+.app-card__body {
+  padding: 1rem;
+}
+
+/* === ページレイアウト === */
+.app-page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  color: #333;
+}
+
+.app-section {
+  margin-bottom: 2rem;
+}
+
+/* === 色管理（ページ別アクセント） === */
+[data-theme="dashboard"] {
+  --card-accent: #388e3c;
+  --card-bg: #e8f5e9;
+}
+
+[data-theme="calendar"] {
+  --card-accent: #1976d2;
+  --card-bg: #e3f2fd;
+}
+
+[data-theme="patient-list"] {
+  --card-accent: #546e7a;
+  --card-bg: #eceff1;
+}
+
+/* === トップバー固定高 === */
+:root {
+  --topbar-height: 56px;
+}
+
+body {
+  padding-top: var(--topbar-height);
+}
+
+/* === Floating Menu 非干渉 === */
+.floating-action-menu {
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 99;
+}
+
+/* === レスポンシブ調整 === */
+@media (max-width: 576px) {
+  .app-card__header {
+    padding: 0.75rem 0.875rem;
+    font-size: 0.9rem;
+  }
+  
+  .app-card__body {
+    padding: 0.875rem;
+  }
+  
+  .app-page-title {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+  }
+}
+
+/* === テーブル内カード === */
+.app-card table {
+  margin-bottom: 0;
+}
+
+.app-card table th {
+  background: var(--card-accent, #7b1fa2);
+  color: #fff;
+  font-weight: 700;
+  border: 0;
+}
+
+.app-card table td {
+  vertical-align: middle;
+}
+
+/* === フォーム内カード === */
+.app-card .form-group:last-child {
+  margin-bottom: 0;
+}
+
+/* === アニメーション === */
+.app-card {
+  transition: box-shadow 0.2s ease-in-out;
+}
+
+.app-card:hover {
+  box-shadow: 0 4px 12px rgba(25, 38, 54, 0.12);
+}

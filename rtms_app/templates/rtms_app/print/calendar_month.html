@@ -60,6 +60,9 @@
 {% endblock %}
 
 {% block content %}
+{% include 'rtms_app/print/_print_toolbar.html' %}
+
+<div id="print-root">
 <div class="calendar-container card-like page-calendar-print">
   <div class="cal-print-header">
     <div class="cal-print-title">{{ year }}年{{ month }}月 rTMS予定カレンダー</div>
@@ -129,6 +132,7 @@
     <span class="legend-item legend-admission">入院</span>
     <span class="legend-item legend-discharge">退院（予定含む）</span>
     <span class="legend-item legend-treatment">治療</span>
+  </div>
   </div>
 </div>
 {% endblock %}

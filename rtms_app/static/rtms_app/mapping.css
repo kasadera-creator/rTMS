@@ -1,0 +1,28 @@
+/* Mapping page specific styles: increase base font and adjust history */
+.mapping-page {
+  font-size: 1.05rem;
+}
+.mapping-page .form-label,
+.mapping-page .form-control,
+.mapping-page .form-select,
+.mapping-page .input-group-text,
+.mapping-page .btn {
+  font-size: 1.05rem;
+}
+.mapping-page .section-title { font-size: 1.05rem; }
+.mapping-page .card-body { font-size: 1.02rem; }
+
+/* History on the right should be slightly smaller */
+.mapping-page .mapping-history {
+  font-size: 0.95rem;
+}
+.mapping-page .mapping-history .list-group-item { padding: 0.5rem 0.6rem; line-height: 1.1; }
+.mapping-page .mapping-history .list-group-item .small { font-size: 0.92rem; }
+
+/* Tighten spacing in history cards */
+.mapping-page .mapping-history .list-group-item .text-muted { margin-top: 0.1rem; margin-bottom: 0.1rem; }
+
+@media (max-width: 767px) {
+  .mapping-page { font-size: 1rem; }
+  .mapping-page .mapping-history { font-size: 0.95rem; }
+}

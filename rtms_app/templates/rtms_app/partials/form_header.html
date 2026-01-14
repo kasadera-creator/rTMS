@@ -5,7 +5,7 @@
 <div class="alert alert-light border shadow-sm mb-4 d-flex align-items-center justify-content-between no-print">
     <div class="d-flex align-items-center">
         <span class="badge bg-dark me-2">ID: {{ patient.card_id }}</span>
-        <span class="h5 mb-0 me-3">{{ patient.name }} 様</span>
+        <span class="h5 mb-0 me-3"><a href="{% url 'rtms_app:patient_basic_edit' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">{{ patient.name }} 様</a></span>
         {% if session_num %}
             <span class="badge bg-success me-1">第{{ session_num }}回目</span>
         {% endif %}

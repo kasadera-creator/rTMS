@@ -145,8 +145,7 @@
 
 <body>
   <div class="no-print">
-    <button class="btn primary" onclick="window.print()">印刷</button>
-    <button class="btn" onclick="window.close()">閉じる</button>
+    {% include 'rtms_app/print/_print_toolbar.html' with back_url=back_url pdf_filename=pdf_filename %}
   </div>
 
   <div class="sheet">

@@ -1,0 +1,93 @@
+{% load static %}
+<style>
+  .print-toolbar-floating { position: fixed; top: 10px; right: 10px; z-index: 12000; }
+  .print-toolbar-floating .btn { margin-left: 6px; }
+  @media print { .print-toolbar-floating { display: none !important; } }
+</style>
+
+<div class="print-toolbar-floating" id="printToolbar" data-back-url="{{ back_url|default:'' }}">
+  <div class="btn-group" role="group" aria-label="Print toolbar">
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-back" title="戻る"><i class="fas fa-arrow-left"></i> 戻る</button>
+    <button type="button" class="btn btn-primary btn-sm" id="btn-print-screen" title="印刷"><i class="fas fa-print"></i> 印刷</button>
+    <button type="button" class="btn btn-success btn-sm" id="btn-save-pdf" data-filename="{{ pdf_filename|default:'' }}" title="PDF保存"><i class="fas fa-file-pdf"></i> PDF保存</button>
+  </div>
+  <div class="small text-muted mt-1">ファイル名: <span id="pdfFilenamePreview">{{ pdf_filename|default:'' }}</span></div>
+</div>
+
+<script src="https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+<script>
+  (function(){
+    const btnBack = document.getElementById('btn-back');
+    const btnPrint = document.getElementById('btn-print-screen');
+    const btnPdf = document.getElementById('btn-save-pdf');
+    const filenamePreview = document.getElementById('pdfFilenamePreview');
+
+    const toolbar = document.getElementById('printToolbar');
+    const backUrl = toolbar ? (toolbar.dataset.backUrl || '') : '';
+    if (btnBack) btnBack.addEventListener('click', () => {
+      try {
+        if (backUrl) return window.location.href = backUrl;
+        if (document.referrer) return history.back();
+        return window.location.href = '/';
+      } catch (e) { console.warn(e); history.back(); }
+    });
+    if (btnPrint) btnPrint.addEventListener('click', () => {
+      const filename = filenamePreview ? filenamePreview.textContent : document.title || '';
+      if (filename) document.title = filename.replace(/\s+/g,'_');
+      window.print();
+    });
+
+    if (!btnPdf) return;
+
+    // Update preview if filename provided dynamically
+    if (btnPdf.dataset && btnPdf.dataset.filename) {
+      filenamePreview.textContent = btnPdf.dataset.filename;
+    }
+
+    btnPdf.addEventListener('click', async () => {
+      const filename = btnPdf.getAttribute('data-filename') || btnPdf.dataset.filename || ('document_' + new Date().toISOString().slice(0,10) + '.pdf');
+
+      // Prefer to capture only the printable document area. Try selectors in order.
+      const selectors = [
+        '#print-root .page-sheet',
+        '#print-root .page-container',
+        '#print-root .bundle-container',
+        '#print-root .doc-wrapper',
+        '#print-root'
+      ];
+      let root = null;
+      for (const s of selectors) {
+        const el = document.querySelector(s);
+        if (el) { root = el; break; }
+      }
+
+      if (!root) {
+        alert('印刷対象のコンテナが見つかりません。');
+        return;
+      }
+
+      // determine orientation based on chosen root aspect ratio
+      const rect = root.getBoundingClientRect();
+      const orientation = (rect.width > rect.height) ? 'landscape' : 'portrait';
+
+      try {
+        if (typeof html2pdf === 'undefined') throw new Error('html2pdf not available');
+        const opt = {
+          margin:       [3,3,3,3],
+          filename:     filename,
+          image:        { type: 'jpeg', quality: 0.98 },
+          html2canvas:  { scale: 2, useCORS: true },
+          jsPDF:        { unit: 'mm', format: 'a4', orientation: orientation },
+          pagebreak:    { mode: ['css', 'legacy'] }
+        };
+        // Set document.title so browser print dialog suggests a filename
+        try { document.title = filename.replace(/\s+/g,'_'); } catch(e){}
+        await html2pdf().set(opt).from(root).save();
+      } catch (err) {
+        console.warn('html2pdf failed:', err);
+        alert('自動PDF生成に失敗しました。印刷ダイアログが開きます。ブラウザで「PDFに保存」を選択してください。');
+        window.print();
+      }
+    });
+  })();
+</script>

@@ -1,37 +1,27 @@
 {% load static %}
-<div class="container py-3">
-  <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
-    <div class="page-title d-flex align-items-center gap-2">
-      <i class="fas fa-chart-bar page-title-icon"></i> {{ timing_label }}
-    </div>
-    <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: nowrap; margin-left: auto;">
-      <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; font-weight: 600; white-space: nowrap;">
-        <span>ID {{ patient.card_id }}</span>
-        <span style="color: #999;">|</span>
-        <span class="patient-name">{{ patient.name }}</span>
-        <span style="color: #999;">|</span>
-        <span style="font-weight: 400;">{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）{{ patient.get_gender_display }}</span>
-        <span style="color: #999;">|</span>
-        <span style="font-weight: 600;">{{ patient.course_number|default:1 }}クール</span>
-        {% if patient.attending_physician %}
-        <span style="color: #999;">|</span>
-        <span style="font-weight: 400;">担当医：{% if patient.attending_physician.last_name %}{{ patient.attending_physician.last_name }}{% else %}{{ patient.attending_physician.username }}{% endif %}</span>
-        {% endif %}
-      </div>
-    </div>
+<div class="container py-3 mb-5">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="fw-bold mb-0">
+      <i class="fas fa-chart-bar text-danger"></i> {{ timing_label }} (HAM-D)
+    </h4>
   </div>
+
+  {# Patient info bar (includes top-right patient nav) #}
+  {% include "rtms_app/partials/patient_inline_bar.html" with page_title=timing_label title_icon="fa-chart-bar" patient=patient %}
+
+  {% include "rtms_app/partials/form_header.html" %}
 
   <form method="post" id="assessmentForm" data-timing="{{ timing }}">
     {% csrf_token %}
 
     <div class="card shadow-sm border-0">
-      <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+      <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
         <div class="fw-bold">
           <i class="fas fa-pen"></i> {{ timing_label }}
         </div>
         <div class="d-flex align-items-center gap-2">
           <div class="small">実施日</div>
-          <input type="date" name="date" class="form-control form-control-sm" value="{{ existing_assessment.date|default:today }}" style="width:auto;">
+          <input type="date" name="date" class="form-control form-control-sm" value="{{ default_date|date:'Y-m-d' }}" style="width:auto;">
         </div>
       </div>
 
@@ -51,7 +41,7 @@
                   </div>
                   <div class="text-end">
                     <input type="hidden" name="{{ key }}" value="0">
-                    <div class="btn-group btn-group-sm hamd-btn-group" role="group" data-hamd-key="{{ key }}">
+                    <div class="btn-group hamd-btn-group" role="group" data-hamd-key="{{ key }}">
                       {% if max == 2 %}
                         {% for v in "012"|make_list %}
                           <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
@@ -86,7 +76,7 @@
                   </div>
                   <div class="text-end">
                     <input type="hidden" name="{{ key }}" value="0">
-                    <div class="btn-group btn-group-sm hamd-btn-group" role="group" data-hamd-key="{{ key }}">
+                    <div class="btn-group hamd-btn-group" role="group" data-hamd-key="{{ key }}">
                       {% if max == 2 %}
                         {% for v in "012"|make_list %}
                           <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
@@ -118,11 +108,11 @@
       <div class="sticky-scorebar">
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
           <div class="fw-bold">
-            HAM-D17 合計：<span id="hamd17Total" class="text-danger">0</span> 点
+            HAMD17 合計：<span id="hamd17Total" class="text-danger">0</span> 点
             <span class="ms-2">重症度：<span id="hamd17Severity" class="text-primary">正常</span></span>
           </div>
           <div class="text-muted small">
-            HAM-D17 参考基準: 0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23-:最重症
+            HAMD17 参考基準: 0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23-:最重症
           </div>
         </div>
       </div>
@@ -138,7 +128,7 @@
     <script src="{% static 'rtms_app/floating.js' %}"></script>
 
     <div class="fab-stack no-print">
-      <button type="button" class="btn btn-success fab" onclick="RTMSFloating.submitFormById('assessmentForm')">
+      <button type="button" class="btn btn-assessment fab" onclick="RTMSFloating.submitFormById('assessmentForm')">
         <i class="fas fa-save"></i> 保存
       </button>
       <a class="btn btn-secondary fab" href="{{ back_url }}">
@@ -151,7 +141,7 @@
   <script src="{% static 'rtms_app/floating.js' %}"></script>
 
   <div class="fab-stack no-print">
-    <button type="button" class="btn btn-success fab" onclick="RTMSFloating.submitFormById('assessmentForm')">
+    <button type="button" class="btn btn-assessment fab" onclick="RTMSFloating.submitFormById('assessmentForm')">
       <i class="fas fa-save"></i> 保存
     </button>
     <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
@@ -175,7 +165,7 @@
     try { scores = JSON.parse(el.textContent || "{}"); } catch(e) { scores = {}; }
 
     for (const [key, value] of Object.entries(scores)) {
-      const hidden = document.querySelector(`input[name="${key}"][type="hidden"]`);
+      const hidden = document.querySelector(`#assessmentForm input[name="${key}"][type="hidden"]`);
       if (hidden) hidden.value = String(value);
     }
   })();

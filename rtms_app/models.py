@@ -11,11 +11,35 @@ class Patient(models.Model):
     card_id = models.CharField("カルテ番号", max_length=20) 
     # ★追加: 何クール目か
     course_number = models.IntegerField("クール数", default=1)
-    PROTOCOL_CHOICES = [
-        ("INSURANCE", "保険診療プロトコル"),
-        ("PMS", "市販後調査プロトコル"),
+    # protocol_type was removed (no longer used). See migrations for removal.
+
+    # --- 新規フィールド: 全例調査対象フラグ ---
+    is_all_case_survey = models.BooleanField("全例調査対象", default=False)
+
+    # --- 原疾患（うつ病）の推定発症年月 ---
+    estimated_onset_year = models.IntegerField("原疾患（うつ病）推定発症年", null=True, blank=True)
+    estimated_onset_month = models.IntegerField("原疾患（うつ病）推定発症月", null=True, blank=True)
+
+    # --- 体重（研究項目） ---
+    weight_kg = models.DecimalField("体重 (kg)", max_digits=4, decimal_places=1, null=True, blank=True)
+    is_weight_unknown = models.BooleanField("体重不明", default=False)
+
+    # --- 診断名（既往精神疾患）関連 ---
+    HAS_PSY_CHOICES = [
+        ("yes", "有"),
+        ("no", "無"),
+        ("unknown", "不明"),
     ]
-    protocol_type = models.CharField("プロトコル", max_length=16, choices=PROTOCOL_CHOICES, default="INSURANCE")
+    has_other_psychiatric_history = models.CharField(
+        "診断名（今回 rTMS の適応以外の精神疾患の既往）",
+        max_length=8,
+        choices=HAS_PSY_CHOICES,
+        default="no",
+    )
+
+    # List of selected psychiatric history codes/names; JSON list for flexibility and CSV export
+    psychiatric_history = models.JSONField("既往精神疾患", default=list, blank=True, null=True)
+    psychiatric_history_other_text = models.TextField("既往精神疾患（その他）", blank=True, default="")
     
     name = models.CharField("氏名", max_length=100)
     birth_date = models.DateField("生年月日")

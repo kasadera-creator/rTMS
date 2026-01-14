@@ -1,6 +1,6 @@
 @page {
   size: A4;
-  margin: 12mm 12mm 14mm 12mm;
+  margin: 3mm 3mm 3mm 3mm;
 }
 
 body {
@@ -27,18 +27,18 @@ body {
 }
 
 .page-container {
-  width: 190mm;
+  width: 200mm;
   max-width: 100%;
-  margin: 16mm auto;
+  margin: 6mm auto;
 }
 
 .page-sheet {
   width: 100%;
-  min-height: calc(297mm - 26mm);
+  min-height: calc(297mm - 10mm);
   background: #fff;
-  padding: 12mm;
+  padding: 6mm;
   box-sizing: border-box;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   color: #000;
   position: relative;
 }
@@ -59,7 +59,7 @@ body {
 }
 
 .page-container .page-sheet + .page-sheet {
-  margin-top: 16mm;
+  margin-top: 6mm;
 }
 
 .table-print {
@@ -165,13 +165,13 @@ body {
 }
 
 .bundle-container {
-  width: 190mm;
+  width: 200mm;
   max-width: 100%;
-  margin: 12mm auto 20mm;
+  margin: 6mm auto 10mm;
   background: #fff;
-  padding: 12mm;
+  padding: 6mm;
   box-sizing: border-box;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.06);
 }
 
 .bundle-section {
@@ -189,7 +189,7 @@ body {
 }
 
 .print-main {
-  padding: 14mm 0 10mm;
+  padding: 4mm 0 4mm;
 }
 
 .print-toolbar {

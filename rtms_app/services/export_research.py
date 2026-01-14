@@ -30,14 +30,20 @@ class ResearchCSVExporter:
                 ('birth_date', '生年月日', lambda p, *args: p.birth_date.isoformat() if p.birth_date else ''),
                 ('age', '年齢', lambda p, *args: p.age),
                 ('gender', '性別', lambda p, *args: dict(p.GENDER_CHOICES).get(p.gender, '')),
-                ('protocol_type', 'プロトコル', lambda p, *args: dict(p.PROTOCOL_CHOICES).get(p.protocol_type, '')),
                 ('diagnosis', '診断名', lambda p, *args: p.diagnosis),
+                ('weight_kg', '体重(kg)', lambda p, *args: str(getattr(p, 'weight_kg', '') or '')),
+                ('is_weight_unknown', '体重不明', lambda p, *args: '有' if getattr(p, 'is_weight_unknown', False) else '無'),
                 ('status', '患者ステータス', lambda p, *args: dict(p.STATUS_CHOICES).get(p.status, '')),
             ]
         },
         'treatment_summary': {
             'label': '治療サマリ',
             'columns': [
+                ('is_all_case_survey', '全例調査対象', lambda p, *args: '有' if getattr(p, 'is_all_case_survey', False) else '無'),
+                ('estimated_onset_year', '原疾患推定発症年', lambda p, *args: str(getattr(p, 'estimated_onset_year', '') or '')),
+                ('estimated_onset_month', '原疾患推定発症月', lambda p, *args: str(getattr(p, 'estimated_onset_month', '') or '')),
+                ('psychiatric_history', '既往精神疾患（リスト）', lambda p, *args: ','.join(p.psychiatric_history) if getattr(p, 'psychiatric_history', None) else ''),
+                ('psychiatric_history_other_text', '既往精神疾患（その他）', lambda p, *args: getattr(p, 'psychiatric_history_other_text', '') or ''),
                 ('first_treatment_date', '初回治療日', lambda p, *args: p.first_treatment_date.isoformat() if p.first_treatment_date else ''),
                 ('mapping_date', '初回位置決め日', lambda p, *args: p.mapping_date.isoformat() if p.mapping_date else ''),
                 ('admission_date', '入院予定日', lambda p, *args: p.admission_date.isoformat() if p.admission_date else ''),

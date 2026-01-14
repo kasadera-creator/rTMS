@@ -4,11 +4,7 @@
 {% block body_class %}page-admission{% endblock %}
 
 {% block header_breadcrumb %}
-  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
-  <span class="text-white-50 px-1">/</span>
-  <a href="#" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ID {{ patient.card_id }}</a>
-  <span class="text-white-50 px-1">/</span>
-  <span class="text-white px-1" style="font-size: 0.9rem;">クリニカルパス</span>
+    <span class="text-white-50 ms-2">/ クリニカルパス</span>
 {% endblock header_breadcrumb %}
 
 {% block extrastyle %}
@@ -17,19 +13,11 @@
     .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
     
     .calendar-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .calendar-table th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; text-align: center; color: #495057; }
+    .calendar-table th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; text-align: center; color: #495057; width: 14.28%; }
     .calendar-table td { 
         border: 1px solid #dee2e6; padding: 5px; vertical-align: top; height: auto; min-height: 60px; 
         background-color: #fff; cursor: default; transition: background 0.1s;
     }
-    /* Column widths: weekdays wide, weekends narrow */
-    .calendar-table col.col-mon,
-    .calendar-table col.col-tue,
-    .calendar-table col.col-wed,
-    .calendar-table col.col-thu,
-    .calendar-table col.col-fri { width: 16%; }
-    .calendar-table col.col-sat { width: 10%; }
-    .calendar-table col.col-sun { width: 10%; }
     .calendar-table td.clickable { cursor: pointer; }
     .calendar-table td.clickable:hover { background-color: #f8f9fa; }
     
@@ -70,25 +58,8 @@
 
 {% block content %}
 <form id="mainForm" class="d-none" method="get"></form>
-<div class="stack-md" style="margin-bottom: 0;">
-<div class="d-flex justify-content-between align-items-center gap-3 mb-4">
-        <div class="page-title d-flex align-items-center gap-2"><i class="fas fa-calendar-alt page-title-icon"></i> クリニカルパス {% include "rtms_app/partials/recommendation_badge.html" %}</div>
-        <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: nowrap; margin-left: auto;">
-          <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; font-weight: 600; white-space: nowrap;">
-            <span>ID {{ patient.card_id }}</span>
-            <span style="color: #999;">|</span>
-            <span class="patient-name">{{ patient.name }}</span>
-            <span style="color: #999;">|</span>
-            <span style="font-weight: 400;">{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）{{ patient.get_gender_display }}</span>
-            <span style="color: #999;">|</span>
-            <span style="font-weight: 600;">{{ patient.course_number|default:1 }}クール</span>
-            {% if patient.attending_physician %}
-            <span style="color: #999;">|</span>
-            <span style="font-weight: 400;">担当医：{% if patient.attending_physician.last_name %}{{ patient.attending_physician.last_name }}{% else %}{{ patient.attending_physician.username }}{% endif %}</span>
-            {% endif %}
-          </div>
-        </div>
-    </div>
+<div class="stack-md">
+    {% include "rtms_app/partials/patient_inline_bar.html" with page_title="クリニカルパス (スケジュール)" title_icon="fa-calendar-alt" patient=patient %}
 
     {% if recommendation and recommendation.status != 'pending' %}
     <div class="alert {% if recommendation.status == 'remission' %}alert-success{% elif recommendation.status == 'ineffective' %}alert-danger{% else %}alert-info{% endif %} fw-bold">
@@ -99,10 +70,7 @@
 
     <div class="calendar-container card-like">
         <div class="calendar-header">
-            <div>
-                <h5 class="fw-bold mb-0">{{ patient.name }} 様</h5>
-                <small class="text-muted">ID: {{ patient.card_id }} / 担当医: {% if patient.attending_physician %}{{ patient.attending_physician.last_name }} 先生{% endif %}</small>
-            </div>
+        
             <div class="text-end small">
                 入院日: {{ patient.admission_date|default:"未定" }}<br>
                 退院予定: {% if patient.discharge_date %}{{ patient.discharge_date }}{% else %}未定{% endif %}
@@ -111,15 +79,6 @@
 
         <div class="table-responsive">
             <table class="calendar-table">
-                <colgroup>
-                    <col class="col-mon">
-                    <col class="col-tue">
-                    <col class="col-wed">
-                    <col class="col-thu">
-                    <col class="col-fri">
-                    <col class="col-sat">
-                    <col class="col-sun">
-                </colgroup>
                 <thead>
                     <tr>
                         <th class="text-primary">月</th>
@@ -209,10 +168,13 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{% static 'rtms_app/calendar_focus.js' %}"></script>
 <script>
-    if (typeof applyCalendarFocus === 'function') {
-        applyCalendarFocus({ calendar: window.calendar, rootEl: document });
-    }
+  window.addEventListener("load", function() {
+    const params = new URLSearchParams(window.location.search);
+    const focus = params.get("focus");
+    if (!focus) return;
+    const el = document.querySelector(`[data-date="${focus}"]`);
+    if (el) el.scrollIntoView({behavior:"smooth", block:"center"});
+  });
 </script>
 {% endblock %}

@@ -1,31 +1,13 @@
 {% extends "rtms_app/base.html" %}
 {% load static %}
-
-{% block body_class %}page-discharge{% endblock body_class %}
-
+{% block body_class %}
+  page-discharge
+{% endblock body_class %}
 {% block header_breadcrumb %}
-  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
-  <span class="text-white-50 px-1">/</span>
-  <a href="#" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ID {{ patient.card_id }}</a>
-  <span class="text-white-50 px-1">/</span>
-  <span class="text-white px-1" style="font-size: 0.9rem;">退院準備</span>
+  <span class="text-white-50 ms-2">/ 退院準備</span>
 {% endblock header_breadcrumb %}
-
 {% block extrastyle %}
-<style>
-    /* 退院準備：常に 7:3 */
-    .dv-grid { display: grid; grid-template-columns: 7fr 3fr; gap: 1rem; align-items: start; }
-
-    /* 右カラムスクロール禁止（不要） */
-    .dv-right-scroll { max-height: none !important; overflow: visible !important; }
-
-    /* iPad横の微調整 */
-    @media (max-width: 1194px) and (orientation: landscape) {
-      .dv-aside .card { padding: 0.5rem; }
-      .dv-aside .card .card-title { font-size: 0.95rem; margin-bottom: .25rem; }
-      .dv-aside .small { font-size: .8rem; }
-    }
-
+  <style>
     .section-title {
         border-left: 5px solid var(--color-discharge);
         padding-left: 10px;
@@ -37,294 +19,282 @@
     .score-table th { background-color: #f3e5f5; text-align: center; font-size: 0.9rem; }
     .score-table td { text-align: center; font-size: 0.9rem; }
 
-    .discharge-date-card { border-left: 0; background-color: #faf5ff; }
-    .dv-main { min-width: 0; }
-    .dv-aside { min-width: 0; }
+    .discharge-date-card { border-left: 5px solid var(--color-discharge); background-color: #faf5ff; }
 
     .autosave-toast {
         position: fixed;
         right: 16px;
-        bottom: calc(28px + 12px);
+        bottom: 16px;
         min-width: 260px;
         z-index: 1100;
         display: none;
         box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     }
-    /* 退院準備：セクション見出しの左線を“紫1本”に固定 */
-    .page-discharge .section-title {
-      border-left: 5px solid var(--color-discharge) !important;
-      box-shadow: none !important;
-      background: transparent;
-    }
-    /* もし疑似要素や別装飾で2本目が出ている場合の保険 */
-    .page-discharge .section-title::before,
-    .page-discharge .section-title::after {
-      content: none !important;
-    }
-
-    /* 右カラム（治療要約）のテーブルをさらにコンパクトに */
-    .page-discharge .dv-aside .score-table th,
-    .page-discharge .dv-aside .score-table td {
-      padding: 2px 4px;
-      font-size: 0.82rem;
-      white-space: nowrap;
-    }
-    .page-discharge .dv-aside .score-table th {
-      background: #f3e5f5;
-    }
-
-    /* 退院準備ページ：section-title の左線は紫1本だけに完全固定（上書き最優先） */
-    .page-discharge .section-title {
-      border-left: 5px solid var(--color-discharge) !important;
-      box-shadow: none !important;
-      outline: none !important;
-      background: transparent !important;
-    }
-    .page-discharge .section-title::before,
-    .page-discharge .section-title::after,
-    .page-discharge h5.section-title::before,
-    .page-discharge h5.section-title::after,
-    .page-discharge .form-label.section-title::before,
-    .page-discharge .form-label.section-title::after {
-      content: none !important;
-      display: none !important;
-    }
-    .page-discharge h5.section-title,
-    .page-discharge .form-label.section-title {
-      border-right: none !important;
-      border-top: none !important;
-      border-bottom: none !important;
-      box-shadow: none !important;
-    }
-</style>
+  </style>
 {% endblock extrastyle %}
-
 {% block content %}
-<div class="container py-4">
-    {% include "rtms_app/partials/patient_inline_bar.html" with page_title="退院準備" title_icon="fa-file-alt" %}
-    
+  <div class="container py-4 mb-5">
+    <!-- ヘッダー: 患者メニュー -->
+    {% include "rtms_app/partials/patient_inline_bar.html" with page_title="治療経過・退院準備" title_icon="fa-file-alt" patient=patient %}
     {% if recommendation and recommendation.status != 'pending' %}
-    <div class="alert {% if recommendation.status == 'remission' %}alert-success{% elif recommendation.status == 'ineffective' %}alert-danger{% else %}alert-info{% endif %} fw-bold">
-      <i class="fas fa-bullhorn me-1"></i>{{ recommendation.message }}
-      <div class="small fw-normal mt-1">{{ recommendation.detail }}</div>
-    </div>
-    {% endif %}
-
-    <div class="dv-grid">
-      <div class="dv-main">
-        <!-- 左カラム：本文/処方/詳細テーブル -->
-        <form method="post" id="mainForm" class="bg-white p-4 shadow-sm rounded" data-disable-floating-autosave="true">
-        {% csrf_token %}
-        <div class="card discharge-date-card mb-4 shadow-sm">
-            <div class="card-body py-3">
-                <div class="row align-items-center">
-                    <div class="col-md-auto"><label class="fw-bold mb-0 section-title" style="font-size: 1.1rem; color: var(--color-discharge);"><i class="fas fa-calendar-check me-2"></i>退院日設定</label></div>
-                    <div class="col-md-auto"><input type="date" name="discharge_date" id="dischargeDateInput" class="form-control fw-bold" value="{{ patient.discharge_date|date:'Y-m-d' }}"></div>
-                    <div class="col"><span class="text-muted small">※退院日が決まったら設定してください。入力すると下のサマリー本文に自動反映されます。</span></div>
-                </div>
-            </div>
-        </div>
-
-        <div class="mb-4">
-            <h5 class="form-label fw-bold section-title">入院経過・治療結果（サマリー本文）</h5>
-            <textarea name="summary_text" id="summaryText" rows="10" class="form-control">{{ summary_text }}</textarea>
-            <div class="form-text text-muted">※内容は編集可能です。印刷ボタンを押すと自動保存されます。</div>
-        </div>
-
-        <div class="mb-4">
-            <h5 class="form-label fw-bold section-title">退院時処方</h5>
-            <textarea name="discharge_prescription" rows="4" class="form-control" placeholder="退院時の処方内容を入力してください...">{{ patient.discharge_prescription }}</textarea>
-        </div>
-
-        <hr>
-
-        
-
-        <div style="height: 50px;"></div>
-        </form>
+      <div class="alert {% if recommendation.status == 'remission' %}alert-success{% elif recommendation.status == 'ineffective' %}alert-danger{% else %}alert-info{% endif %} fw-bold">
+        <i class="fas fa-bullhorn me-1"></i>{{ recommendation.message }}
+        <div class="small fw-normal mt-1">{{ recommendation.detail }}</div>
       </div>
-      <aside class="dv-aside no-print">
-        <!-- 右カラム：治療要約カード（要約 + 30回モーダルボタン + 簡易HAMD推移表） -->
-        <div class="card shadow-sm mb-3">
-          <div class="card-body">
-            <h4 class="fw-bold section-title text-discharge mb-1" style="font-size: 1.25rem;"><i class="fas fa-notes-medical me-1"></i> 治療要約</h4>
-            <div class="small text-muted">
-              全{% if total_count %}{{ total_count }}{% else %}0{% endif %}回治療実施
-              （{% if start_date_str %}{{ start_date_str }}{% else %}-{% endif %}〜{% if end_date_str %}{{ end_date_str }}{% else %}-{% endif %}）
+    {% endif %}
+    <form method="post" id="mainForm" data-disable-floating-autosave="true">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-12">
+          <div class="card discharge-date-card shadow-sm">
+            <div class="card-body py-3 d-flex align-items-center">
+              <div class="me-3">
+                <label class="fw-bold mb-0"
+                       style="font-size: 1.05rem;
+                              color: var(--color-discharge)">
+                  <i class="fas fa-calendar-check me-2"></i>退院日設定
+                </label>
+              </div>
+              <div class="me-3" style="min-width:160px;">
+                <input type="date"
+                       name="discharge_date"
+                       id="dischargeDateInput"
+                       class="form-control fw-bold"
+                       value="{{ patient.discharge_date|date:'Y-m-d' }}">
+              </div>
+              <div class="flex-fill">
+                <span class="text-muted small">※退院日が決まったら設定してください。入力すると下のサマリー本文に自動反映されます。</span>
+              </div>
             </div>
-
-            <div class="mt-2">
-              <button type="button" class="btn btn-sm btn-outline-secondary w-100"
-                      data-bs-toggle="modal" data-bs-target="#stimHistoryModal">
-                治療詳細（モーダルへのリンクボタン）
-              </button>
+          </div>
+        </div>
+        <div class="col-12">
+          <div class="card shadow-sm mb-3">
+            <div class="card-header card-header-accent d-flex align-items-center justify-content-between" style="--card-accent: var(--color-discharge-dark); background: var(--color-discharge-bg); color: var(--color-discharge-dark);">
+              <div class="fw-bold">
+                <i class="fas fa-file-medical-alt me-2 text-muted"></i>入院経過・治療結果（サマリー本文）
+              </div>
             </div>
-
-            <!-- 右カラム用：指定形式の HAM-D 推移表 -->
-            <div class="mt-3">
-              {% with last_col=trend_cols|last %}
-              <div class="fw-bold mb-1" style="color:#7b1fa2;">HAM-D（{{ last_col.date_str }}）</div>
-              {% endwith %}
-
-              <table class="table table-sm score-table w-100 mb-0" style="table-layout: fixed;">
+            <div class="card-body">
+              <textarea name="summary_text" id="summaryText" rows="10" class="form-control">{{ summary_text }}</textarea>
+              <div class="form-text text-muted mt-2">※内容は編集可能です。</div>
+            </div>
+          </div>
+          <div class="card mt-3 shadow-sm">
+            <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-discharge-dark); background: var(--color-discharge-bg); color: var(--color-discharge-dark);">退院時処方</div>
+            <div class="card-body">
+              <textarea name="discharge_prescription"
+                        rows="4"
+                        class="form-control"
+                        placeholder="退院時の処方内容を入力してください...">{{ patient.discharge_prescription }}</textarea>
+            </div>
+          </div>
+        </div>
+        <!-- right column removed: summary/status and quick actions were redundant -->
+        <div class="col-12">
+          <div class="card shadow-sm">
+            <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-discharge-dark); background: var(--color-discharge-bg); color: var(--color-discharge-dark);">rTMS 治療実施記録</div>
+            <div class="card-body p-2" style="max-height: 320px; overflow-y: auto;">
+              <table class="table table-bordered history-table table-sm mb-0">
                 <thead>
                   <tr>
-                    <th style="width: 28%;"> </th>
-                    {% for c in trend_cols %}
-                      <th class="text-center">{{ c.label }}</th>
-                    {% endfor %}
+                    <th>回数</th>
+                    <th>日付</th>
+                    <th>MT（%）</th>
+                    <th>出力（%）</th>
+                    <th>周波数(Hz)</th>
+                    <th>刺激時間(s)</th>
+                    <th>非刺激時間(s)</th>
+                    <th>トレイン回数</th>
+                    <th>備考・副作用</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td class="fw-bold">HAM-D17</td>
-                    {% for c in trend_cols %}
+                  {% for item in history_list %}
+                    <tr>
+                      <td class="text-center">{{ item.count }}</td>
+                      <td class="text-center">{{ item.date|date:"Y/n/j" }}</td>
+                      <td class="text-center">{{ item.mt }}</td>
                       <td class="text-center">
-                        {% if c.hamd17 is not None %}
-                          <div class="fw-bold">{{ c.hamd17 }}</div>
-                          <div class="small text-muted">（{% if c.severity_label_17 %}{{ c.severity_label_17 }}{% else %}-{% endif %}）</div>
-
-                          {% if not forloop.first %}
-                            <div class="small text-muted">改善率 {% if c.improvement_pct is not None %}{{ c.improvement_pct }}%{% else %}-{% endif %}</div>
-                            <div class="small">（{% if c.status_label %}{{ c.status_label }}{% else %}-{% endif %}）</div>
-                          {% endif %}
+                        {% if item.output_pct is not None %}
+                          {{ item.output_pct }}
                         {% else %}
                           -
                         {% endif %}
                       </td>
-                    {% endfor %}
-                  </tr>
-
+                      <td class="text-center">{{ item.frequency_hz|default:18 }}</td>
+                      <td class="text-center">{{ item.train_seconds|default:2 }}</td>
+                      <td class="text-center">{{ item.intertrain_seconds|default:20 }}</td>
+                      <td class="text-center">{{ item.train_count|default:55 }}</td>
+                      <td class="text-start">{{ item.se }}</td>
+                    </tr>
+                  {% empty %}
+                    <tr>
+                      <td colspan="9">記録がありません</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="col-12">
+          <div class="card shadow-sm">
+            <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-discharge-dark); background: var(--color-discharge-bg); color: var(--color-discharge-dark);">
+              <i class="fas fa-chart-line me-2"></i>心理検査推移 (HAMD)
+            </div>
+            <div class="card-body" style="overflow-x: auto;">
+              <table class="table table-sm table-striped score-table w-auto mb-0">
+                <thead>
                   <tr>
-                    <td class="fw-bold">HAM-D21</td>
+                    <th style="min-width:140px;">項目</th>
                     {% for c in trend_cols %}
-                      <td class="text-center">{% if c.hamd21 is not None %}{{ c.hamd21 }}{% else %}-{% endif %}</td>
+                      <th style="min-width:120px;">
+                        {{ c.label }}
+                        <div class="small text-muted">{{ c.date_str }}</div>
+                      </th>
                     {% endfor %}
                   </tr>
+                </thead>
+                <tbody>
+                  {% if trend_cols %}
+                    <tr>
+                      <td class="fw-bold">HAMD 21項</td>
+                      {% for c in trend_cols %}
+                        <td class="fw-bold">
+                          {% if c.hamd21 is not None %}
+                            {{ c.hamd21 }}
+                          {% else %}
+                            -
+                          {% endif %}
+                        </td>
+                      {% endfor %}
+                    </tr>
+                    <tr>
+                      <td class="fw-bold">HAMD 17項</td>
+                      {% for c in trend_cols %}
+                        <td>
+                          {% if c.hamd17 is not None %}
+                            {{ c.hamd17 }}
+                          {% else %}
+                            -
+                          {% endif %}
+                        </td>
+                      {% endfor %}
+                    </tr>
+                    <tr>
+                      <td class="fw-bold">改善率（HAMD17）</td>
+                      {% for c in trend_cols %}
+                        <td>
+                          {% if c.improvement_pct is not None %}
+                            {{ c.improvement_pct }}%
+                          {% else %}
+                            -
+                          {% endif %}
+                        </td>
+                      {% endfor %}
+                    </tr>
+                  {% else %}
+                    <tr>
+                      <td colspan="5" class="text-muted py-3">データなし</td>
+                    </tr>
+                  {% endif %}
                 </tbody>
               </table>
               <div class="mt-2 p-2 bg-light border rounded small text-muted">
-                <strong>※HAM-D17 参考基準:</strong>
-                0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23-:最重症
+                <strong>※HAMD17 参考基準:</strong> 0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23-:最重症
               </div>
             </div>
           </div>
         </div>
-
-        <div class="card mb-3">
-          <div class="card-header bg-light fw-bold">退院時 印刷</div>
-          <div class="card-body">
-            <form id="bundlePrintFormDischarge"
-                  action="{% url 'rtms_app:print:patient_print_bundle' patient.id %}"
-                  method="get"
-                  target="_blank">
-              <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" name="docs" value="discharge" id="docDischarge" checked>
-                <label class="form-check-label" for="docDischarge">退院時サマリー</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" name="docs" value="referral" id="docReferral" checked>
-                <label class="form-check-label" for="docReferral">紹介状</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input class="form-check-input" type="checkbox" name="docs" value="hamd_detail" id="docHamdDetail" checked>
-                <label class="form-check-label" for="docHamdDetail">HAM-D詳細票</label>
-              </div>
-
-              {% if dashboard_date %}
-                <input type="hidden" name="dashboard_date" value="{{ dashboard_date }}">
-              {% endif %}
-
-              <button type="submit" class="btn btn-primary mt-2">印刷プレビュー</button>
-            </form>
-          </div>
+      </div>
+    </form>
+    <div class="form-section">
+      <div class="card mb-3">
+        <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-discharge-dark); background: var(--color-discharge-bg); color: var(--color-discharge-dark);">退院時 印刷</div>
+        <div class="card-body">
+          <form id="bundlePrintFormDischarge"
+                action="{% url 'rtms_app:print:patient_print_bundle' patient.id %}"
+                method="get"
+                target="_blank">
+            <div class="form-check form-check-inline">
+              <input class="form-check-input"
+                     type="checkbox"
+                     name="docs"
+                     value="discharge"
+                     id="docDischarge"
+                     checked>
+              <label class="form-check-label" for="docDischarge">退院時サマリー</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input"
+                     type="checkbox"
+                     name="docs"
+                     value="referral"
+                     id="docReferral"
+                     checked>
+              <label class="form-check-label" for="docReferral">紹介状</label>
+            </div>
+            {% if dashboard_date %}<input type="hidden" name="dashboard_date" value="{{ dashboard_date }}">{% endif %}
+            <button type="submit" class="btn btn-primary mt-2">印刷プレビュー</button>
+          </form>
         </div>
-      </aside>
+      </div>
     </div>
-
     {% url 'rtms_app:dashboard' as dashboard_url %}
-{% if dashboard_date %}
-  {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
-    <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
-    <script src="{% static 'rtms_app/floating.js' %}"></script>
-
-    <div class="fab-stack no-print">
-      <button type="button" class="btn btn-primary fab" onclick="RTMSFloating.openPrintForm('bundlePrintFormDischarge')">
-        <i class="fas fa-print"></i> 印刷プレビュー
-      </button>
-
-      <button type="button" class="btn btn-discharge fab" onclick="RTMSFloating.submitFormById('mainForm')">
-        <i class="fas fa-save"></i> 保存
-      </button>
-
-      <a class="btn btn-secondary fab" href="{{ back_url }}">
-        <i class="fas fa-undo"></i> 戻る
-      </a>
-    </div>
-  {% endwith %}
-{% else %}
-    <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
-    <script src="{% static 'rtms_app/floating.js' %}"></script>
-
-    <div class="fab-stack no-print">
-      <button type="button" class="btn btn-primary fab" onclick="RTMSFloating.openPrintForm('bundlePrintFormDischarge')">
-        <i class="fas fa-print"></i> 印刷プレビュー
-      </button>
-
-      <button type="button" class="btn btn-discharge fab" onclick="RTMSFloating.submitFormById('mainForm')">
-        <i class="fas fa-save"></i> 保存
-      </button>
-
-      <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
-        <i class="fas fa-undo"></i> 戻る
-      </a>
-    </div>
-  {% endif %}
-
-</div>
-
-<!-- 30回分刺激内容モーダル -->
-<div class="modal fade" id="stimHistoryModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-xl modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">rTMS 刺激内容（全30回）</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    {% if dashboard_date %}
+      {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+        <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
+        <script src="{% static 'rtms_app/floating.js' %}"></script>
+        <div class="fab-stack no-print">
+          <button type="button"
+                  class="btn btn-primary fab"
+                  onclick="RTMSFloating.openPrintForm('bundlePrintFormDischarge')">
+            <i class="fas fa-print"></i> 印刷プレビュー
+          </button>
+          <button type="button"
+                  class="btn btn-discharge fab"
+                  onclick="RTMSFloating.submitFormById('mainForm')">
+            <i class="fas fa-save"></i> 保存
+          </button>
+          <a class="btn btn-secondary fab" href="{{ back_url }}">
+            <i class="fas fa-undo"></i> 戻る
+          </a>
+        </div>
+      {% endwith %}
+    {% else %}
+      <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
+      <script src="{% static 'rtms_app/floating.js' %}"></script>
+      <div class="fab-stack no-print">
+        <button type="button"
+                class="btn btn-primary fab"
+                onclick="RTMSFloating.openPrintForm('bundlePrintFormDischarge')">
+          <i class="fas fa-print"></i> 印刷プレビュー
+        </button>
+        <button type="button"
+                class="btn btn-discharge fab"
+                onclick="RTMSFloating.submitFormById('mainForm')">
+          <i class="fas fa-save"></i> 保存
+        </button>
+        <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
+          <i class="fas fa-undo"></i> 戻る
+        </a>
       </div>
-      <div class="modal-body">
-        <table class="table table-bordered table-sm history-table">
-          <thead>
-            <tr>
-              <th>回数</th><th>日付</th><th>MT値（モーター閾値）</th><th>刺激強度（%MT）</th><th>備考・副作用</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for item in history_list %}
-              <tr>
-                <td>{{ item.count }}</td>
-                <td>{{ item.date|date:"Y/n/j" }}</td>
-                <td>{{ item.mt }}</td>
-                <td>{{ item.intensity }} %MT</td>
-                <td class="text-start">{{ item.se }}</td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="5" class="text-muted">記録がありません</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+    {% endif %}
+  </div>
+  <div id="autosaveToast"
+       class="toast align-items-center text-white bg-success autosave-toast"
+       role="status"
+       aria-live="polite">
+    <div class="d-flex">
+      <div class="toast-body" id="autosaveToastBody">✓ 自動保存しました</div>
+      <button type="button"
+              class="btn-close btn-close-white me-2 m-auto"
+              aria-label="Close"
+              onclick="hideToast()"></button>
     </div>
   </div>
-</div>
-
-<div id="autosaveToast" class="toast align-items-center text-white bg-success autosave-toast" role="status" aria-live="polite">
-  <div class="d-flex">
-    <div class="toast-body" id="autosaveToastBody">✓ 自動保存しました</div>
-    <button type="button" class="btn-close btn-close-white me-2 m-auto" aria-label="Close" onclick="hideToast()"></button>
-  </div>
-</div>
-
-<script>
+  <script>
     document.getElementById('dischargeDateInput').addEventListener('change', function(e) {
         const dateVal = e.target.value;
         if (!dateVal) return;
@@ -341,9 +311,8 @@
         }
     });
 
-</script>
-
-<script>
+  </script>
+  <script>
   const autosaveToast = document.getElementById('autosaveToast');
   const autosaveToastBody = document.getElementById('autosaveToastBody');
   let autosaveTimer = null;
@@ -403,6 +372,5 @@
     el.addEventListener('input', debounceSave);
     el.addEventListener('change', debounceSave);
   });
-</script>
-
+  </script>
 {% endblock content %}

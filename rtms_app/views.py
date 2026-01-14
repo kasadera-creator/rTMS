@@ -2424,6 +2424,18 @@ def assessment_hub(request, patient_id, timing):
     })
 
 
+def assessment_hub_redirect(request, patient_id, initial_timing):
+    """Redirect /assessment/hub/<initial_timing>/ to canonical assessment_hub.
+    
+    Compatibility shim: preserves querystring and maps initial_timing parameter.
+    """
+    qs = request.META.get('QUERY_STRING', '')
+    target = reverse('rtms_app:assessment_hub', args=[patient_id, initial_timing])
+    if qs:
+        target = f"{target}?{qs}"
+    return redirect(target)
+
+
 @login_required
 def assessment_scale_form(request, patient_id, timing, scale_code):
     patient = get_object_or_404(Patient, pk=patient_id)

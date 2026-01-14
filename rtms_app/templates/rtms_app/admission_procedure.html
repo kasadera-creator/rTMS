@@ -4,11 +4,7 @@
 {% block body_class %}page-admission{% endblock %}
 
 {% block header_breadcrumb %}
-  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
-  <span class="text-white-50 px-1">/</span>
-  <a href="#" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ID {{ patient.card_id }}</a>
-  <span class="text-white-50 px-1">/</span>
-  <span class="text-white px-1" style="font-size: 0.9rem;">入院手続き</span>
+    <span class="text-white-50 ms-2">/ 入院手続き</span>
 {% endblock header_breadcrumb %}
 
 {% block extrastyle %}
@@ -39,85 +35,55 @@
 <div class="container py-4">
 
   <!-- ヘッダー -->
-  <div class="d-flex justify-content-between align-items-center gap-3 mb-4">
-    <div class="page-title"><i class="fas fa-procedures page-title-icon"></i> 入院手続き</div>
-    <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: nowrap; margin-left: auto;">
-      <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; font-weight: 600; white-space: nowrap;">
-        <span>ID {{ patient.card_id }}</span>
-        <span style="color: #999;">|</span>
-        <span class="patient-name">{{ patient.name }}</span>
-        <span style="color: #999;">|</span>
-        <span style="font-weight: 400;">{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）{{ patient.get_gender_display }}</span>
-        <span style="color: #999;">|</span>
-        <span style="font-weight: 600;">{{ patient.course_number|default:1 }}クール</span>
-        {% if patient.attending_physician %}
-        <span style="color: #999;">|</span>
-        <span style="font-weight: 400;">担当医：{% if patient.attending_physician.last_name %}{{ patient.attending_physician.last_name }}{% else %}{{ patient.attending_physician.username }}{% endif %}</span>
-        {% endif %}
-      </div>
-    </div>
-  </div>
+    {% include "rtms_app/partials/patient_inline_bar.html" with page_title="入院手続き" title_icon="fa-procedures" patient=patient %}
 
-  <div class="card shadow-sm">
-    <div class="card-body p-4 p-md-5">
-      <form method="post" id="admissionForm">
-          {% csrf_token %}
-          
-          <h5 class="section-title fw-bold">入院形態の選択</h5>
-          
-          <div class="mb-5">
-              {% for radio in form.admission_type %}
-              <div class="form-check mb-3">
-                  {{ radio.tag }}
-                  <label class="form-check-label fs-5 ps-2" for="{{ radio.id_for_label }}">
-                      {{ radio.choice_label }}
-                  </label>
-              </div>
-              {% endfor %}
-          </div>
-
-          <div class="alert alert-info">
-              <i class="fas fa-info-circle"></i> 
-              入院対応が完了したら、以下のボタンを押してください。
-          </div>
-
-          <div class="text-center mt-3 mb-4">
-              <button type="submit" class="btn btn-admission btn-lg" form="admissionForm">
-                  <i class="fas fa-check me-2"></i> 入院手続き完了
-              </button>
-          </div>
-
-                <div class="text-center mt-4">
-                    <!-- 操作は右下のフローティングメニューに統一 -->
-                    <br>
-                    <a href="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-link text-secondary mt-3">キャンセルして戻る</a>
-                </div>
-{% endblock %}
-
-{% block scripts %}
-<link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
-<script src="{% static 'rtms_app/floating.js' %}"></script>
-
-{% url 'rtms_app:dashboard' as dashboard_url %}
-{% if dashboard_date %}
-    {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
-        <div class="fab-stack no-print">
-            <button type="button" class="btn btn-admission fab" onclick="RTMSFloating.submitFormById('admissionForm')">
-                <i class="fas fa-check"></i> 入院手続き完了
-            </button>
-            <a class="btn btn-secondary fab" href="{{ back_url }}">
-                <i class="fas fa-undo"></i> 戻る
-            </a>
+    <div class="card shadow-sm">
+        <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-admission);">
+            <i class="fas fa-procedures"></i> 入院手続き
         </div>
-    {% endwith %}
-{% else %}
-    <div class="fab-stack no-print">
-        <button type="button" class="btn btn-admission fab" onclick="RTMSFloating.submitFormById('admissionForm')">
-            <i class="fas fa-check"></i> 入院手続き完了
-        </button>
-        <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
-            <i class="fas fa-undo"></i> 戻る
-        </a>
+        <div class="card-body p-4 p-md-5">
+            <form method="post" id="admissionForm">
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <div class="fw-bold mb-2">入院形態の選択</div>
+                        <div class="mb-4">
+                            {% for radio in form.admission_type %}
+                                <div class="form-check mb-3">
+                                    {{ radio.tag }}
+                                    <label class="form-check-label fs-5 ps-2" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        入院対応が完了したら、下のボタンを押してください。
+                    </div>
+
+                    <div class="text-center mt-4 d-md-none">
+                        <a href="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}" class="btn btn-link text-secondary mt-3">キャンセルして戻る</a>
+                    </div>
+            </form>
+        </div>
+        <div class="card-footer bg-white border-0">
+            <div class="d-flex w-100 justify-content-center gap-3">
+                <button type="button" class="btn btn-admission" onclick="document.getElementById('admissionForm').submit()">
+                    <i class="fas fa-check"></i> 入院手続き完了
+                </button>
+
+                {% url 'rtms_app:dashboard' as dashboard_url %}
+                {% if dashboard_date %}
+                    {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+                        <a class="btn btn-secondary" href="{{ back_url }}">戻る</a>
+                    {% endwith %}
+                {% else %}
+                    <a class="btn btn-secondary" href="{{ dashboard_url }}">戻る</a>
+                {% endif %}
+            </div>
+        </div>
     </div>
-{% endif %}
 {% endblock %}
+
+{% block scripts %}{% endblock %}

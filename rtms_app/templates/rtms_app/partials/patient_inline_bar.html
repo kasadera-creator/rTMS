@@ -1,25 +1,33 @@
-<div class="d-flex justify-content-between align-items-center gap-3 mb-3">
-  <div class="page-title d-flex align-items-center gap-2">
-    {% if title_icon %}<i class="fas {{ title_icon }} page-title-icon"></i>{% endif %} {{ page_title|default:"" }}
-  </div>
-  <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: nowrap; margin-left: auto;">
-    <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; font-weight: 600; white-space: nowrap;">
-      <span>ID {{ patient.card_id }}</span>
-      <span style="color: #999;">|</span>
-      <span class="patient-name">{{ patient.name }}</span>
-      <span style="color: #999;">|</span>
-      <span style="font-weight: 400;">{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）{{ patient.get_gender_display }}</span>
-      <span style="color: #999;">|</span>
-      <span style="font-weight: 600;">{{ patient.course_number|default:1 }}クール</span>
-      {% if patient.attending_physician %}
-      <span style="color: #999;">|</span>
-      <span style="font-weight: 400;">担当医：{% if patient.attending_physician.last_name %}{{ patient.attending_physician.last_name }}{% else %}{{ patient.attending_physician.username }}{% endif %}</span>
-      {% endif %}
-
-      {% if right_controls_html %}
-      <span style="color: #999;">|</span>
-      <span class="no-print">{{ right_controls_html|safe }}</span>
+<div class="mb-3">
+  <div class="d-flex justify-content-between align-items-center">
+    <div class="page-title d-flex align-items-center gap-2">
+      {% if title_icon %}<i class="fas {{ title_icon }} page-title-icon"></i>{% endif %} {{ page_title|default:"" }}
+      {% if title_controls_html %}
+        <span class="ms-3">{{ title_controls_html|safe }}</span>
       {% endif %}
     </div>
+    {% if right_controls_html %}
+      <div class="no-print">{{ right_controls_html|safe }}</div>
+    {% endif %}
   </div>
+
+  <div class="patient-meta mt-1" style="font-size:0.95rem; color: #333;">
+    <span>ID {{ patient.card_id }}</span>
+    <span class="mx-2 text-muted">|</span>
+    <span class="patient-name">
+      <a href="{% url 'rtms_app:patient_basic_edit' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">{{ patient.name }}</a>
+    </span>
+    <span class="mx-2 text-muted">|</span>
+    <span>{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）</span>
+    <span class="mx-2 text-muted">|</span>
+    <span>{{ patient.get_gender_display }}</span>
+    <span class="mx-2 text-muted">|</span>
+    <span>{{ patient.course_number|default:1 }}クール</span>
+    {% if patient.attending_physician %}
+      <span class="mx-2 text-muted">|</span>
+      <span>担当医：{% if patient.attending_physician.last_name %}{{ patient.attending_physician.last_name }}{% else %}{{ patient.attending_physician.username }}{% endif %}</span>
+    {% endif %}
+  </div>
+
+  <div class="mt-2">{% include "rtms_app/partials/patient_nav.html" %}</div>
 </div>

@@ -4,11 +4,7 @@
 {% block body_class %}page-assessment{% endblock %}
 
 {% block header_breadcrumb %}
-  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
-  <span class="text-white-50 px-1">/</span>
-  <a href="#" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ID {{ patient.card_id }}</a>
-  <span class="text-white-50 px-1">/</span>
-  <span class="text-white px-1" style="font-size: 0.9rem;">評価尺度（{{ initial_timing_display }}）</span>
+  <span class="text-white-50 ms-2">/ 尺度評価</span>
 {% endblock header_breadcrumb %}
 
 {% block extrastyle %}
@@ -20,81 +16,43 @@
   .help-icon { color: var(--color-assessment); cursor:pointer; opacity:.75; }
   .help-icon:hover { opacity:1; }
   .popover { max-width: 420px; }
-  .popover-body { white-space: pre-wrap; font-size: .95rem; line-height: 1.35; }
+  .popover-body { white-space: pre-wrap; font-size: .9rem; }
   .sticky-scorebar {
     position: sticky; bottom: 0; z-index: 1020;
     background: #fff; border-top: 2px solid var(--color-assessment);
     padding: 10px 12px;
   }
-  .compact-label { font-size:.95rem; line-height:1.25; }
-
-  /* Force 2 columns layout using grid */
-  .card-body .row.g-2 {
-      display: grid !important;
-      grid-template-columns: 1fr 1fr !important;
-      gap: 0.5rem !important;
-  }
-  @media (max-width: 767px) {
-      .card-body .row.g-2 {
-          grid-template-columns: 1fr !important;
-      }
-  }
-  .card-body .row.g-2 > .col-md-6 {
-      width: 100% !important;
-      max-width: 100% !important;
-  }
+  .compact-label { font-size:.92rem; line-height:1.2; }
 
   /* iPad Landscape Optimization */
   @media only screen and (min-width: 1000px) and (orientation: landscape) {
-      .container { max-width: 98vw; padding-top: 6px !important; padding-bottom: 6px !important; }
-      .page-title { font-size: 1.1rem !important; }
-      .alert { padding: 0.2rem 0.4rem; margin-bottom: 0.4rem !important; font-size: 0.8rem; }
+      .container { max-width: 98vw; padding-top: 10px !important; padding-bottom: 60px !important; }
+      h4 { font-size: 1.2rem; margin-bottom: 0.5rem !important; }
+      .alert { padding: 0.25rem 0.5rem; margin-bottom: 0.5rem !important; font-size: 0.85rem; }
       
-      .card { margin-bottom: 0.4rem !important; }
-      .card-header { padding: 0.2rem 0.4rem; font-size: 0.85rem; }
-      .card-body { padding: 0.4rem; }
+      .card-header { padding: 0.25rem 0.5rem; font-size: 0.9rem; }
+      .card-body { padding: 0.5rem; }
       
-      .hamd-row { padding: 0.2rem 0.3rem !important; margin-bottom: 0.15rem; }
-      .q-badge { width: 20px; height: 20px; font-size: 0.65rem; }
-      .compact-label { font-size: 0.75rem; line-height: 1.1; }
+      .hamd-row { padding: 0.25rem !important; margin-bottom: 0.2rem; }
+      .q-badge { width: 22px; height: 22px; font-size: 0.7rem; }
+      .compact-label { font-size: 0.8rem; }
       
-      .btn-group-sm>.btn, .btn-sm { padding: 0.08rem 0.25rem; font-size: 0.7rem; }
-      .form-control-sm { padding: 0.15rem 0.3rem; font-size: 0.8rem; }
+      .btn-group-sm>.btn, .btn-sm { padding: 0.18rem 0.45rem; font-size: 0.95rem; }
       
-      /* Make 2 columns layout more compact */
-      .col-md-6 { width: 50%; }
-      .row.g-2 { gap: 0.3rem !important; }
+      /* Make 2 columns become 3 columns if space permits, or just tighter 2 columns */
+      .col-lg-6 { width: 50%; } 
       
-      .sticky-scorebar { padding: 4px 8px; }
-      .sticky-scorebar .h5 { font-size: 0.9rem; margin-bottom: 0 !important; }
-      .sticky-scorebar .btn { padding: 0.2rem 0.4rem; font-size: 0.8rem; }
-      
-      /* Keep fab buttons normal size */
-      .fab { padding: 6px 12px !important; font-size: 0.85rem !important; }
+      .sticky-scorebar { padding: 5px 10px; }
+      .sticky-scorebar .h5 { font-size: 1rem; }
+      .sticky-scorebar .btn { padding: 0.25rem 0.5rem; font-size: 0.85rem; }
   }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container py-3 mb-5">
-  <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
-    <div class="page-title d-flex align-items-center gap-2"><i class="fas fa-chart-bar page-title-icon"></i> 尺度評価 (HAM-D) {% include "rtms_app/partials/recommendation_badge.html" %}</div>
-    <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: nowrap; margin-left: auto;">
-      <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; font-weight: 600; white-space: nowrap;">
-        <span>ID {{ patient.card_id }}</span>
-        <span style="color: #999;">|</span>
-        <span class="patient-name">{{ patient.name }}</span>
-        <span style="color: #999;">|</span>
-        <span style="font-weight: 400;">{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）{{ patient.get_gender_display }}</span>
-        <span style="color: #999;">|</span>
-        <span style="font-weight: 600;">{{ patient.course_number|default:1 }}クール</span>
-        {% if patient.attending_physician %}
-        <span style="color: #999;">|</span>
-        <span style="font-weight: 400;">担当医：{% if patient.attending_physician.last_name %}{{ patient.attending_physician.last_name }}{% else %}{{ patient.attending_physician.username }}{% endif %}</span>
-        {% endif %}
-      </div>
-    </div>
-  </div>
+  {# Ensure patient info bar + floating nav appear on assessment pages #}
+  {% include "rtms_app/partials/patient_inline_bar.html" with page_title="尺度評価" title_icon="fa-chart-bar" patient=patient dashboard_date=dashboard_date %}
 
   {% if recommendation %}
     <div class="alert alert-info fw-bold mb-3 shadow-sm"><i class="fas fa-comment-medical"></i> {{ recommendation }}</div>
@@ -111,117 +69,12 @@
   <form method="post" id="assessmentForm">
     {% csrf_token %}
 
-    <div class="card shadow-sm border-0">
-      <div class="card-header text-white d-flex justify-content-between align-items-center" style="background-color: var(--color-assessment);">
-        <div class="fw-bold">
-          {% if existing_assessment %}
-            <i class="fas fa-check-circle"></i> HAM-D（保存済み）
-          {% else %}
-            <i class="fas fa-pen"></i> HAM-D
-          {% endif %}
-        </div>
-        <div class="d-flex align-items-center gap-2">
-          <div class="small">実施日</div>
-          <input type="date" name="date" class="form-control form-control-sm" value="{{ default_date|date:'Y-m-d' }}" style="width:auto;">
-        </div>
-      </div>
+    {# Include the scale-specific inner form. The view supplies `scale_template` and scale-specific context. #}
+    {% include scale_template %}
 
-      <div class="card-body bg-light">
-        <div class="row g-2">
-          <div class="col-md-6">
-            <div class="d-flex flex-column gap-2">
-              {% for key, label, max, text in hamd_items_left %}
-                <div class="hamd-row p-2 d-flex align-items-center justify-content-between"
-                     data-bs-toggle="popover"
-                     data-bs-placement="right"
-                     data-bs-trigger="click"
-                     data-bs-content="{{ text }}">
-                  <div class="d-flex align-items-center gap-2 flex-grow-1 me-2">
-                    <div class="q-badge">Q{{ forloop.counter }}</div>
-                    <div class="fw-bold compact-label">{{ label }}</div>
-                  </div>
-                  <div class="text-end">
-                    <input type="hidden" name="{{ key }}" value="0">
-                    <div class="btn-group btn-group-sm hamd-btn-group" role="group" data-hamd-key="{{ key }}">
-                      {% if max == 2 %}
-                        {% for v in "012"|make_list %}
-                          <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
-                        {% endfor %}
-                      {% elif max == 3 %}
-                        {% for v in "0123"|make_list %}
-                          <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
-                        {% endfor %}
-                      {% else %}
-                        {% for v in "01234"|make_list %}
-                          <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
-                        {% endfor %}
-                      {% endif %}
-                    </div>
-                  </div>
-                </div>
-              {% endfor %}
-            </div>
-          </div>
-
-          <div class="col-md-6">
-            <div class="d-flex flex-column gap-2">
-              {% for key, label, max, text in hamd_items_right %}
-                <div class="hamd-row p-2 d-flex align-items-center justify-content-between"
-                     data-bs-toggle="popover"
-                     data-bs-placement="left"
-                     data-bs-trigger="click"
-                     data-bs-content="{{ text }}">
-                  <div class="d-flex align-items-center gap-2 flex-grow-1 me-2">
-                    <div class="q-badge">Q{{ forloop.counter|add:11 }}</div>
-                    <div class="fw-bold compact-label">{{ label }}</div>
-                  </div>
-                  <div class="text-end">
-                    <input type="hidden" name="{{ key }}" value="0">
-                    <div class="btn-group btn-group-sm hamd-btn-group" role="group" data-hamd-key="{{ key }}">
-                      {% if max == 2 %}
-                        {% for v in "012"|make_list %}
-                          <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
-                        {% endfor %}
-                      {% elif max == 3 %}
-                        {% for v in "0123"|make_list %}
-                          <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
-                        {% endfor %}
-                      {% else %}
-                        {% for v in "01234"|make_list %}
-                          <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
-                        {% endfor %}
-                      {% endif %}
-                    </div>
-                  </div>
-                </div>
-              {% endfor %}
-            </div>
-          </div>
-        </div>
-
-        <div class="mt-2 bg-white p-2 rounded border">
-          <label class="form-label fw-bold mb-1"><i class="fas fa-comment-dots me-1"></i>コメント・特記事項</label>
-          <textarea name="note" id="id_note" class="form-control" rows="2"
-            placeholder="特記事項があれば入力してください">{{ existing_assessment.note|default:"" }}</textarea>
-        </div>
-      </div>
-
-      <div class="sticky-scorebar shadow">
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-          <div class="fw-bold">
-            HAM-D17 合計：<span id="hamd17Total" style="color: var(--color-assessment);">0</span> 点
-            <span class="ms-2">重症度：<span id="hamd17Severity" class="text-primary">正常</span></span>
-          </div>
-          <div class="text-muted small">
-            HAM-D17 参考基準: 0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23-:最重症
-          </div>
-        </div>
-      </div>
-
-    </div>
   </form>
-</div>
 
+</div>
 {% url 'rtms_app:dashboard' as dashboard_url %}
     {% if dashboard_date %}
       {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}

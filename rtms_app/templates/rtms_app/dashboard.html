@@ -3,50 +3,36 @@
 {% block extrastyle %}
 <style>
     .dashboard-shell { display: flex; flex-direction: column; gap: var(--space-3); }
+    
+    /* === ダッシュボード用カード（date-navは.app-cardで统一） === */
     .date-nav {
-        background: #fff;
-        border: var(--border);
-        border-radius: var(--radius);
-        padding: 0.8rem 1rem;
-        box-shadow: var(--shadow);
+        padding: 1rem;
+        border-bottom: none;
     }
 
-    .dashboard-grid { 
-        gap: 1rem !important; 
-        display: grid !important;
-        grid-template-columns: repeat(3, 1fr) !important;
-        grid-auto-flow: row !important;
-        grid-auto-rows: auto;
-    }
-    @media (max-width: 1024px) {
-        .dashboard-grid { grid-template-columns: repeat(2, 1fr) !important; }
-    }
-    @media (max-width: 768px) {
-        .dashboard-grid { grid-template-columns: 1fr !important; }
-    }
-    .task-group-wrapper { 
-        width: 100% !important;
-        max-width: none !important;
-        margin: 0 !important;
-        min-width: auto !important;
-    }
+    .dashboard-grid { gap: 1rem; }
+    .task-group-wrapper { min-width: 320px; max-width: 420px; margin: 0 auto; }
+    
+    /* === タスクカード改修：app-cardの色スキーム適用 === */
     .card-task {
-        border: var(--border);
-        border-radius: var(--radius);
-        box-shadow: var(--shadow);
+        border: 0;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(25, 38, 54, 0.06);
         background: #fff;
         overflow: hidden;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
-    .card-task:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
+    .card-task:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(25, 38, 54, 0.12); }
+    
     .task-header {
-        padding: 0.65rem 0.85rem;
+        padding: 0.875rem 1rem;
         color: #fff;
         display: flex;
         justify-content: space-between;
         align-items: center;
         font-weight: 700;
-        font-size: var(--font-base);
+        font-size: 0.95rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
     }
 
     /* テーマベースのグラデーション */
@@ -60,8 +46,8 @@
     .list-group-item {
         border: none;
         border-bottom: 1px solid #f0f0f0;
-        padding: 0.65rem 0.85rem;
-        font-size: var(--font-base);
+        padding: 0.875rem 1rem;
+        font-size: 0.95rem;
         line-height: 1.35;
     }
     .list-group-item:hover { background-color: #f8f9fa; }
@@ -84,19 +70,18 @@
     .date-picker-input { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10; }
 
     @media (min-width: 1024px) and (max-width: 1366px) and (orientation: landscape) {
-        .date-nav { padding: 0.65rem 0.9rem; }
-        .task-header { padding: 0.6rem 0.75rem; }
-        .list-group-item { padding: 0.55rem 0.75rem; }
+        .date-nav { padding: 0.75rem 1rem; }
+        .task-header { padding: 0.75rem 1rem; }
+        .list-group-item { padding: 0.75rem 1rem; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="dashboard-container">
-    <!-- 日付ナビゲーション -->
-    <div class="date-nav d-flex flex-column flex-md-row justify-content-between align-items-center gap-3 mb-3">
-        
-        <!-- 左側: タイトルと日付操作 -->
+<div class="dashboard-container" data-theme="dashboard">
+    <!-- 日付ナビゲーション（カード化） -->
+    <div class="app-card date-nav">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
         <div class="d-flex flex-wrap align-items-center justify-content-center gap-2 w-100 w-md-auto">
             <h4 class="mb-0 fw-bold me-3 d-none d-lg-block text-nowrap"><i class="fas fa-tachometer-alt text-secondary"></i> ダッシュボード</h4>
             
@@ -135,9 +120,6 @@
                 <a href="{% url 'rtms_app:patient_add' %}" class="btn btn-first-visit btn-sm text-nowrap">
                     <i class="fas fa-user-plus me-1"></i> 新規患者登録
                 </a>
-                <a href="{% url 'rtms_app:calendar_month' %}" class="btn btn-outline-primary btn-sm fw-bold text-nowrap">
-                    <i class="fas fa-calendar-alt me-1"></i> 月間カレンダー
-                </a>
                 <a href="{% url 'rtms_app:patient_list' %}?dashboard_date={{ today|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm fw-bold text-nowrap">
                     <i class="fas fa-users me-1"></i> 患者一覧
                 </a>
@@ -153,10 +135,7 @@
         <div class="task-group-wrapper">
             <div class="card-task bg-white">
                 <div class="task-header {{ task_group.color_class }}">
-                    <span>
-                        <i class="fas {{ task_group.icon }} me-2"></i>
-                        {% if task_group.title == "③ 位置決め" %}③ 位置決め・MT測定{% else %}{{ task_group.title }}{% endif %}
-                    </span>
+                    <span><i class="fas {{ task_group.icon }} me-2"></i>{{ task_group.title }}</span>
                     <span class="badge bg-white text-dark rounded-pill opacity-75">{{ task_group.list|length }}</span>
                 </div>
                 <!-- 初診のみ新規登録ボタンを表示 -->

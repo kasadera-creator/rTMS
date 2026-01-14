@@ -1,0 +1,15 @@
+.print-toolbar-floating { position: fixed; top: 10px; right: 10px; z-index: 2200; background: rgba(255,255,255,0.98); padding: 8px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+.print-toolbar-floating .btn { margin-left: 6px; }
+.print-main { padding-top: 66px; }
+@media print { .print-toolbar-floating { display: none !important; } .print-main { padding-top: 0 !important; } }
+
+/* Ensure toolbar receives pointer events */
+.print-toolbar-floating { pointer-events: auto; }
+
+/* prevent page-breaks inside tables where possible */
+.print-main table { page-break-inside: avoid; }
+
+/* small helper to reduce top margin on PDF rendering */
+@media all {
+  .print-root-reduce-margin { transform-origin: top left; }
+}

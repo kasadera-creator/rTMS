@@ -1,3 +1,29 @@
+from datetime import date
+
+CONTENT_LABELS = {
+    'admission': '入院時サマリー',
+    'discharge': '退院時サマリー',
+    'referral': '紹介状',
+    'suitability': 'rTMS問診票',
+    'side_effect': '治療実施記録票',
+    'adverse_event': '有害事象報告書',
+    'path': '臨床経過表',
+    'bundle': 'ドキュメントバンドル',
+}
+
+
+def build_pdf_filename(patient, course_no, content_label, target_date: date):
+    """Return filename like: {card_id}_{course}_{label}_{YYYY-MM-DD}.pdf
+
+    `patient` may be a Patient instance; `course_no` fallback to 1 if None.
+    `content_label` should be a fixed string (Japanese) as defined above or passed explicitly.
+    """
+    cid = getattr(patient, 'card_id', None) or getattr(patient, 'id', '')
+    course_no = course_no or getattr(patient, 'course_number', 1) or 1
+    dstr = target_date.isoformat() if target_date else date.today().isoformat()
+    # sanitize label (replace spaces with underscore)
+    label_safe = str(content_label).replace(' ', '_')
+    return f"{cid}_{course_no}_{label_safe}_{dstr}.pdf"
 """
 印刷サービス層
 ビジネスロジックとデータ取得を分離

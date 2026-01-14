@@ -274,3 +274,10 @@ document.addEventListener('DOMContentLoaded', function() {
     console.warn('[SideEffectWidget] Widget element #sideEffectWidget not found');
   }
 });
+
+// Expose a flush function for external callers to ensure hidden input is synced
+window.sideEffectWidgetFlush = function() {
+  if (sideEffectWidgetInstance && typeof sideEffectWidgetInstance.updateHiddenInput === 'function') {
+    sideEffectWidgetInstance.updateHiddenInput();
+  }
+};

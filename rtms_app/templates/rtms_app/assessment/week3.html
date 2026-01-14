@@ -1,14 +1,5 @@
 {% extends "rtms_app/base.html" %}
 {% load static %}
-
-{% block header_breadcrumb %}
-  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
-  <span class="text-white-50 px-1">/</span>
-  <a href="#" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ID {{ patient.card_id }}</a>
-  <span class="text-white-50 px-1">/</span>
-  <span class="text-white px-1" style="font-size: 0.9rem;">尺度評価入力</span>
-{% endblock header_breadcrumb %}
-
 {% block extrastyle %}
 <style>
   .score-input { width: 64px; text-align: center; font-weight: 700; }
@@ -25,34 +16,8 @@
     padding: 10px 12px;
   }
   .compact-label { font-size:.92rem; line-height:1.2; }
-
-  @media only screen and (min-width: 1000px) and (orientation: landscape) {
-    .scale-page .hamd-row { 
-      padding: 0.6rem 0.75rem !important; 
-      margin-bottom: 0.5rem;
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
-    .scale-page .hamd-row:active { transform: scale(0.98); }
-    .scale-page .q-badge { width: 32px; height: 32px; font-size: 0.95rem; }
-    .scale-page .compact-label { font-size: 1.05rem; font-weight: 600; line-height: 1.4; }
-    .scale-page .hamd-btn-group .btn { 
-      padding: 0.5rem 0.75rem !important;
-      font-size: 1.1rem !important;
-      min-width: 48px;
-      min-height: 48px;
-      font-weight: 600;
-    }
-    .scale-page .anchor-sticky { position: sticky; top: 12px; }
-    .scale-page .list-group-item { 
-      font-size: 1.05rem; 
-      padding: 0.65rem 0.75rem;
-      cursor: pointer;
-    }
-    .scale-page .card-body { padding: .75rem; }
-    .scale-page .form-label { font-size: 1rem; }
-    .scale-page textarea.form-control { font-size: 1rem; padding: 0.6rem; }
-  }
+  /* Week3 specific: green accented header */
+  .card-header { border-left: 4px solid #d32f2f !important; background-color: rgba(211,47,47,0.08) !important; color: #222 !important; }
 </style>
 {% endblock %}
 

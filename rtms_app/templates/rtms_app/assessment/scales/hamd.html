@@ -3,10 +3,13 @@
 
 {% block scale_form_inner %}
   <div class="card shadow-sm border-0">
-    <div class="card-header text-white d-flex justify-content-between align-items-center" style="background-color: var(--color-assessment);">
-      <div class="fw-bold">
-        <i class="fas fa-pen"></i> {{ scale_name }}
-      </div>
+    {# HAM-D は赤に統一：共通 accent を使う #}
+    {% with accent='#d32f2f' rgb='211,47,47' %}
+      <div class="card-header d-flex justify-content-between align-items-center" style="border-left:4px solid {{ accent }}; background-color: rgba({{ rgb }},0.08); color: #222;">
+        <div class="fw-bold">
+          <i class="fas fa-pen"></i> {{ scale_name }}
+        </div>
+    {% endwith %}
       <div class="d-flex align-items-center gap-2">
         <div class="small">実施日</div>
         <input type="date" name="date" class="form-control form-control-sm" value="{{ default_date|date:'Y-m-d' }}" style="width:auto;">
@@ -29,7 +32,7 @@
                 </div>
                 <div class="text-end">
                   <input type="hidden" name="{{ key }}" value="0">
-                  <div class="btn-group btn-group-sm hamd-btn-group" role="group" data-hamd-key="{{ key }}">
+                  <div class="btn-group hamd-btn-group" role="group" data-hamd-key="{{ key }}">
                     {% if max == 2 %}
                       {% for v in "012"|make_list %}
                         <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>
@@ -64,7 +67,7 @@
                 </div>
                 <div class="text-end">
                   <input type="hidden" name="{{ key }}" value="0">
-                  <div class="btn-group btn-group-sm hamd-btn-group" role="group" data-hamd-key="{{ key }}">
+                  <div class="btn-group hamd-btn-group" role="group" data-hamd-key="{{ key }}">
                     {% if max == 2 %}
                       {% for v in "012"|make_list %}
                         <button type="button" class="btn btn-outline-primary hamd-btn" data-value="{{ v }}">{{ v }}</button>

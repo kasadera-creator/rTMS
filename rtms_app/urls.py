@@ -1,6 +1,7 @@
 from django.urls import path, include
 from django.shortcuts import redirect
 from . import views
+from django.views.generic.base import RedirectView
 from . import views_health
 
 from django.conf import settings
@@ -79,54 +80,28 @@ urlpatterns = [
         name="mapping_add",
     ),
     path(
-        "patient/<int:patient_id>/mapping/upsert-from-wizard/",
-        views.mapping_upsert_from_wizard,
-        name="mapping_upsert_from_wizard",
-    ),
-    path(
         "patient/<int:patient_id>/treatment/add/",
         views.treatment_add,
         name="treatment_add",
-    ),
-    path(
-        "app/session/<int:session_id>/sae_report.docx",
-        views.sae_report_docx,
-        name="sae_report_docx",
-    ),
-    path(
-        "app/adverse-event-report/print-preview/",
-        views.adverse_event_report_print_preview,
-        name="adverse_event_report_print_preview",
-    ),
-    path(
-        "app/session/<int:session_id>/adverse-event/",
-        views.adverse_event_report_form,
-        name="adverse_event_report_form",
-    ),
-    path(
-        "app/session/<int:session_id>/adverse-event/print/",
-        views.adverse_event_report_print,
-        name="adverse_event_report_print",
-    ),
-    path(
-        "patient/<int:patient_id>/mapping/upsert-from-wizard/",
-        views.mapping_upsert_from_wizard,
-        name="mapping_upsert_from_wizard",
     ),
     path(
         "patient/<int:patient_id>/assessment/week4/",
         views.assessment_week4,
         name="assessment_week4",
     ),
+    # Short URL compatibility: redirect /assessment/<timing>/ -> /assessment/<timing>/add/
+    path(
+        "patient/<int:patient_id>/assessment/<str:timing>/",
+        RedirectView.as_view(pattern_name='rtms_app:assessment_add', query_string=True, permanent=False),
+        name="assessment_shortcut",
+    ),
     path(
         "patient/<int:patient_id>/assessment/<str:timing>/add/",
         views.assessment_add,
         name="assessment_add",
     ),
-
-    # ---- New assessment flow (hub + scale forms) ----
     path(
-        "patient/<int:patient_id>/assessment/<str:timing>/",
+        "patient/<int:patient_id>/assessment/hub/<str:timing>/",
         views.assessment_hub,
         name="assessment_hub",
     ),
@@ -135,20 +110,7 @@ urlpatterns = [
         views.assessment_scale_form,
         name="assessment_scale",
     ),
-
-    # =========================
-    # Multi-patient calendar
-    # =========================
-    path(
-        "app/calendar/",
-        views.calendar_month_view,
-        name="calendar_month",
-    ),
-    path(
-        "app/calendar/print/",
-        views.calendar_month_print_view,
-        name="calendar_month_print",
-    ),
+    # Note: assessment_hub removed due to compatibility issues; link directly to `assessment_add`.
 
     # =========================
     # Path / Calendar
@@ -158,19 +120,15 @@ urlpatterns = [
         views.patient_clinical_path,
         name="patient_clinical_path",
     ),
-
-    # =========================
-    # Export & Backup
-    # =========================
     path(
-        "export/research_csv/",
-        views.export_research_csv,
-        name="export_research_csv",
+        "calendar/month/",
+        views.calendar_month_view,
+        name="calendar_month",
     ),
     path(
-        "admin/backup/",
-        views.admin_backup,
-        name="admin_backup",
+        "calendar/month/print/",
+        views.calendar_month_print_view,
+        name="calendar_month_print",
     ),
 
     # =========================
@@ -181,6 +139,20 @@ urlpatterns = [
     path("consent/latest/", views.consent_latest, name="consent_latest"),
 
     path("patient/<int:patient_id>/audit_logs/", views.audit_logs_view, name="audit_logs"),
+
+    # =========================
+    # Adverse Event Reports
+    # =========================
+    path(
+        "adverse-event/print-preview/",
+        views.adverse_event_report_print_preview,
+        name="adverse_event_report_print_preview",
+    ),
+    path(
+        "adverse-event/<int:session_id>/print/",
+        views.adverse_event_report_print,
+        name="adverse_event_report_print",
+    ),
 
 ]
 

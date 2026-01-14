@@ -1,8 +1,8 @@
 # rtms_app/protocols.py
 """Protocol abstraction layer for rTMS.
 
-Each course (Patient.protocol_type) specifies the protocol used.
 This module centralizes protocol-specific logic (sessions, eval weeks, required fields).
+Note: `Patient.protocol_type` was removed; default INSURANCE protocol is used for now.
 """
 from __future__ import annotations
 from dataclasses import dataclass
@@ -71,14 +71,12 @@ def get_protocol_by_code(code: str) -> Optional[ProtocolSpec]:
 
 def get_protocol(patient) -> ProtocolSpec:
     """Return the protocol spec for this patient's current course.
-
-    Falls back to INSURANCE if unset or invalid.
+    Currently returns the default INSURANCE specification.
     """
     from rtms_app.models import Patient  # delayed to avoid circular import
     if not isinstance(patient, Patient):
         # fallback: handle patient_id or None
         return INSURANCE_PROTOCOL
 
-    protocol_code = getattr(patient, 'protocol_type', None) or "INSURANCE"
-    spec = get_protocol_by_code(protocol_code)
-    return spec or INSURANCE_PROTOCOL
+    # protocol_type removed — always use INSURANCE for now
+    return INSURANCE_PROTOCOL

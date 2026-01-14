@@ -1,0 +1,73 @@
+/* Global box/card styles to unify page UIs to match treatment page appearance */
+
+/* Target main app content to avoid affecting admin or other third-party areas */
+.rtms-main .card.shadow-sm {
+  border: 0;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(25, 38, 54, 0.08);
+  overflow: visible;
+}
+
+.rtms-main .card-header {
+  padding: 0.6rem 0.75rem;
+  font-weight: 700;
+  font-size: 1rem;
+  background: transparent; /* individual templates can set color backgrounds */
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+.rtms-main .card-body {
+  padding: 1rem;
+  font-size: 0.98rem;
+}
+
+/* Make compact cards consistently proportioned */
+.rtms-main .card .section-title { margin-bottom: 0.75rem; }
+.rtms-main .card .form-label { font-weight: 600; }
+.rtms-main .card .form-text { font-size: 0.9rem; }
+
+/* Floating FABs and action areas spacing harmonization */
+.fab-stack .fab { box-shadow: 0 6px 18px rgba(0,0,0,0.12); border-radius: 6px; }
+
+/* List group / history adjustments to match card look */
+.rtms-main .list-group-item { border: none; border-bottom: 1px solid rgba(0,0,0,0.04); padding: 0.65rem 0.75rem; }
+.rtms-main .mapping-history .list-group-item { padding: 0.5rem 0.6rem; }
+
+/* Small-print and muted areas inside cards */
+.rtms-main .card small, .rtms-main .card .small { color: #6c757d; }
+
+@media (max-width: 767px) {
+  .rtms-main .card-body { padding: 0.8rem; }
+  .rtms-main .card-header { font-size: 0.98rem; }
+}
+
+/* Support legacy 'card-like' blocks used across templates: make them look like cards */
+.card-like {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(25, 38, 54, 0.06);
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.card-like .section-title {
+  font-weight: 700;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  font-size: 1rem;
+}
+.card-like .form-label { font-weight: 600; }
+.card-like .card-body-like { padding-top: 0.5rem; }
+
+/* Accent header: left color stripe + subtle background with strong text */
+.card-header-accent {
+  position: relative;
+  border-left: 6px solid var(--card-accent, #198754);
+  background: rgba(0,0,0,0.02);
+  color: rgba(0,0,0,0.85);
+  padding-left: 0.9rem; /* give space after stripe */
+}
+.card-header-accent i { margin-right: 0.5rem; }
+
+/* Slightly stronger header text and reduced border-bottom */
+.card-header-accent { font-weight: 700; border-bottom: 1px solid rgba(0,0,0,0.04); }

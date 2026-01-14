@@ -13,6 +13,8 @@
     <link rel="icon" href="{% static 'img/logo.jpg' %}">
     <link rel="stylesheet" href="{% static 'css/rtms_theme.css' %}">
     <link rel="stylesheet" href="{% static 'css/print_a4.css' %}" media="print">
+    <link rel="stylesheet" href="{% static 'rtms_app/box_style.css' %}">
+    <link rel="stylesheet" href="{% static 'rtms_app/app.css' %}">
     <style>
         /* テーマカラー定義 */
         :root {
@@ -51,25 +53,17 @@
             --color-patient-list-bg: #eceff1;
         }
         
-        html, body { height: 100%; }
-        body { font-family: 'Noto Sans JP', sans-serif; background-color: #f0f2f5; margin: 0; padding: 0; overflow: hidden; }
-        
-        .rtms-app { height: 100vh; display: flex; flex-direction: column; }
-        .rtms-header { flex: 0 0 56px; height: 56px; }
-        .rtms-main { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-bottom: 28px; }
-        .rtms-footer { position: fixed; bottom: 0; left: 0; right: 0; height: 28px; line-height: 28px; background-color: #343a40; color: #adb5bd; font-size: 0.75rem; text-align: center; padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 100; }
-        .rtms-footer * { margin: 0 !important; padding: 0 !important; }
-        .rtms-footer a { color: #adb5bd; text-decoration: none; }
-        .rtms-footer a:hover { color: #fff; }
-        
+        body { font-family: 'Noto Sans JP', sans-serif; background-color: #f0f2f5; display: flex; flex-direction: column; min-height: 100vh; }
+        .rtms-shell .content-wrapper { min-height: calc(100vh - var(--header-h) - var(--footer-h)); flex: 1; display: flex; }
+        .navbar { min-height: var(--header-h); }
         .navbar-brand { font-weight: bold; }
-        
-        /* 患者名表示用スタイル */
-        .patient-name { color: #0d7bb7; font-weight: 700; }
+        .app-footer { background-color: #343a40; color: #adb5bd; min-height: var(--footer-h); padding: 10px 0; font-size: 0.85rem; text-align: center; display: flex; align-items: center; }
+        .app-footer a { color: #adb5bd; text-decoration: none; }
+        .app-footer a:hover { color: #fff; }
 
-        .floating-actions, .fab-stack {
+        .floating-actions {
             position: fixed;
-            bottom: calc(28px + 12px);
+            bottom: 20px;
             right: 20px;
             z-index: 1050;
             display: flex;
@@ -161,110 +155,127 @@
         .rtms-topnav-center { min-width: 0; }
         .rtms-topnav-brand { min-width: 0; }
         .rtms-topnav-patient { max-width: 56vw; }
-
-        .rtms-patient-banner { background: var(--card-bg); border-bottom: var(--border); }
-        .rtms-patient-banner .badge { font-weight: 600; }
-
-        .rtms-topnav-center nav { 
-            flex-wrap: nowrap !important; 
-            white-space: nowrap !important; 
-            overflow-x: auto !important;
-            overflow-y: hidden !important;
+        
+        /* === トップバー1行固定 === */
+        .rtms-topnav .container-fluid {
+            flex-wrap: nowrap;
+            overflow: hidden;
         }
-        .rtms-topnav-center nav a,
-        .rtms-topnav-center nav span { 
-            flex-shrink: 0 !important;
-            font-size: 0.85rem !important;
+        
+        .rtms-topnav-left {
+            flex-shrink: 0;
+            min-width: auto;
+        }
+        
+        .rtms-topnav-brand span.rtms-brand-text {
+            max-width: 200px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        @media (max-width: 768px) {
+            .rtms-topnav-brand span.rtms-brand-text {
+                max-width: 100px;
+            }
+            
+            .btn-menu span:not(.me-2) {
+                display: none;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            .rtms-topnav-brand span.rtms-brand-text {
+                max-width: 50px;
+            }
         }
     </style>
     {% block extrastyle %}{% endblock extrastyle %}
 </head>
-<body>
-<div class="rtms-app">
+<body class="rtms-shell {% block body_class %}{% endblock body_class %}">
 
-<nav class="navbar navbar-dark bg-dark shadow-sm no-print rtms-header rtms-topnav">
+<nav class="navbar navbar-dark bg-dark sticky-top shadow-sm no-print rtms-topnav">
     <div class="container-fluid px-3">
-        <div class="d-flex align-items-center gap-2 flex-grow-1 rtms-topnav-left">
-            <a class="navbar-brand d-flex align-items-center gap-2 rtms-topnav-brand" href="{% url 'rtms_app:dashboard' %}" style="margin-right: 0;">
+        <div class="d-flex align-items-center gap-2 rtms-topnav-left">
+            <a class="navbar-brand d-flex align-items-center gap-2 rtms-topnav-brand" href="{% url 'rtms_app:dashboard' %}">
                 <i class="fas fa-hospital-alt"></i>
                 <span class="rtms-brand-text text-truncate">笠寺精治寮病院 rTMS支援システム</span>
             </a>
-            <!-- Breadcrumb inline with brand -->
-            <span class="text-white-50" style="margin: 0 0.5rem;">/ </span>
-            <div class="text-white-50 small text-nowrap" style="display: flex; align-items: center; gap: 0;">
-                {% block header_breadcrumb %}{% endblock header_breadcrumb %}
-            </div>
+        </div>
+
+        <div class="d-none d-md-flex flex-grow-1 justify-content-center rtms-topnav-center">
+            {# Top nav center intentionally left empty to avoid duplicating patient info here.
+               Page-level title and patient summary are shown under the page header. #}
         </div>
 
         <div class="d-flex align-items-center gap-2">
-            <a class="btn btn-outline-light fw-bold" href="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}">
-                <i class="fas fa-arrow-left me-1"></i> ダッシュボードに戻る
-            </a>
+            <style>
+                /* Larger textual menu button */
+                .rtms-topnav .btn-menu { font-size: 1rem; padding: 6px 10px; font-weight: 700; border-radius: 6px; }
+                .rtms-topnav .dropdown-menu .patient-name { font-weight: 700; }
+                @media (max-width: 576px) { .rtms-topnav .btn-menu { font-size: .95rem; padding: 6px 8px; } }
+            </style>
+
             <div class="dropdown">
-                <button class="btn btn-outline-light" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="メニュー">
-                    <i class="fas fa-bars me-1"></i>
-                    <span class="fw-bold">メニュー</span>
-                    <i class="fas fa-chevron-down ms-1"></i>
+                <button class="btn btn-outline-light btn-menu" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="メニュー" data-bs-toggle2="tooltip">
+                    <i class="fas fa-bars me-2"></i> メニュー
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end">
                     <li class="dropdown-header">
-                        {% if user.last_name %}{{ user.last_name }} {{ user.first_name }}{% else %}{{ user.username }}{% endif %}
+                        <div>
+                          {% if user.last_name %}{{ user.last_name }} {{ user.first_name }}{% else %}{{ user.username }}{% endif %}
+                        </div>
+                        {% if patient %}
+                          <div class="small text-muted patient-name">{{ patient.name }} (ID {{ patient.card_id }})</div>
+                        {% endif %}
                     </li>
                     <li><hr class="dropdown-divider"></li>
 
                     {% if patient %}
                         <li>
                             <a class="dropdown-item" href="{% url 'rtms_app:patient_first_visit' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
-                                <i class="fas fa-user-plus me-2"></i>初診・基本情報
+                                <i class="fas fa-user-plus me-2"></i> 初診・基本情報
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'rtms_app:questionnaire_edit' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+                                <i class="fas fa-clipboard-list me-2"></i> 適正問診票
                             </a>
                         </li>
                         <li>
                             <a class="dropdown-item" href="{% url 'rtms_app:patient_clinical_path' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
-                                <i class="fas fa-route me-2"></i>クリニカルパス
+                                <i class="fas fa-route me-2"></i> クリニカルパス
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'rtms_app:admission_procedure' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+                                <i class="fas fa-procedures me-2"></i> 入院手続き
                             </a>
                         </li>
                         <li>
                             <a class="dropdown-item" href="{% url 'rtms_app:mapping_add' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
-                                <i class="fas fa-crosshairs me-2"></i>位置決め・MT測定
+                                <i class="fas fa-crosshairs me-2"></i> 位置決め（MT測定）
                             </a>
                         </li>
                         <li>
                             <a class="dropdown-item" href="{% url 'rtms_app:treatment_add' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
-                                <i class="fas fa-bolt me-2"></i>治療実施
-                            </a>
-                        </li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li class="dropdown-header">尺度評価入力</li>
-                        <li>
-                            <a class="dropdown-item ps-4" href="{% url 'rtms_app:assessment_add' patient.id 'baseline' %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
-                                <i class="fas fa-clipboard-check me-2"></i>治療前
+                                <i class="fas fa-bolt me-2"></i> 治療実施
                             </a>
                         </li>
                         <li>
-                            <a class="dropdown-item ps-4" href="{% url 'rtms_app:assessment_add' patient.id 'week3' %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
-                                <i class="fas fa-clipboard-check me-2"></i>3週間目
+                            <a class="dropdown-item" href="{% url 'rtms_app:assessment_add' patient.id 'baseline' %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+                                <i class="fas fa-clipboard-check me-2"></i> 評価尺度
                             </a>
                         </li>
-                        <li>
-                            <a class="dropdown-item ps-4" href="{% url 'rtms_app:assessment_week4' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
-                                <i class="fas fa-clipboard-check me-2"></i>4週間目
-                            </a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item ps-4" href="{% url 'rtms_app:assessment_add' patient.id 'week6' %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
-                                <i class="fas fa-clipboard-check me-2"></i>6週間目
-                            </a>
-                        </li>
-                        <li><hr class="dropdown-divider"></li>
                         <li>
                             <a class="dropdown-item" href="{% url 'rtms_app:patient_home' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
-                                <i class="fas fa-notes-medical me-2"></i>治療経過・退院準備
+                                <i class="fas fa-notes-medical me-2"></i> 治療経過・退院準備
                             </a>
                         </li>
                         {% if can_view_audit|default:False %}
                         <li>
                             <a class="dropdown-item" href="{% url 'rtms_app:audit_logs' patient.id %}">
-                                <i class="fas fa-history me-2"></i>変更履歴
+                                <i class="fas fa-history me-2"></i> 変更履歴
                             </a>
                         </li>
                         {% endif %}
@@ -274,35 +285,30 @@
 
                     <li>
                         <a class="dropdown-item" href="{% url 'rtms_app:dashboard' %}{% if dashboard_date %}?date={{ dashboard_date }}{% endif %}">
-                            <i class="fas fa-columns me-2"></i>ダッシュボード
+                            <i class="fas fa-columns me-2"></i> ダッシュボード
                         </a>
                     </li>
                     <li>
                         <a class="dropdown-item" href="{% url 'rtms_app:calendar_month' %}">
-                            <i class="fas fa-calendar-alt me-2"></i>月間カレンダー
+                            <i class="fas fa-calendar-alt me-2"></i> 月間カレンダー
                         </a>
                     </li>
                     <li>
                         <a class="dropdown-item" href="{% url 'rtms_app:patient_list' %}">
-                            <i class="fas fa-users me-2"></i>患者一覧
+                            <i class="fas fa-users me-2"></i> 患者一覧
                         </a>
                     </li>
-                    <li>
-                        <a class="dropdown-item" href="{% url 'rtms_app:patient_add' %}">
-                            <i class="fas fa-user-plus me-2"></i>新規患者登録
-                        </a>
-                    </li>
-                    {% if user.is_staff %}
+                    {% if user.is_superuser %}
                     <li>
                         <a class="dropdown-item" href="{% url 'admin:index' %}" target="_blank" rel="noopener">
-                            <i class="fas fa-cog me-2"></i>管理画面
+                            <i class="fas fa-cog me-2"></i> 管理画面
                         </a>
                     </li>
                     {% endif %}
                     <li><hr class="dropdown-divider"></li>
                     <li>
                         <a class="dropdown-item" href="{% url 'rtms_app:custom_logout' %}">
-                            <i class="fas fa-sign-out-alt me-2"></i>ログアウト
+                            <i class="fas fa-sign-out-alt me-2"></i> ログアウト
                         </a>
                     </li>
                 </ul>
@@ -311,22 +317,22 @@
     </div>
 </nav>
 
-{% block patient_banner %}
-{% endblock patient_banner %}
-
-<main class="rtms-main">
+<div class="content-wrapper">
     <div class="rtms-page">
         <div class="rtms-container">
-            {% block content %}{% endblock content %}
+            <main class="rtms-main">
+                {% block content %}{% endblock content %}
+            </main>
         </div>
     </div>
-</main>
+</div>
 
-<footer class="rtms-footer no-print">
-© {% now "Y" %} K.Iwata, Kasadera Seichiryo Hospital. All Rights Reserved. | Powered by Python/Django/JAZZMIN
+<footer class="app-footer no-print">
+    <div class="container">
+        <div class="mb-1">© {% now "Y" %} K.Iwata, Kasadera Seichiryo Hospital. All Rights Reserved.</div>
+        <div class="small text-muted">Powered by Python/Django/JAZZMIN</div>
+    </div>
 </footer>
-
-</div><!-- /.rtms-app -->
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 

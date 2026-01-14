@@ -4,11 +4,7 @@
 {% block body_class %}page-mapping{% endblock %}
 
 {% block header_breadcrumb %}
-  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
-  <span class="text-white-50 px-1">/</span>
-  <a href="#" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ID {{ patient.card_id }}</a>
-  <span class="text-white-50 px-1">/</span>
-    <span class="text-white px-1" style="font-size: 0.9rem;">位置決め・MT測定</span>
+    <span class="text-white-50 ms-2">/ 位置決め</span>
 {% endblock header_breadcrumb %}
 
 {% block extrastyle %}
@@ -20,25 +16,30 @@
     margin-bottom: 1.5rem;
   }
 
+    /* Slightly larger base font for readability on mapping page */
+    .mapping-page { font-size: 1.05rem; }
+
   /* iPad Landscape Optimization */
   @media only screen and (min-width: 1000px) and (orientation: landscape) {
-      .container { max-width: 98vw; padding-top: 10px !important; }
+      .container { max-width: 98vw; padding-top: 10px !important; padding-bottom: 60px !important; }
       h3 { font-size: 1.2rem; margin-bottom: 0.5rem !important; }
       .alert { padding: 0.25rem 0.5rem; margin-bottom: 0.5rem !important; font-size: 0.85rem; }
       
-      .card-header { padding: 0.25rem 0.5rem; font-size: 0.9rem; }
-      .card-body { padding: 0.5rem; }
+    .card-header { padding: 0.25rem 0.5rem; font-size: 0.98rem; }
+    .card-body { padding: 0.6rem; }
       
-      .form-label { margin-bottom: 0; font-size: 0.8rem; }
-      /* Tapability first: don't over-compress inputs */
-      .form-control, .form-select, .input-group-text { padding: 0.35rem 0.5rem; font-size: 0.9rem; height: auto; }
+    .form-label { margin-bottom: 0; font-size: 0.95rem; }
+    .form-control, .form-select, .input-group-text { padding: 0.25rem 0.4rem; font-size: 0.95rem; height: auto; }
       
       .section-title { margin-bottom: 0.5rem; font-size: 1rem; }
       .mb-3 { margin-bottom: 0.4rem !important; }
       .mb-4 { margin-bottom: 0.5rem !important; }
       
       /* History list compact */
-      .list-group-item { padding: 0.4rem 0.5rem; font-size: 0.85rem; }
+    .list-group-item { padding: 0.45rem 0.6rem; font-size: 0.95rem; }
+      
+      /* Hide large bottom buttons in favor of FAB to save space */
+      .text-center.my-4 { display: none; }
       
       .fab-stack { bottom: 15px; right: 15px; gap: 8px; }
       .fab { padding: 6px 10px; font-size: 14px; }
@@ -47,23 +48,14 @@
 {% endblock %}
 
 {% block content %}
-<div class="container py-4">
-<div class="mb-4">
-    {% include "rtms_app/partials/patient_inline_bar.html" with page_title="位置決め・MT測定" title_icon="fa-crosshairs" %}
-    {% include "rtms_app/partials/recommendation_badge.html" %}
-</div>
-
-    <div class="d-none">
-        <span class="badge bg-dark me-2">ID: {{ patient.card_id }}</span>
-        <span class="h5 mb-0 me-3">{{ patient.name }} 様</span>
-        <span class="text-muted small">({{ patient.age }}歳 / {{ patient.get_gender_display }})</span>
-    </div>
+<div class="container py-4 mb-5 mapping-page">
+    {% include "rtms_app/partials/patient_inline_bar.html" with page_title="位置決め記録" title_icon="fa-crosshairs" patient=patient %}
 
     <div class="row">
-        <div class="col-md-6">
+        <div class="col-md-8">
             <div class="card shadow-sm border-0 h-100">
-                <div class="card-header fw-bold" style="background-color: var(--color-mapping); color: #fff;">
-                    <i class="fas fa-pen me-1"></i> 位置決め・MT測定
+                <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-mapping);">
+                    <i class="fas fa-pen me-1"></i> 新規記録
                 </div>
                 <div class="card-body bg-light">
                     <form method="post" id="mainForm">
@@ -83,13 +75,14 @@
                             <h5 class="fw-bold mb-3 section-title"><i class="fas fa-bolt me-2"></i>位置決めパラメータ</h5>
                             <div class="row mb-3">
                                 <div class="col-6">
-                                    <label class="form-label fw-bold">MT値（モーター閾値）</label>
+                                    <label class="form-label fw-bold">MT（モーター閾値）</label>
                                     {{ form.resting_mt }}
+                                    <div class="form-text small">ステップ: 1</div>
                                 </div>
                             </div>
                             <div class="row">
                                 <div class="col-6">
-                                    <label class="form-label fw-bold">位置 a</label>
+                                    <label class="form-label fw-bold">位置 a（向かって左）</label>
                                     <div class="row g-2">
                                         <div class="col-6">
                                             <div class="input-group">
@@ -106,7 +99,7 @@
                                     </div>
                                 </div>
                                 <div class="col-6">
-                                    <label class="form-label fw-bold">位置 b</label>
+                                    <label class="form-label fw-bold">位置 b（向かって右）</label>
                                     <div class="row g-2">
                                         <div class="col-6">
                                             <div class="input-group">
@@ -130,14 +123,26 @@
                             {{ form.notes }}
                         </div>
                         <hr>
+                        <!-- 保存操作はカードフッターへ移動 -->
                     </form>
+                </div>
+
+                <div class="card-footer bg-white border-0">
+                    <div class="d-flex justify-content-center gap-3">
+                        <button type="submit" form="mainForm" name="action" value="to_treatment" class="btn btn-success btn-lg px-4 fw-bold shadow-sm">
+                            <i class="fas fa-arrow-right"></i> 本日の治療へ
+                        </button>
+                        <button type="submit" form="mainForm" name="action" value="save_and_return" class="btn btn-secondary btn-lg px-4 fw-bold shadow-sm">
+                            <i class="fas fa-save"></i> 保存して戻る
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="col-md-6">
+        <div class="col-md-4 mapping-history">
             <div class="card shadow-sm border-0 h-100">
-                <div class="card-header bg-white fw-bold border-bottom">
+                <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-mapping); background-color: #fff;">
                     <i class="fas fa-history me-1"></i> 履歴
                 </div>
                 <div class="list-group list-group-flush">
@@ -147,7 +152,7 @@
                             <strong>{{ item.date|date:"Y/n/j" }}（{{ item.get_week_number_display }}）</strong>
                         </div>
                         <div class="text-muted small mb-1">
-                            MT値：<strong class="text-dark">{{ item.resting_mt }}</strong>
+                            MT強度：<strong class="text-dark">{{ item.resting_mt }}</strong>
                             　位置：A({{ item.helmet_position_a_x|default:"-" }},{{ item.helmet_position_a_y|default:"-" }}) / B({{ item.helmet_position_b_x|default:"-" }},{{ item.helmet_position_b_y|default:"-" }})
                         </div>
                         {% if item.notes %}
@@ -167,54 +172,65 @@
     </div>
 </div>
 
-{% url 'rtms_app:dashboard' as dashboard_url %}
-<div class="text-center my-4 no-print d-none d-xl-block">
-    <button type="submit" form="mainForm" name="action" value="to_treatment" class="btn btn-success btn-lg px-5 fw-bold shadow-sm me-3">
-        <i class="fas fa-arrow-right"></i> 治療実施へ
-    </button>
-    <button type="submit" form="mainForm" name="action" value="save_and_return" class="btn btn-warning btn-lg px-5 fw-bold shadow-sm me-3">
-        <i class="fas fa-save"></i> 保存して戻る
-    </button>
-    {% if dashboard_date %}
-        {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
-        <a href="{{ back_url }}" class="btn btn-secondary btn-lg px-5 fw-bold shadow-sm">
-            <i class="fas fa-undo"></i> 戻る
-        </a>
-        {% endwith %}
-    {% else %}
-        <a href="{{ dashboard_url }}" class="btn btn-secondary btn-lg px-5 fw-bold shadow-sm">
-            <i class="fas fa-undo"></i> 戻る
-        </a>
-    {% endif %}
-</div>
+ 
+{% endblock %}
 
-{% url 'rtms_app:dashboard' as dashboard_url %}
-<link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
-<script src="{% static 'rtms_app/floating.js' %}"></script>
+{% block extrahead %}
+<link rel="stylesheet" href="{% static 'rtms_app/mapping.css' %}">
+{% endblock %}
 
-<div class="fab-stack no-print">
-    {% if dashboard_date %}
-        {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
-        <button type="submit" form="mainForm" name="action" value="to_treatment" class="btn btn-success fab">
-            <i class="fas fa-arrow-right"></i> 治療実施へ
-        </button>
-        <button type="button" class="btn btn-warning fab" onclick="document.getElementById('mainForm').submit()">
-            <i class="fas fa-save"></i> 保存して戻る
-        </button>
-        <a class="btn btn-secondary fab" href="{{ back_url }}">
-            <i class="fas fa-undo"></i> 戻る
-        </a>
-        {% endwith %}
-    {% else %}
-        <button type="submit" form="mainForm" name="action" value="to_treatment" class="btn btn-success fab">
-            <i class="fas fa-arrow-right"></i> 治療実施へ
-        </button>
-        <button type="button" class="btn btn-warning fab" onclick="document.getElementById('mainForm').submit()">
-            <i class="fas fa-save"></i> 保存して戻る
-        </button>
-        <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
-            <i class="fas fa-undo"></i> 戻る
-        </a>
-    {% endif %}
-</div>
+{% block extrascript %}
+<script>
+// Auto-update week number when date changes (day1-based, week = floor(diff/7)+1)
+(function(){
+    const startDateStr = '{{ patient.first_treatment_date|default:""|date:"Y-m-d" }}';
+    if (!startDateStr) return; // no start date available
+
+    const start = new Date(startDateStr + 'T00:00:00');
+    const dateEl = document.getElementById('id_date');
+    const weekEl = document.getElementById('id_week_number');
+    if (!dateEl || !weekEl) return;
+
+
+    function computeWeekFor(dateStr){
+        try{
+            const d = new Date(dateStr + 'T00:00:00');
+            const diffMs = d - start;
+            const diffDays = Math.floor(diffMs / (1000*60*60*24));
+            // If before start => return 0 to indicate '治療前'
+            const wk = (diffDays < 0) ? 0 : Math.floor(diffDays/7) + 1;
+            return wk;
+        }catch(e){ return 0; }
+    }
+
+    function applyWeek(){
+        const val = dateEl.value || new Date().toISOString().slice(0,10);
+        const wk = computeWeekFor(val);
+        if (wk === 0) {
+            // ensure "治療前" option exists
+            let preOpt = Array.from(weekEl.options).find(o => o.value === 'pre');
+            if (!preOpt) {
+                preOpt = document.createElement('option'); preOpt.value = 'pre'; preOpt.text = '治療前';
+                // insert at beginning
+                weekEl.insertBefore(preOpt, weekEl.firstChild);
+            }
+            weekEl.value = 'pre';
+        } else {
+            // set numeric week; if option missing, add it
+            let opt = Array.from(weekEl.options).find(o => parseInt(o.value) === wk || o.text == ('第'+wk+'週');
+            if (!opt) {
+                opt = document.createElement('option'); opt.value = String(wk); opt.text = '第' + String(wk) + '週';
+                weekEl.appendChild(opt);
+            }
+            weekEl.value = String(wk);
+        }
+    }
+
+    dateEl.addEventListener('change', applyWeek);
+    // initialize on load
+    document.addEventListener('DOMContentLoaded', applyWeek);
+    // also run immediately in case DOMContentLoaded already fired
+    applyWeek();
+})();
+</script>
 {% endblock %}

@@ -58,7 +58,7 @@
 {% block content %}
 <div class="container py-3">
 
-  {% include "rtms_app/partials/patient_inline_bar.html" with page_title="治療実施" title_icon="fa-bolt" right_controls_html=mode_switch_html %}
+  {% include "rtms_app/partials/patient_inline_bar.html" with page_title="治療実施" title_icon="fa-bolt" title_controls_html=mode_switch_html %}
 
   {% if alert_msg %}
   <div class="alert alert-danger fw-bold shadow-sm no-print mt-2">
@@ -71,6 +71,7 @@
 
     <div class="row g-3 mt-1">
         <div class="col-12 col-lg-4">
+
         <div class="card shadow-sm">
           <div class="card-header fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2" style="color:#198754; background:rgba(25,135,84,.1);">
             <div><i class="fas fa-calendar-day me-1"></i>実施日時・安全確認</div>
@@ -79,17 +80,6 @@
             {% endif %}
           </div>
           <div class="card-body">
-
-            <div class="row g-2 mb-3">
-              <div class="col-md-6">
-                <label class="form-label fw-bold">実施日</label>
-                {{ form.treatment_date }}
-              </div>
-              <div class="col-md-6">
-                <label class="form-label fw-bold">開始時間</label>
-                {{ form.treatment_time }}
-              </div>
-            </div>
 
             <hr class="my-2">
 
@@ -221,70 +211,25 @@
                 <div class="small text-muted mt-2">MT（モーター閾値）：{{ mtValueDisplay }}</div>
               {% endif %}
 
-              <!-- 上段：刺激時間 / 刺激強度（2カラム） -->
-              <div class="row g-2 mt-2 align-items-end">
-                <div class="col-12 col-md-6">
-                  <label class="form-label fw-bold">刺激時間（秒）</label>
-                  <input type="number" class="form-control" name="confirm_pulse_seconds" id="confirm_pulse_seconds"
-                         step="0.5" value="{{ confirm_defaults.seconds|default:'2.0' }}">
-                </div>
-
-                <div class="col-12 col-md-6">
-                  <label class="form-label fw-bold">刺激強度（%MT）</label>
-                          <input type="number" class="form-control" name="confirm_mt_percent" id="confirm_mt_percent"
-                            step="10" value="{{ confirm_defaults.percent|default:'120' }}">
-                          <div class="small text-muted mt-1">※必要なら直接入力してください（手入力可）</div>
-                </div>
-              </div>
-
+              <!-- 上段の重複する確認用刺激ブロックを削除しました -->
               <hr class="my-2">
 
-              <!-- 診療録入力ボタン（確認刺激） -->
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <div class="fw-bold text-muted small">診療録（確認刺激）</div>
-                <button type="button" class="btn btn-success btn-sm fw-bold"
-                        data-bs-toggle="modal" data-bs-target="#sideEffectModal">
-                  <i class="fas fa-notes-medical me-1"></i>診療録入力
-                </button>
-              </div>
-
-              <!-- 下段：チェック（縦まとめ） + 備考（4/8） -->
-              <div class="row g-2 align-items-end">
-                <div class="col-12 col-md-4">
-                  <div class="d-flex flex-column gap-2">
-                    <div class="form-check" style="min-height: 2.4rem; display:flex; align-items:center;">
-                      <input class="form-check-input" type="checkbox" id="confirm_discomfort" name="confirm_discomfort" {% if confirm_discomfort_checked %}checked{% endif %}>
-                      <label class="form-check-label fw-bold ms-2" for="confirm_discomfort">過剰な不快感</label>
+              <!-- 確認用刺激: 左側に刺激強度/刺激時間をコンパクトに表示、右半分は空白 -->
+              <div class="row g-2 mt-2">
+                <div class="col-12 col-md-6">
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <label class="form-label fw-bold">刺激強度（%MT）</label>
+                      <input type="number" class="form-control" name="confirm_mt_percent" id="confirm_mt_percent" step="10" value="{{ confirm_defaults.percent|default:'120' }}">
                     </div>
-                    <div class="form-check" style="min-height: 2.4rem; display:flex; align-items:center;">
-                      <input class="form-check-input" type="checkbox" id="confirm_movement" name="confirm_movement" {% if confirm_movement_checked %}checked{% endif %}>
-                      <label class="form-check-label fw-bold ms-2" for="confirm_movement">過剰な運動反応</label>
+                    <div class="col-6">
+                      <label class="form-label fw-bold">刺激時間（秒）</label>
+                      <input type="number" class="form-control" name="confirm_pulse_seconds" id="confirm_pulse_seconds" step="0.5" value="{{ confirm_defaults.seconds|default:'2.0' }}">
                     </div>
                   </div>
                 </div>
-
-                <div class="col-12 col-md-8">
-                  <div class="small text-muted">備考は「診療録入力」ボタンで一元管理します。</div>
-                </div>
-              </div>
-
-              <div id="confirm_actions" class="d-none mt-2 p-2 rounded soft-warning">
-                <div class="fw-bold mb-1">対処方法</div>
-
-                <div id="confirm_actions_discomfort" class="d-none small">
-                  <div class="fw-bold">不快感</div>
-                  <ul class="mb-2">
-                    <li>ヘルメットを内外軸に左右に0.5cmまたは1cm動かす</li>
-                    <li>強い痛み：刺激パラメータを調整（0.5→1→2sec、100→105→110→120%MT）</li>
-                  </ul>
-                </div>
-
-                <div id="confirm_actions_movement" class="d-none small">
-                  <div class="fw-bold">運動反応</div>
-                  <ul class="mb-0">
-                    <li>肘〜指に限局：1cm刻みで最大2cm前方へ</li>
-                    <li>肘より上/下肢：MT測定を再実施</li>
-                  </ul>
+                <div class="col-12 col-md-6">
+                  <!-- intentionally left blank for layout balance -->
                 </div>
               </div>
             </div>
@@ -295,95 +240,49 @@
               </div>
 
               <div class="row g-2 mt-2">
-                <div class="col-12 col-md-4">
+                <!-- First row: 4 items compact -->
+                <div class="col-6 col-md-3">
                   <label class="form-label fw-bold">刺激強度（%MT）</label>
                   {{ form.mt_percent }}
                 </div>
-
-                <div class="col-12 col-md-4">
+                <div class="col-6 col-md-3">
                   <label class="form-label fw-bold">周波数（Hz）</label>
                   {{ form.frequency_hz }}
                 </div>
-
-                <div class="col-12 col-md-4">
+                <div class="col-6 col-md-3">
                   <label class="form-label fw-bold">トレイン長（秒）</label>
                   {{ form.train_seconds }}
                 </div>
-
-                <div class="col-12 col-md-4">
+                <div class="col-6 col-md-3">
                   <label class="form-label fw-bold">トレイン間隔（秒）</label>
                   {{ form.intertrain_seconds }}
                 </div>
+              </div>
 
-                <div class="col-12 col-md-4">
+              <div class="row g-2 mt-2">
+                <!-- Second row: remaining 3 items (train_count, total_pulses, helmet_shift_cm) -->
+                <div class="col-6 col-md-4">
                   <label class="form-label fw-bold">トレイン数</label>
                   {{ form.train_count }}
                 </div>
-
-                <div class="col-12 col-md-4">
-                  <label class="form-label fw-bold">治療時ヘルメット移動（cm、前方+）</label>
-                  {{ form.helmet_shift_cm }}
-                  <div class="form-text small">通常は +6cm（MT測定位置から前方へ移動）</div>
-                </div>
-
-                <div class="col-12 col-md-4">
+                <div class="col-6 col-md-4">
                   <label class="form-label fw-bold">総パルス数</label>
                   {{ form.total_pulses }}
                 </div>
+                <div class="col-6 col-md-4">
+                  <label class="form-label fw-bold">治療時ヘルメット移動（cm）</label>
+                  <input type="number" name="helmet_shift_cm" class="form-control" step="1" value="{{ session.helmet_shift_cm|default:6 }}">
+                </div>
               </div>
 
               <hr class="my-2">
 
-              <!-- 診療録入力（実施治療刺激） -->
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <div class="fw-bold text-muted small">診療録（実施治療刺激）</div>
-                <button type="button" class="btn btn-success btn-sm fw-bold"
-                        data-bs-toggle="modal" data-bs-target="#sideEffectModal">
-                  <i class="fas fa-notes-medical me-1"></i>診療録入力
+              <div class="d-flex justify-content-start my-2">
+                <button type="button" class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#sideEffectModal">
+                  <i class="fas fa-notes-medical me-1"></i>
+                  治療実施記録票（副作用チェック票）入力
                 </button>
               </div>
-
-              <div class="row g-2 align-items-end">
-                <div class="col-12 col-md-4">
-                  <div class="d-flex flex-column gap-2">
-                    <div class="form-check" style="min-height: 2.4rem; display:flex; align-items:center;">
-                      <input class="form-check-input" type="checkbox" id="treat_discomfort" name="treat_discomfort" {% if treat_discomfort_checked %}checked{% endif %}>
-                      <label class="form-check-label fw-bold ms-2" for="treat_discomfort">過剰な不快感</label>
-                    </div>
-                    <div class="form-check" style="min-height: 2.4rem; display:flex; align-items:center;">
-                      <input class="form-check-input" type="checkbox" id="treat_movement" name="treat_movement" {% if treat_movement_checked %}checked{% endif %}>
-                      <label class="form-check-label fw-bold ms-2" for="treat_movement">過剰な運動反応</label>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="col-12 col-md-8">
-                  <div class="small text-muted">備考は「診療録入力」ボタンで一元管理します。</div>
-                </div>
-              </div>
-
-              <div id="treat_actions" class="d-none mt-2 p-2 rounded soft-success">
-                <div class="fw-bold mb-1">対処方法</div>
-
-                <div id="treat_actions_discomfort" class="d-none small">
-                  <div class="fw-bold">不快感</div>
-                  <ul class="mb-2">
-                    <li>治療を中断し、ヘルメットを内外軸に左右0.5cmまたは1cm動かす</li>
-                  </ul>
-                </div>
-
-                <div id="treat_actions_movement" class="d-none small">
-                  <div class="fw-bold">運動反応</div>
-                  <ul class="mb-0">
-                    <li>肘より上：中断</li>
-                    <li>下肢：中止</li>
-                    <li>刺激と刺激の間にも四肢の動き：中止</li>
-                    <li>肘〜指に限局：中断→前方最大2cm/左右0.5–1cm→必要ならMT再測定</li>
-                  </ul>
-                </div>
-              </div>
-
-              <hr class="my-2">
 
               <div class="alert alert-danger" id="adverse-event-section">
                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -393,7 +292,7 @@
                     <i class="fas fa-exclamation-triangle me-1"></i>有害事象入力・報告書
                   </button>
                 </div>
-                <div class="small mb-2">※ 以下のいずれかがチェックされた場合、Brainsway社への報告書作成が必要です</div>
+                <div class="small mb-2">※ 以下のいずれかがチェックされた場合、報告書作成が必要です</div>
                 <div class="d-flex flex-wrap gap-2">
                   <label class="form-check"><input class="form-check-input sae-check" type="checkbox" name="sae_seizure" id="sae_seizure" {% if sae_event_types_checked.sae_seizure %}checked{% endif %}><span class="form-check-label">けいれん発作</span></label>
                   <label class="form-check"><input class="form-check-input sae-check" type="checkbox" name="sae_finger_muscle" id="sae_finger_muscle" {% if sae_event_types_checked.sae_finger_muscle %}checked{% endif %}><span class="form-check-label">手指の筋収縮</span></label>
@@ -429,7 +328,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title wizard-title">
-          <i class="fas fa-route me-2"></i>治療手順解説モード
+          <i class="fas fa-route me-2"></i>手順を確認する
         </h5>
         <button type="button" class="btn-close js-hide-on-print" data-bs-dismiss="modal" aria-label="閉じる"></button>
       </div>
@@ -456,7 +355,7 @@
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">診療録入力</h5>
+        <h5 class="modal-title">治療実施記録票（副作用チェック票）入力</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
       </div>
       <div class="modal-body">
@@ -471,7 +370,9 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">閉じる</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">閉じる</button>
+            <button type="button" class="btn btn-success btn-sm" id="sideEffectSaveCloseBtn">保存して閉じる</button>
+            <button type="button" class="btn btn-primary btn-sm" id="sideEffectSavePrintBtn">保存して印刷</button>
       </div>
     </div>
   </div>
@@ -676,7 +577,7 @@
 {% if dashboard_date %}
   {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
     <div class="fab-stack no-print">
-      <button type="button" class="btn btn-primary fab" id="printTreatmentRecordBtn" onclick="window.printTreatmentRecord();">
+      <button type="button" class="btn btn-primary fab" id="printTreatmentRecordBtn">
         <i class="fas fa-print"></i> 治療実施記録票（副作用チェック票）印刷
       </button>
       <button type="submit" class="btn btn-treatment fab" form="treatmentForm">
@@ -691,8 +592,8 @@
     </div>
   {% endwith %}
 {% else %}
-  <div class="fab-stack no-print">
-    <button type="button" class="btn btn-primary fab" id="printTreatmentRecordBtn" onclick="window.printTreatmentRecord();">
+    <div class="fab-stack no-print">
+    <button type="button" class="btn btn-primary fab" id="printTreatmentRecordBtn">
       <i class="fas fa-print"></i> 治療実施記録票（副作用チェック票）印刷
     </button>
     <button type="submit" class="btn btn-treatment fab" form="treatmentForm">
@@ -709,21 +610,65 @@
 
 <script src="{% static 'rtms_app/side_effect_widget_v2.js' %}"></script>
 <script>
-  // 治療実施記録票（副作用チェック票）印刷
-  window.printTreatmentRecord = function() {
+  // 治療実施記録票（副作用チェック票）印刷 — 安全なタブ操作（空白タブを先に開かない）
+  window.printTreatmentRecord = async function() {
     const form = document.getElementById('treatmentForm');
-    if (!form) {
-      alert('フォームが見つかりません');
-      return;
+    if (!form) { alert('フォームが見つかりません'); return; }
+
+    if (typeof window.sideEffectWidgetFlush === 'function') {
+      try { window.sideEffectWidgetFlush(); } catch(e) { /* ignore */ }
     }
-    
-    const actionInput = document.createElement('input');
-    actionInput.type = 'hidden';
-    actionInput.name = 'action';
-    actionInput.value = 'print';
-    form.appendChild(actionInput);
-    form.submit();
+
+    const fd = new FormData(form);
+    fd.set('action','print');
+
+    try {
+      const res = await fetch(window.location.href, {
+        method: 'POST', body: fd, credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+
+      if (!res.ok) throw new Error('保存に失敗しました');
+
+      // Try to parse JSON when content-type indicates JSON
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('application/json')) {
+        const data = await res.json().catch(() => null);
+        const url = (data && (data.pdf_url || data.html_url)) ? (data.pdf_url || data.html_url) : null;
+        if (url) return window.open(url, '_blank', 'noopener');
+        // If no url in JSON, try to open res.url
+        if (res.url) return window.open(res.url, '_blank', 'noopener');
+      }
+
+      // If not JSON, try to open the response URL (may be a redirect)
+      if (res.url) return window.open(res.url, '_blank', 'noopener');
+
+      // As a last resort, fallback to classic form submit in new tab
+      const hidden = document.createElement('input'); hidden.type='hidden'; hidden.name='action'; hidden.value='print';
+      form.appendChild(hidden);
+      const prevTarget = form.target || '';
+      form.target = '_blank';
+      form.submit();
+      form.target = prevTarget;
+      form.removeChild(hidden);
+    } catch (err) {
+      console.error('printTreatmentRecord error', err);
+      // fallback to classic submit
+      const hidden = document.createElement('input'); hidden.type='hidden'; hidden.name='action'; hidden.value='print';
+      form.appendChild(hidden);
+      const prevTarget = form.target || '';
+      form.target = '_blank';
+      form.submit();
+      form.target = prevTarget;
+      form.removeChild(hidden);
+    }
   };
+
+  // attach handler to floating button (safer than inline onclick)
+  document.getElementById('printTreatmentRecordBtn')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.printTreatmentRecord();
+  });
 
   // Pass previous abnormal alert message for Step6 into wizard
   window.wizardConfirmAlertMessage = "{{ confirm_alert_message|default:''|escapejs }}";
@@ -914,6 +859,69 @@
     });
   }
 
+  // Side-effect modal save/print handlers
+  const sideSaveClose = document.getElementById('sideEffectSaveCloseBtn');
+  const sideSavePrint = document.getElementById('sideEffectSavePrintBtn');
+  function submitSideEffectForm(extraAction) {
+    // flush widget to hidden input
+    if (typeof window.sideEffectWidgetFlush === 'function') {
+      try { window.sideEffectWidgetFlush(); } catch (e) { /* ignore */ }
+    }
+    const form = document.getElementById('treatmentForm');
+    if (!form) { alert('フォームが見つかりません'); return; }
+    // set action and submit into new tab if printing
+    if (extraAction === 'print') {
+      // Use fetch to save data asynchronously, then open server-side PDF URL returned by the view.
+      const fd = new FormData(form);
+      fd.set('action', 'print');
+      // Fetch to current URL
+      fetch(window.location.href, {
+        method: 'POST',
+        body: fd,
+        credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      }).then(async res => {
+        if (!res.ok) throw new Error('保存に失敗しました');
+        const data = await res.json().catch(() => null);
+        // If server returned a pdf_url, open it in a new window
+        const win = window.open('', '_blank');
+        if (data && data.pdf_url) {
+          // navigate the new window to the PDF URL
+          try { win.location.href = data.pdf_url; } catch (e) { window.open(data.pdf_url, '_blank'); }
+        } else if (data && data.html_url) {
+          try { win.location.href = data.html_url; } catch (e) { window.open(data.html_url, '_blank'); }
+        } else {
+          // fallback: open current location in new tab
+          try { win.location.reload(); } catch (e) {}
+        }
+      }).catch(err => {
+        console.error(err);
+        // fallback to classic submit if fetch fails
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden'; hidden.name = 'action'; hidden.value = extraAction || 'save';
+        form.appendChild(hidden);
+        const prevTarget = form.target || '';
+        form.target = '_blank';
+        form.submit();
+        form.target = prevTarget;
+        form.removeChild(hidden);
+      });
+    } else {
+      const hidden = document.createElement('input');
+      hidden.type = 'hidden'; hidden.name = 'action'; hidden.value = extraAction || 'save';
+      form.appendChild(hidden);
+      form.submit();
+      form.removeChild(hidden);
+    }
+  }
+
+  sideSaveClose?.addEventListener('click', (e) => {
+    e.preventDefault(); submitSideEffectForm('save');
+  });
+  sideSavePrint?.addEventListener('click', (e) => {
+    e.preventDefault(); submitSideEffectForm('print');
+  });
+
   // 印刷メニュー処理
   const sideEffectPrintUrl = '{{ side_effect_print_url|default:"" }}';
 
@@ -1062,35 +1070,7 @@
     });
   }
 
-  // ---- 確認/治療刺激：チェックONで対処表示 ----
-  function updateActions() {
-    const cd = document.getElementById('confirm_discomfort')?.checked;
-    const cm = document.getElementById('confirm_movement')?.checked;
-    const ta = document.getElementById('confirm_actions');
-    const tad = document.getElementById('confirm_actions_discomfort');
-    const tam = document.getElementById('confirm_actions_movement');
-
-    if (ta) ta.classList.toggle('d-none', !(cd || cm));
-    if (tad) tad.classList.toggle('d-none', !cd);
-    if (tam) tam.classList.toggle('d-none', !cm);
-
-    const td = document.getElementById('treat_discomfort')?.checked;
-    const tm = document.getElementById('treat_movement')?.checked;
-    const tb = document.getElementById('treat_actions');
-    const tbd = document.getElementById('treat_actions_discomfort');
-    const tbm = document.getElementById('treat_actions_movement');
-
-    if (tb) tb.classList.toggle('d-none', !(td || tm));
-    if (tbd) tbd.classList.toggle('d-none', !td);
-    if (tbm) tbm.classList.toggle('d-none', !tm);
-  }
-
-  ['confirm_discomfort','confirm_movement','treat_discomfort','treat_movement'].forEach(id => {
-    document.getElementById(id)?.addEventListener('change', updateActions);
-  });
-  
   document.addEventListener('DOMContentLoaded', () => {
-    updateActions();
 
     // SAE prefill: site/diagnosis/initials
     const saeSiteSelect = document.getElementById('saeSite');
