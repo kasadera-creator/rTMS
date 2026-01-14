@@ -20,7 +20,7 @@ DEBUG = env_bool("DJANGO_DEBUG", "0")
 
 ALLOWED_HOSTS = os.environ.get(
     "DJANGO_ALLOWED_HOSTS",
-    "localhost,127.0.0.1,rtms.local"
+    "localhost,127.0.0.1,rtms.local,seichiryo.jp"
 ).split(",")
 
 INSTALLED_APPS = [
