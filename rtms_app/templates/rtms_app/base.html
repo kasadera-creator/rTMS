@@ -53,11 +53,11 @@
             --color-patient-list-bg: #eceff1;
         }
         
-        body { font-family: 'Noto Sans JP', sans-serif; background-color: #f0f2f5; display: flex; flex-direction: column; min-height: 100vh; }
-        .rtms-shell .content-wrapper { min-height: calc(100vh - var(--header-h) - var(--footer-h)); flex: 1; display: flex; }
-        .navbar { min-height: var(--header-h); }
+        body { font-family: 'Noto Sans JP', sans-serif; background-color: #f0f2f5; min-height: 100vh; padding-top: 56px; display: flex; flex-direction: column; }
+        .rtms-shell .content-wrapper { flex: 1; display: flex; }
+        .navbar { position: fixed; top: 0; left: 0; right: 0; width: 100%; min-height: var(--header-h); padding-top: 0; padding-bottom: 0; z-index: 1030; }
         .navbar-brand { font-weight: bold; }
-        .app-footer { background-color: #343a40; color: #adb5bd; min-height: var(--footer-h); padding: 10px 0; font-size: 0.85rem; text-align: center; display: flex; align-items: center; }
+        .app-footer { background-color: #343a40; color: #adb5bd; min-height: var(--footer-h); padding: 0.5rem 0; font-size: 0.85rem; text-align: center; display: flex; align-items: center; }
         .app-footer a { color: #adb5bd; text-decoration: none; }
         .app-footer a:hover { color: #fff; }
 
@@ -157,9 +157,12 @@
         .rtms-topnav-patient { max-width: 56vw; }
         
         /* === トップバー1行固定 === */
+        .rtms-topnav {
+            overflow: visible;
+        }
+        
         .rtms-topnav .container-fluid {
             flex-wrap: nowrap;
-            overflow: hidden;
         }
         
         .rtms-topnav-left {
@@ -168,7 +171,7 @@
         }
         
         .rtms-topnav-brand span.rtms-brand-text {
-            max-width: 200px;
+            max-width: 400px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -176,7 +179,7 @@
         
         @media (max-width: 768px) {
             .rtms-topnav-brand span.rtms-brand-text {
-                max-width: 100px;
+                max-width: 150px;
             }
             
             .btn-menu span:not(.me-2) {
@@ -191,10 +194,22 @@
         }
     </style>
     {% block extrastyle %}{% endblock extrastyle %}
+    <style>
+    /* Force navbar fixed to top as a final safeguard against per-page CSS overrides */
+    body .rtms-topnav.navbar {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        z-index: 2000 !important;
+    }
+    body { padding-top: var(--header-h, 56px) !important; }
+    </style>
 </head>
 <body class="rtms-shell {% block body_class %}{% endblock body_class %}">
 
-<nav class="navbar navbar-dark bg-dark sticky-top shadow-sm no-print rtms-topnav">
+<nav class="navbar navbar-dark bg-dark shadow-sm no-print rtms-topnav">
     <div class="container-fluid px-3">
         <div class="d-flex align-items-center gap-2 rtms-topnav-left">
             <a class="navbar-brand d-flex align-items-center gap-2 rtms-topnav-brand" href="{% url 'rtms_app:dashboard' %}">
@@ -203,15 +218,13 @@
             </a>
         </div>
 
-        <div class="d-none d-md-flex flex-grow-1 justify-content-center rtms-topnav-center">
-            {# Top nav center intentionally left empty to avoid duplicating patient info here.
-               Page-level title and patient summary are shown under the page header. #}
-        </div>
+        <div class="d-none d-md-flex flex-grow-1 justify-content-center rtms-topnav-center"></div>
 
         <div class="d-flex align-items-center gap-2">
             <style>
                 /* Larger textual menu button */
                 .rtms-topnav .btn-menu { font-size: 1rem; padding: 6px 10px; font-weight: 700; border-radius: 6px; }
+                .rtms-topnav .dropdown-menu { min-width: 250px; z-index: 1000; }
                 .rtms-topnav .dropdown-menu .patient-name { font-weight: 700; }
                 @media (max-width: 576px) { .rtms-topnav .btn-menu { font-size: .95rem; padding: 6px 8px; } }
             </style>

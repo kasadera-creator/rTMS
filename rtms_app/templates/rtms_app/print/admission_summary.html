@@ -5,8 +5,8 @@
 {% block toolbar_title %}入院時サマリー - {{ patient.name }} 様{% endblock %}
 
 {% block print_content %}
-<div class="page-container">
-  <div class="page-sheet">
+{% comment %} Render directly as A4 page-sheet without outer container %}{% endcomment %}
+<div class="page-sheet" style="width:210mm; margin:0; padding:6mm; box-sizing:border-box; background:#fff;">
     {# ヘッダーエリア #}
     <div class="summary-header">
       <div>作成日: {{ today|date:"Y年n月j日" }}</div>

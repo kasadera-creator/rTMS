@@ -12,7 +12,6 @@
 {% endblock header_breadcrumb %}
 
 {% block extrastyle %}
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <style>
     /* 印刷時の制御 */
     @media print {
@@ -34,7 +33,7 @@
 
     /* iPad Landscape Optimization */
     @media only screen and (min-width: 1000px) and (orientation: landscape) {
-        .container { max-width: 98vw; padding-top: 10px !important; padding-bottom: 80px !important; }
+        .container { max-width: 98vw; padding-bottom: 80px !important; }
         .card-header { padding: 0.4rem 0.6rem; font-size: 0.95rem; }
         .card-body { padding: 0.6rem; }
         .form-label { margin-bottom: 0.2rem; font-size: 0.85rem; }
@@ -59,6 +58,8 @@
 <div class="container py-3">
 
   {% include "rtms_app/partials/patient_inline_bar.html" with page_title="治療実施" title_icon="fa-bolt" title_controls_html=mode_switch_html %}
+
+  {# print toolbar is only for print preview pages; remove from regular screen #}
 
   {% if alert_msg %}
   <div class="alert alert-danger fw-bold shadow-sm no-print mt-2">
@@ -667,6 +668,13 @@
   // attach handler to floating button (safer than inline onclick)
   document.getElementById('printTreatmentRecordBtn')?.addEventListener('click', (e) => {
     e.preventDefault();
+    const pid = '{{ patient.id }}';
+    const sid = '{{ session.id|default:"" }}';
+    if (sid && sid.length > 0) {
+      const url = `/app/patient/${pid}/print/treatment/record/${sid}/`;
+      return window.open(url, '_blank', 'noopener');
+    }
+    // no session id available yet — fallback to save-then-open flow
     window.printTreatmentRecord();
   });
 

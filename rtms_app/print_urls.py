@@ -18,4 +18,5 @@ urlpatterns = [
     path("suitability/pdf/", print_views.patient_print_suitability_pdf, name="patient_print_suitability_pdf"),
     path("side_effect/<int:session_id>/", print_views.print_side_effect_check, name="print_side_effect_check"),
     path("side_effect/<int:session_id>/pdf/", print_views.print_side_effect_check_pdf, name="print_side_effect_check_pdf"),
+    path("treatment/record/<int:session_id>/", print_views.print_side_effect_check, name="print_treatment_record_preview"),
 ]

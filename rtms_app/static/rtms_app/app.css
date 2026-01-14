@@ -61,10 +61,6 @@
   --topbar-height: 56px;
 }
 
-body {
-  padding-top: var(--topbar-height);
-}
-
 /* === Floating Menu 非干渉 === */
 .floating-action-menu {
   bottom: 2rem;

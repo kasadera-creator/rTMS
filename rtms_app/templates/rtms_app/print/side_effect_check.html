@@ -10,10 +10,11 @@
         width: 100%;
         border-collapse: collapse;
         margin-top: 10px;
+        font-size: 10pt;
     }
     .data-table th, .data-table td {
         border: 1px solid #000 !important;
-        padding: 6px;
+        padding: 4px 6px;
         vertical-align: middle !important;
     }
     .data-table th {
@@ -29,9 +30,7 @@
 {% endblock %}
 
 {% block print_content %}
-<div id="print-root">
-    <div class="page-container">
-        <div class="page-sheet">
+<div class="page-sheet" style="width:210mm; margin:0; padding:6mm; box-sizing:border-box; background:#fff;">
         <div class="summary-header">
             <div>作成日: {{ today|date:"Y年n月j日" }}</div>
             <div>笠寺精治寮病院</div>
@@ -59,6 +58,35 @@
                 <td>第 {{ session_number }} 回</td>
             </tr>
         </table>
+
+        {# --- 治療内容ブロック: 実施日 と 副作用表の間に挿入 --- #}
+        {% with mt=session.mt_percent|default:session.motor_threshold|default:"0" intensity_pct=session.intensity_percent|default:session.intensity|default:"0" %}
+        {% widthratio mt 100 intensity_pct as intensity_value %}
+        <div class="content-section mt-3">
+            <div class="section-label">治療内容</div>
+            <table class="summary-info-table" style="margin-top:6px;">
+                <tr>
+                    <th>使用したTMS治療機</th>
+                    <td>{{ session.coil_type|default:"Brainsway" }}</td>
+                    <th>刺激部位</th>
+                    <td>{{ session.target_site|default:"左DLPFC" }}</td>
+                </tr>
+                <tr>
+                    <th>刺激頻度</th>
+                    <td>{{ session.frequency_hz }} Hz</td>
+                    <th>総パルス数</th>
+                    <td>{{ session.total_pulses }}</td>
+                </tr>
+                <tr>
+                    <th>刺激強度</th>
+                    <td colspan="3">
+                        MT値: {{ mt }}% ， 刺激: {{ intensity_pct }}%MT
+                        （計算出力: {{ intensity_value }}% ）
+                    </td>
+                </tr>
+            </table>
+        </div>
+        {% endwith %}
 
         <div class="content-section mt-4">
             <table class="data-table">
@@ -115,6 +143,5 @@
                 </div>
             </div>
         </div>
-    </div>
 </div>
 {% endblock %}
