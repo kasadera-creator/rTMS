@@ -278,16 +278,12 @@
       <script src="{% static 'rtms_app/floating.js' %}"></script>
 
       <div class="fab-stack no-print">
-        <button type="button"
-                class="btn btn-primary fab"
-                data-bs-toggle="dropdown"
-                aria-expanded="false">
-          <i class="fas fa-print"></i> 印刷 ▼
-        </button>
-        <ul class="dropdown-menu dropdown-menu-end" style="right: 0;">
-          <li><a class="dropdown-item" href="{% url 'rtms_app:print:patient_print_admission' patient.id %}" target="_blank"><i class="fas fa-file-pdf me-2"></i>入院時サマリー</a></li>
-          <li><a class="dropdown-item" href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}" target="_blank"><i class="fas fa-file-pdf me-2"></i>rTMS適正問診票</a></li>
-        </ul>
+        <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_admission' patient.id %}" target="_blank">
+          <i class="fas fa-file-pdf"></i> 入院時
+        </a>
+        <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}" target="_blank">
+          <i class="fas fa-file-pdf"></i> 問診票
+        </a>
         <button type="button" class="btn btn-first-visit fab"
                 onclick="RTMSFloating.submitFormById('mainForm')">
           <i class="fas fa-save"></i> 保存
@@ -303,16 +299,12 @@
     <script src="{% static 'rtms_app/floating.js' %}"></script>
 
     <div class="fab-stack no-print">
-      <button type="button"
-              class="btn btn-primary fab"
-              data-bs-toggle="dropdown"
-              aria-expanded="false">
-        <i class="fas fa-print"></i> 印刷 ▼
-      </button>
-      <ul class="dropdown-menu dropdown-menu-end" style="right: 0;">
-        <li><a class="dropdown-item" href="{% url 'rtms_app:print:patient_print_admission' patient.id %}" target="_blank"><i class="fas fa-file-pdf me-2"></i>入院時サマリー</a></li>
-        <li><a class="dropdown-item" href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}" target="_blank"><i class="fas fa-file-pdf me-2"></i>rTMS適正問診票</a></li>
-      </ul>
+      <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_admission' patient.id %}" target="_blank">
+        <i class="fas fa-file-pdf"></i> 入院時
+      </a>
+      <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}" target="_blank">
+        <i class="fas fa-file-pdf"></i> 問診票
+      </a>
       <button type="button" class="btn btn-first-visit fab"
               onclick="RTMSFloating.submitFormById('mainForm')">
         <i class="fas fa-save"></i> 保存

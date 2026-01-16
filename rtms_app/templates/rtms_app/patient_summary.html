@@ -231,16 +231,12 @@
         <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
         <script src="{% static 'rtms_app/floating.js' %}"></script>
         <div class="fab-stack no-print">
-          <button type="button"
-                  class="btn btn-primary fab"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false">
-            <i class="fas fa-print"></i> 印刷 ▼
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end" style="right: 0;">
-            <li><a class="dropdown-item" href="{% url 'rtms_app:print:patient_print_discharge' patient.id %}" target="_blank"><i class="fas fa-file-pdf me-2"></i>退院時サマリー印刷</a></li>
-            <li><a class="dropdown-item" href="{% url 'rtms_app:print:patient_print_referral' patient.id %}" target="_blank"><i class="fas fa-file-pdf me-2"></i>紹介状印刷</a></li>
-          </ul>
+          <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_discharge' patient.id %}" target="_blank">
+            <i class="fas fa-file-pdf"></i> 退院時
+          </a>
+          <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_referral' patient.id %}" target="_blank">
+            <i class="fas fa-file-pdf"></i> 紹介状
+          </a>
           <button type="button"
                   class="btn btn-discharge fab"
                   onclick="RTMSFloating.submitFormById('mainForm')">
@@ -255,18 +251,12 @@
       <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
       <script src="{% static 'rtms_app/floating.js' %}"></script>
       <div class="fab-stack no-print">
-        <button type="button"
-                class="btn btn-primary fab"
-                data-bs-toggle="dropdown"
-                aria-expanded="false">
-          <i class="fas fa-print"></i> 印刷 ▼
-        </button>
-        <ul class="dropdown-menu dropdown-menu-end" style="right: 0;">
-          <li><a class="dropdown-item" href="{% url 'rtms_app:print:patient_print_admission' patient.id %}" target="_blank"><i class="fas fa-file-pdf me-2"></i>入院時サマリー</a></li>
-          <li><a class="dropdown-item" href="{% url 'rtms_app:print:patient_print_discharge' patient.id %}" target="_blank"><i class="fas fa-file-pdf me-2"></i>退院時サマリー</a></li>
-          <li><a class="dropdown-item" href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}" target="_blank"><i class="fas fa-file-pdf me-2"></i>rTMS適正問診票</a></li>
-          <li><a class="dropdown-item" href="{% url 'rtms_app:print:patient_print_referral' patient.id %}" target="_blank"><i class="fas fa-file-pdf me-2"></i>紹介状</a></li>
-        </ul>
+        <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_discharge' patient.id %}" target="_blank">
+          <i class="fas fa-file-pdf"></i> 退院時
+        </a>
+        <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_referral' patient.id %}" target="_blank">
+          <i class="fas fa-file-pdf"></i> 紹介状
+        </a>
         <button type="button"
                 class="btn btn-discharge fab"
                 onclick="RTMSFloating.submitFormById('mainForm')">
