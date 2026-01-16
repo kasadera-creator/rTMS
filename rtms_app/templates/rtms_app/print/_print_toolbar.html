@@ -16,7 +16,7 @@
 
 <script src="https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 <script>
-  (function(){
+  document.addEventListener('DOMContentLoaded', () => {
     const btnBack = document.getElementById('btn-back');
     const btnPrint = document.getElementById('btn-print-screen');
     const btnPdf = document.getElementById('btn-save-pdf');
@@ -24,19 +24,25 @@
 
     const toolbar = document.getElementById('printToolbar');
     const backUrl = toolbar ? (toolbar.dataset.backUrl || '') : '';
-    if (btnBack) btnBack.addEventListener('click', () => {
-      try {
-        if (backUrl) return window.location.href = backUrl;
-        if (document.referrer) return history.back();
-        return window.location.href = '/';
-      } catch (e) { console.warn(e); history.back(); }
-    });
-    if (btnPrint) btnPrint.addEventListener('click', () => {
-      const filename = filenamePreview ? filenamePreview.textContent : document.title || '';
-      if (filename) document.title = filename.replace(/\s+/g,'_');
-      window.print();
-    });
-
+    
+    if (btnBack) {
+      btnBack.addEventListener('click', () => {
+        try {
+          if (backUrl) return window.location.href = backUrl;
+          if (document.referrer) return history.back();
+          return window.location.href = '/';
+        } catch (e) { console.warn(e); history.back(); }
+      });
+    }
+    
+    if (btnPrint) {
+      btnPrint.addEventListener('click', () => {
+        const filename = filenamePreview ? filenamePreview.textContent : document.title || '';
+        if (filename) document.title = filename.replace(/\s+/g,'_');
+        window.print();
+      });
+    }
+    
     if (!btnPdf) return;
 
     // Update preview if filename provided dynamically
@@ -89,5 +95,5 @@
         window.print();
       }
     });
-  })();
+  });
 </script>

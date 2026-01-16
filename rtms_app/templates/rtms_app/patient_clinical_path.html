@@ -135,7 +135,7 @@
         <div class="fab-stack no-print">
             {% if floating_print_options and floating_print_options.0.href %}
                 <button type="button" class="btn btn-primary fab" onclick="window.open('{{ floating_print_options.0.href|escapejs }}', '{{ floating_print_options.0.target|default:"_blank" }}');">
-                    <i class="fas fa-print"></i> 印刷プレビュー
+                    <i class="fas fa-print"></i> クリニカルパス印刷
                 </button>
             {% endif %}
 
@@ -151,7 +151,7 @@
     <div class="fab-stack no-print">
         {% if floating_print_options and floating_print_options.0.href %}
             <a class="btn btn-primary fab" href="{{ floating_print_options.0.href }}" {% if floating_print_options.0.target %}target="{{ floating_print_options.0.target }}"{% endif %}>
-                <i class="fas fa-print"></i> 印刷プレビュー
+                <i class="fas fa-print"></i> クリニカルパス印刷
             </a>
         {% endif %}
 

@@ -211,33 +211,17 @@
     </form>
     <div class="form-section">
       <div class="card mb-3">
-        <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-discharge-dark); background: var(--color-discharge-bg); color: var(--color-discharge-dark);">退院時 印刷</div>
+        <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-discharge-dark); background: var(--color-discharge-bg); color: var(--color-discharge-dark);">退院時 印刷・書類</div>
         <div class="card-body">
-          <form id="bundlePrintFormDischarge"
-                action="{% url 'rtms_app:print:patient_print_bundle' patient.id %}"
-                method="get"
-                target="_blank">
-            <div class="form-check form-check-inline">
-              <input class="form-check-input"
-                     type="checkbox"
-                     name="docs"
-                     value="discharge"
-                     id="docDischarge"
-                     checked>
-              <label class="form-check-label" for="docDischarge">退院時サマリー</label>
-            </div>
-            <div class="form-check form-check-inline">
-              <input class="form-check-input"
-                     type="checkbox"
-                     name="docs"
-                     value="referral"
-                     id="docReferral"
-                     checked>
-              <label class="form-check-label" for="docReferral">紹介状</label>
-            </div>
-            {% if dashboard_date %}<input type="hidden" name="dashboard_date" value="{{ dashboard_date }}">{% endif %}
-            <button type="submit" class="btn btn-primary mt-2">印刷プレビュー</button>
-          </form>
+          <div class="small text-muted mb-3">各ドキュメントを個別に印刷・保存できます</div>
+          <div class="d-grid gap-2">
+            <a class="btn btn-primary btn-sm" href="{% url 'rtms_app:print:patient_print_discharge' patient.id %}" target="_blank" rel="noopener">
+              <i class="fas fa-print"></i> 退院時サマリーを印刷
+            </a>
+            <a class="btn btn-primary btn-sm" href="{% url 'rtms_app:print:patient_print_referral' patient.id %}" target="_blank" rel="noopener">
+              <i class="fas fa-print"></i> 紹介状を印刷
+            </a>
+          </div>
         </div>
       </div>
     </div>
@@ -249,9 +233,14 @@
         <div class="fab-stack no-print">
           <button type="button"
                   class="btn btn-primary fab"
-                  onclick="RTMSFloating.openPrintForm('bundlePrintFormDischarge')">
-            <i class="fas fa-print"></i> 印刷プレビュー
+                  data-bs-toggle="dropdown"
+                  aria-expanded="false">
+            <i class="fas fa-print"></i> 印刷 ▼
           </button>
+          <ul class="dropdown-menu dropdown-menu-end" style="right: 0;">
+            <li><a class="dropdown-item" href="{% url 'rtms_app:print:patient_print_discharge' patient.id %}" target="_blank"><i class="fas fa-file-pdf me-2"></i>退院時サマリー印刷</a></li>
+            <li><a class="dropdown-item" href="{% url 'rtms_app:print:patient_print_referral' patient.id %}" target="_blank"><i class="fas fa-file-pdf me-2"></i>紹介状印刷</a></li>
+          </ul>
           <button type="button"
                   class="btn btn-discharge fab"
                   onclick="RTMSFloating.submitFormById('mainForm')">
@@ -268,9 +257,16 @@
       <div class="fab-stack no-print">
         <button type="button"
                 class="btn btn-primary fab"
-                onclick="RTMSFloating.openPrintForm('bundlePrintFormDischarge')">
-          <i class="fas fa-print"></i> 印刷プレビュー
+                data-bs-toggle="dropdown"
+                aria-expanded="false">
+          <i class="fas fa-print"></i> 印刷 ▼
         </button>
+        <ul class="dropdown-menu dropdown-menu-end" style="right: 0;">
+          <li><a class="dropdown-item" href="{% url 'rtms_app:print:patient_print_admission' patient.id %}" target="_blank"><i class="fas fa-file-pdf me-2"></i>入院時サマリー</a></li>
+          <li><a class="dropdown-item" href="{% url 'rtms_app:print:patient_print_discharge' patient.id %}" target="_blank"><i class="fas fa-file-pdf me-2"></i>退院時サマリー</a></li>
+          <li><a class="dropdown-item" href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}" target="_blank"><i class="fas fa-file-pdf me-2"></i>rTMS適正問診票</a></li>
+          <li><a class="dropdown-item" href="{% url 'rtms_app:print:patient_print_referral' patient.id %}" target="_blank"><i class="fas fa-file-pdf me-2"></i>紹介状</a></li>
+        </ul>
         <button type="button"
                 class="btn btn-discharge fab"
                 onclick="RTMSFloating.submitFormById('mainForm')">

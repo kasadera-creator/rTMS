@@ -2282,6 +2282,9 @@ def _build_month_calendar(year: int, month: int, is_print: bool = False):
         # Planned treatments up to 30 (skip those already done)
         if p.first_treatment_date:
             planned_dates = generate_treatment_dates(p.first_treatment_date, total=30, holidays=JP_HOLIDAYS)
+            # Filter out treatments on or after discharge_date
+            if p.discharge_date:
+                planned_dates = [d for d in planned_dates if d < p.discharge_date]
             actual_nos = actual_session_numbers.get((p.id, p.course_number), set())
             for idx, d in enumerate(planned_dates, start=1):
                 if idx in actual_nos:

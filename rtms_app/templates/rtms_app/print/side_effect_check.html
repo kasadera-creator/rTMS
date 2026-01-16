@@ -1,10 +1,9 @@
-{% extends 'rtms_app/print/_print_base.html' %}
+{% extends 'rtms_app/print/_print_base_twocolumn.html' %}
 {% load static %}
 
 {% block title %}副作用チェック表 - {{ patient.name }}{% endblock %}
-{% block toolbar_title %}副作用チェック表 - {{ patient.name }} 様{% endblock %}
 
-{% block extra_head %}
+{% block extra_styles %}
 <style>
     .data-table {
         width: 100%;
@@ -30,12 +29,7 @@
 {% endblock %}
 
 {% block print_content %}
-<div class="page-sheet" style="width:210mm; margin:0; padding:6mm; box-sizing:border-box; background:#fff;">
-        <div class="summary-header">
-            <div>作成日: {{ today|date:"Y年n月j日" }}</div>
-            <div>笠寺精治寮病院</div>
-            <div>担当医: {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}</div>
-        </div>
+<div class="page-sheet">
         <h1 class="doc-title">反復経頭蓋磁気刺激療法(rTMS) 副作用チェック表</h1>
 
         <table class="summary-info-table">
@@ -143,5 +137,28 @@
                 </div>
             </div>
         </div>
+
+        <div class="page-footer">
+            <div>作成日: {{ today|date:"Y年n月j日" }}</div>
+            <div>笠寺精治寮病院</div>
+            <div>担当医: {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}</div>
+        </div>
+</div>
+{% endblock %}
+
+{% block print_controls %}
+<div class="control-section">
+    <h5>印刷オプション</h5>
+    <div class="btn-group">
+        <button id="print-btn" class="btn btn-primary">
+            <i class="fas fa-print"></i> 印刷
+        </button>
+        <button id="pdf-btn" class="btn btn-success">
+            <i class="fas fa-file-pdf"></i> PDF保存
+        </button>
+        <button id="back-btn" class="btn btn-outline-secondary" data-back-url="{{ back_url }}">
+            <i class="fas fa-arrow-left"></i> 戻る
+        </button>
+    </div>
 </div>
 {% endblock %}

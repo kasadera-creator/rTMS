@@ -177,16 +177,13 @@
     </style>
 </head>
 <body>
-    <div class="print-controls no-print">
-        <button class="btn btn-primary" onclick="window.print()">
-            <i class="fas fa-print"></i> 印刷
-        </button>
-        <button class="btn btn-secondary" onclick="window.history.back()">
-            <i class="fas fa-arrow-left"></i> 戻る
-        </button>
-    </div>
+    <div id="print-root">
+        <div class="print-controls no-print">
+            <button type="button" class="btn btn-primary" id="btn-print-db"><i class="fas fa-print"></i> 印刷</button>
+            <button type="button" class="btn btn-secondary" id="btn-back-db"><i class="fas fa-arrow-left"></i> 戻る</button>
+        </div>
 
-    <div class="report-page">
+        <div class="report-page page-sheet">
         <!-- タイトル -->
         <div class="title-box">
             重篤を含む有害事象 報告書
@@ -363,9 +360,25 @@
         <div class="print-date">
             作成日：{{ report_date }}
         </div>
+        </div>
     </div>
 
     <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const btnPrint = document.getElementById('btn-print-db');
+            const btnBack = document.getElementById('btn-back-db');
+            if (btnPrint) {
+                btnPrint.addEventListener('click', () => {
+                    window.print();
+                });
+            }
+            if (btnBack) {
+                btnBack.addEventListener('click', () => {
+                    if (document.referrer) window.history.back();
+                    else window.location.href = '/';
+                });
+            }
+        });
         // If URL indicates "print=1", auto-print on load
         if (new URLSearchParams(window.location.search).get('print') === '1') {
             window.addEventListener('load', function() {

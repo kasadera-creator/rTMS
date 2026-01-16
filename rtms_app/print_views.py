@@ -531,3 +531,67 @@ def print_side_effect_check_pdf(request, patient_id, session_id):
 	content_label = CONTENT_LABELS.get('side_effect', '治療実施記録票')
 	context['pdf_filename'] = build_pdf_filename(patient, getattr(session, 'course_number', None) or getattr(patient, 'course_number', None), content_label, target_date)
 	return render_pdf_response(request, 'rtms_app/print/side_effect_check.html', context, context['pdf_filename'])
+
+
+@login_required
+def api_get_or_create_session(request, patient_id):
+	"""
+	API endpoint to get or create a TreatmentSession based on patient_id, course_number, and session_date.
+	Returns JSON with session_id if successful, or error message.
+	
+	GET/POST Parameters:
+	- course_number: int
+	- session_date: YYYY-MM-DD
+	
+	Returns: {"session_id": <id>} or {"error": "message"}
+	"""
+	import json
+	from django.http import JsonResponse
+	from django.views.decorators.http import require_http_methods
+	
+	if request.method == 'POST':
+		try:
+			data = json.loads(request.body)
+		except:
+			data = request.POST
+	else:
+		data = request.GET
+	
+	try:
+		patient = get_object_or_404(Patient, pk=patient_id)
+		course_number = int(data.get('course_number', patient.course_number or 1))
+		session_date_str = data.get('session_date')
+		
+		if not session_date_str:
+			return JsonResponse({'error': 'session_date is required'}, status=400)
+		
+		# Parse date
+		from django.utils.dateparse import parse_date
+		session_date = parse_date(session_date_str)
+		if not session_date:
+			return JsonResponse({'error': f'Invalid session_date format: {session_date_str}'}, status=400)
+		
+		# Get or create session with empty slot
+		session, created = TreatmentSession.objects.get_or_create(
+			patient=patient,
+			course_number=course_number,
+			session_date=session_date,
+			slot='',
+			defaults={
+				'date': timezone.make_aware(timezone.datetime.combine(session_date, timezone.datetime.min.time())),
+				'performer': request.user,
+			}
+		)
+		
+		return JsonResponse({
+			'session_id': session.id,
+			'created': created,
+			'patient_id': patient.id,
+			'course_number': course_number,
+			'session_date': session_date_str,
+		})
+	
+	except Patient.DoesNotExist:
+		return JsonResponse({'error': f'Patient {patient_id} not found'}, status=404)
+	except Exception as e:
+		return JsonResponse({'error': str(e)}, status=500)

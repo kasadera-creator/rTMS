@@ -19,4 +19,5 @@ urlpatterns = [
     path("side_effect/<int:session_id>/", print_views.print_side_effect_check, name="print_side_effect_check"),
     path("side_effect/<int:session_id>/pdf/", print_views.print_side_effect_check_pdf, name="print_side_effect_check_pdf"),
     path("treatment/record/<int:session_id>/", print_views.print_side_effect_check, name="print_treatment_record_preview"),
+    path("api/get-session/", print_views.api_get_or_create_session, name="api_get_session"),
 ]

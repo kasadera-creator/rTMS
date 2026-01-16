@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Print{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Yu Gothic', 'Hiragino Sans', sans-serif;
+            background-color: #f5f5f5;
+            padding: 0;
+            margin: 0;
+        }
+
+        .print-container {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            height: 100vh;
+            overflow: hidden;
+            gap: 0;
+        }
+
+        .print-preview-area {
+            grid-column: 1;
+            overflow-y: auto;
+            background-color: #f5f5f5;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 20px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .print-root {
+            background: white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            margin: 0 auto;
+            width: 100%;
+            max-width: 210mm;
+            box-sizing: border-box;
+        }
+
+        .print-controls {
+            grid-column: 2;
+            width: 250px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-left: 1px solid #dee2e6;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .print-controls h5 {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .print-controls .btn {
+            width: 100%;
+            padding: 10px 12px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .control-section {
+            padding-bottom: 16px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .control-section:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .control-section .btn-group {
+            display: flex;
+            flex-direction: row;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .control-section .btn-group .btn {
+            width: auto;
+            flex: 1;
+            min-width: 70px;
+        }
+
+        .print-controls .btn {
+            padding: 8px 10px;
+            font-size: 0.8rem;
+        }
+
+        .print-controls .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        }
+
+        .print-controls .btn-primary {
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+            color: white;
+        }
+
+        .print-controls .btn-success {
+            background-color: #198754;
+            border-color: #198754;
+            color: white;
+        }
+
+        .print-controls .btn-outline-secondary {
+            background-color: white;
+            border: 1px solid #dee2e6;
+            color: #495057;
+        }
+
+        .print-controls .btn-outline-secondary:hover {
+            background-color: #e9ecef;
+            border-color: #adb5bd;
+        }
+
+        /* Print styles */
+        @media print {
+            .print-container {
+                display: block;
+            }
+
+            .print-controls {
+                display: none;
+            }
+
+            .print-preview-area {
+                background-color: white;
+                padding: 0;
+                overflow: visible;
+            }
+
+            .print-root {
+                box-shadow: none;
+                margin: 0;
+            }
+
+            body {
+                background-color: white;
+                padding: 0;
+            }
+        }
+
+        /* Page sheet styling */
+        .page-sheet {
+            width: 100%;
+            height: auto;
+            min-height: 297mm;
+            background: white;
+            padding: 15mm;
+            margin: 0;
+            box-sizing: border-box;
+            font-size: 10pt;
+            line-height: 1.4;
+            position: relative;
+        }
+
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        @media print {
+            body {
+                margin: 0;
+                padding: 0;
+            }
+            .page-sheet {
+                width: 210mm;
+                height: auto;
+                min-height: 297mm;
+                padding: 15mm;
+                margin: 0;
+                box-sizing: border-box;
+                page-break-after: always;
+            }
+        }
+        .page-sheet h1 {
+            font-size: 14pt;
+            font-weight: bold;
+            margin: 12pt 0 6pt 0;
+            text-align: center;
+        }
+
+        .page-sheet h2 {
+            font-size: 12pt;
+            font-weight: bold;
+            margin: 10pt 0 4pt 0;
+        }
+
+        .page-sheet p {
+            margin: 4pt 0;
+        }
+
+        /* Table styling */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 8pt 0;
+        }
+
+        table th, table td {
+            border: 1px solid #333;
+            padding: 4pt;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        table th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+        }
+
+        .summary-header {
+            display: none;
+        }
+
+        .page-sheet {
+            position: relative;
+            padding-bottom: 30mm;
+        }
+
+        .page-footer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 9pt;
+            line-height: 1.5;
+            color: #555;
+            padding: 8mm 10mm;
+            border-top: 1px solid #ddd;
+        }
+
+        .summary-info-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .summary-info-table th {
+            background-color: #e8e8e8;
+            font-weight: 600;
+            width: 15%;
+        }
+
+        .summary-info-table td {
+            padding: 4pt;
+        }
+
+        .content-section {
+            margin: 12pt 0 0 0;
+        }
+
+        .section-label {
+            font-weight: bold;
+            font-size: 11pt;
+            margin-bottom: 6pt;
+            padding: 4pt;
+            background-color: #f8f8f8;
+            border-left: 3px solid #0066cc;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9pt;
+        }
+
+        .data-table th, .data-table td {
+            border: 1px solid #999;
+            padding: 3pt 4pt;
+        }
+
+        .data-table th {
+            background-color: #dfe8f6;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .text-start {
+            text-align: left;
+        }
+
+        .text-end {
+            text-align: right;
+        }
+
+        .text-content {
+            border: 1px solid #ccc;
+            padding: 4pt;
+            background-color: #fafafa;
+            min-height: 60px;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+
+        .footer-section {
+            margin-top: 20pt;
+            font-size: 10pt;
+        }
+
+        .doc-title {
+            text-align: center;
+            font-size: 16pt;
+            font-weight: bold;
+            margin: 12pt 0;
+        }
+
+        .mt-0 { margin-top: 0 !important; }
+        .mt-1 { margin-top: 6pt !important; }
+        .mt-2 { margin-top: 12pt !important; }
+        .mt-3 { margin-top: 18pt !important; }
+        .mt-4 { margin-top: 24pt !important; }
+        .mt-5 { margin-top: 30pt !important; }
+
+        .ps-2 { padding-left: 12pt !important; }
+
+        /* Responsive controls for small screens */
+        @media screen and (max-width: 1400px) {
+            .print-container {
+                grid-template-columns: 1fr;
+            }
+
+            .print-controls {
+                grid-column: 1;
+                width: 100%;
+                max-height: 120px;
+                flex-direction: row;
+                flex-wrap: wrap;
+                border-left: none;
+                border-top: 1px solid #dee2e6;
+                justify-content: flex-start;
+                gap: 8px;
+            }
+
+            .print-controls .btn {
+                width: calc(50% - 4px);
+            }
+
+            .control-section {
+                width: 100%;
+                border: none;
+                padding: 0;
+            }
+
+            .print-controls h5 {
+                width: 100%;
+                margin: 0 0 8px 0;
+            }
+        }
+    </style>
+    {% block extra_styles %}{% endblock %}
+</head>
+<body>
+    <div class="print-container">
+        <div class="print-preview-area">
+            <div class="print-root">
+                {% block print_content %}
+                {% endblock %}
+            </div>
+        </div>
+        {% if not include_mode %}
+        <div class="print-controls">
+            {% block print_controls %}
+            {% endblock %}
+        </div>
+        {% endif %}
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Print ボタンの処理
+            const printBtn = document.getElementById('print-btn');
+            if (printBtn) {
+                printBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    window.print();
+                });
+            }
+
+            // 戻る ボタンの処理
+            const backBtn = document.getElementById('back-btn');
+            if (backBtn) {
+                backBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const backUrl = this.getAttribute('data-back-url');
+                    if (backUrl && backUrl.trim()) {
+                        window.location.href = backUrl;
+                    } else {
+                        history.back();
+                    }
+                });
+            }
+
+            // PDF 保存ボタンの処理
+            const pdfBtn = document.getElementById('pdf-btn');
+            if (pdfBtn) {
+                pdfBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    // 現在のURLからpdf版URLを生成
+                    let currentUrl = window.location.pathname;
+                    console.log('Original pathname:', currentUrl);
+                    
+                    // すでに/pdf/ で終わっている場合はそのまま使用
+                    if (currentUrl.endsWith('/pdf/')) {
+                        console.log('Already PDF URL, no change needed');
+                        return;
+                    }
+                    
+                    // /pdf を削除（もし存在したら）
+                    currentUrl = currentUrl.replace(/\/pdf\/$/, '/');
+                    
+                    // 末尾のスラッシュがない場合は追加
+                    if (!currentUrl.endsWith('/')) {
+                        currentUrl = currentUrl + '/';
+                    }
+                    
+                    const pdfUrl = currentUrl + 'pdf/';
+                    console.log('Generated PDF URL:', pdfUrl);
+                    window.location.href = pdfUrl;
+                });
+            }
+        });
+    </script>
+</body>
+</html>

@@ -112,6 +112,17 @@
           </div>
           <div class="card-body">
 
+            <div class="row g-2 mb-3">
+              <div class="col-md-6">
+                <label class="form-label fw-bold">実施日</label>
+                {{ form.treatment_date }}
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-bold">開始時間</label>
+                {{ form.treatment_time }}
+              </div>
+            </div>
+
             <hr class="my-2">
 
             <div class="fw-bold text-success mb-1">安全確認（問題があればOFF）</div>
@@ -618,7 +629,7 @@
         <i class="fas fa-undo"></i> 戻る
       </a>
       <button type="button" class="btn btn-outline-warning fab" id="openSkipModalBtn">
-        <i class="fas fa-forward"></i> スキップ
+        <i class="fas fa-forward"></i> 治療スキップ・中止
       </button>
     </div>
   {% endwith %}
@@ -634,29 +645,64 @@
       <i class="fas fa-undo"></i> 戻る
     </a>
     <button type="button" class="btn btn-outline-warning fab" id="openSkipModalBtn2">
-      <i class="fas fa-forward"></i> スキップ
+      <i class="fas fa-forward"></i> 治療スキップ・中止
     </button>
   </div>
 {% endif %}
 
-<!-- Skip Reason Modal -->
+<!-- Skip/Cancel Modal -->
 <div class="modal fade" id="skipModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-sm modal-dialog-centered">
+  <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">スキップの理由</h5>
+        <h5 class="modal-title">治療スキップ・中止を選択</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
       </div>
       <div class="modal-body">
-        <div class="mb-2">
-          <label class="form-label small">理由（任意）</label>
-          <textarea class="form-control form-control-sm" id="skipReasonText" rows="3" placeholder="例: 患者都合で本日欠席"></textarea>
+        <div class="mb-3">
+          <div class="alert alert-info" role="alert">
+            <strong>操作を選択してください：</strong>
+          </div>
         </div>
-        <div class="small text-muted">スキップは予定を順送りします。取り消す場合は管理画面から復元してください。</div>
+
+        <!-- Skip Option -->
+        <div class="card mb-3 border-primary">
+          <div class="card-header bg-primary text-white">
+            <strong><i class="fas fa-forward me-1"></i>治療スキップ</strong>
+          </div>
+          <div class="card-body">
+            <p class="card-text">本日の治療をスキップし、以降の予定を1日ずつ順延します。</p>
+            <p class="text-muted small">土日・祝日は自動的にスキップされます。</p>
+            <div class="mb-2">
+              <label class="form-label small">理由（任意）</label>
+              <textarea class="form-control form-control-sm" id="skipReasonText" rows="2" placeholder="例: 患者都合で本日欠席"></textarea>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" id="confirmSkipBtn">
+              <i class="fas fa-check me-1"></i>スキップを実行
+            </button>
+          </div>
+        </div>
+
+        <!-- Cancel Option -->
+        <div class="card border-danger">
+          <div class="card-header bg-danger text-white">
+            <strong><i class="fas fa-stop me-1"></i>治療を中止</strong>
+          </div>
+          <div class="card-body">
+            <p class="card-text">本日から治療を中止し、以降の予定を削除します。</p>
+            <p class="text-muted small">退院準備の予定日を本日に設定します。</p>
+            <div class="mb-2">
+              <label class="form-label small">理由（任意）</label>
+              <textarea class="form-control form-control-sm" id="cancelReasonText" rows="2" placeholder="例: 効果判定で治療終了"></textarea>
+            </div>
+            <button type="button" class="btn btn-danger btn-sm" id="confirmCancelBtn">
+              <i class="fas fa-check me-1"></i>中止を実行
+            </button>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">キャンセル</button>
-        <button type="button" class="btn btn-warning btn-sm" id="confirmSkipBtn">スキップ実行</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">閉じる</button>
       </div>
     </div>
   </div>
@@ -664,71 +710,171 @@
 
 <script src="{% static 'rtms_app/side_effect_widget_v2.js' %}"></script>
 <script>
-  // 治療実施記録票（副作用チェック票）印刷 — 安全なタブ操作（空白タブを先に開かない）
-  window.printTreatmentRecord = async function() {
-    const form = document.getElementById('treatmentForm');
-    if (!form) { alert('フォームが見つかりません'); return; }
-
-    if (typeof window.sideEffectWidgetFlush === 'function') {
-      try { window.sideEffectWidgetFlush(); } catch(e) { /* ignore */ }
-    }
-
-    const fd = new FormData(form);
-    fd.set('action','print');
-
-    try {
-      const res = await fetch(window.location.href, {
-        method: 'POST', body: fd, credentials: 'same-origin',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-      });
-
-      if (!res.ok) throw new Error('保存に失敗しました');
-
-      // Try to parse JSON when content-type indicates JSON
-      const ct = res.headers.get('content-type') || '';
-      if (ct.includes('application/json')) {
-        const data = await res.json().catch(() => null);
-        const url = (data && (data.pdf_url || data.html_url)) ? (data.pdf_url || data.html_url) : null;
-        if (url) return window.open(url, '_blank', 'noopener');
-        // If no url in JSON, try to open res.url
-        if (res.url) return window.open(res.url, '_blank', 'noopener');
+  // Print button handler: Get or create session and navigate to print screen
+  (function() {
+    function attachPrintHandler() {
+      const printBtn = document.getElementById('printTreatmentRecordBtn');
+      if (!printBtn) {
+        console.error('printTreatmentRecordBtn not found');
+        setTimeout(attachPrintHandler, 500);  // Retry after 500ms
+        return;
       }
-
-      // If not JSON, try to open the response URL (may be a redirect)
-      if (res.url) return window.open(res.url, '_blank', 'noopener');
-
-      // As a last resort, fallback to classic form submit in new tab
-      const hidden = document.createElement('input'); hidden.type='hidden'; hidden.name='action'; hidden.value='print';
-      form.appendChild(hidden);
-      const prevTarget = form.target || '';
-      form.target = '_blank';
-      form.submit();
-      form.target = prevTarget;
-      form.removeChild(hidden);
-    } catch (err) {
-      console.error('printTreatmentRecord error', err);
-      // fallback to classic submit
-      const hidden = document.createElement('input'); hidden.type='hidden'; hidden.name='action'; hidden.value='print';
-      form.appendChild(hidden);
-      const prevTarget = form.target || '';
-      form.target = '_blank';
-      form.submit();
-      form.target = prevTarget;
-      form.removeChild(hidden);
+      
+      printBtn.addEventListener('click', async function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const pid = '{{ patient.id }}';
+        const courseNumber = '{{ course_number }}' || 1;
+        
+        // Try to find treatment_date input (name="treatment_date" or id="id_treatment_date")
+        let treatmentDateInput = document.querySelector('input[name="treatment_date"]');
+        if (!treatmentDateInput) {
+          treatmentDateInput = document.querySelector('input#id_treatment_date');
+        }
+        
+        // If still not found, try to get it from form data
+        if (!treatmentDateInput) {
+          // Fallback: look at all date inputs
+          const allDateInputs = document.querySelectorAll('input[type="date"]');
+          if (allDateInputs.length > 0) {
+            treatmentDateInput = allDateInputs[0];
+          }
+        }
+        
+        if (!treatmentDateInput || !treatmentDateInput.value) {
+          console.warn('No treatment_date input found. Available inputs:', document.querySelectorAll('input[type="date"]'));
+          alert('実施日を選択してください。');
+          return;
+        }
+        
+        const sessionDate = treatmentDateInput.value; // Format: YYYY-MM-DD
+        
+        try {
+          // Call API to get or create session
+          const response = await fetch(`/app/patient/${pid}/print/api/get-session/`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+              course_number: parseInt(courseNumber),
+              session_date: sessionDate
+            })
+          });
+          
+          if (!response.ok) {
+            const error = await response.json();
+            alert(`エラー: ${error.error || 'セッションが作成できません。'}`);
+            return;
+          }
+          
+          const data = await response.json();
+          const sid = data.session_id;
+          
+          // Navigate to print screen
+          const url = `/app/patient/${pid}/print/treatment/record/${sid}/`;
+          window.location.href = url;
+        } catch (err) {
+          console.error('Print handler error:', err);
+          alert(`エラーが発生しました: ${err.message}`);
+        }
+      });
     }
-  };
-
-  // attach handler to floating button (safer than inline onclick)
-  document.getElementById('printTreatmentRecordBtn')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    const pid = '{{ patient.id }}';
-    const sid = '{{ session.id|default:"" }}';
-    if (sid && sid.length > 0) {
-      const url = `/app/patient/${pid}/print/treatment/record/${sid}/`;
-      return window.open(url, '_blank', 'noopener');
+    
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', attachPrintHandler);
+    } else {
+      attachPrintHandler();
     }
-    // no session id available yet — fallback to save-then-open flow
-    window.printTreatmentRecord();
+  })();
+
+  // Skip/Cancel modal buttons
+  document.addEventListener('DOMContentLoaded', () => {
+    const openSkipBtn = document.getElementById('openSkipModalBtn');
+    const openSkipBtn2 = document.getElementById('openSkipModalBtn2');
+    const confirmSkip = document.getElementById('confirmSkipBtn');
+    const confirmCancel = document.getElementById('confirmCancelBtn');
+
+    if (openSkipBtn) {
+      openSkipBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        new bootstrap.Modal(document.getElementById('skipModal')).show();
+      });
+    }
+    
+    if (openSkipBtn2) {
+      openSkipBtn2.addEventListener('click', (e) => {
+        e.preventDefault();
+        new bootstrap.Modal(document.getElementById('skipModal')).show();
+      });
+    }
+
+    // Skip button handler
+    if (confirmSkip) {
+      confirmSkip.addEventListener('click', () => {
+        const reason = document.getElementById('skipReasonText')?.value || '';
+        submitSkipOrCancel('postpone', reason);
+      });
+    }
+
+    // Cancel button handler
+    if (confirmCancel) {
+      confirmCancel.addEventListener('click', () => {
+        if (!confirm('治療を中止します。以降の治療予定が全て削除されます。よろしいですか？')) {
+          return;
+        }
+        const reason = document.getElementById('cancelReasonText')?.value || '';
+        submitSkipOrCancel('cancel', reason);
+      });
+    }
+
+    // Helper function to submit skip or cancel
+    function submitSkipOrCancel(actionType, reason) {
+      const form = document.getElementById('treatmentForm');
+      if (!form) return;
+      
+      // Close modal
+      const modal = bootstrap.Modal.getInstance(document.getElementById('skipModal'));
+      if (modal) modal.hide();
+
+      let action = form.querySelector('[name=action]');
+      if (!action) { 
+        action = document.createElement('input'); 
+        action.type = 'hidden'; 
+        action.name = 'action'; 
+        form.appendChild(action); 
+      }
+      action.value = actionType;
+      
+      const skipReasonField = document.getElementById('id_skip_reason');
+      if (skipReasonField) skipReasonField.value = reason;
+      
+      form.submit();
+    }
+    
+    // Form submit handler to sync side effect widget
+    const treatmentForm = document.getElementById('treatmentForm');
+    if (treatmentForm) {
+      treatmentForm.addEventListener('submit', (e) => {
+        // Prevent double submit
+        if (treatmentForm.dataset.submitting === '1') {
+          e.preventDefault();
+          return;
+        }
+        treatmentForm.dataset.submitting = '1';
+
+        // Disable submit buttons
+        const submits = treatmentForm.querySelectorAll('button[type="submit"], input[type="submit"]');
+        submits.forEach(b => { try { b.disabled = true; } catch (err) {} });
+
+        // Ensure side effect widget state is persisted to hidden input
+        if (typeof sideEffectWidgetInstance !== 'undefined' && sideEffectWidgetInstance) {
+          sideEffectWidgetInstance.updateHiddenInput();
+        }
+      });
+    }
   });
 
   // Pass previous abnormal alert message for Step6 into wizard
@@ -747,38 +893,12 @@
   };
   window.getTodayMtPercent = () => {
     const el = document.getElementById('id_mt_percent');
-  <script>
-    // Skip modal wiring: open buttons and confirm
-    document.getElementById('openSkipModalBtn')?.addEventListener('click', (e) => {
-      e.preventDefault();
-      const m = new bootstrap.Modal(document.getElementById('skipModal'));
-      m.show();
-    });
-    document.getElementById('openSkipModalBtn2')?.addEventListener('click', (e) => {
-      e.preventDefault();
-      const m = new bootstrap.Modal(document.getElementById('skipModal'));
-      m.show();
-    });
-
-    document.getElementById('confirmSkipBtn')?.addEventListener('click', () => {
-      const reason = document.getElementById('skipReasonText')?.value || '';
-      const form = document.getElementById('treatmentForm');
-      if (!form) return;
-      // Ensure action hidden input exists
-      let a = form.querySelector('[name=action]');
-      if (!a) { a = document.createElement('input'); a.type = 'hidden'; a.name = 'action'; form.appendChild(a); }
-      a.value = 'skip';
-      // Set reason
-      const r = document.getElementById('id_skip_reason');
-      if (r) r.value = reason;
-
-      form.submit();
-    });
-  </script>
     return el && el.value ? el.value : (el && el.getAttribute('value')) || '';
   };
+
   window.getCSRFToken = () => document.querySelector('[name="csrfmiddlewaretoken"]').value;
 </script>
+
 <script src="{% static 'rtms_app/wizard.js' %}"></script>
 <script>
   // ---- モード切替：手順解説を選ぶとモーダルを開き、閉じたら記入モードへ戻す ----
@@ -1215,28 +1335,6 @@
         const el = document.getElementById(id);
         if (el) el.classList.add('form-control-sm');
       });
-
-    // Sync side effect widget before form submission and prevent double-submit
-    const treatmentForm = document.getElementById('treatmentForm');
-    if (treatmentForm) {
-      treatmentForm.addEventListener('submit', (e) => {
-        // Prevent double submit
-        if (treatmentForm.dataset.submitting === '1') {
-          e.preventDefault();
-          return;
-        }
-        treatmentForm.dataset.submitting = '1';
-
-        // Disable submit buttons
-        const submits = treatmentForm.querySelectorAll('button[type="submit"], input[type="submit"]');
-        submits.forEach(b => { try { b.disabled = true; } catch (err) {} });
-
-        // Ensure side effect widget state is persisted to hidden input
-        if (typeof sideEffectWidgetInstance !== 'undefined' && sideEffectWidgetInstance) {
-          sideEffectWidgetInstance.updateHiddenInput();
-        }
-      });
-    }
   });
 </script>
 {% endblock %}
