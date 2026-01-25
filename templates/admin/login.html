@@ -1,0 +1,175 @@
+{% extends "rtms_app/base.html" %}
+{% load static %}
+
+{% block title %}スタッフログイン | rTMS{% endblock %}
+
+{% block extrastyle %}
+<style>
+  .login-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: linear-gradient(to bottom, #f0f7ff 0%, #f9fafb 100%);
+    padding: 1rem;
+  }
+  .login-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e5e7eb;
+    padding: 2.5rem 2rem;
+    width: 100%;
+    max-width: 400px;
+  }
+  .login-card h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: #1f2937;
+  }
+  .login-card > p {
+    color: #6b7280;
+    font-size: 0.95rem;
+    margin-bottom: 2rem;
+  }
+  .login-card .form-group {
+    margin-bottom: 1.5rem;
+  }
+  .login-card label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #374151;
+    font-size: 0.95rem;
+  }
+  .login-card input[type="text"],
+  .login-card input[type="password"] {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 1rem;
+    transition: all 0.2s;
+    background: #fafbfc;
+  }
+  .login-card input[type="text"]:focus,
+  .login-card input[type="password"]:focus {
+    outline: none;
+    border-color: #3b82f6;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+  .login-card .errorlist {
+    background-color: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    list-style: none;
+    padding-left: 0;
+    font-size: 0.9rem;
+  }
+  .login-card .errorlist li {
+    margin: 0;
+  }
+  .login-card button {
+    width: 100%;
+    padding: 0.875rem;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .login-card button:hover {
+    background: #2563eb;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+  }
+  .login-card button:active {
+    transform: translateY(1px);
+  }
+  .patient-login-link {
+    background-color: #eff6ff;
+    border: 1px solid #dbeafe;
+    padding: 1rem;
+    border-radius: 6px;
+    margin-top: 1.5rem;
+  }
+  .patient-login-link p {
+    margin: 0 0 0.75rem 0;
+    color: #1e40af;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  .patient-login-link a {
+    display: inline-block;
+    color: #3b82f6;
+    font-weight: 600;
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .patient-login-link a:hover {
+    color: #2563eb;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-container">
+  <div class="login-card">
+    <h1>スタッフログイン</h1>
+    <p>スタッフアカウントでログインしてください</p>
+
+    {% if form.non_field_errors %}
+      <ul class="errorlist">
+        {% for error in form.non_field_errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="form-group">
+        {{ form.username.label_tag }}
+        {{ form.username }}
+        {% if form.username.errors %}
+          <ul class="errorlist">
+            {% for error in form.username.errors %}
+              <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </div>
+
+      <div class="form-group">
+        {{ form.password.label_tag }}
+        {{ form.password }}
+        {% if form.password.errors %}
+          <ul class="errorlist">
+            {% for error in form.password.errors %}
+              <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </div>
+
+      <button type="submit">ログイン</button>
+
+      <div class="patient-login-link">
+        <p style="margin: 0 0 0.5rem 0; color: #666; font-size: 0.875rem;">
+          患者さんですか？
+        </p>
+        <a href="/patient/login/" style="display: inline-block; color: #667eea; font-weight: bold; text-decoration: none;">患者ログインはこちら →</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

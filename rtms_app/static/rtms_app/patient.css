@@ -1,0 +1,103 @@
+:root {
+  --patient-bg: linear-gradient(135deg, #f5f7fb 0%, #e0ecff 100%);
+  --accent: #0d7bb7;
+  --card-bg: #ffffff;
+  --text-muted: #6c757d;
+}
+
+body.patient-shell {
+  min-height: 100vh;
+  background: var(--patient-bg);
+  font-family: 'Noto Sans JP', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.patient-header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: rgba(13, 123, 183, 0.9);
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.patient-main {
+  padding-bottom: 120px;
+}
+
+.portal-card {
+  background: var(--card-bg);
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.survey-header {
+  position: sticky;
+  top: 0;
+  z-index: 900;
+  background: #fff;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.question-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 16px;
+  border: 1px solid #e9ecef;
+}
+
+.q-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(13, 123, 183, 0.12);
+  color: #0d7bb7;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.question-text {
+  font-size: 1.05rem;
+}
+
+.options-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.btn-option {
+  border-radius: 12px;
+  padding: 12px 14px;
+  min-width: 120px;
+  border: 1px solid #d0d7e2;
+  background: #f8fafc;
+  transition: all 0.15s ease;
+}
+
+.btn-option:hover,
+.btn-option:focus,
+.btn-check:checked + .btn-option {
+  border-color: #0d7bb7;
+  background: rgba(13, 123, 183, 0.12);
+  color: #0b4f7a;
+  box-shadow: 0 4px 10px rgba(13, 123, 183, 0.15);
+}
+
+.survey-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-top: 1px solid #e9ecef;
+  z-index: 1000;
+}
+
+@media (max-width: 768px) {
+  .btn-option { width: 100%; text-align: left; }
+  .question-text { font-size: 1rem; }
+  .survey-header .container { align-items: flex-start; }
+}

@@ -20,13 +20,20 @@ class PatientRegistrationForm(forms.ModelForm):
         model = Patient
         fields = ['card_id', 'name', 'birth_date', 'gender', 'referral_source', 'referral_doctor']
         widgets = {
-            'card_id': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '例: 12345'}),
+            'card_id': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '例: 12345', 'maxlength': '5', 'pattern': '[0-9]{5}'}),
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '例: 笠寺 太郎'}),
             'birth_date': DateInput(attrs={'class': 'form-control'}),
             'gender': forms.Select(attrs={'class': 'form-select'}),
             'referral_source': forms.TextInput(attrs={'class': 'form-control', 'list': 'referral-options', 'placeholder': '医療機関名 (任意)'}),
             'referral_doctor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '医師名 (任意)'}),
         }
+    
+    def clean_card_id(self):
+        import re
+        card_id = self.cleaned_data.get('card_id', '').strip()
+        if not re.match(r'^\d{5}$', card_id):
+            raise forms.ValidationError('患者IDは5桁の数字で入力してください（例: 12345）')
+        return card_id
 
 
 class PatientBasicEditForm(forms.ModelForm):
@@ -34,13 +41,20 @@ class PatientBasicEditForm(forms.ModelForm):
         model = Patient
         fields = ['card_id', 'name', 'birth_date', 'gender', 'referral_source', 'referral_doctor']
         widgets = {
-            'card_id': forms.TextInput(attrs={'class': 'form-control'}),
+            'card_id': forms.TextInput(attrs={'class': 'form-control', 'maxlength': '5', 'pattern': '[0-9]{5}'}),
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'birth_date': DateInput(attrs={'class': 'form-control'}),
             'gender': forms.Select(attrs={'class': 'form-select'}),
             'referral_source': forms.TextInput(attrs={'class': 'form-control', 'list': 'referral-options', 'placeholder': '医療機関名 (任意)'}),
             'referral_doctor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '医師名 (任意)'}),
         }
+    
+    def clean_card_id(self):
+        import re
+        card_id = self.cleaned_data.get('card_id', '').strip()
+        if not re.match(r'^\d{5}$', card_id):
+            raise forms.ValidationError('患者IDは5桁の数字で入力してください（例: 12345）')
+        return card_id
 
 # --- 2. 初診フォーム (修正: バリデーション追加) ---
 class PatientFirstVisitForm(forms.ModelForm):

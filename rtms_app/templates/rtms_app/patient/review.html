@@ -1,0 +1,69 @@
+{% extends "rtms_app/patient/base_patient.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="card shadow-sm border-0">
+    <div class="card-body">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+          <div class="text-muted small">{{ session.get_phase_display }}</div>
+          <h1 class="h5 fw-bold mb-0">検査結果の確認</h1>
+        </div>
+        <a class="btn btn-outline-secondary" href="{% url 'patient_portal:portal' %}"><i class="fas fa-home me-1"></i>ポータルへ</a>
+      </div>
+
+      {% if missing_instruments %}
+        <div class="alert alert-warning">未回答の検査があります。該当ページに戻って入力してください。</div>
+      {% endif %}
+
+      <div class="table-responsive">
+        <table class="table table-striped align-middle">
+          <thead class="table-light">
+            <tr>
+              <th style="width:40%">検査</th>
+              <th style="width:20%">合計点</th>
+              <th style="width:20%">補足</th>
+              <th style="width:20%"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in summary %}
+              <tr>
+                <td class="fw-bold">{{ row.label }}</td>
+                <td>{% if row.total is not None %}{{ row.total }}{% else %}-{% endif %}</td>
+                <td>
+                  {% if row.phq9_q10 is not None %}困難度: {{ row.phq9_q10 }}{% endif %}
+                </td>
+                <td>
+                  <a class="btn btn-sm btn-outline-primary" href="{% url 'patient_portal:instrument' session.id row.code %}">修正する</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if is_submitted %}
+        <div class="alert alert-success mt-4" role="alert">
+          <div class="fw-bold mb-1">提出が完了しました。</div>
+          <div>お疲れ様でした。スタッフに端末を返してください。</div>
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-3">
+          <a class="btn btn-outline-secondary" href="{% url 'patient_portal:portal' %}"><i class="fas fa-home me-1"></i>ポータルへ戻る</a>
+        </div>
+      {% else %}
+        <form method="post" action="{% url 'patient_portal:submit' session.id %}" class="mt-3">
+          {% csrf_token %}
+          <div class="d-flex justify-content-end gap-2">
+            <a class="btn btn-outline-secondary" href="{% url 'patient_portal:instrument' session.id summary.0.code %}">戻る</a>
+            <button type="submit" class="btn btn-primary btn-lg" {% if missing_instruments %}disabled{% endif %}>
+              <i class="fas fa-check me-1"></i>提出する
+            </button>
+          </div>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

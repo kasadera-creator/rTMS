@@ -3,12 +3,14 @@ from django.utils import timezone
 from django.contrib.auth.models import User
 import os
 
+from .surveys import INSTRUMENT_ORDER, calculate_score, instrument_label
+
 class Patient(models.Model):
     GENDER_CHOICES = [('M', '男性'), ('F', '女性'), ('O', 'その他')]
     ADMISSION_TYPES = [('voluntary', '任意入院'), ('medical_protection', '医療保護入院'), ('emergency', '緊急措置入院'), ('measure', '措置入院')]
     
-    # ★変更: unique=True を削除（複数クール対応のため）
-    card_id = models.CharField("カルテ番号", max_length=20) 
+    # 患者ID（5桁数字、患者ログインIDとして使用）
+    card_id = models.CharField("患者ID", max_length=5, unique=True, db_index=True) 
     # ★追加: 何クール目か
     course_number = models.IntegerField("クール数", default=1)
     # protocol_type was removed (no longer used). See migrations for removal.
@@ -45,6 +47,7 @@ class Patient(models.Model):
     birth_date = models.DateField("生年月日")
     gender = models.CharField("性別", max_length=1, choices=GENDER_CHOICES, default='M')
     attending_physician = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, verbose_name="担当医")
+    user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True, related_name="patient_profile", verbose_name="患者ユーザー")
     
     referral_source = models.CharField("紹介元医療機関", max_length=200, blank=True)
     referral_doctor = models.CharField("紹介医", max_length=100, blank=True)
@@ -64,6 +67,13 @@ class Patient(models.Model):
     mapping_notes = models.TextField("位置決め記録メモ", blank=True)
     
     admission_date = models.DateField("入院予定日", null=True, blank=True)
+    
+    def clean(self):
+        """Validate that card_id is exactly 5 digits."""
+        from django.core.exceptions import ValidationError
+        import re
+        if self.card_id and not re.match(r'^\d{5}$', self.card_id):
+            raise ValidationError({'card_id': '患者IDは5桁の数字で入力してください（例: 12345）'})
     mapping_date = models.DateField("初回位置決め日", null=True, blank=True)
     first_treatment_date = models.DateField("初回治療日", null=True, blank=True)
     
@@ -423,6 +433,73 @@ class AssessmentRecord(models.Model):
             models.Index(fields=['patient', 'timing']),
             models.Index(fields=['scale', 'timing']),
         ]
+
+
+class PatientSurveySession(models.Model):
+    PHASE_CHOICES = [
+        ("pre", "治療前"),
+        ("post", "治療後"),
+    ]
+    STATUS_CHOICES = [
+        ("in_progress", "実施中"),
+        ("submitted", "提出済"),
+    ]
+
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="survey_sessions")
+    course_number = models.IntegerField("クール数", default=1, db_index=True)
+    phase = models.CharField("フェーズ", max_length=16, choices=PHASE_CHOICES, db_index=True)
+    status = models.CharField("ステータス", max_length=16, choices=STATUS_CHOICES, default="in_progress", db_index=True)
+    started_at = models.DateTimeField("開始日時", auto_now_add=True)
+    submitted_at = models.DateTimeField("提出日時", null=True, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="patient_survey_sessions_started")
+
+    class Meta:
+        verbose_name = "患者自己記入式セッション"
+        verbose_name_plural = "患者自己記入式セッション"
+        ordering = ["-started_at"]
+        indexes = [
+            models.Index(fields=["patient", "status"]),
+            models.Index(fields=["patient", "phase"]),
+        ]
+
+    def __str__(self):
+        return f"Session {self.id} patient={self.patient_id} phase={self.phase} status={self.status}"
+
+
+INSTRUMENT_CHOICES = [(code, instrument_label(code)) for code in INSTRUMENT_ORDER]
+
+
+class PatientSurveyResponse(models.Model):
+    session = models.ForeignKey(PatientSurveySession, on_delete=models.CASCADE, related_name="responses")
+    instrument = models.CharField("検査", max_length=20, choices=INSTRUMENT_CHOICES)
+    answers = models.JSONField("回答", default=dict, blank=True, null=True)
+    total_score = models.IntegerField("合計点", default=0)
+    extra_data = models.JSONField("補足", default=dict, blank=True, null=True)
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "患者自己記入式回答"
+        verbose_name_plural = "患者自己記入式回答"
+        constraints = [
+            models.UniqueConstraint(fields=["session", "instrument"], name="unique_response_per_session_instrument"),
+        ]
+        indexes = [
+            models.Index(fields=["session", "instrument"]),
+        ]
+
+    def calculate_totals(self):
+        answers = self.answers or {}
+        total, extras = calculate_score(self.instrument, answers)
+        self.total_score = total
+        self.extra_data = extras or {}
+
+    def save(self, *args, **kwargs):
+        self.calculate_totals()
+        super().save(*args, **kwargs)
+
+    @property
+    def phq9_difficulty(self):
+        return (self.extra_data or {}).get("phq9_q10") if self.instrument == "phq9" else None
 
 class SeriousAdverseEvent(models.Model):
     """Serious adverse event tied to a treatment session.

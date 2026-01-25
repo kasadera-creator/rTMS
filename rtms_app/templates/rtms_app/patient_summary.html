@@ -161,6 +161,58 @@
                     <tr>
                       <td class="fw-bold">HAMD 21項</td>
                       {% for c in trend_cols %}
+        <div class="col-12">
+          <div class="card shadow-sm mt-3">
+            <div class="card-header card-header-accent fw-bold d-flex align-items-center justify-content-between" style="--card-accent: var(--color-discharge-dark); background: var(--color-discharge-bg); color: var(--color-discharge-dark);">
+              <span><i class="fas fa-table me-2"></i>自己記入式検査（患者用）</span>
+              <a class="btn btn-outline-primary btn-sm" href="{% url 'rtms_app:patient_survey_export' patient.id %}"><i class="fas fa-file-csv me-1"></i>CSV出力</a>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-sm table-striped mb-0 align-middle">
+                  <thead class="table-light">
+                    <tr>
+                      <th>フェーズ</th>
+                      <th>開始</th>
+                      <th>提出</th>
+                      <th>状態</th>
+                      <th>BDI-II</th>
+                      <th>SDS</th>
+                      <th>SASS-J</th>
+                      <th>PHQ-9</th>
+                      <th>Q10</th>
+                      <th>STAI X1</th>
+                      <th>STAI X2</th>
+                      <th>DAI-10</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in survey_summary %}
+                      <tr>
+                        <td>{{ row.session.get_phase_display }}</td>
+                        <td>{{ row.session.started_at|date:"Y/m/d H:i" }}</td>
+                        <td>{% if row.session.submitted_at %}{{ row.session.submitted_at|date:"Y/m/d H:i" }}{% else %}-{% endif %}</td>
+                        <td>{{ row.session.get_status_display }}</td>
+                        <td>{{ row.totals.bdi2|default:"-" }}</td>
+                        <td>{{ row.totals.sds|default:"-" }}</td>
+                        <td>{{ row.totals.sassj|default:"-" }}</td>
+                        <td>{{ row.totals.phq9|default:"-" }}</td>
+                        <td>{% if row.phq9_q10 is not None %}{{ row.phq9_q10 }}{% else %}-{% endif %}</td>
+                        <td>{{ row.totals.stai_x1|default:"-" }}</td>
+                        <td>{{ row.totals.stai_x2|default:"-" }}</td>
+                        <td>{{ row.totals.dai10|default:"-" }}</td>
+                      </tr>
+                    {% empty %}
+                      <tr>
+                        <td colspan="12" class="text-muted text-center py-3">実施された自己記入式検査はありません</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
                         <td class="fw-bold">
                           {% if c.hamd21 is not None %}
                             {{ c.hamd21 }}

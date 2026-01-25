@@ -3,7 +3,13 @@
 """
 import uuid
 import logging
+
+from django.conf import settings
+from django.http import HttpResponseForbidden
+from django.shortcuts import redirect
+
 from .utils.request_context import _thread_locals
+from .services.patient_accounts import PATIENT_GROUP_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -50,3 +56,25 @@ class RequestMiddleware:
                 exc_info=True
             )
             raise
+
+
+class PatientAccessMiddleware:
+    """Restrict patient-group users to the patient portal only."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return self.get_response(request)
+        if not user.groups.filter(name=PATIENT_GROUP_NAME).exists():
+            return self.get_response(request)
+
+        allowed_prefixes = ("/patient/", settings.STATIC_URL, settings.MEDIA_URL)
+        if any(request.path.startswith(prefix) for prefix in allowed_prefixes):
+            return self.get_response(request)
+
+        if request.method == "GET":
+            return redirect("/patient/")
+        return HttpResponseForbidden("患者用アカウントではアクセスできません。")

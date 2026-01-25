@@ -6,6 +6,7 @@ from rtms_app.admin import rtms_admin_site
 
 urlpatterns = [
     path("", RedirectView.as_view(url="/app/dashboard/", permanent=False)),
+    path("patient/", include(("rtms_app.patient_urls", "patient_portal"), namespace="patient_portal")),
     path("app/", include(("rtms_app.urls", "rtms_app"), namespace="rtms_app")),
     # Register print routes under the 'print' namespace
     path("app/print/", include(("rtms_app.print_urls", "print"), namespace="print")),

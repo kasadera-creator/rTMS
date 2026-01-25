@@ -3,7 +3,9 @@ from django.dispatch import receiver
 from django.db import transaction
 from django.contrib.auth import get_user_model
 from .models import AuditLog, TreatmentSession, Assessment, ConsentDocument, Patient
+from .services.patient_accounts import ensure_patient_user
 from .utils.request_context import get_current_request, get_client_ip, get_user_agent
+import re
 
 TARGET_MODELS = [TreatmentSession, Assessment]
 
@@ -97,6 +99,29 @@ def audit_log_user_save(sender, instance, created, **kwargs):
     transaction.on_commit(_create_user_log)
 
 
+@receiver(post_save, sender=Patient)
+def auto_create_patient_user(sender, instance, created, **kwargs):
+    """Automatically create patient portal user when Patient is created."""
+    if not instance.pk or not instance.card_id:
+        return
+    
+    # Only create user if card_id is valid 5-digit format
+    if not re.match(r'^\d{5}$', instance.card_id):
+        return
+    
+    # Skip if user already exists
+    if instance.user_id:
+        return
+    
+    try:
+        ensure_patient_user(instance)
+    except Exception as e:
+        # Log error but don't break patient creation
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to auto-create user for patient {instance.pk}: {e}")
+
+
 @receiver(post_delete, sender=User)
 def audit_log_user_delete(sender, instance, **kwargs):
     request = get_current_request()
@@ -120,3 +145,14 @@ def audit_log_user_delete(sender, instance, **kwargs):
         )
 
     transaction.on_commit(_create_user_delete_log)
+
+
+@receiver(post_save, sender=Patient)
+def create_patient_user_on_save(sender, instance: Patient, created, **kwargs):
+    """Automatically provision a patient portal user when a Patient is saved."""
+    try:
+        if created or not instance.user_id:
+            ensure_patient_user(instance)
+    except Exception:
+        # Avoid breaking patient save due to user provisioning errors
+        pass

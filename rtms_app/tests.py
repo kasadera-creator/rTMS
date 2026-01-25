@@ -8,6 +8,8 @@ import datetime
 from datetime import date
 from rtms_app import services
 from rtms_app.services import schedule as schedule_service
+from rtms_app.surveys import INSTRUMENT_ORDER, get_instrument
+from rtms_app.services.patient_accounts import ensure_patient_group
 
 
 class TestAssessmentRules(TestCase):
@@ -165,6 +167,59 @@ class TestSkipSessions(TestCase):
         new_last = expected_second
         delta = new_last - original_last
         self.assertEqual(self.patient.discharge_date, date(2026,1,31) + delta)
+
+class TestPatientSurveyFlow(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        # Ensure patient group exists
+        ensure_patient_group()
+        self.patient = Patient.objects.create(
+            card_id="12345",
+            name="Survey Patient",
+            birth_date=datetime.date(1990, 1, 1),
+        )
+        # Create linked user with patient group
+        from rtms_app.services.patient_accounts import ensure_patient_user
+        user, _ = ensure_patient_user(self.patient, reset_password=True)
+        self.user = user
+        self.client.force_login(self.user)
+
+    def _answers_for(self, instrument_code: str):
+        inst = get_instrument(instrument_code)
+        data = {}
+        for q in inst.get("questions", []):
+            opts = q.get("options", [])
+            if not opts:
+                continue
+            data[q["key"]] = opts[0]["id"]
+        return data
+
+    def test_full_flow_reaches_review(self):
+        from rtms_app.models import PatientSurveySession
+
+        session = PatientSurveySession.objects.create(
+            patient=self.patient,
+            phase="pre",
+            status="in_progress",
+            course_number=1,
+        )
+
+        for idx, code in enumerate(INSTRUMENT_ORDER):
+            url = reverse("patient_portal:instrument", args=[session.id, code])
+            data = self._answers_for(code)
+            data["nav"] = "next"
+            resp = self.client.post(url, data)
+            if idx == len(INSTRUMENT_ORDER) - 1:
+                self.assertRedirects(resp, reverse("patient_portal:review", args=[session.id]))
+            else:
+                next_code = INSTRUMENT_ORDER[idx + 1]
+                self.assertRedirects(resp, reverse("patient_portal:instrument", args=[session.id, next_code]))
+
+    def test_invalid_instrument_is_forbidden(self):
+        url = reverse("patient_portal:instrument", args=[999, "invalid_code"])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 403)
 
     def test_skip_undo_restores_original_dates(self):
         from datetime import date

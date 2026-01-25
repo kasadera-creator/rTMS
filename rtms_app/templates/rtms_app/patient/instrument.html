@@ -1,0 +1,87 @@
+{% extends "rtms_app/patient/base_patient.html" %}
+{% load static %}
+
+{% block content %}
+<div class="survey-header shadow-sm">
+  <div class="container d-flex flex-wrap align-items-center justify-content-between gap-3 py-2">
+    <div class="d-flex flex-column">
+      <div class="small text-muted">{{ session.get_phase_display }} / 検査 {{ current_number }} / {{ total_instruments }}</div>
+      <div class="fw-bold h5 mb-0">{{ instrument_def.name }}</div>
+    </div>
+    <div class="text-end">
+      <div class="small text-muted">合計点 (リアルタイム)</div>
+      <div class="display-6 fw-bold" id="totalScore" data-initial="{{ current_total|default:0 }}">{{ current_total|default:0 }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="container mt-3">
+  <div class="card shadow-sm border-0">
+    <div class="card-body">
+      <div class="text-muted small mb-2">検査の説明</div>
+      <h2 class="h5 fw-bold mb-3">{{ instrument_def.name }}</h2>
+      <div class="instruction-text" style="line-height: 1.6;">
+        {{ instrument_def.instructions|default:""|linebreaksbr }}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="container py-4 mb-5">
+  <form id="surveyForm" method="post" action="" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="nav" id="navInput" value="stay">
+    <div class="d-flex flex-column gap-3">
+      {% for q in instrument_def.questions %}
+        <div class="question-card shadow-sm" id="q-{{ q.key }}" data-question-key="{{ q.key }}" data-include-total="{{ q.include_in_total|default:'True' }}">
+          <div class="d-flex flex-column gap-2">
+            <div class="d-flex align-items-center gap-2">
+              <div class="q-badge">Q{{ forloop.counter }}</div>
+              <div class="fw-bold question-text" data-default-label="{{ q.text }}">{{ q.text }}</div>
+            </div>
+            <div class="options-row">
+              {% for opt in q.options %}
+                {% with input_id="q"|add:q.key|add:"-"|add:opt.id %}
+                  <input class="btn-check" type="radio" name="{{ q.key }}" id="{{ input_id }}" value="{{ opt.id }}">
+                  <label class="btn btn-option" for="{{ input_id }}" data-score="{{ opt.score }}">{{ opt.label }}</label>
+                {% endwith %}
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </form>
+</div>
+
+<div class="survey-footer shadow-lg">
+  <div class="container d-flex align-items-center justify-content-between py-2">
+    <div>
+      {% if current_index > 0 %}
+        <button class="btn btn-outline-secondary" type="button" onclick="SurveyPage.goPrev()"><i class="fas fa-arrow-left me-1"></i> 戻る</button>
+      {% endif %}
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-light" type="button" onclick="SurveyPage.saveDraft()"><i class="fas fa-save me-1"></i> 下書き保存</button>
+      <button class="btn btn-primary" type="button" onclick="SurveyPage.goNext()">
+        {% if current_index|add:1 == progress|length %}確認へ{% else %}次へ<i class="fas fa-arrow-right ms-1"></i>{% endif %}
+      </button>
+    </div>
+  </div>
+</div>
+
+{{ instrument_def|json_script:"instrumentDef" }}
+{{ answers|json_script:"answerData" }}
+<script src="{% static 'rtms_app/patient_surveys.js' %}"></script>
+<script>
+  SurveyPage.init({
+    sessionId: {{ session.id }},
+    instrumentCode: "{{ instrument }}",
+    reviewUrl: "{% url 'patient_portal:review' session.id %}",
+    hasPrev: {{ prev_code|yesno:"true,false" }},
+    hasNext: {{ next_code|yesno:"true,false" }},
+    nextInstrument: "{{ next_code|default:'' }}",
+    prevInstrument: "{{ prev_code|default:'' }}",
+  });
+</script>
+{% endblock %}

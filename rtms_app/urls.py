@@ -3,6 +3,7 @@ from django.shortcuts import redirect
 from . import views
 from django.views.generic.base import RedirectView
 from . import views_health
+from . import views_survey_export
 
 from django.conf import settings
 from django.conf.urls.static import static
@@ -49,6 +50,11 @@ urlpatterns = [
         "patient/<int:patient_id>/summary/",
         views.patient_summary_view,
         name="patient_home",
+    ),
+    path(
+        "patient/<int:patient_id>/surveys/export.csv",
+        views_survey_export.export_patient_surveys_csv,
+        name="patient_survey_export",
     ),
 
     # ★ 適正質問票（別画面）

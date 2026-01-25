@@ -42,6 +42,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "rtms_app.middleware.PatientAccessMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "rtms_app.middleware.RequestMiddleware",
@@ -100,6 +101,9 @@ LOGIN_REDIRECT_URL = "/app/dashboard/"
 LOGOUT_REDIRECT_URL = "/admin/login/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Patient survey guidance
+PATIENT_SURVEY_PRE_WINDOW_DAYS = int(env("PATIENT_SURVEY_PRE_WINDOW_DAYS", 7))
 
 # Logging（500根治のため、django.request は ERROR以上を必ず出す）
 # NOTE:
