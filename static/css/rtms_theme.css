@@ -5,7 +5,7 @@
   --container-pad: 1.25rem;
   --container-pad-narrow: 1rem;
   --header-h: 56px;
-  --footer-h: 20px;
+  --footer-h: 56px;
   --radius: 12px;
   --radius-sm: 8px;
   --border: 1px solid #e5e7eb;
@@ -57,15 +57,14 @@ label { font-size: var(--font-base); font-weight: 600; margin-bottom: 0.25rem; }
 /* Containers */
 .rtms-page {
   width: 100%;
-  padding: 0;
+  padding: var(--space-3) 0 var(--space-4);
 }
 .rtms-container {
   max-width: var(--container-max);
   margin: 0 auto;
   padding: 0 var(--container-pad);
 }
-
-/* rtms-main はbase.htmlで制御（overflow-y: auto）*/
+.rtms-main { display: flex; flex-direction: column; gap: var(--space-4); }
 
 /* Titles */
 .page-title { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); font-size: var(--h2); font-weight: 700; }
@@ -126,7 +125,8 @@ label { font-size: var(--font-base); font-weight: 600; margin-bottom: 0.25rem; }
 
 /* HAMD rows */
 .hamd-row { border-radius: var(--radius-sm); padding: 0.5rem; }
-.q-badge { width: 24px; height: 24px; font-size: 0.75rem; }
+/* Consolidated from assessment_add/baseline/scale_form_base/week3/week4/week6 (byte-identical local overrides removed 2026 refactor stage3) */
+.q-badge { width: 28px; height: 28px; background: #f1f3f5; color: #495057; border-radius: 999px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size: .8rem; }
 
 /* iPad landscape (1194w) */
 @media (max-width: 1194px) and (max-height: 834px) and (orientation: landscape) {
