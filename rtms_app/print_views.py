@@ -213,8 +213,7 @@ def print_clinical_path_pdf(request, patient_id):
 	return render_pdf_response(request, 'rtms_app/print/path.html', context, context['pdf_filename'])
 
 
-@login_required
-def patient_print_discharge(request, patient_id):
+def _build_discharge_context(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
 	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
     
@@ -234,32 +233,22 @@ def patient_print_discharge(request, patient_id):
 	# build hamd trend cols using shared service so print matches screen
 	context['hamd_trend_cols'] = _hamd_cols_for_patient(patient)
 	context['pdf_filename'] = build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('discharge','退院時サマリー'), timezone.now().date())
+	return context
+
+
+@login_required
+def patient_print_discharge(request, patient_id):
+	context = _build_discharge_context(request, patient_id)
 	return render(request, 'rtms_app/print/discharge_summary.html', context)
 
 
 @login_required
 def patient_print_discharge_pdf(request, patient_id):
-	patient = get_object_or_404(Patient, pk=patient_id)
-	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
-	assessments_qs = Assessment.objects.filter(patient=patient).order_by('date')
-	latest_by_date = {}
-	for a in assessments_qs:
-		latest_by_date[a.date] = a
-	test_scores = [latest_by_date[d] for d in sorted(latest_by_date.keys())]
-	context = {
-		'patient': patient,
-		'today': timezone.now().date(),
-		'test_scores': test_scores,
-		'back_url': back_url,
-	}
-	# build hamd trend cols for PDF as well
-	context['hamd_trend_cols'] = _hamd_cols_for_patient(patient)
-	context['pdf_filename'] = build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('discharge','退院時サマリー'), timezone.now().date())
+	context = _build_discharge_context(request, patient_id)
 	return render_pdf_response(request, 'rtms_app/print/discharge_summary.html', context, context['pdf_filename'])
 
 
-@login_required
-def patient_print_admission(request, patient_id):
+def _build_admission_context(request, patient_id):
 	from datetime import timedelta
 	patient = get_object_or_404(Patient, pk=patient_id)
 	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
@@ -280,31 +269,22 @@ def patient_print_admission(request, patient_id):
 		'back_url': back_url,
 	}
 	context['pdf_filename'] = build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('admission','入院時サマリ'), timezone.now().date())
+	return context
+
+
+@login_required
+def patient_print_admission(request, patient_id):
+	context = _build_admission_context(request, patient_id)
 	return render(request, 'rtms_app/print/admission_summary.html', context)
 
 
 @login_required
 def patient_print_admission_pdf(request, patient_id):
-	from datetime import timedelta
-	patient = get_object_or_404(Patient, pk=patient_id)
-	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
-	assessments = Assessment.objects.filter(patient=patient, timing='baseline').order_by('date')
-	end_date_est = None
-	if patient.first_treatment_date:
-		end_date_est = patient.first_treatment_date + timedelta(days=42)
-	context = {
-		'patient': patient,
-		'today': timezone.now().date(),
-		'assessments': assessments,
-		'end_date_est': end_date_est,
-		'back_url': back_url,
-	}
-	context['pdf_filename'] = build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('admission','入院時サマリ'), timezone.now().date())
+	context = _build_admission_context(request, patient_id)
 	return render_pdf_response(request, 'rtms_app/print/admission_summary.html', context, context['pdf_filename'])
 
 
-@login_required
-def patient_print_referral(request, patient_id):
+def _build_referral_context(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
 	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
 	# 重複があれば同日最新のみ
@@ -320,25 +300,18 @@ def patient_print_referral(request, patient_id):
 		'back_url': back_url,
 	}
 	context['pdf_filename'] = build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('referral','紹介状'), timezone.now().date())
+	return context
+
+
+@login_required
+def patient_print_referral(request, patient_id):
+	context = _build_referral_context(request, patient_id)
 	return render(request, 'rtms_app/print/referral.html', context)
 
 
 @login_required
 def patient_print_referral_pdf(request, patient_id):
-	patient = get_object_or_404(Patient, pk=patient_id)
-	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
-	assessments_qs = Assessment.objects.filter(patient=patient).order_by('date')
-	latest_by_date = {}
-	for a in assessments_qs:
-		latest_by_date[a.date] = a
-	test_scores = [latest_by_date[d] for d in sorted(latest_by_date.keys())]
-	context = {
-		'patient': patient,
-		'today': timezone.now().date(),
-		'test_scores': test_scores,
-		'back_url': back_url,
-	}
-	context['pdf_filename'] = build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('referral','紹介状'), timezone.now().date())
+	context = _build_referral_context(request, patient_id)
 	return render_pdf_response(request, 'rtms_app/print/referral.html', context, context['pdf_filename'])
 
 
@@ -376,12 +349,7 @@ def patient_print_suitability_pdf(request, patient_id):
 	return render_pdf_response(request, 'rtms_app/print/suitability_questionnaire.html', context, context['pdf_filename'])
 
 
-@login_required
-def print_side_effect_check(request, patient_id, session_id):
-	"""Print view for side-effect check of a specific treatment session."""
-	if request.method != 'GET':
-		return HttpResponseNotAllowed(['GET'])
-
+def _build_side_effect_context(request, patient_id, session_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
 	session = get_object_or_404(TreatmentSession, pk=session_id, patient=patient)
 	
@@ -454,6 +422,16 @@ def print_side_effect_check(request, patient_id, session_id):
 		target_date = timezone.now().date()
 	content_label = CONTENT_LABELS.get('side_effect', '治療実施記録票')
 	context['pdf_filename'] = build_pdf_filename(patient, getattr(session, 'course_number', None) or getattr(patient, 'course_number', None), content_label, target_date)
+	return context
+
+
+@login_required
+def print_side_effect_check(request, patient_id, session_id):
+	"""Print view for side-effect check of a specific treatment session."""
+	if request.method != 'GET':
+		return HttpResponseNotAllowed(['GET'])
+
+	context = _build_side_effect_context(request, patient_id, session_id)
 	return render(request, 'rtms_app/print/side_effect_check.html', context)
 
 
@@ -462,74 +440,7 @@ def print_side_effect_check_pdf(request, patient_id, session_id):
 	if request.method != 'GET':
 		return HttpResponseNotAllowed(['GET'])
 
-	patient = get_object_or_404(Patient, pk=patient_id)
-	session = get_object_or_404(TreatmentSession, pk=session_id, patient=patient)
-
-	if getattr(session, 'session_date', None):
-		session_number = TreatmentSession.objects.filter(
-			patient=patient,
-			session_date__lte=session.session_date,
-		).order_by('session_date', 'date').count()
-	else:
-		session_number = TreatmentSession.objects.filter(
-			patient=patient,
-			date__lte=session.date,
-		).order_by('date').count()
-
-	def default_rows():
-		return [
-			{"item": "頭皮痛・刺激痛", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
-			{"item": "顔面の不快感", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
-			{"item": "頸部痛・肩こり", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
-			{"item": "頭痛 (刺激後)", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
-			{"item": "けいれん (部位・時間)", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
-			{"item": "失神", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
-			{"item": "聴覚障害", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
-			{"item": "めまい・耳鳴り", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
-			{"item": "注意集中困難", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
-			{"item": "急性気分変化 (躁転など)", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
-			{"item": "その他", "before": 0, "during": 0, "after": 0, "relatedness": 0, "memo": ""},
-		]
-
-	try:
-		side_effect_check = SideEffectCheck.objects.get(session=session)
-		rows = side_effect_check.rows or default_rows()
-		memo = side_effect_check.memo or ""
-		signature = side_effect_check.physician_signature or ""
-	except SideEffectCheck.DoesNotExist:
-		rows = default_rows()
-		memo = ""
-		signature = ""
-
-	back_url = request.GET.get('back_url')
-	if not back_url:
-		query = {}
-		if getattr(session, 'session_date', None):
-			query['date'] = session.session_date.isoformat()
-		elif getattr(session, 'date', None):
-			query['date'] = session.date.date().isoformat()
-		dashboard_date = request.GET.get('dashboard_date')
-		if dashboard_date:
-			query['dashboard_date'] = dashboard_date
-		base = reverse('rtms_app:treatment_add', args=[patient.id])
-		back_url = f"{base}?{urlencode(query)}" if query else base
-
-	context = {
-		'patient': patient,
-		'session': session,
-		'session_number': session_number,
-		'side_effect_rows': rows,
-		'side_effect_memo': memo,
-		'side_effect_signature': signature,
-		'today': timezone.now().date(),
-		'back_url': back_url,
-	}
-	try:
-		target_date = session.session_date if getattr(session, 'session_date', None) else (session.date.date() if getattr(session, 'date', None) else timezone.now().date())
-	except Exception:
-		target_date = timezone.now().date()
-	content_label = CONTENT_LABELS.get('side_effect', '治療実施記録票')
-	context['pdf_filename'] = build_pdf_filename(patient, getattr(session, 'course_number', None) or getattr(patient, 'course_number', None), content_label, target_date)
+	context = _build_side_effect_context(request, patient_id, session_id)
 	return render_pdf_response(request, 'rtms_app/print/side_effect_check.html', context, context['pdf_filename'])
 
 
