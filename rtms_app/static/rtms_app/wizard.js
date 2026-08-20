@@ -29,6 +29,7 @@ class ProcedureWizard {
       step6_movement: false,
       step6_note: '',
       // Step7
+      step7_intensity_percent: '',
       step7_mt_percent: '',
       step7_discomfort: false,
       step7_movement: false,
@@ -49,13 +50,19 @@ class ProcedureWizard {
    */
   init() {
     this.setupEventListeners();
-    // Initialize Step7 default MT% from form or default to 120
+    // Step7の初期値・刻み値は治療実施画面の実フォームに合わせる
+    const intensityField = document.getElementById('id_intensity_percent');
     const mtField = document.getElementById('id_mt_percent');
-    if (mtField && mtField.value) {
-      this.state.step7_mt_percent = mtField.value;
-    } else {
-      this.state.step7_mt_percent = '120';
-    }
+    this.state.step7_intensity_percent = (intensityField && intensityField.value) ? intensityField.value : '60';
+    this.state.step7_mt_percent = (mtField && mtField.value) ? mtField.value : '100';
+    this.step7IntensityAttrs = {
+      min: (intensityField && intensityField.min) || '0',
+      step: (intensityField && intensityField.step) || '1',
+    };
+    this.step7MtAttrs = {
+      min: (mtField && mtField.min) || '0',
+      step: (mtField && mtField.step) || '1',
+    };
     this.render();
   }
 
@@ -146,9 +153,9 @@ class ProcedureWizard {
         return true;
 
       case 7:
-        // 刺激強度は既定値がいるので基本OK
-        if (!this.state.step7_mt_percent) {
-          alert('実施した刺激強度（%）を入力してください。');
+        // 刺激強度・%MT は既定値が入るので基本OK
+        if (!this.state.step7_intensity_percent || !this.state.step7_mt_percent) {
+          alert('実施した刺激強度と%MTを入力してください。');
           return false;
         }
         return true;
@@ -159,6 +166,40 @@ class ProcedureWizard {
 
       default:
         return true;
+    }
+  }
+
+  /**
+   * ウィザードで入力した内容を実際の治療フォームへ反映する
+   */
+  syncToTreatmentForm() {
+    const setValue = (id, value) => {
+      const el = document.getElementById(id);
+      if (el && value !== '' && value != null) {
+        el.value = value;
+      }
+    };
+    const setChecked = (id, checked) => {
+      const el = document.getElementById(id);
+      if (el) el.checked = checked;
+    };
+
+    setValue('id_intensity_percent', this.state.step7_intensity_percent);
+    setValue('id_mt_percent', this.state.step7_mt_percent);
+    setChecked('id_safety_sleep', this.state.step3_safety_sleep);
+    setChecked('id_safety_alcohol', this.state.step3_safety_alcohol);
+    setChecked('id_safety_meds', this.state.step3_safety_meds);
+
+    const wizardNotes = [this.state.step5_mt_note, this.state.step6_note, this.state.step7_note]
+      .map((s) => (s || '').trim())
+      .filter(Boolean)
+      .join(' / ');
+    if (wizardNotes) {
+      const notesEl = document.getElementById('id_treatment_notes');
+      if (notesEl) {
+        const existing = (notesEl.value || '').trim();
+        notesEl.value = existing ? `${existing}\n[手順解説モード] ${wizardNotes}` : `[手順解説モード] ${wizardNotes}`;
+      }
     }
   }
 
@@ -195,6 +236,19 @@ class ProcedureWizard {
     const sleepCheckbox = document.getElementById('id_safety_sleep');
     if (sleepCheckbox) {
       sleepCheckbox.dispatchEvent(new Event('change'));
+    }
+
+    // モーダルを閉じて治療フォームを送信（保存）
+    const modalEl = document.getElementById('procedureWizardModal');
+    if (modalEl && typeof bootstrap !== 'undefined') {
+      bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+    }
+    if (treatmentForm) {
+      if (treatmentForm.requestSubmit) {
+        treatmentForm.requestSubmit();
+      } else {
+        treatmentForm.submit();
+      }
     }
   }
 
@@ -554,16 +608,28 @@ class ProcedureWizard {
   }
 
   renderStep7() {
+    const intensityAttrs = this.step7IntensityAttrs || { min: '0', step: '1' };
+    const mtAttrs = this.step7MtAttrs || { min: '0', step: '1' };
     return `
       <h5 class="mb-3">Step 7: 治療刺激</h5>
       <div class="mb-2 text-muted">治療刺激をしてください。</div>
       <div class="row g-3">
         <div class="col-7">
-          <div class="form-group mb-3">
-            <label class="form-label fw-bold">実施した刺激強度（%MT）</label>
-            <input type="number" step="10" min="80" max="140" class="form-control form-control-sm" value="${this.state.step7_mt_percent}"
-              onchange="window.currentWizard.state.step7_mt_percent = this.value;">
-            <small class="text-muted">初期値120、10刻み</small>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <div class="form-group">
+                <label class="form-label fw-bold">実施した刺激強度</label>
+                <input type="number" step="${intensityAttrs.step}" min="${intensityAttrs.min}" class="form-control form-control-sm" value="${this.state.step7_intensity_percent}"
+                  onchange="window.currentWizard.state.step7_intensity_percent = this.value;">
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="form-group">
+                <label class="form-label fw-bold">%MT</label>
+                <input type="number" step="${mtAttrs.step}" min="${mtAttrs.min}" class="form-control form-control-sm" value="${this.state.step7_mt_percent}"
+                  onchange="window.currentWizard.state.step7_mt_percent = this.value;">
+              </div>
+            </div>
           </div>
           <div class="mt-2">
             <div class="form-check mt-2">

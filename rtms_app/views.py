@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
+from django.utils.safestring import mark_safe
 from django.urls import reverse
 from django.templatetags.static import static
 from datetime import timedelta, date
@@ -889,6 +890,23 @@ def treatment_add(request, patient_id):
     week_num = 1
     current_week_mapping = None
     mapping_alert = None
+
+    # 上部患者バー右側：モード切替（治療画面専用）
+    mode_switch_html = mark_safe(
+        """
+        <div class=\"btn-group\" role=\"group\" aria-label=\"mode-switch\">
+            <input type=\"radio\" class=\"btn-check\" name=\"modeSwitch\" id=\"treatModeRecord\" autocomplete=\"off\" checked>
+            <label class=\"btn btn-success btn-sm\" for=\"treatModeRecord\">
+                <i class=\"fas fa-pen me-1\"></i>治療内容記入モード
+            </label>
+
+            <input type=\"radio\" class=\"btn-check\" name=\"modeSwitch\" id=\"treatModeWizard\" autocomplete=\"off\">
+            <label class=\"btn btn-outline-success btn-sm\" for=\"treatModeWizard\">
+                <i class=\"fas fa-route me-1\"></i>手順解説モード
+            </label>
+        </div>
+        """
+    )
     if patient.first_treatment_date:
         tdates = generate_treatment_dates(patient.first_treatment_date, total=30, holidays=JP_HOLIDAYS)
         if initial_date in tdates:
@@ -1377,6 +1395,7 @@ def treatment_add(request, patient_id):
         'current_week_mapping': current_week_mapping,
         'treatment_positions': treatment_positions,
         'mapping_alert': mapping_alert,
+        'mode_switch_html': mode_switch_html,
         'initial_date': initial_date,
         'session_num': session_num,
         'week_num': week_num,

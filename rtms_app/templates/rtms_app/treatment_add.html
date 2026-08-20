@@ -362,15 +362,33 @@
                     </button>
                     <span class="small text-danger ms-2" id="saeStatus"></span>
                   </div>
-                  <div class="small mb-2">以下のいずれかがあった場合、報告書作成が必要です。該当症状の確認は入力モーダルで行います。</div>
-                  <ul class="small mb-0 ps-0 d-flex flex-wrap gap-2 list-unstyled">
-                    <li>けいれん発作</li>
-                    <li>手指の筋収縮</li>
-                    <li>失神</li>
-                    <li>躁病・軽躁病の出現</li>
-                    <li>自殺企図</li>
-                    <li>その他</li>
-                  </ul>
+                  <div class="small mb-2">該当する場合はチェックしてください。チェックすると下の「有害事象入力・報告書」ボタンが強調表示されます。</div>
+                  <div class="d-flex flex-wrap gap-3 mb-1">
+                    <label class="form-check form-check-inline">
+                      <input class="form-check-input sae-check" type="checkbox" name="sae_seizure" id="sae_seizure" form="treatmentForm" {% if sae_event_types_checked.sae_seizure %}checked{% endif %}>
+                      <span class="form-check-label">けいれん発作</span>
+                    </label>
+                    <label class="form-check form-check-inline">
+                      <input class="form-check-input sae-check" type="checkbox" name="sae_finger_muscle" id="sae_finger_muscle" form="treatmentForm" {% if sae_event_types_checked.sae_finger_muscle %}checked{% endif %}>
+                      <span class="form-check-label">手指の筋収縮</span>
+                    </label>
+                    <label class="form-check form-check-inline">
+                      <input class="form-check-input sae-check" type="checkbox" name="sae_syncope" id="sae_syncope" form="treatmentForm" {% if sae_event_types_checked.sae_syncope %}checked{% endif %}>
+                      <span class="form-check-label">失神</span>
+                    </label>
+                    <label class="form-check form-check-inline">
+                      <input class="form-check-input sae-check" type="checkbox" name="sae_mania" id="sae_mania" form="treatmentForm" {% if sae_event_types_checked.sae_mania %}checked{% endif %}>
+                      <span class="form-check-label">躁病・軽躁病の出現</span>
+                    </label>
+                    <label class="form-check form-check-inline">
+                      <input class="form-check-input sae-check" type="checkbox" name="sae_suicide_attempt" id="sae_suicide_attempt" form="treatmentForm" {% if sae_event_types_checked.sae_suicide_attempt %}checked{% endif %}>
+                      <span class="form-check-label">自殺企図</span>
+                    </label>
+                    <label class="form-check form-check-inline">
+                      <input class="form-check-input sae-check" type="checkbox" name="sae_other" id="sae_other" form="treatmentForm" {% if sae_event_types_checked.sae_other %}checked{% endif %}>
+                      <span class="form-check-label">その他</span>
+                    </label>
+                  </div>
                 </div>
                 <div id="sae_notice" class="d-none alert alert-warning mt-2">
                   <div class="fw-bold">
@@ -380,6 +398,10 @@
                     送付先：<a href="mailto:brainsway_saeinfo@cmi.co.jp">brainsway_saeinfo@cmi.co.jp</a>
                   </div>
                   <div class="small mt-1">上部の「有害事象入力・報告書」ボタンから詳細を入力し、報告書を印刷してください。</div>
+                </div>
+                <div class="mt-3">
+                  <label class="form-label fw-bold" for="id_treatment_notes">治療メモ</label>
+                  {{ form.treatment_notes }}
                 </div>
               </div>
             </div>
@@ -502,65 +524,10 @@
               <small class="text-muted">印刷後、このアドレスへメールで送付してください</small>
             </div>
           </div>
-          <!-- チェックされた事象 -->
+          <!-- チェックされた事象（治療画面上部のチェックボックスと連動、ここでは表示のみ） -->
           <div class="mb-3 border rounded p-2 bg-light">
             <label class="form-label fw-bold small mb-2">該当する有害事象（チェック済み）</label>
-            <div class="d-flex flex-wrap gap-2 mb-2">
-              <label class="form-check">
-                <input class="form-check-input sae-check"
-                       type="checkbox"
-                       name="sae_seizure"
-                       id="sae_seizure"
-                       form="treatmentForm"
-                       {% if sae_event_types_checked.sae_seizure %}checked{% endif %}>
-                <span class="form-check-label">けいれん発作</span>
-              </label>
-              <label class="form-check">
-                <input class="form-check-input sae-check"
-                       type="checkbox"
-                       name="sae_finger_muscle"
-                       id="sae_finger_muscle"
-                       form="treatmentForm"
-                       {% if sae_event_types_checked.sae_finger_muscle %}checked{% endif %}>
-                <span class="form-check-label">手指の筋収縮</span>
-              </label>
-              <label class="form-check">
-                <input class="form-check-input sae-check"
-                       type="checkbox"
-                       name="sae_syncope"
-                       id="sae_syncope"
-                       form="treatmentForm"
-                       {% if sae_event_types_checked.sae_syncope %}checked{% endif %}>
-                <span class="form-check-label">失神</span>
-              </label>
-              <label class="form-check">
-                <input class="form-check-input sae-check"
-                       type="checkbox"
-                       name="sae_mania"
-                       id="sae_mania"
-                       form="treatmentForm"
-                       {% if sae_event_types_checked.sae_mania %}checked{% endif %}>
-                <span class="form-check-label">躁病・軽躁病</span>
-              </label>
-              <label class="form-check">
-                <input class="form-check-input sae-check"
-                       type="checkbox"
-                       name="sae_suicide_attempt"
-                       id="sae_suicide_attempt"
-                       form="treatmentForm"
-                       {% if sae_event_types_checked.sae_suicide_attempt %}checked{% endif %}>
-                <span class="form-check-label">自殺企図</span>
-              </label>
-              <label class="form-check">
-                <input class="form-check-input sae-check"
-                       type="checkbox"
-                       name="sae_other"
-                       id="sae_other"
-                       form="treatmentForm"
-                       {% if sae_event_types_checked.sae_other %}checked{% endif %}>
-                <span class="form-check-label">その他</span>
-              </label>
-            </div>
+            <div class="small text-muted mb-2">チェックは治療実施画面上部のチェックボックスで行ってください。</div>
             <div id="saeCheckedEvents" class="d-flex flex-wrap gap-2">
               <span class="text-muted small">事象をチェックしてください</span>
             </div>
