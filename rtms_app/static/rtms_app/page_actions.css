@@ -1,11 +1,9 @@
-.page-exit-menu,
-.page-document-actions {
+.page-exit-menu {
     width: 100%;
     align-items: stretch;
 }
 
-.page-exit-menu .btn,
-.page-document-actions .btn {
+.page-exit-menu .btn {
     min-height: 44px;
     flex: 1 1 220px;
     max-width: 320px;
@@ -17,8 +15,7 @@
 
 @media (max-width: 575.98px) {
 
-    .page-exit-menu .btn,
-    .page-document-actions .btn {
+    .page-exit-menu .btn {
         flex-basis: 100%;
         max-width: none;
     }

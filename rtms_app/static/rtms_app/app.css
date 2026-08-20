@@ -28,18 +28,6 @@
   padding: 1rem;
 }
 
-/* === ページレイアウト === */
-.app-page-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin-bottom: 1.5rem;
-  color: #333;
-}
-
-.app-section {
-  margin-bottom: 2rem;
-}
-
 /* === 色管理（ページ別アクセント） === */
 [data-theme="dashboard"] {
   --card-accent: #388e3c;
@@ -61,13 +49,6 @@
   --topbar-height: 56px;
 }
 
-/* === Floating Menu 非干渉 === */
-.floating-action-menu {
-  bottom: 2rem;
-  right: 2rem;
-  z-index: 99;
-}
-
 /* === レスポンシブ調整 === */
 @media (max-width: 576px) {
   .app-card__header {
@@ -77,11 +58,6 @@
   
   .app-card__body {
     padding: 0.875rem;
-  }
-  
-  .app-page-title {
-    font-size: 1.25rem;
-    margin-bottom: 1rem;
   }
 }
 
