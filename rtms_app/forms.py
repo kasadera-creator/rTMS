@@ -217,6 +217,17 @@ class PatientFirstVisitForm(forms.ModelForm):
 
 # --- 3. 位置決めフォーム ---
 class MappingForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance.pk:
+            self.initial.update({
+                'resting_mt': 60,
+                'helmet_position_a_x': 3,
+                'helmet_position_a_y': 7,
+                'helmet_position_b_x': 9,
+                'helmet_position_b_y': 7,
+            })
+
     class Meta:
         model = MappingSession
         fields = [
@@ -228,11 +239,11 @@ class MappingForm(forms.ModelForm):
         widgets = {
             'date': DateInput(attrs={'class': 'form-control'}),
             'week_number': forms.Select(attrs={'class': 'form-select'}),
-            'resting_mt': forms.NumberInput(attrs={'class': 'form-control', 'required': True, 'min': 0, 'step': '1', 'value': '60'}),
-            'helmet_position_a_x': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5', 'value': '3', 'placeholder': 'X座標'}),
-            'helmet_position_a_y': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5', 'value': '1', 'placeholder': 'Y座標'}),
-            'helmet_position_b_x': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5', 'value': '9', 'placeholder': 'X座標'}),
-            'helmet_position_b_y': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5', 'value': '1', 'placeholder': 'Y座標'}),
+            'resting_mt': forms.NumberInput(attrs={'class': 'form-control', 'required': True, 'min': 0, 'step': '1'}),
+            'helmet_position_a_x': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5', 'placeholder': 'X座標'}),
+            'helmet_position_a_y': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5', 'placeholder': 'Y座標'}),
+            'helmet_position_b_x': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5', 'placeholder': 'X座標'}),
+            'helmet_position_b_y': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.5', 'placeholder': 'Y座標'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2})
         }
 
@@ -247,7 +258,7 @@ class TreatmentForm(forms.ModelForm):
         fields = [
             'safety_sleep', 'safety_alcohol', 'safety_meds',
             'coil_type', 'target_site',
-            'mt_percent',
+            'intensity_percent', 'mt_percent',
             'train_seconds', 'frequency_hz', 'intertrain_seconds',
             'train_count', 'total_pulses',
             'treatment_notes',
@@ -255,7 +266,8 @@ class TreatmentForm(forms.ModelForm):
         widgets = {
             'coil_type': forms.TextInput(attrs={'class': 'form-control', 'required': True, 'value': 'BrainsWay H1'}),
             'target_site': forms.TextInput(attrs={'class': 'form-control', 'required': True, 'value': '左DLPFC'}),
-            'mt_percent': forms.NumberInput(attrs={'class': 'form-control', 'required': True, 'min': 0}),
+            'intensity_percent': forms.NumberInput(attrs={'class': 'form-control', 'required': True, 'min': 0, 'step': '1'}),
+            'mt_percent': forms.NumberInput(attrs={'class': 'form-control', 'required': True, 'min': 0, 'step': '1'}),
             'train_seconds': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1', 'required': True, 'value': 2}),
             'frequency_hz': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1', 'required': True, 'value': 18}),
             'intertrain_seconds': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1', 'required': True, 'value': 20}),

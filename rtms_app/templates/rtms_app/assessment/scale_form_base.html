@@ -1,20 +1,26 @@
 {% extends "rtms_app/base.html" %}
 {% load static %}
-
 {% block body_class %}page-assessment{% endblock %}
-
 {% block header_breadcrumb %}
-  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
+  <a href="{% url 'rtms_app:dashboard' %}"
+     class="nav-link text-white-50 px-1"
+     style="text-decoration: none;
+            font-size: 0.9rem">ダッシュボード</a>
   <span class="text-white-50 px-1">/</span>
-  <a href="#" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ID {{ patient.card_id }}</a>
+  <a href="#"
+     class="nav-link text-white-50 px-1"
+     style="text-decoration: none;
+            font-size: 0.9rem">ID {{ patient.card_id }}</a>
   <span class="text-white-50 px-1">/</span>
-  <a href="{% url 'rtms_app:assessment_add' patient.id initial_timing %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">評価尺度（{{ initial_timing_display }}）</a>
+  <a href="{% url 'rtms_app:assessment_add' patient.id initial_timing %}"
+     class="nav-link text-white-50 px-1"
+     style="text-decoration: none;
+            font-size: 0.9rem">評価尺度（{{ initial_timing_display }}）</a>
   <span class="text-white-50 px-1">/</span>
   <span class="text-white px-1" style="font-size: 0.9rem;">{{ scale_name }}</span>
 {% endblock header_breadcrumb %}
-
 {% block extrastyle %}
-<style>
+  <style>
   .hamd-row { border: 1px solid #e9ecef; border-radius: 10px; background: #fff; }
   .hamd-row:hover { border-color: var(--color-assessment); background: #fef8f8; }
   .q-badge { width: 28px; height: 28px; background: #f1f3f5; color: #495057; border-radius: 999px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size: .8rem; }
@@ -71,64 +77,74 @@
       .sticky-scorebar { padding: 4px 8px; }
       .fab { padding: 6px 12px !important; font-size: 0.85rem !important; }
   }
-</style>
+  </style>
 {% endblock %}
-
 {% block content %}
-<div class="container py-3 mb-5">
-  {# Use shared patient info bar to ensure consistent placement and floating nav #}
-  {% include "rtms_app/partials/patient_inline_bar.html" with page_title="尺度評価 ("|add:scale_name|add:")" title_icon="fa-chart-bar" patient=patient dashboard_date=dashboard_date %}
-
-  <div class="alert alert-secondary mb-3 shadow-sm">
-    <i class="fas fa-calendar-alt me-1"></i>
-    <span class="fw-bold">評価予定日：</span>
-    {{ window_start|date:"Y年n月j日" }}〜{{ window_end|date:"Y年n月j日" }}
-    <span class="ms-2 text-muted small">（{{ initial_timing_display }}）</span>
+  <div class="container py-3 mb-5">
+    {# Use shared patient info bar to ensure consistent placement and floating nav #}
+    {% include "rtms_app/partials/patient_inline_bar.html" with page_title="尺度評価 ("|add:scale_name|add:")" title_icon="fa-chart-bar" patient=patient dashboard_date=dashboard_date %}
+    <div class="alert alert-secondary mb-3 shadow-sm">
+      <i class="fas fa-calendar-alt me-1"></i>
+      <span class="fw-bold">評価予定日：</span>
+      {{ window_start|date:"Y年n月j日" }}〜{{ window_end|date:"Y年n月j日" }}
+      <span class="ms-2 text-muted small">（{{ initial_timing_display }}）</span>
+    </div>
+    <form method="post" id="assessmentForm">
+      {% csrf_token %}
+      <input type="hidden" name="from" value="{{ from_page|default:'' }}">
+      <input type="hidden"
+             name="dashboard_date"
+             value="{{ dashboard_date|default:'' }}">
+      {% block scale_form_inner %}{% endblock %}
+    </form>
   </div>
-
-  <form method="post" id="assessmentForm">
-    {% csrf_token %}
-    {% block scale_form_inner %}{% endblock %}
-  </form>
-</div>
-
-{% url 'rtms_app:dashboard' as dashboard_url %}
-{% if dashboard_date %}
-  {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+  {% url 'rtms_app:dashboard' as dashboard_url %}
+  {% if dashboard_date %}
+    {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+      <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
+      <script src="{% static 'rtms_app/floating.js' %}"></script>
+      <div class="fab-stack no-print">
+        <button type="button"
+                class="btn btn-assessment fab"
+                onclick="RTMSFloating.submitFormById('assessmentForm')">
+          <i class="fas fa-save"></i>
+          {% if from_page == 'assessment_hub' %}
+            保存してHubへ戻る
+          {% else %}
+            保存
+          {% endif %}
+        </button>
+        <a class="btn btn-secondary fab" href="{{ back_url }}">
+          <i class="fas fa-undo"></i> 戻る
+        </a>
+      </div>
+    {% endwith %}
+  {% else %}
     <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
     <script src="{% static 'rtms_app/floating.js' %}"></script>
-
     <div class="fab-stack no-print">
-      <button type="button" class="btn btn-assessment fab" onclick="RTMSFloating.submitFormById('assessmentForm')">
-        <i class="fas fa-save"></i> 保存
+      <button type="button"
+              class="btn btn-assessment fab"
+              onclick="RTMSFloating.submitFormById('assessmentForm')">
+        <i class="fas fa-save"></i>
+        {% if from_page == 'assessment_hub' %}
+          保存してHubへ戻る
+        {% else %}
+          保存
+        {% endif %}
       </button>
-      <a class="btn btn-secondary fab" href="{{ back_url }}">
+      <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
         <i class="fas fa-undo"></i> 戻る
       </a>
     </div>
-  {% endwith %}
-{% else %}
-  <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
-  <script src="{% static 'rtms_app/floating.js' %}"></script>
-
-  <div class="fab-stack no-print">
-    <button type="button" class="btn btn-assessment fab" onclick="RTMSFloating.submitFormById('assessmentForm')">
-      <i class="fas fa-save"></i> 保存
-    </button>
-    <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
-      <i class="fas fa-undo"></i> 戻る
-    </a>
-  </div>
-{% endif %}
-
-{# Embed scores safely and restore hidden inputs BEFORE loading scale widget scripts #}
-{% if existing_scores %}
-  {{ existing_scores|json_script:"assessmentScores" }}
-{% else %}
-  {{ "{}"|json_script:"assessmentScores" }}
-{% endif %}
-
-<script>
+  {% endif %}
+  {# Embed scores safely and restore hidden inputs BEFORE loading scale widget scripts #}
+  {% if existing_scores %}
+    {{ existing_scores|json_script:"assessmentScores" }}
+  {% else %}
+    {{ "{}"|json_script:"assessmentScores" }}
+  {% endif %}
+  <script>
   (function(){
     const el = document.getElementById('assessmentScores');
     if (!el) return;
@@ -139,7 +155,6 @@
       if (hidden) hidden.value = String(value);
     }
   })();
-</script>
+  </script>
 {% endblock %}
-
 {% block scripts %}{% endblock %}

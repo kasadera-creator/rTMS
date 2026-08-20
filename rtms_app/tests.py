@@ -224,6 +224,10 @@ class TestPatientSurveyFlow(TestCase):
     def test_skip_undo_restores_original_dates(self):
         from datetime import date
         from rtms_app.models import TreatmentSkip
+        staff = get_user_model().objects.create_user(
+            username='skip-operator', password='pw', is_staff=True
+        )
+        self.client.force_login(staff)
         # create sessions
         d1 = date(2026,1,5)
         d2 = date(2026,1,6)

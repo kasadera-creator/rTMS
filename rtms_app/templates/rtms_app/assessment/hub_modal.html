@@ -1,0 +1,59 @@
+{# MODAL VERSION - THIS SHOULD BE RENDERED #}
+{# Modal version of assessment hub - no extends, just modal content #}
+<div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+    <div class="mb-2 fw-bold">尺度評価</div>
+    {% for section in matrix_sections %}
+        <section class="card shadow-sm border-0 mb-3">
+            <div class="card-header text-white"
+                 style="background-color: var(--color-assessment)">{{ section.title }}</div>
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle mb-0 assessment-matrix-modal">
+                    <thead class="table-light">
+                        <tr>
+                            <th>尺度</th>
+                            {% for column in section.columns %}<th class="text-center">{{ column.label }}</th>{% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in section.rows %}
+                            <tr>
+                                <th>{{ row.name }}</th>
+                                {% for cell in row.cells %}
+                                    <td class="p-1">
+                                        <a href="javascript:void(0)"
+                                           onclick="selectScale('{{ cell.url }}')"
+                                           class="assessment-cell {% if cell.is_done %}is-done{% endif %}"><span class="assessment-cell-status">{{ cell.status_text }}</span></a>
+                                    </td>
+                                {% endfor %}
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="{{ section.columns|length|add:1 }}"
+                                    class="text-muted text-center py-3">設定された尺度はありません</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    {% endfor %}
+</div>
+<style>
+    .assessment-matrix-modal { min-width: 560px; }
+    .assessment-matrix-modal th:first-child { min-width: 8rem; white-space: nowrap; }
+    .assessment-cell { min-height: 3.8rem; padding: .55rem .35rem; border: 1px solid #dee2e6; border-radius: .4rem; background: #f8f9fa; color: #495057; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; text-decoration: none; }
+    .assessment-cell.is-done { background: #edf8f0; border-color: #9bd2a6; color: #146c2e; }
+    .assessment-cell-status { font-weight: 700; font-size: .82rem; }
+</style>
+<script>
+function selectScale(url) {
+  // If modal mode, fetch the scale form and load it in the modal
+  fetch(url)
+    .then(r => r.text())
+    .then(html => {
+      document.getElementById('modalContent').innerHTML = html;
+      // Keep the modal visible
+    })
+    .catch(e => console.error('Scale load error:', e));
+}
+</script>

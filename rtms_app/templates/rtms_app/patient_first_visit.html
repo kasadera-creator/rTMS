@@ -1,13 +1,14 @@
 {% extends "rtms_app/base.html" %}
 {% load static %}
-{% block body_class %}page-first-visit{% endblock body_class %}
-
+{% block body_class %}
+  page-first-visit
+{% endblock body_class %}
 {% block header_breadcrumb %}
   <span class="text-white-50 ms-2">/ 初診</span>
 {% endblock header_breadcrumb %}
-
 {% block extrastyle %}
-<style>
+  <link rel="stylesheet" href="{% static 'rtms_app/page_actions.css' %}">
+  <style>
   .fv-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-4); }
   @media (min-width: 992px) {
     .fv-grid { grid-template-columns: 1.3fr 0.7fr; }
@@ -25,309 +26,355 @@
     textarea.fv-ta { height: 4.4em; }
     textarea.fv-ta.fv-ta--tall { height: 6.4em; }
   }
-</style>
+
+  /* HAM-D button styling for modal */
+  .hamd-btn.active {
+    background-color: #d32f2f !important;
+    color: white !important;
+    border-color: #d32f2f !important;
+  }
+  
+  /* HAM-D group focus styling */
+  .hamd-btn-group.hamd-focused {
+    background-color: #fff3e0;
+    border-left: 4px solid #ff9800;
+    padding-left: 0.5rem;
+  }
+  
+  /* Questionnaire group focus styling */
+  .questionnaire-focused {
+    background-color: #e8f5e9;
+    border-left: 4px solid #4caf50;
+    padding-left: 0.5rem;
+  }
+  </style>
 {% endblock extrastyle %}
-
 {% block content %}
-<div class="stack-md">
-  {% include "rtms_app/partials/patient_inline_bar.html" with page_title="初診・基本情報入力" title_icon="fa-file-medical" patient=patient %}
-
-  <form method="post" id="mainForm" class="form-rtms">
-    {% csrf_token %}
-    {# Hidden backing fields moved here after removing reference card #}
-    <input type="hidden" name="card_id" value="{{ patient.card_id }}">
-    <input type="hidden" name="name" value="{{ patient.name }}">
-    <input type="hidden" name="birth_date" value="{{ patient.birth_date|date:'Y-m-d' }}">
-    <input type="hidden" name="gender" value="{{ patient.gender }}">
-    {% if form.errors %}
-      <div class="alert alert-danger"><strong>保存できませんでした:</strong> {{ form.errors }}</div>
-    {% endif %}
-
-    <div class="fv-grid">
-      <!-- ===== 1画面目: 主要入力（左） ===== -->
-      <div class="stack-md">
-        {# 基本情報（参照）カードはUIから削除。参照用の hidden フィールドは上部に移動しました。 #}
-
-        <div class="card shadow-sm">
-          <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-first-visit);">
-            <i class="fas fa-file-medical"></i> 紹介元〜薬剤治療歴
-          </div>
-          <div class="card-body">
-          <div class="row g-3">
-            <div class="col-12">
-              <label class="form-label">紹介元情報</label>
-              <div class="row g-2">
-                <div class="col-md-6">
-                  <div class="input-group">
-                    <span class="input-group-text bg-light">医療機関</span>
-                    {{ form.referral_source }}
+  <div class="stack-md">
+    {% include "rtms_app/partials/patient_inline_bar.html" with page_title="初診・基本情報入力" title_icon="fa-file-medical" patient=patient %}
+    <form method="post" id="mainForm" class="form-rtms">
+      {% csrf_token %}
+      {# Hidden backing fields moved here after removing reference card #}
+      <input type="hidden" name="card_id" value="{{ patient.card_id }}">
+      <input type="hidden" name="name" value="{{ patient.name }}">
+      <input type="hidden"
+             name="birth_date"
+             value="{{ patient.birth_date|date:'Y-m-d' }}">
+      <input type="hidden" name="gender" value="{{ patient.gender }}">
+      {% if form.errors %}
+        <div class="alert alert-danger">
+          <strong>保存できませんでした:</strong> {{ form.errors }}
+        </div>
+      {% endif %}
+      <div class="fv-grid">
+        <!-- ===== 1画面目: 主要入力（左） ===== -->
+        <div class="stack-md">
+          {# 基本情報（参照）カードはUIから削除。参照用の hidden フィールドは上部に移動しました。 #}
+          <div class="card shadow-sm">
+            <div class="card-header card-header-accent fw-bold"
+                 style="--card-accent: var(--color-first-visit)">
+              <i class="fas fa-file-medical"></i> 紹介元〜薬剤治療歴
+            </div>
+            <div class="card-body">
+              <div class="row g-3">
+                <div class="col-12">
+                  <label class="form-label">紹介元情報</label>
+                  <div class="row g-2">
+                    <div class="col-md-6">
+                      <div class="input-group">
+                        <span class="input-group-text bg-light">医療機関</span>
+                        {{ form.referral_source }}
+                      </div>
+                      <datalist id="referral-options">
+                        {% for opt in referral_options %}<option value="{{ opt }}">{% endfor %}
+                        </datalist>
+                      </div>
+                      <div class="col-md-6">
+                        <div class="input-group">
+                          <span class="input-group-text bg-light">医師名</span>
+                          {{ form.referral_doctor }}
+                          <span class="input-group-text bg-light">先生</span>
+                        </div>
+                        <datalist id="doctor-options"></datalist>
+                      </div>
+                    </div>
                   </div>
-                  <datalist id="referral-options">
-                    {% for opt in referral_options %}<option value="{{ opt }}">{% endfor %}
-                  </datalist>
-                </div>
-                <div class="col-md-6">
-                  <div class="input-group">
-                    <span class="input-group-text bg-light">医師名</span>
-                    {{ form.referral_doctor }}
-                    <span class="input-group-text bg-light">先生</span>
+                  <div class="col-12">
+                    <label class="form-label">主訴</label>
+                    {{ form.chief_complaint }}
                   </div>
-                  <datalist id="doctor-options"></datalist>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-12">
-              <label class="form-label">主訴</label>
-              {{ form.chief_complaint }}
-            </div>
-
-            <div class="col-md-6">
-              <label class="form-label">生活歴</label>
-              <textarea name="{{ form.life_history.name }}" class="form-control fv-ta" data-fv-modal="1" data-fv-label="生活歴" rows="3">{{ form.life_history.value|default_if_none:"" }}</textarea>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">既往歴</label>
-              <textarea name="{{ form.past_history.name }}" class="form-control fv-ta" data-fv-modal="1" data-fv-label="既往歴" rows="3">{{ form.past_history.value|default_if_none:"" }}</textarea>
-            </div>
-
-            <div class="col-12">
-              <label class="form-label">現病歴</label>
-              <textarea name="{{ form.present_illness.name }}" class="form-control fv-ta fv-ta--tall" data-fv-modal="1" data-fv-label="現病歴" rows="6">{{ form.present_illness.value|default_if_none:"" }}</textarea>
-            </div>
-
-            <div class="col-12">
-              <label class="form-label">薬剤治療歴</label>
-              <textarea name="{{ form.medication_history.name }}" class="form-control fv-ta fv-ta--tall" data-fv-modal="1" data-fv-label="薬剤治療歴" rows="5">{{ form.medication_history.value|default_if_none:"" }}</textarea>
-            </div>
-            
-            <div class="col-12">
-                <label class="form-label">原疾患（うつ病）の推定発症年月</label>
-                <div class="d-flex flex-wrap gap-3 align-items-end">
-                  <div class="d-flex gap-2 align-items-end">
-                    <div>
-                      <label class="form-label mb-1">推定発症</label>
+                  <div class="col-md-6">
+                    <label class="form-label">生活歴</label>
+                    <textarea name="{{ form.life_history.name }}"
+                              class="form-control fv-ta"
+                              data-fv-modal="1"
+                              data-fv-label="生活歴"
+                              rows="3">{{ form.life_history.value|default_if_none:"" }}</textarea>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">既往歴</label>
+                    <textarea name="{{ form.past_history.name }}"
+                              class="form-control fv-ta"
+                              data-fv-modal="1"
+                              data-fv-label="既往歴"
+                              rows="3">{{ form.past_history.value|default_if_none:"" }}</textarea>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label">現病歴</label>
+                    <textarea name="{{ form.present_illness.name }}"
+                              class="form-control fv-ta fv-ta--tall"
+                              data-fv-modal="1"
+                              data-fv-label="現病歴"
+                              rows="6">{{ form.present_illness.value|default_if_none:"" }}</textarea>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label">薬剤治療歴</label>
+                    <textarea name="{{ form.medication_history.name }}"
+                              class="form-control fv-ta fv-ta--tall"
+                              data-fv-modal="1"
+                              data-fv-label="薬剤治療歴"
+                              rows="5">{{ form.medication_history.value|default_if_none:"" }}</textarea>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label">原疾患（うつ病）の推定発症年月</label>
+                    <div class="d-flex flex-wrap gap-3 align-items-end">
                       <div class="d-flex gap-2 align-items-end">
                         <div>
-                          {{ form.estimated_onset_year }} 年
+                          <label class="form-label mb-1">推定発症</label>
+                          <div class="d-flex gap-2 align-items-end">
+                            <div>{{ form.estimated_onset_year }} 年</div>
+                            <div>{{ form.estimated_onset_month }} 月</div>
+                          </div>
                         </div>
+                      </div>
+                      <div class="d-flex gap-3 align-items-end ms-auto">
                         <div>
-                          {{ form.estimated_onset_month }} 月
+                          <label class="form-label mb-1">体重</label>
+                          <div class="input-group" style="width: 12rem;">
+                            {{ form.weight_kg }}
+                            <span class="input-group-text">kg</span>
+                          </div>
+                        </div>
+                        <div class="form-check d-flex align-items-center mb-1">
+                          {{ form.is_weight_unknown }}
+                          <label class="form-check-label ms-2" for="id_is_weight_unknown">不明</label>
                         </div>
                       </div>
                     </div>
                   </div>
-
-                  <div class="d-flex gap-3 align-items-end ms-auto">
-                    <div>
-                      <label class="form-label mb-1">体重</label>
-                      <div class="input-group" style="width: 12rem;">
-                        {{ form.weight_kg }}
-                        <span class="input-group-text">kg</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- ===== 2画面目: 短い入力・導線（右） ===== -->
+          <div class="stack-md">
+            <div class="card shadow-sm">
+              <div class="card-header card-header-accent fw-bold"
+                   style="--card-accent: var(--color-first-visit)">
+                <i class="fas fa-user-md"></i> 診断名
+              </div>
+              <div class="card-body">
+                {{ form.diagnosis }}
+                <!-- Old diagnosis checklist removed. New UI renders below. -->
+                <div class="mt-3">
+                  <label class="form-label">診断名（今回 rTMS の適応となるうつ病以外の精神疾患の既往）</label>
+                  <div>
+                    <div id="psychiatric-radio">
+                      <div class="d-flex flex-wrap gap-3 mt-2">
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input"
+                                 type="radio"
+                                 name="has_other_psychiatric_history"
+                                 id="id_has_other_psychiatric_history_yes"
+                                 value="yes"
+                                 {% if form.has_other_psychiatric_history.value == "yes" %}checked{% endif %}>
+                          <label class="form-check-label" for="id_has_other_psychiatric_history_yes">有</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input"
+                                 type="radio"
+                                 name="has_other_psychiatric_history"
+                                 id="id_has_other_psychiatric_history_no"
+                                 value="no"
+                                 {% if form.has_other_psychiatric_history.value == "no" %}checked{% endif %}>
+                          <label class="form-check-label" for="id_has_other_psychiatric_history_no">無</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input"
+                                 type="radio"
+                                 name="has_other_psychiatric_history"
+                                 id="id_has_other_psychiatric_history_unknown"
+                                 value="unknown"
+                                 {% if form.has_other_psychiatric_history.value == "unknown" %}checked{% endif %}>
+                          <label class="form-check-label"
+                                 for="id_has_other_psychiatric_history_unknown">不明</label>
+                        </div>
+                      </div>
+                      <!-- debug removed -->
+                    </div>
+                  </div>
+                  <div id="psychiatric-history-panel" class="d-none mt-3">
+                    <div class="small text-muted mb-2">該当する病名にチェックしてください</div>
+                    <div class="psy-list">
+                      <div class="row g-2">
+                        {% for cb in form.psychiatric_history %}
+                          <div class="col-12 col-md-6">
+                            <div class="form-check">
+                              {{ cb.tag }}
+                              <label class="form-check-label" for="{{ cb.id_for_label }}">{{ cb.choice_label }}</label>
+                            </div>
+                          </div>
+                        {% endfor %}
                       </div>
                     </div>
-
-                    <div class="form-check d-flex align-items-center mb-1">
-                      {{ form.is_weight_unknown }}
-                      <label class="form-check-label ms-2" for="id_is_weight_unknown">不明</label>
+                    <div class="mt-2">
+                      <label class="form-label small">その他（自由記載）</label>
+                      {{ form.psychiatric_history_other_text }}
                     </div>
                   </div>
                 </div>
-            </div>
-          </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ===== 2画面目: 短い入力・導線（右） ===== -->
-      <div class="stack-md">
-        <div class="card shadow-sm">
-          <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-first-visit);">
-            <i class="fas fa-user-md"></i> 診断名
-          </div>
-          <div class="card-body">
-          {{ form.diagnosis }}
-
-          <!-- Old diagnosis checklist removed. New UI renders below. -->
-
-            <div class="mt-3">
-            <label class="form-label">診断名（今回 rTMS の適応となるうつ病以外の精神疾患の既往）</label>
-            <div>
-              <div id="psychiatric-radio">
-                <div class="d-flex flex-wrap gap-3 mt-2">
-                  <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="has_other_psychiatric_history" id="id_has_other_psychiatric_history_yes" value="yes" {% if form.has_other_psychiatric_history.value == "yes" %}checked{% endif %}>
-                    <label class="form-check-label" for="id_has_other_psychiatric_history_yes">有</label>
-                  </div>
-                  <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="has_other_psychiatric_history" id="id_has_other_psychiatric_history_no" value="no" {% if form.has_other_psychiatric_history.value == "no" %}checked{% endif %}>
-                    <label class="form-check-label" for="id_has_other_psychiatric_history_no">無</label>
-                  </div>
-                  <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="has_other_psychiatric_history" id="id_has_other_psychiatric_history_unknown" value="unknown" {% if form.has_other_psychiatric_history.value == "unknown" %}checked{% endif %}>
-                    <label class="form-check-label" for="id_has_other_psychiatric_history_unknown">不明</label>
-                  </div>
-                </div>
-                <!-- debug removed -->
               </div>
             </div>
-
-            <div id="psychiatric-history-panel" class="d-none mt-3">
-              <div class="small text-muted mb-2">該当する病名にチェックしてください</div>
-              <div class="psy-list">
-                <div class="row g-2">
-                  {% for cb in form.psychiatric_history %}
-                    <div class="col-12 col-md-6">
-                      <div class="form-check">
-                        {{ cb.tag }}
-                        <label class="form-check-label" for="{{ cb.id_for_label }}">{{ cb.choice_label }}</label>
+            <div class="card shadow-sm">
+              <div class="card-header card-header-accent fw-bold"
+                   style="--card-accent: var(--color-first-visit)">
+                <i class="fas fa-clipboard-list"></i> 重症度評価 / 適正質問票
+              </div>
+              <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                  <div>
+                    <div class="fw-bold">HAM-D（治療前）</div>
+                    {% if baseline_assessment %}
+                      <div class="small muted">
+                        HAMD17: {{ baseline_assessment.total_score_17 }} / HAMD21: {{ baseline_assessment.total_score_21 }}
                       </div>
-                    </div>
-                  {% endfor %}
+                      <div class="badge-rtms success mt-1">評価済</div>
+                    {% else %}
+                      <div class="badge-rtms gray mt-1">未入力</div>
+                    {% endif %}
+                  </div>
+                  <button type="button"
+                          class="btn btn-outline-assessment btn-sm"
+                          onclick="loadAssessmentModal('baseline')">入力する</button>
+                </div>
+                <hr class="my-3">
+                <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                  <div>
+                    <div class="fw-bold">rTMS 適正質問票</div>
+                    {% if questionnaire_done %}
+                      <div class="badge-rtms success mt-1">入力済</div>
+                    {% else %}
+                      <div class="badge-rtms gray mt-1">未入力</div>
+                    {% endif %}
+                  </div>
+                  <button type="button"
+                          class="btn btn-outline-first-visit btn-sm"
+                          onclick="loadQuestionnaireModal()">入力する</button>
                 </div>
               </div>
-              <div class="mt-2">
-                <label class="form-label small">その他（自由記載）</label>
-                {{ form.psychiatric_history_other_text }}
+            </div>
+            <div class="card shadow-sm">
+              <div class="card-header card-header-accent fw-bold"
+                   style="--card-accent: var(--color-first-visit)">
+                <i class="fas fa-calendar-check"></i> スケジュール・担当医
+              </div>
+              <div class="card-body">
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label class="form-label">入院予定日</label>
+                    {{ form.admission_date }}
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">初回治療日</label>
+                    {{ form.first_treatment_date }}
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label">今後の担当医</label>
+                    {{ form.attending_physician }}
+                  </div>
+                  <div class="col-12 mt-2">
+                    <div class="form-check">
+                      {{ form.is_all_case_survey }}
+                      <label class="form-check-label" for="id_is_all_case_survey">全例調査対象（※該当時は4週目にもHAM-D指示）</label>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-          </div>
         </div>
-
-        <div class="card shadow-sm">
-          <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-first-visit);">
-            <i class="fas fa-clipboard-list"></i> 重症度評価 / 適正質問票
-          </div>
-          <div class="card-body">
-          <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
-            <div>
-              <div class="fw-bold">HAM-D（治療前）</div>
-              {% if baseline_assessment %}
-                <div class="small muted">HAMD17: {{ baseline_assessment.total_score_17 }} / HAMD21: {{ baseline_assessment.total_score_21 }}</div>
-                <div class="badge-rtms success mt-1">評価済</div>
-              {% else %}
-                <div class="badge-rtms gray mt-1">未入力</div>
-              {% endif %}
-            </div>
-            <a class="btn btn-outline-assessment btn-sm" href="{% url 'rtms_app:assessment_add' patient.id 'baseline' %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">入力する</a>
-          </div>
-
-          <hr class="my-3">
-
-          <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
-            <div>
-              <div class="fw-bold">rTMS 適正質問票</div>
-              {% if questionnaire_done %}
-                <div class="badge-rtms success mt-1">入力済</div>
-              {% else %}
-                <div class="badge-rtms gray mt-1">未入力</div>
-              {% endif %}
-            </div>
-            <a class="btn btn-outline-first-visit btn-sm" href="{% url 'rtms_app:questionnaire_edit' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">入力する</a>
-          </div>
-          </div>
-        </div>
-
-        <div class="card shadow-sm">
-          <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-first-visit);">
-            <i class="fas fa-calendar-check"></i> スケジュール・担当医
-          </div>
-          <div class="card-body">
-          <div class="row g-3">
-            <div class="col-md-6"><label class="form-label">入院予定日</label>{{ form.admission_date }}</div>
-            <div class="col-md-6"><label class="form-label">初回治療日</label>{{ form.first_treatment_date }}</div>
-            <div class="col-12"><label class="form-label">今後の担当医</label>{{ form.attending_physician }}</div>
-            <div class="col-12 mt-2">
-              <div class="form-check">
-                {{ form.is_all_case_survey }}
-                <label class="form-check-label" for="id_is_all_case_survey">全例調査対象（※該当時は4週目にもHAM-D指示）</label>
-              </div>
-            </div>
-          </div>
-          </div>
-        </div>
-
-        <div class="card shadow-sm">
-          <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-first-visit);">
-            <i class="fas fa-print"></i> 印刷・書類
-          </div>
-          <div class="card-body">
-          <div class="small text-muted mb-3">各ドキュメントを個別に印刷・保存できます</div>
-          <div class="d-grid gap-2">
-            <a class="btn btn-primary btn-sm" href="{% url 'rtms_app:print:patient_print_admission' patient.id %}" target="_blank" rel="noopener">
+      </form>
+      {% url 'rtms_app:dashboard' as dashboard_url %}
+      {% if dashboard_date %}
+        {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+          <div class="page-exit-menu no-print d-flex flex-wrap justify-content-center gap-2 mt-4 pt-3 border-top">
+            <button type="submit" form="mainForm" class="btn btn-first-visit">
+              <i class="fas fa-save"></i> 保存
+            </button>
+            <a class="btn btn-primary"
+               href="{% url 'rtms_app:print:patient_print_admission' patient.id %}"
+               target="_blank"
+               rel="noopener">
               <i class="fas fa-print"></i> 入院時サマリーを印刷
             </a>
-            <a class="btn btn-primary btn-sm" href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}" target="_blank" rel="noopener">
-              <i class="fas fa-print"></i> rTMS問診票を印刷
+            <a class="btn btn-primary"
+               href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}"
+               target="_blank"
+               rel="noopener">
+              <i class="fas fa-print"></i> rTMS適正質問票を印刷
             </a>
-            <a class="btn btn-outline-primary btn-sm" href="{% url 'rtms_app:latest_consent' %}" target="_blank" rel="noopener">
-              <i class="fas fa-file-pdf"></i> 説明同意書（PDF）
+            <a class="btn btn-outline-primary"
+               href="{% url 'rtms_app:latest_consent' %}"
+               target="_blank"
+               rel="noopener">
+              <i class="fas fa-file-pdf"></i> 説明同意書（PDF）を表示・印刷
+            </a>
+            <a class="btn btn-secondary" href="{{ back_url }}">
+              <i class="fas fa-undo"></i> 戻る
             </a>
           </div>
-          </div>
+        {% endwith %}
+      {% else %}
+        <div class="page-exit-menu no-print d-flex flex-wrap justify-content-center gap-2 mt-4 pt-3 border-top">
+          <button type="submit" form="mainForm" class="btn btn-first-visit">
+            <i class="fas fa-save"></i> 保存
+          </button>
+          <a class="btn btn-primary"
+             href="{% url 'rtms_app:print:patient_print_admission' patient.id %}"
+             target="_blank"
+             rel="noopener">
+            <i class="fas fa-print"></i> 入院時サマリーを印刷
+          </a>
+          <a class="btn btn-primary"
+             href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}"
+             target="_blank"
+             rel="noopener">
+            <i class="fas fa-print"></i> rTMS適正質問票を印刷
+          </a>
+          <a class="btn btn-outline-primary"
+             href="{% url 'rtms_app:latest_consent' %}"
+             target="_blank"
+             rel="noopener">
+            <i class="fas fa-file-pdf"></i> 説明同意書（PDF）を表示・印刷
+          </a>
+          <a class="btn btn-secondary" href="{{ dashboard_url }}">
+            <i class="fas fa-undo"></i> 戻る
+          </a>
         </div>
-      </div>
-    </div>
-  </form>
-
-  {% url 'rtms_app:dashboard' as dashboard_url %}
-  {% if dashboard_date %}
-    {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
-      <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
-      <script src="{% static 'rtms_app/floating.js' %}"></script>
-
-      <div class="fab-stack no-print">
-        <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_admission' patient.id %}" target="_blank">
-          <i class="fas fa-file-pdf"></i> 入院時
-        </a>
-        <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}" target="_blank">
-          <i class="fas fa-file-pdf"></i> 問診票
-        </a>
-        <button type="button" class="btn btn-first-visit fab"
-                onclick="RTMSFloating.submitFormById('mainForm')">
-          <i class="fas fa-save"></i> 保存
-        </button>
-
-        <a class="btn btn-secondary fab" href="{{ back_url }}">
-          <i class="fas fa-undo"></i> 戻る
-        </a>
-      </div>
-    {% endwith %}
-  {% else %}
-    <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
-    <script src="{% static 'rtms_app/floating.js' %}"></script>
-
-    <div class="fab-stack no-print">
-      <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_admission' patient.id %}" target="_blank">
-        <i class="fas fa-file-pdf"></i> 入院時
-      </a>
-      <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}" target="_blank">
-        <i class="fas fa-file-pdf"></i> 問診票
-      </a>
-      <button type="button" class="btn btn-first-visit fab"
-              onclick="RTMSFloating.submitFormById('mainForm')">
-        <i class="fas fa-save"></i> 保存
-      </button>
-
-      <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
-        <i class="fas fa-undo"></i> 戻る
-      </a>
-    </div>
-  {% endif %}
-  
-{% endblock content %}
-
-{% block scripts %}
-<script>
+      {% endif %}
+    {% endblock content %}
+    {% block scripts %}
+      <script>
   // 紹介元・紹介医の連携（アップロード版を維持）
-  const referralMap = JSON.parse('{{ referral_map_json|safe }}');
-  const sourceInput = document.querySelector('input[name="referral_source"]');
-  const doctorInput = document.querySelector('input[name="referral_doctor"]');
-  const doctorDatalist = document.getElementById('doctor-options');
+  try {
+    const referralMapJson = '{{ referral_map_json|safe }}';
+    const referralMap = referralMapJson ? JSON.parse(referralMapJson) : {};
+    const sourceInput = document.querySelector('input[name="referral_source"]');
+    const doctorInput = document.querySelector('input[name="referral_doctor"]');
+    const doctorDatalist = document.getElementById('doctor-options');
 
-  function updateDoctorOptions() {
-    if (!sourceInput || !doctorDatalist) return;
+    function updateDoctorOptions() {
+      if (!sourceInput || !doctorDatalist) return;
     const selectedSource = sourceInput.value;
     doctorDatalist.innerHTML = '';
     if (referralMap[selectedSource]) {
@@ -395,9 +442,8 @@
 
     // --- Psychiatric history toggle (moved to robust init below) ---
   });
-</script>
-
-<script>
+      </script>
+      <script>
 // Robust init for psychiatric-history-panel: immediate + pageshow + turbo/htmx aware
 (function () {
   function init() {
@@ -457,7 +503,8 @@
 
     // restore existing selections from server-side data
     try {
-      const existing = JSON.parse('{{ patient.psychiatric_history|default:"[]"|escapejs }}');
+      const psyhistJson = '{{ patient.psychiatric_history|default:"[]"|escapejs }}';
+      const existing = psyhistJson && psyhistJson.trim() ? JSON.parse(psyhistJson) : [];
       if (Array.isArray(existing) && existing.length > 0) {
         existing.forEach(code => {
           const el = document.querySelector(`#psychiatric-history-panel input[type=checkbox][value="${code}"]`);
@@ -467,7 +514,7 @@
         if (yesRadio) yesRadio.checked = true;
       }
     } catch (e) {
-      console.debug('[psych] restore error', e);
+      console.error('[psych] restore error', e);
     }
 
     // run initial sync
@@ -483,23 +530,495 @@
   document.addEventListener('turbo:load', init);
   document.body.addEventListener('htmx:afterSwap', init);
 })();
-</script>
+      </script>
+      <div class="modal fade"
+           id="fvTextareaModal"
+           tabindex="-1"
+           aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" data-fv-modal-title>入力</h5>
+              <button type="button"
+                      class="btn-close"
+                      data-bs-dismiss="modal"
+                      aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <textarea class="form-control" rows="12"></textarea>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+              <button type="button" class="btn btn-primary" data-fv-modal-save>反映</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Assessment/Questionnaire Modal -->
+      <div class="modal fade"
+           id="assessmentQuestionnaireModal"
+           tabindex="-1"
+           aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+          <div class="modal-content">
+            <div id="modalContent"></div>
+          </div>
+        </div>
+      </div>
+      <script>
+// Modal for Assessment and Questionnaire forms
+let currentModal = null;
 
-<div class="modal fade" id="fvTextareaModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" data-fv-modal-title>入力</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <textarea class="form-control" rows="12"></textarea>
-      </div>
-      <div class="modal-footer">
+function loadAssessmentModal(timing) {
+  // Directly load HAM-D assessment form in modal (skip scale selection hub)
+  let url = `{% url 'rtms_app:assessment_scale' patient.id 'TIMING' 'hamd' %}?modal=1`.replace('TIMING', timing);
+  const dashboardDate = '{{ dashboard_date }}';
+  if (dashboardDate) {
+    url += `&dashboard_date=${dashboardDate}`;
+  }
+  
+  fetch(url)
+    .then(r => r.text())
+    .then(html => {
+      console.log('DEBUG loadAssessmentModal: Got HTML response', html.length, 'bytes');
+      
+      // Extract script tags from HTML
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      const scripts = doc.querySelectorAll('script');
+      const scriptContents = Array.from(scripts).map(s => s.textContent);
+      
+      // Remove script tags before inserting HTML
+      const htmlWithoutScripts = html.replace(/<script\b [^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+      
+      document.getElementById('modalContent').innerHTML = htmlWithoutScripts;
+      console.log('DEBUG: Inserted HTML into modalContent');
+      
+      // hamd_modal.html returns bare modal-header/body/footer (no modal-content wrapper)
+      // So we work directly with the modalContent div
+      const modalContent = document.getElementById('modalContent');
+      console.log('DEBUG: modalContent (direct)', !!modalContent);
+      
+      // Remove existing footer if present (from hamd_modal.html)
+      const oldFooter = modalContent.querySelector('.modal-footer');
+      console.log('DEBUG: oldFooter found:', !!oldFooter);
+      if (oldFooter) {
+        console.log('DEBUG: Removing old footer');
+        oldFooter.remove();
+      }
+      
+      // Create new footer with the save button
+      const buttonContainer = document.createElement('div');
+      buttonContainer.className = 'modal-footer bg-light';
+      buttonContainer.style.cssText = `
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        padding: 1rem;
+        border-top: 1px solid #dee2e6;
+      `;
+      buttonContainer.innerHTML = `
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
-        <button type="button" class="btn btn-primary" data-fv-modal-save>反映</button>
-      </div>
-    </div>
-  </div>
-</div>
+        <button type="button" class="btn btn-primary" onclick="submitHamdModalForm()">保存して閉じる</button>
+      `;
+      
+      // Append footer to modal-content
+      console.log('DEBUG: Appending new footer to modalContent');
+      modalContent.appendChild(buttonContainer);
+      
+      // Execute extracted scripts in order (this ensures initHamdModal is defined)
+      for (const scriptContent of scriptContents) {
+        if (scriptContent.trim()) {
+          console.log('DEBUG: Executing extracted script');
+          const script = document.createElement('script');
+          script.textContent = scriptContent;
+          document.body.appendChild(script);
+          script.remove();
+        }
+      }
+      
+      // Show modal
+      currentModal = new bootstrap.Modal(document.getElementById('assessmentQuestionnaireModal'));
+      currentModal.show();
+      
+      // Initialize HAM-D keyboard navigation
+      setTimeout(() => {
+        hamdGroupIndex = 0;
+        setHamdGroupFocus(0);
+        console.log('DEBUG: HAM-D keyboard initialized');
+      }, 300);
+      
+      // Initialize HAM-D modal handlers
+      setTimeout(() => {
+        if (window.initHamdModal) {
+          console.log('DEBUG: Calling initHamdModal');
+          window.initHamdModal();
+        } else {
+          console.log('DEBUG: initHamdModal not found in window');
+        }
+      }, 150);
+    })
+    .catch(e => console.error('Modal load error:', e));
+}
+
+function loadQuestionnaireModal() {
+  let url = `{% url 'rtms_app:questionnaire_edit' patient.id %}?modal=1`;
+  const dashboardDate = '{{ dashboard_date }}';
+  if (dashboardDate) {
+    url += `&dashboard_date=${dashboardDate}`;
+  }
+  
+  fetch(url)
+    .then(r => r.text())
+    .then(html => {
+      document.getElementById('modalContent').innerHTML = html;
+      
+      // Find modal-content within the modalContent div
+      const modalContent = document.getElementById('modalContent').querySelector('.modal-content');
+      
+      // Create button container with right-aligned flexbox
+      const buttonContainer = document.createElement('div');
+      buttonContainer.className = 'modal-footer bg-light';
+      buttonContainer.style.cssText = `
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        padding: 1rem;
+        border-top: 1px solid #dee2e6;
+      `;
+      buttonContainer.innerHTML = `
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button type="button" class="btn btn-primary" onclick="submitQuestionnaireModalForm()">保存して閉じる</button>
+      `;
+      
+      // Remove old footer if exists
+      const oldFooter = modalContent?.querySelector('.modal-footer');
+      if (oldFooter) oldFooter.remove();
+      
+      // Add footer to modal-content
+      if (modalContent) {
+        modalContent.appendChild(buttonContainer);
+      }
+      
+      currentModal = new bootstrap.Modal(document.getElementById('assessmentQuestionnaireModal'));
+      currentModal.show();
+      
+      // Initialize questionnaire keyboard navigation
+      setTimeout(() => {
+        questionnaireGroupIndex = 0;
+        setQuestionnaireGroupFocus(0);
+      }, 300);
+      
+      // Initialize questionnaire modal handlers
+      if (window.initQuestionnaireModal) {
+        window.initQuestionnaireModal();
+      }
+    })
+    .catch(e => console.error('Modal load error:', e));
+}
+
+function submitAssessmentModal() {
+  const form = document.getElementById('assessmentForm');
+  if (!form) return;
+  
+  const formData = new FormData(form);
+  const url = form.action || window.location.href;
+  
+  fetch(url, {
+    method: 'POST',
+    body: formData,
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest'
+    }
+  })
+    .then(r => {
+      if (!r.ok) throw new Error('Network response was not ok');
+      return r.json().catch(e => {
+        console.error('JSON parse error:', e, 'Response status:', r.status);
+        throw new Error('Invalid JSON response');
+      });
+    })
+    .then(data => {
+      if (data && data.status === 'success') {
+        currentModal.hide();
+        // Reload the first visit page to show updated status
+        setTimeout(() => location.reload(), 300);
+      } else {
+        alert('保存に失敗しました: ' + (data && data.message ? data.message : '不明なエラー'));
+      }
+    })
+    .catch(e => {
+      console.error('Submit error:', e);
+      alert('保存に失敗しました。');
+    });
+}
+
+function submitQuestionnaireModal() {
+  const form = document.getElementById('questionnaireForm');
+  if (!form) return;
+  
+  const formData = new FormData(form);
+  const url = form.action || window.location.href;
+  
+  fetch(url, {
+    method: 'POST',
+    body: formData,
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest'
+    }
+  })
+    .then(r => {
+      if (!r.ok) throw new Error('Network response was not ok');
+      return r.json().catch(e => {
+        console.error('JSON parse error:', e, 'Response status:', r.status);
+        throw new Error('Invalid JSON response');
+      });
+    })
+    .then(data => {
+      if (data && data.status === 'success') {
+        currentModal.hide();
+        // Reload the first visit page to show updated status
+        setTimeout(() => location.reload(), 300);
+      } else {
+        alert('保存に失敗しました: ' + (data && data.message ? data.message : '不明なエラー'));
+      }
+    })
+    .catch(e => {
+      console.error('Submit error:', e);
+      alert('保存に失敗しました。');
+    });
+}
+
+// Global HAM-D and Questionnaire modal handlers
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.hamd-btn');
+  if (!btn) return;
+  
+  e.preventDefault();
+  const group = btn.closest('.hamd-btn-group');
+  if (!group) return;
+  
+  // Deselect all buttons in this group
+  group.querySelectorAll('.hamd-btn').forEach(b => {
+    b.classList.remove('active');
+  });
+  
+  // Select this button
+  btn.classList.add('active');
+  
+  // Update hidden input
+  const key = group.dataset.hamdKey;
+  const value = btn.dataset.value;
+  const hamdRow = group.closest('.hamd-row');
+  if (hamdRow) {
+    const hiddenInput = hamdRow.querySelector(`input[name="${key}"]`);
+    if (hiddenInput) {
+      hiddenInput.value = value;
+    }
+  }
+});
+
+// HAM-D keyboard input with auto-advance (0-4 keys)
+let hamdGroupIndex = 0;
+function getHamdGroups() {
+  return Array.from(document.querySelectorAll('.hamd-btn-group'));
+}
+
+function setHamdGroupFocus(index) {
+  const groups = getHamdGroups();
+  if (index < 0 || index >= groups.length) return;
+  
+  // Remove focus styling from all groups
+  groups.forEach(g => g.classList.remove('hamd-focused'));
+  
+  // Add focus styling to current group
+  groups[index].classList.add('hamd-focused');
+  
+  // Scroll into view
+  groups[index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  
+  hamdGroupIndex = index;
+}
+
+document.addEventListener('keydown', function(e) {
+  if (!['0', '1', '2', '3', '4'].includes(e.key)) return;
+  
+  // Check if we're in a text input
+  if (e.target.tagName === 'INPUT' && e.target.type === 'text') return;
+  if (e.target.tagName === 'TEXTAREA') return;
+  
+  const groups = getHamdGroups();
+  if (groups.length === 0) return;
+  
+  // Check if we're in a modal or full page with HAM-D
+  // If no group is focused, focus first group
+  if (hamdGroupIndex >= groups.length) {
+    hamdGroupIndex = 0;
+  }
+  
+  const currentGroup = groups[hamdGroupIndex];
+  const button = currentGroup.querySelector(`button[data-value="${e.key}"]`);
+  
+  if (button) {
+    e.preventDefault();
+    button.click();
+    
+    // Highlight focus for visual feedback
+    setHamdGroupFocus(hamdGroupIndex);
+    
+    // Move to next group if not at end
+    if (hamdGroupIndex < groups.length - 1) {
+      setHamdGroupFocus(hamdGroupIndex + 1);
+    }
+  }
+});
+
+// Questionnaire keyboard input (Y for yes, N for no) with auto-advance
+let questionnaireGroupIndex = 0;
+function getQuestionnaireRadioGroups() {
+  const groups = {};
+  const allRadios = document.querySelectorAll('input[type="radio"]');
+  allRadios.forEach(radio => {
+    if (!groups[radio.name]) {
+      groups[radio.name] = [];
+    }
+    groups[radio.name].push(radio);
+  });
+  return Object.entries(groups).map(([name, radios]) => ({ name, radios }));
+}
+
+function setQuestionnaireGroupFocus(index) {
+  const groups = getQuestionnaireRadioGroups();
+  if (index < 0 || index >= groups.length) return;
+  
+  // Remove focus styling from all rows
+  document.querySelectorAll('tr').forEach(tr => {
+    tr.classList.remove('questionnaire-focused');
+  });
+  
+  // Find the row for this radio group and add focus style
+  const currentRadios = groups[index].radios;
+  const row = currentRadios[0]?.closest('tr');
+  if (row) {
+    row.classList.add('questionnaire-focused');
+    row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  
+  questionnaireGroupIndex = index;
+}
+
+document.addEventListener('keydown', function(e) {
+  const key = e.key.toUpperCase();
+  if (!['Y', 'N'].includes(key)) return;
+  if (e.target.tagName === 'INPUT' && e.target.type === 'text') return;
+  if (e.target.tagName === 'TEXTAREA') return;
+  
+  const groups = getQuestionnaireRadioGroups();
+  if (groups.length === 0) return;
+  
+  // If no group is focused, start with first
+  if (questionnaireGroupIndex >= groups.length) {
+    questionnaireGroupIndex = 0;
+  }
+  
+  const currentGroup = groups[questionnaireGroupIndex];
+  const value = key === 'Y' ? 'はい' : 'いいえ';
+  const target = document.querySelector(`input[type="radio"][name="${currentGroup.name}"][value="${value}"]`);
+  
+  if (target) {
+    e.preventDefault();
+    target.checked = true;
+    
+    // Trigger change event if needed
+    target.dispatchEvent(new Event('change', { bubbles: true }));
+    
+    // Highlight focus for visual feedback
+    setQuestionnaireGroupFocus(questionnaireGroupIndex);
+    
+    // Move to next group if not at end
+    if (questionnaireGroupIndex < groups.length - 1) {
+      setQuestionnaireGroupFocus(questionnaireGroupIndex + 1);
+    }
+  }
+});
+
+// HAM-D Modal Form Submission
+function submitHamdModalForm() {
+  // Find the form - could be hamdForm or assessmentForm depending on modal mode
+  const form = document.getElementById('hamdForm') || document.getElementById('assessmentForm');
+  if (!form) {
+    console.error('HAM-D form not found');
+    alert('フォームが見つかりません。');
+    return;
+  }
+  
+  const formData = new FormData(form);
+  const action = form.action;
+  
+  fetch(action, {
+    method: 'POST',
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    body: formData,
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data && data.status === 'success') {
+      // Close modal and reload parent page
+      if (typeof currentModal !== 'undefined' && currentModal) {
+        currentModal.hide();
+      }
+      // Reload to show updated status
+      setTimeout(() => location.reload(), 500);
+    } else {
+      const msg = (data && data.message) ? data.message : '不明なエラー';
+      console.error('Form submission failed:', msg);
+      alert('保存に失敗しました：' + msg);
+    }
+  })
+  .catch(e => {
+    console.error('Form submit error:', e);
+    alert('保存に失敗しました。');
+  });
+}
+
+// Questionnaire Modal Form Submission
+function submitQuestionnaireModalForm() {
+  const form = document.getElementById('questionnaireForm');
+  if (!form) {
+    console.error('Questionnaire form not found');
+    return;
+  }
+  
+  const formData = new FormData(form);
+  
+  fetch(form.action, {
+    method: 'POST',
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    body: formData,
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data && data.status === 'success') {
+      // Close modal and reload parent page
+      if (typeof currentModal !== 'undefined' && currentModal) {
+        currentModal.hide();
+      }
+      // Reload to show updated status
+      setTimeout(() => location.reload(), 500);
+    } else {
+      const msg = (data && data.message) ? data.message : '不明なエラー';
+      console.error('Form submission failed:', msg);
+      alert('保存に失敗しました：' + msg);
+    }
+  })
+  .catch(e => {
+    console.error('Form submit error:', e);
+    alert('保存に失敗しました。');
+  });
+}
+</script>
 {% endblock scripts %}

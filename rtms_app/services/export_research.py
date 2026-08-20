@@ -45,7 +45,7 @@ class ResearchCSVExporter:
                 ('psychiatric_history', '既往精神疾患（リスト）', lambda p, *args: ','.join(p.psychiatric_history) if getattr(p, 'psychiatric_history', None) else ''),
                 ('psychiatric_history_other_text', '既往精神疾患（その他）', lambda p, *args: getattr(p, 'psychiatric_history_other_text', '') or ''),
                 ('first_treatment_date', '初回治療日', lambda p, *args: p.first_treatment_date.isoformat() if p.first_treatment_date else ''),
-                ('mapping_date', '初回位置決め日', lambda p, *args: p.mapping_date.isoformat() if p.mapping_date else ''),
+                ('mapping_date', '初回MT測定日', lambda p, *args: p.mapping_date.isoformat() if p.mapping_date else ''),
                 ('admission_date', '入院予定日', lambda p, *args: p.admission_date.isoformat() if p.admission_date else ''),
                 ('discharge_date', '退院日', lambda p, *args: p.discharge_date.isoformat() if p.discharge_date else ''),
                 ('treatment_sessions_count', '実施治療回数', lambda p, *args: _count_treatment_sessions(p, *args)),

@@ -1,10 +1,8 @@
 {% extends 'rtms_app/print/_print_base_twocolumn.html' %}
 {% load static %}
-
 {% block title %}副作用チェック表 - {{ patient.name }}{% endblock %}
-
 {% block extra_styles %}
-<style>
+    <style>
     .data-table {
         width: 100%;
         border-collapse: collapse;
@@ -25,13 +23,11 @@
     .text-center { text-align: center !important; }
     .text-start { text-align: left !important; }
     .ps-2 { padding-left: 0.5rem !important; }
-</style>
+    </style>
 {% endblock %}
-
 {% block print_content %}
-<div class="page-sheet">
+    <div class="page-sheet">
         <h1 class="doc-title">反復経頭蓋磁気刺激療法(rTMS) 副作用チェック表</h1>
-
         <table class="summary-info-table">
             <tr>
                 <th>患者ID</th>
@@ -52,43 +48,45 @@
                 <td>第 {{ session_number }} 回</td>
             </tr>
         </table>
-
         {# --- 治療内容ブロック: 実施日 と 副作用表の間に挿入 --- #}
         {% with mt=session.mt_percent|default:session.motor_threshold|default:"0" intensity_pct=session.intensity_percent|default:session.intensity|default:"0" %}
-        {% widthratio mt 100 intensity_pct as intensity_value %}
-        <div class="content-section mt-3">
-            <div class="section-label">治療内容</div>
-            <table class="summary-info-table" style="margin-top:6px;">
-                <tr>
-                    <th>使用したTMS治療機</th>
-                    <td>{{ session.coil_type|default:"Brainsway" }}</td>
-                    <th>刺激部位</th>
-                    <td>{{ session.target_site|default:"左DLPFC" }}</td>
-                </tr>
-                <tr>
-                    <th>刺激頻度</th>
-                    <td>{{ session.frequency_hz }} Hz</td>
-                    <th>総パルス数</th>
-                    <td>{{ session.total_pulses }}</td>
-                </tr>
-                <tr>
-                    <th>刺激強度</th>
-                    <td colspan="3">
-                        MT値: {{ mt }}% ， 刺激: {{ intensity_pct }}%MT
-                        （計算出力: {{ intensity_value }}% ）
-                    </td>
-                </tr>
-            </table>
-        </div>
+            {% widthratio mt 100 intensity_pct as intensity_value %}
+            <div class="content-section mt-3">
+                <div class="section-label">治療内容</div>
+                <table class="summary-info-table" style="margin-top:6px;">
+                    <tr>
+                        <th>使用したTMSコイル</th>
+                        <td>{{ session.coil_type|default:"Brainsway" }}</td>
+                        <th>刺激部位</th>
+                        <td>{{ session.target_site|default:"左DLPFC" }}</td>
+                    </tr>
+                    <tr>
+                        <th>刺激頻度</th>
+                        <td>{{ session.frequency_hz }} Hz</td>
+                        <th>総パルス数</th>
+                        <td>{{ session.total_pulses }}</td>
+                    </tr>
+                    <tr>
+                        <th>刺激強度</th>
+                        <td colspan="3">
+                            MT値: {{ mt }}% ， 刺激: {{ intensity_pct }}%MT
+                            （計算出力: {{ intensity_value }}% ）
+                        </td>
+                    </tr>
+                </table>
+            </div>
         {% endwith %}
-
         <div class="content-section mt-4">
             <table class="data-table">
                 <thead>
                     <tr>
                         <th rowspan="2" style="width: 25%;">症状</th>
                         <th colspan="3">重症度 (0-3)</th>
-                        <th rowspan="2" style="width: 10%;">関連性<br>(0-3)</th>
+                        <th rowspan="2" style="width: 10%;">
+                            関連性
+                            <br>
+                            (0-3)
+                        </th>
                         <th rowspan="2" style="width: 35%;">備考</th>
                     </tr>
                     <tr>
@@ -99,14 +97,14 @@
                 </thead>
                 <tbody>
                     {% for row in side_effect_rows %}
-                    <tr>
-                        <td class="text-center">{{ row.item }}</td>
-                        <td class="text-center">{{ row.before }}</td>
-                        <td class="text-center">{{ row.during }}</td>
-                        <td class="text-center">{{ row.after }}</td>
-                        <td class="text-center">{{ row.relatedness }}</td>
-                        <td class="text-start ps-2">{{ row.memo|default:"" }}</td>
-                    </tr>
+                        <tr>
+                            <td class="text-center">{{ row.item }}</td>
+                            <td class="text-center">{{ row.before }}</td>
+                            <td class="text-center">{{ row.during }}</td>
+                            <td class="text-center">{{ row.after }}</td>
+                            <td class="text-center">{{ row.relatedness }}</td>
+                            <td class="text-start ps-2">{{ row.memo|default:"" }}</td>
+                        </tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -114,21 +112,21 @@
                 重症度：0=なし、1=軽度、2=中等度、3=重度 ／ 関連性：0=なし、1=低い、2=あり、3=高い
             </div>
         </div>
-
         <div class="content-section mt-4">
             <div class="section-label">特記事項・メモ</div>
-            <div class="text-content" style="min-height: 60px;">
-                {{ side_effect_memo|linebreaksbr|default:"特になし" }}
-            </div>
+            <div class="text-content" style="min-height: 60px;">{{ side_effect_memo|linebreaksbr|default:"特になし" }}</div>
         </div>
-
         <div class="footer-section mt-5">
             <div class="row">
                 <div class="col-6"></div>
                 <div class="col-6 text-end">
                     <div style="display: inline-block; text-align: left;">
                         <div style="margin-bottom: 5px;">担当医署名:</div>
-                        <div style="border-bottom: 1px solid #000; width: 250px; height: 30px; display: flex; align-items: end;">
+                        <div style="border-bottom: 1px solid #000;
+                                    width: 250px;
+                                    height: 30px;
+                                    display: flex;
+                                    align-items: end">
                             {% if side_effect_signature %}
                                 <span style="font-family: 'Kaushan Script', cursive; font-size: 1.2rem;">{{ side_effect_signature }}</span>
                             {% endif %}
@@ -137,28 +135,28 @@
                 </div>
             </div>
         </div>
-
         <div class="page-footer">
             <div>作成日: {{ today|date:"Y年n月j日" }}</div>
             <div>笠寺精治寮病院</div>
             <div>担当医: {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}</div>
         </div>
-</div>
-{% endblock %}
-
-{% block print_controls %}
-<div class="control-section">
-    <h5>印刷オプション</h5>
-    <div class="btn-group">
-        <button id="print-btn" class="btn btn-primary">
-            <i class="fas fa-print"></i> 印刷
-        </button>
-        <button id="pdf-btn" class="btn btn-success">
-            <i class="fas fa-file-pdf"></i> PDF保存
-        </button>
-        <button id="back-btn" class="btn btn-outline-secondary" data-back-url="{{ back_url }}">
-            <i class="fas fa-arrow-left"></i> 戻る
-        </button>
     </div>
-</div>
+{% endblock %}
+{% block print_controls %}
+    <div class="control-section">
+        <h5>印刷オプション</h5>
+        <div class="btn-group">
+            <button id="print-btn" class="btn btn-primary">
+                <i class="fas fa-print"></i> 印刷
+            </button>
+            <button id="pdf-btn" class="btn btn-success">
+                <i class="fas fa-file-pdf"></i> PDF保存
+            </button>
+            <button id="back-btn"
+                    class="btn btn-outline-secondary"
+                    data-back-url="{{ back_url }}">
+                <i class="fas fa-arrow-left"></i> 戻る
+            </button>
+        </div>
+    </div>
 {% endblock %}

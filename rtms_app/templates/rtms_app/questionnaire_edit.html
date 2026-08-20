@@ -1,14 +1,21 @@
 {% extends "rtms_app/base.html" %}
 {% load static %}
-
-{% block body_class %}page-questionnaire{% endblock body_class %}
-
+{% block body_class %}
+  page-questionnaire
+{% endblock body_class %}
 {% block header_breadcrumb %}
   <span class="text-white-50 ms-2">/ 適正問診票</span>
 {% endblock header_breadcrumb %}
-
 {% block extrastyle %}
-<style>
+  <style>
+  /* Raise modal above floating menu (floating.css uses z-index: 2000) */
+  .modal {
+    z-index: 2050 !important;
+  }
+  .modal-backdrop {
+    z-index: 2049 !important;
+  }
+  
   .fv-accent { --theme-primary: var(--color-first-visit); }
   .q-col-no { width: 56px; }
   .q-col-yn { width: 96px; }
@@ -18,197 +25,474 @@
     .q-col-yn { width: 80px; }
     .table-rtms th, .table-rtms td { padding: 0.4rem 0.55rem; }
   }
-</style>
+  </style>
 {% endblock extrastyle %}
-
 {% block content %}
-<div class="stack-md">
-  <div class="d-flex justify-content-between align-items-center">
-    <div class="page-title"><i class="fas fa-clipboard-list page-title-icon"></i> rTMS 適正質問票</div>
-  </div>
-
-  <div class="card-like">
-    <div class="section-title fv-accent">患者</div>
-    <div class="d-flex flex-wrap gap-3">
-      <div class="fw-bold">{{ patient.name }}（{{ patient.card_id }}）</div>
-      <div class="text-muted">{{ patient.birth_date|date:"Y/n/j" }}（{{ patient.age }}歳）</div>
-    </div>
-  </div>
-
-  <form method="post" id="questionnaireForm" class="form-rtms">
-    {% csrf_token %}
-
-    <div class="card-like">
-      <div class="section-title fv-accent">質問項目</div>
-      <div class="text-muted small mb-2">※患者様への聴取結果を入力してください。</div>
-
-      <div class="row g-3">
-        <div class="col-lg-6">
-          <div class="table-responsive">
-            <table class="table table-rtms align-middle">
-              <thead>
-                <tr>
-                  <th class="q-col-no">No.</th>
-                  <th>質問項目</th>
-                  <th class="q-col-yn text-center">はい</th>
-                  <th class="q-col-yn text-center">いいえ</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td colspan="4" class="fw-bold bg-light">これまでに、以下のことがありましたか？</td>
-                </tr>
-
-                <tr>
-                  <td class="text-muted">1</td>
-                  <td>rTMS実施経験（治験・研究を含む）</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_rtms" value="はい" {% if questionnaire.q_past_rtms == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_rtms" value="いいえ" {% if questionnaire.q_past_rtms != 'はい' %}checked{% endif %}></td>
-                </tr>
-                <tr>
-                  <td class="text-muted">2</td>
-                  <td>rTMS後に副作用などの不快な経験</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_side_effect" value="はい" {% if questionnaire.q_past_side_effect == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_side_effect" value="いいえ" {% if questionnaire.q_past_side_effect != 'はい' %}checked{% endif %}></td>
-                </tr>
-                <tr>
-                  <td class="text-muted">3</td>
-                  <td>電気けいれん療法（ECT）の実施歴</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_ect" value="はい" {% if questionnaire.q_past_ect == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_ect" value="いいえ" {% if questionnaire.q_past_ect != 'はい' %}checked{% endif %}></td>
-                </tr>
-                <tr>
-                  <td class="text-muted">4</td>
-                  <td>けいれん発作（てんかん診断の有無を問わない）</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_seizure" value="はい" {% if questionnaire.q_past_seizure == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_seizure" value="いいえ" {% if questionnaire.q_past_seizure != 'はい' %}checked{% endif %}></td>
-                </tr>
-                <tr>
-                  <td class="text-muted">5</td>
-                  <td>意識消失発作</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_loc" value="はい" {% if questionnaire.q_past_loc == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_loc" value="いいえ" {% if questionnaire.q_past_loc != 'はい' %}checked{% endif %}></td>
-                </tr>
-                <tr>
-                  <td class="text-muted">6</td>
-                  <td>脳卒中（脳梗塞・脳出血など）</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_stroke" value="はい" {% if questionnaire.q_past_stroke == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_stroke" value="いいえ" {% if questionnaire.q_past_stroke != 'はい' %}checked{% endif %}></td>
-                </tr>
-                <tr>
-                  <td class="text-muted">7</td>
-                  <td>頭部外傷（意識消失を伴うなど重度なもの）</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_trauma" value="はい" {% if questionnaire.q_past_trauma == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_trauma" value="いいえ" {% if questionnaire.q_past_trauma != 'はい' %}checked{% endif %}></td>
-                </tr>
-                <tr>
-                  <td class="text-muted">8</td>
-                  <td>頭部の手術歴</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_surgery" value="はい" {% if questionnaire.q_past_surgery == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_surgery" value="いいえ" {% if questionnaire.q_past_surgery != 'はい' %}checked{% endif %}></td>
-                </tr>
-                <tr>
-                  <td class="text-muted">9</td>
-                  <td>脳外科もしくは神経内科の病気</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_neuro" value="はい" {% if questionnaire.q_past_neuro == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_neuro" value="いいえ" {% if questionnaire.q_past_neuro != 'はい' %}checked{% endif %}></td>
-                </tr>
-                <tr>
-                  <td class="text-muted">10</td>
-                  <td>脳障害をおこす可能性のある内科疾患</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_internal" value="はい" {% if questionnaire.q_past_internal == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_internal" value="いいえ" {% if questionnaire.q_past_internal != 'はい' %}checked{% endif %}></td>
-                </tr>
-                <tr>
-                  <td class="text-muted">11</td>
-                  <td>アルコールや薬物の乱用</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_abuse" value="はい" {% if questionnaire.q_past_abuse == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_past_abuse" value="いいえ" {% if questionnaire.q_past_abuse != 'はい' %}checked{% endif %}></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="col-lg-6">
-          <div class="table-responsive">
-            <table class="table table-rtms align-middle">
-              <thead>
-                <tr>
-                  <th class="q-col-no">No.</th>
-                  <th>質問項目</th>
-                  <th class="q-col-yn text-center">はい</th>
-                  <th class="q-col-yn text-center">いいえ</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td colspan="4" class="fw-bold bg-light">現在、以下のことはありますか？</td>
-                </tr>
-
-                <tr>
-                  <td class="text-muted">12</td>
-                  <td>頻繁または重度な頭痛</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_cur_headache" value="はい" {% if questionnaire.q_cur_headache == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_cur_headache" value="いいえ" {% if questionnaire.q_cur_headache != 'はい' %}checked{% endif %}></td>
-                </tr>
-                <tr>
-                  <td class="text-muted">13</td>
-                  <td>頭の中に金属や磁性体（チタン製品かどうか要確認）</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_cur_metal" value="はい" {% if questionnaire.q_cur_metal == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_cur_metal" value="いいえ" {% if questionnaire.q_cur_metal != 'はい' %}checked{% endif %}></td>
-                </tr>
-                <tr>
-                  <td class="text-muted">14</td>
-                  <td>体内埋め込み式の医療機器（心臓ペースメーカーなど）</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_cur_device" value="はい" {% if questionnaire.q_cur_device == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_cur_device" value="いいえ" {% if questionnaire.q_cur_device != 'はい' %}checked{% endif %}></td>
-                </tr>
-                <tr>
-                  <td class="text-muted">15</td>
-                  <td>多量の飲酒や薬物の乱用</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_cur_abuse" value="はい" {% if questionnaire.q_cur_abuse == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_cur_abuse" value="いいえ" {% if questionnaire.q_cur_abuse != 'はい' %}checked{% endif %}></td>
-                </tr>
-                <tr>
-                  <td class="text-muted">16</td>
-                  <td>妊娠中、もしくは妊娠の可能性が否定されない</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_cur_preg" value="はい" {% if questionnaire.q_cur_preg == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_cur_preg" value="いいえ" {% if questionnaire.q_cur_preg != 'はい' %}checked{% endif %}></td>
-                </tr>
-                <tr>
-                  <td class="text-muted">17</td>
-                  <td>家族内にてんかんを持っているかた</td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_cur_family_epilepsy" value="はい" {% if questionnaire.q_cur_family_epilepsy == 'はい' %}checked{% endif %}></td>
-                  <td class="text-center"><input class="form-check-input" type="radio" name="q_cur_family_epilepsy" value="いいえ" {% if questionnaire.q_cur_family_epilepsy != 'はい' %}checked{% endif %}></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+  {% if not modal_mode %}
+    <div class="stack-md">
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="page-title">
+          <i class="fas fa-clipboard-list page-title-icon"></i> rTMS 適正質問票
         </div>
       </div>
-
-      <div class="mt-3">
-        <label class="form-label">「はい」とチェックした項目について、より詳しくおしえてください</label>
-        <textarea name="q_details" class="form-control" rows="4">{{ questionnaire.q_details|default_if_none:"" }}</textarea>
+      <div class="card-like">
+        <div class="section-title fv-accent">患者</div>
+        <div class="d-flex flex-wrap gap-3">
+          <div class="fw-bold">{{ patient.name }}（{{ patient.card_id }}）</div>
+          <div class="text-muted">{{ patient.birth_date|date:"Y/n/j" }}（{{ patient.age }}歳）</div>
+        </div>
       </div>
+    {% else %}
+      <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="modal-title">rTMS 適正質問票</h5>
+          <button type="button"
+                  class="btn-close"
+                  data-bs-dismiss="modal"
+                  aria-label="Close"></button>
+        </div>
+      {% endif %}
+      <form method="post" id="questionnaireForm" class="form-rtms">
+        {% csrf_token %}
+        <div class="card-like">
+          <div class="section-title fv-accent">質問項目</div>
+          <div class="text-muted small mb-2">※患者様への聴取結果を入力してください。</div>
+          <div class="row g-3">
+            <div class="col-lg-6">
+              <div class="table-responsive">
+                <table class="table table-rtms align-middle">
+                  <thead>
+                    <tr>
+                      <th class="q-col-no">No.</th>
+                      <th>質問項目</th>
+                      <th class="q-col-yn text-center">はい</th>
+                      <th class="q-col-yn text-center">いいえ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td colspan="4" class="fw-bold bg-light">これまでに、以下のことがありましたか？</td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">1</td>
+                      <td>rTMS実施経験（治験・研究を含む）</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_rtms"
+                               value="はい"
+                               {% if questionnaire.q_past_rtms == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_rtms"
+                               value="いいえ"
+                               {% if questionnaire.q_past_rtms != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">2</td>
+                      <td>rTMS後に副作用などの不快な経験</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_side_effect"
+                               value="はい"
+                               {% if questionnaire.q_past_side_effect == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_side_effect"
+                               value="いいえ"
+                               {% if questionnaire.q_past_side_effect != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">3</td>
+                      <td>電気けいれん療法（ECT）の実施歴</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_ect"
+                               value="はい"
+                               {% if questionnaire.q_past_ect == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_ect"
+                               value="いいえ"
+                               {% if questionnaire.q_past_ect != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">4</td>
+                      <td>けいれん発作（てんかん診断の有無を問わない）</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_seizure"
+                               value="はい"
+                               {% if questionnaire.q_past_seizure == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_seizure"
+                               value="いいえ"
+                               {% if questionnaire.q_past_seizure != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">5</td>
+                      <td>意識消失発作</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_loc"
+                               value="はい"
+                               {% if questionnaire.q_past_loc == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_loc"
+                               value="いいえ"
+                               {% if questionnaire.q_past_loc != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">6</td>
+                      <td>脳卒中（脳梗塞・脳出血など）</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_stroke"
+                               value="はい"
+                               {% if questionnaire.q_past_stroke == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_stroke"
+                               value="いいえ"
+                               {% if questionnaire.q_past_stroke != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">7</td>
+                      <td>頭部外傷（意識消失を伴うなど重度なもの）</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_trauma"
+                               value="はい"
+                               {% if questionnaire.q_past_trauma == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_trauma"
+                               value="いいえ"
+                               {% if questionnaire.q_past_trauma != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">8</td>
+                      <td>頭部の手術歴</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_surgery"
+                               value="はい"
+                               {% if questionnaire.q_past_surgery == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_surgery"
+                               value="いいえ"
+                               {% if questionnaire.q_past_surgery != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">9</td>
+                      <td>脳外科もしくは神経内科の病気</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_neuro"
+                               value="はい"
+                               {% if questionnaire.q_past_neuro == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_neuro"
+                               value="いいえ"
+                               {% if questionnaire.q_past_neuro != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">10</td>
+                      <td>脳障害をおこす可能性のある内科疾患</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_internal"
+                               value="はい"
+                               {% if questionnaire.q_past_internal == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_internal"
+                               value="いいえ"
+                               {% if questionnaire.q_past_internal != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">11</td>
+                      <td>アルコールや薬物の乱用</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_abuse"
+                               value="はい"
+                               {% if questionnaire.q_past_abuse == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_past_abuse"
+                               value="いいえ"
+                               {% if questionnaire.q_past_abuse != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="col-lg-6">
+              <div class="table-responsive">
+                <table class="table table-rtms align-middle">
+                  <thead>
+                    <tr>
+                      <th class="q-col-no">No.</th>
+                      <th>質問項目</th>
+                      <th class="q-col-yn text-center">はい</th>
+                      <th class="q-col-yn text-center">いいえ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td colspan="4" class="fw-bold bg-light">現在、以下のことはありますか？</td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">12</td>
+                      <td>頻繁または重度な頭痛</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_cur_headache"
+                               value="はい"
+                               {% if questionnaire.q_cur_headache == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_cur_headache"
+                               value="いいえ"
+                               {% if questionnaire.q_cur_headache != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">13</td>
+                      <td>頭の中に金属や磁性体（チタン製品かどうか要確認）</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_cur_metal"
+                               value="はい"
+                               {% if questionnaire.q_cur_metal == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_cur_metal"
+                               value="いいえ"
+                               {% if questionnaire.q_cur_metal != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">14</td>
+                      <td>体内埋め込み式の医療機器（心臓ペースメーカーなど）</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_cur_device"
+                               value="はい"
+                               {% if questionnaire.q_cur_device == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_cur_device"
+                               value="いいえ"
+                               {% if questionnaire.q_cur_device != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">15</td>
+                      <td>多量の飲酒や薬物の乱用</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_cur_abuse"
+                               value="はい"
+                               {% if questionnaire.q_cur_abuse == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_cur_abuse"
+                               value="いいえ"
+                               {% if questionnaire.q_cur_abuse != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">16</td>
+                      <td>妊娠中、もしくは妊娠の可能性が否定されない</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_cur_preg"
+                               value="はい"
+                               {% if questionnaire.q_cur_preg == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_cur_preg"
+                               value="いいえ"
+                               {% if questionnaire.q_cur_preg != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">17</td>
+                      <td>家族内にてんかんを持っているかた</td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_cur_family_epilepsy"
+                               value="はい"
+                               {% if questionnaire.q_cur_family_epilepsy == 'はい' %}checked{% endif %}>
+                      </td>
+                      <td class="text-center">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="q_cur_family_epilepsy"
+                               value="いいえ"
+                               {% if questionnaire.q_cur_family_epilepsy != 'はい' %}checked{% endif %}>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label">「はい」とチェックした項目について、より詳しくおしえてください</label>
+            <textarea name="q_details" class="form-control" rows="4">{{ questionnaire.q_details|default_if_none:"" }}</textarea>
+          </div>
+        </div>
+        {% if not modal_mode %}
+        </form>
+        <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
+        <script src="{% static 'rtms_app/floating.js' %}"></script>
+        {% url 'rtms_app:patient_first_visit' patient.id as back_url %}
+        <div class="fab-stack no-print">
+          <a class="btn btn-primary fab"
+             href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}"
+             target="_blank"
+             rel="noopener">
+            <i class="fas fa-print"></i> 印刷プレビュー
+          </a>
+          <button type="button"
+                  class="btn btn-first-visit fab"
+                  onclick="RTMSFloating.submitFormById('questionnaireForm')">
+            <i class="fas fa-save"></i> 保存
+          </button>
+          <a class="btn btn-secondary fab"
+             href="{{ back_url }}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+            <i class="fas fa-undo"></i> 戻る
+          </a>
+        </div>
+      </div>
+    {% else %}
+    </form>
+    <div class="modal-footer bg-light">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+      <button type="button"
+              class="btn btn-first-visit"
+              onclick="submitQuestionnaireModal()">保存して閉じる</button>
     </div>
-  </form>
-
-  <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
-  <script src="{% static 'rtms_app/floating.js' %}"></script>
-
-  {% url 'rtms_app:patient_first_visit' patient.id as back_url %}
-  <div class="fab-stack no-print">
-    <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}" target="_blank" rel="noopener">
-      <i class="fas fa-print"></i> 印刷プレビュー
-    </a>
-    <button type="button" class="btn btn-first-visit fab" onclick="RTMSFloating.submitFormById('questionnaireForm')">
-      <i class="fas fa-save"></i> 保存
-    </button>
-    <a class="btn btn-secondary fab" href="{{ back_url }}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
-      <i class="fas fa-undo"></i> 戻る
-    </a>
-  </div>
-</div>
+  {% endif %}
 {% endblock content %}
+<script>
+// Initialize questionnaire modal (called from patient_first_visit.html)
+window.initQuestionnaireModal = function() {
+  // Keyboard input support for questionnaire: Y for yes, N for no
+  document.addEventListener('keydown', function(e) {
+    if (e.target.tagName === 'INPUT' && e.target.type === 'text') return; // Skip text inputs
+    
+    const key = e.key.toUpperCase();
+    if (!['Y', 'N', 'ENTER', 'TAB'].includes(key)) return;
+    
+    if (key === 'Y' || key === 'N') {
+      e.preventDefault();
+      
+      // Find currently focused radio button or first unchecked
+      let targetGroup = null;
+      const focusedInput = document.activeElement;
+      
+      if (focusedInput && focusedInput.type === 'radio') {
+        // Get the group of the currently focused radio
+        const name = focusedInput.name;
+        targetGroup = document.querySelector(`input[type="radio"][name="${name}"]`);
+      } else {
+        // Find first unchecked radio group or move to next group
+        const allRadios = Array.from(document.querySelectorAll('input[type="radio"]'));
+        const groupedByName = {};
+        allRadios.forEach(r => {
+          if (!groupedByName[r.name]) groupedByName[r.name] = [];
+          groupedByName[r.name].push(r);
+        });
+        
+        // Find first unchecked group or the current group
+        for (const [name, radios] of Object.entries(groupedByName)) {
+          const unchecked = radios.filter(r => !r.checked);
+          if (unchecked.length > 0) {
+            targetGroup = radios[0];
+            break;
+          }
+        }
+      }
+      
+      if (targetGroup) {
+        const groupName = targetGroup.name;
+        const value = key === 'Y' ? 'はい' : 'いいえ';
+        const target = document.querySelector(`input[type="radio"][name="${groupName}"][value="${value}"]`);
+        if (target) {
+          target.checked = true;
+          target.focus();
+        }
+      }
+    } else if (key === 'TAB') {
+      // Allow normal tab behavior
+    }
+  });
+};
+</script>

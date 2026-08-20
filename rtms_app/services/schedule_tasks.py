@@ -94,7 +94,7 @@ def compute_task_definitions(patient: Patient, holidays: Optional[set] = None) -
             perf = _mapping_performed_date_for_nominal(patient, planned)
             tasks.append({
                 'key': 'mapping',
-                'label': '位置決め',
+                'label': 'MT測定',
                 'planned_date': planned,
                 'window_start': planned,
                 'window_end': planned,

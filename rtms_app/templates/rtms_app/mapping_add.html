@@ -1,14 +1,11 @@
 {% extends "rtms_app/base.html" %}
 {% load static %}
-
 {% block body_class %}page-mapping{% endblock %}
-
 {% block header_breadcrumb %}
-    <span class="text-white-50 ms-2">/ 位置決め</span>
+    <span class="text-white-50 ms-2">/ MT測定</span>
 {% endblock header_breadcrumb %}
-
 {% block extrastyle %}
-<style>
+    <style>
   .section-title {
     border-left: 5px solid var(--color-mapping);
     padding-left: 10px;
@@ -16,7 +13,31 @@
   }
 
     /* Slightly larger base font for readability on mapping page */
-    .mapping-page { font-size: 1.05rem; }
+        .mapping-page { font-size: 1.05rem; }
+        .mt-stepper { position: relative; }
+        .mt-stepper input { padding-right: 3rem; }
+        .mt-stepper input::-webkit-outer-spin-button,
+        .mt-stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .mt-stepper input { -moz-appearance: textfield; }
+        .mt-stepper-controls {
+            position: absolute;
+            top: 1px;
+            right: 1px;
+            bottom: 1px;
+            display: flex;
+            flex-direction: column;
+            width: 2.25rem;
+        }
+        .mt-stepper-controls button {
+            flex: 1;
+            padding: 0;
+            border: 0;
+            background: #f1f3f5;
+            color: #495057;
+            line-height: 1;
+        }
+        .mt-stepper-controls button:first-child { border-bottom: 1px solid #dee2e6; }
+        .mt-stepper-controls button:hover { background: #dee2e6; }
 
   /* iPad Landscape Optimization */
   @media only screen and (min-width: 1000px) and (orientation: landscape) {
@@ -43,145 +64,162 @@
       .fab-stack { bottom: 15px; right: 15px; gap: 8px; }
       .fab { padding: 6px 10px; font-size: 14px; }
   }
-</style>
+    </style>
 {% endblock %}
-
 {% block content %}
-<div class="container py-4 mb-5 mapping-page">
-    {% include "rtms_app/partials/patient_inline_bar.html" with page_title="位置決め記録" title_icon="fa-crosshairs" patient=patient %}
-
-    {# print toolbar is only for print preview pages; remove from regular screen #}
-
-    <div class="row">
-        <div class="col-md-8">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-mapping);">
-                    <i class="fas fa-pen me-1"></i> 新規記録
-                </div>
-                <div class="card-body bg-light">
-                    <form method="post" id="mainForm">
-                        {% csrf_token %}
-                        <div class="row g-2 mb-3">
-                            <div class="col-6">
-                                <label class="form-label fw-bold small">実施日</label>
-                                {{ form.date }}
-                            </div>
-                            <div class="col-6">
-                                <label class="form-label fw-bold small">時期 (週数)</label>
-                                {{ form.week_number }}
-                            </div>
-                        </div>
-                        
-                        <div class="card border-2 p-3 mb-3" style="border-color: var(--color-mapping) !important;">
-                            <h5 class="fw-bold mb-3 section-title"><i class="fas fa-bolt me-2"></i>位置決めパラメータ</h5>
-                            <div class="row mb-3">
+    <div class="container py-4 mb-5 mapping-page">
+        {% include "rtms_app/partials/patient_inline_bar.html" with page_title="MT測定記録" title_icon="fa-crosshairs" patient=patient %}
+        {# print toolbar is only for print preview pages; remove from regular screen #}
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header card-header-accent fw-bold"
+                         style="--card-accent: var(--color-mapping)">
+                        <i class="fas fa-pen me-1"></i> 新規記録
+                    </div>
+                    <div class="card-body bg-light">
+                        <form method="post" id="mainForm">
+                            {% csrf_token %}
+                            <div class="row g-2 mb-3">
                                 <div class="col-6">
-                                    <label class="form-label fw-bold">MT（モーター閾値）</label>
-                                    {{ form.resting_mt }}
-                                    <div class="form-text small">ステップ: 1</div>
+                                    <label class="form-label fw-bold small">実施日</label>
+                                    {{ form.date }}
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label fw-bold small">時期 (週数)</label>
+                                    {{ form.week_number }}
                                 </div>
                             </div>
-                            <div class="row">
-                                <div class="col-6">
-                                    <label class="form-label fw-bold">位置 a（向かって左）</label>
-                                    <div class="row g-2">
-                                        <div class="col-6">
-                                            <div class="input-group">
-                                                <span class="input-group-text">X</span>
-                                                {{ form.helmet_position_a_x }}
+                            <div class="card border-2 p-3 mb-3"
+                                 style="border-color: var(--color-mapping) !important">
+                                <h5 class="fw-bold mb-3 section-title">
+                                    <i class="fas fa-bolt me-2"></i>MT測定記録
+                                </h5>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <label class="form-label fw-bold">位置A（向かって左）</label>
+                                        <div class="row g-2">
+                                            <div class="col-6">
+                                                <div class="input-group">
+                                                    <span class="input-group-text">X</span>
+                                                    {{ form.helmet_position_a_x }}
+                                                </div>
+                                            </div>
+                                            <div class="col-6">
+                                                <div class="input-group">
+                                                    <span class="input-group-text">Y</span>
+                                                    {{ form.helmet_position_a_y }}
+                                                </div>
                                             </div>
                                         </div>
-                                        <div class="col-6">
-                                            <div class="input-group">
-                                                <span class="input-group-text">Y</span>
-                                                {{ form.helmet_position_a_y }}
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label fw-bold">位置B（向かって右）</label>
+                                        <div class="row g-2">
+                                            <div class="col-6">
+                                                <div class="input-group">
+                                                    <span class="input-group-text">X</span>
+                                                    {{ form.helmet_position_b_x }}
+                                                </div>
+                                            </div>
+                                            <div class="col-6">
+                                                <div class="input-group">
+                                                    <span class="input-group-text">Y</span>
+                                                    {{ form.helmet_position_b_y }}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-6">
-                                    <label class="form-label fw-bold">位置 b（向かって右）</label>
-                                    <div class="row g-2">
-                                        <div class="col-6">
-                                            <div class="input-group">
-                                                <span class="input-group-text">X</span>
-                                                {{ form.helmet_position_b_x }}
+                                <div class="row mt-3">
+                                    <div class="col-6">
+                                        <label class="form-label fw-bold">MT（モーター閾値）</label>
+                                        <div class="mt-stepper">
+                                            {{ form.resting_mt }}
+                                            <div class="mt-stepper-controls" aria-label="MTを5単位で増減">
+                                                <button type="button"
+                                                        data-mt-step="5"
+                                                        aria-label="MTを5増やす"
+                                                        onclick="const input=this.closest('.mt-stepper').querySelector('input'); input.value=String(Number(input.value || 60) + 5); input.dispatchEvent(new Event('change', {bubbles:true}));">
+                                                    <i class="fas fa-chevron-up"></i>
+                                                </button>
+                                                <button type="button"
+                                                        data-mt-step="-5"
+                                                        aria-label="MTを5減らす"
+                                                        onclick="const input=this.closest('.mt-stepper').querySelector('input'); input.value=String(Number(input.value || 60) - 5); input.dispatchEvent(new Event('change', {bubbles:true}));">
+                                                    <i class="fas fa-chevron-down"></i>
+                                                </button>
                                             </div>
                                         </div>
-                                        <div class="col-6">
-                                            <div class="input-group">
-                                                <span class="input-group-text">Y</span>
-                                                {{ form.helmet_position_b_y }}
-                                            </div>
-                                        </div>
+                                        <div class="form-text small">直接入力: 1単位 / ボタン: 5単位</div>
                                     </div>
                                 </div>
                             </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small">備考</label>
+                                {{ form.notes }}
+                            </div>
+                            <hr>
+                            <!-- 保存操作はカードフッターへ移動 -->
+                        </form>
+                    </div>
+                    <div class="card-footer bg-white border-0">
+                        <div class="d-flex justify-content-center gap-3">
+                            <button type="submit"
+                                    form="mainForm"
+                                    name="action"
+                                    value="to_treatment"
+                                    class="btn btn-success btn-lg px-4 fw-bold shadow-sm">
+                                <i class="fas fa-arrow-right"></i> 本日の治療へ
+                            </button>
+                            <button type="submit"
+                                    form="mainForm"
+                                    name="action"
+                                    value="save_and_return"
+                                    class="btn btn-secondary btn-lg px-4 fw-bold shadow-sm">
+                                <i class="fas fa-save"></i> 保存して戻る
+                            </button>
                         </div>
-                        
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small">備考</label>
-                            {{ form.notes }}
-                        </div>
-                        <hr>
-                        <!-- 保存操作はカードフッターへ移動 -->
-                    </form>
-                </div>
-
-                <div class="card-footer bg-white border-0">
-                    <div class="d-flex justify-content-center gap-3">
-                        <button type="submit" form="mainForm" name="action" value="to_treatment" class="btn btn-success btn-lg px-4 fw-bold shadow-sm">
-                            <i class="fas fa-arrow-right"></i> 本日の治療へ
-                        </button>
-                        <button type="submit" form="mainForm" name="action" value="save_and_return" class="btn btn-secondary btn-lg px-4 fw-bold shadow-sm">
-                            <i class="fas fa-save"></i> 保存して戻る
-                        </button>
                     </div>
                 </div>
             </div>
-        </div>
-
-        <div class="col-md-4 mapping-history">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-mapping); background-color: #fff;">
-                    <i class="fas fa-history me-1"></i> 履歴
-                </div>
-                <div class="list-group list-group-flush">
-                    {% for item in history %}
-                    <div class="list-group-item list-group-item-action">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <strong>{{ item.date|date:"Y/n/j" }}（{{ item.get_week_number_display }}）</strong>
-                        </div>
-                        <div class="text-muted small mb-1">
-                            MT強度：<strong class="text-dark">{{ item.resting_mt }}</strong>
-                            　位置：A({{ item.helmet_position_a_x|default:"-" }},{{ item.helmet_position_a_y|default:"-" }}) / B({{ item.helmet_position_b_x|default:"-" }},{{ item.helmet_position_b_y|default:"-" }})
-                        </div>
-                        {% if item.notes %}
-                        <div class="small text-muted mt-1 border-top pt-1">
-                            <i class="fas fa-comment-dots"></i> {{ item.notes }}
-                        </div>
-                        {% endif %}
+            <div class="col-md-4 mapping-history">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header card-header-accent fw-bold"
+                         style="--card-accent: var(--color-mapping);
+                                background-color: #fff">
+                        <i class="fas fa-history me-1"></i> 履歴
                     </div>
-                    {% empty %}
-                    <div class="list-group-item text-center text-muted py-4">
-                        記録はまだありません
+                    <div class="list-group list-group-flush">
+                        {% for item in history %}
+                            <div class="list-group-item list-group-item-action">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <strong>{{ item.date|date:"Y/n/j" }}（{{ item.get_week_number_display }}）</strong>
+                                </div>
+                                <div class="text-muted small mb-1">
+                                    MT（モーター閾値）：<strong class="text-dark">{{ item.resting_mt }}</strong>
+                                    　位置A({{ item.helmet_position_a_x|default:"-" }},{{ item.helmet_position_a_y|default:"-" }}) / 位置B({{ item.helmet_position_b_x|default:"-" }},{{ item.helmet_position_b_y|default:"-" }})
+                                </div>
+                                {% if item.notes %}
+                                    <div class="small text-muted mt-1 border-top pt-1">
+                                        <i class="fas fa-comment-dots"></i> {{ item.notes }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% empty %}
+                            <div class="list-group-item text-center text-muted py-4">記録はまだありません</div>
+                        {% endfor %}
                     </div>
-                    {% endfor %}
                 </div>
             </div>
         </div>
     </div>
-</div>
-
- 
 {% endblock %}
-
 {% block extrahead %}
-<link rel="stylesheet" href="{% static 'rtms_app/mapping.css' %}">
+    <link rel="stylesheet" href="{% static 'rtms_app/mapping.css' %}">
 {% endblock %}
-
 {% block extrascript %}
-<script>
+    <script>
 // Auto-update week number when date changes (day1-based, week = floor(diff/7)+1)
 (function(){
     const startDateStr = '{{ patient.first_treatment_date|default:""|date:"Y-m-d" }}';
@@ -218,7 +256,7 @@
             weekEl.value = 'pre';
         } else {
             // set numeric week; if option missing, add it
-            let opt = Array.from(weekEl.options).find(o => parseInt(o.value) === wk || o.text == ('第'+wk+'週');
+            let opt = Array.from(weekEl.options).find(o => parseInt(o.value) === wk || o.text === ('第' + wk + '週'));
             if (!opt) {
                 opt = document.createElement('option'); opt.value = String(wk); opt.text = '第' + String(wk) + '週';
                 weekEl.appendChild(opt);
@@ -233,5 +271,6 @@
     // also run immediately in case DOMContentLoaded already fired
     applyWeek();
 })();
-</script>
+
+    </script>
 {% endblock %}

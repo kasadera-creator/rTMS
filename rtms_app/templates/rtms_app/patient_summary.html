@@ -7,6 +7,7 @@
   <span class="text-white-50 ms-2">/ 退院準備</span>
 {% endblock header_breadcrumb %}
 {% block extrastyle %}
+  <link rel="stylesheet" href="{% static 'rtms_app/page_actions.css' %}">
   <style>
     .section-title {
         border-left: 5px solid var(--color-discharge);
@@ -70,7 +71,10 @@
         </div>
         <div class="col-12">
           <div class="card shadow-sm mb-3">
-            <div class="card-header card-header-accent d-flex align-items-center justify-content-between" style="--card-accent: var(--color-discharge-dark); background: var(--color-discharge-bg); color: var(--color-discharge-dark);">
+            <div class="card-header card-header-accent d-flex align-items-center justify-content-between"
+                 style="--card-accent: var(--color-discharge-dark);
+                        background: var(--color-discharge-bg);
+                        color: var(--color-discharge-dark)">
               <div class="fw-bold">
                 <i class="fas fa-file-medical-alt me-2 text-muted"></i>入院経過・治療結果（サマリー本文）
               </div>
@@ -81,7 +85,10 @@
             </div>
           </div>
           <div class="card mt-3 shadow-sm">
-            <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-discharge-dark); background: var(--color-discharge-bg); color: var(--color-discharge-dark);">退院時処方</div>
+            <div class="card-header card-header-accent fw-bold"
+                 style="--card-accent: var(--color-discharge-dark);
+                        background: var(--color-discharge-bg);
+                        color: var(--color-discharge-dark)">退院時処方</div>
             <div class="card-body">
               <textarea name="discharge_prescription"
                         rows="4"
@@ -93,7 +100,10 @@
         <!-- right column removed: summary/status and quick actions were redundant -->
         <div class="col-12">
           <div class="card shadow-sm">
-            <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-discharge-dark); background: var(--color-discharge-bg); color: var(--color-discharge-dark);">rTMS 治療実施記録</div>
+            <div class="card-header card-header-accent fw-bold"
+                 style="--card-accent: var(--color-discharge-dark);
+                        background: var(--color-discharge-bg);
+                        color: var(--color-discharge-dark)">rTMS 治療実施記録</div>
             <div class="card-body p-2" style="max-height: 320px; overflow-y: auto;">
               <table class="table table-bordered history-table table-sm mb-0">
                 <thead>
@@ -140,16 +150,20 @@
         </div>
         <div class="col-12">
           <div class="card shadow-sm">
-            <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-discharge-dark); background: var(--color-discharge-bg); color: var(--color-discharge-dark);">
-              <i class="fas fa-chart-line me-2"></i>心理検査推移 (HAMD)
+            <div class="card-header card-header-accent fw-bold"
+                 style="--card-accent: var(--color-discharge-dark);
+                        background: var(--color-discharge-bg);
+                        color: var(--color-discharge-dark)">
+              <i class="fas fa-chart-line me-2"></i>心理検査推移
             </div>
             <div class="card-body" style="overflow-x: auto;">
-              <table class="table table-sm table-striped score-table w-auto mb-0">
+              <h6 class="fw-bold mb-2">HAM-D</h6>
+              <table class="table table-sm table-striped score-table w-auto mb-3">
                 <thead>
                   <tr>
-                    <th style="min-width:140px;">項目</th>
+                    <th>項目</th>
                     {% for c in trend_cols %}
-                      <th style="min-width:120px;">
+                      <th>
                         {{ c.label }}
                         <div class="small text-muted">{{ c.date_str }}</div>
                       </th>
@@ -157,164 +171,207 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {% if trend_cols %}
-                    <tr>
-                      <td class="fw-bold">HAMD 21項</td>
-                      {% for c in trend_cols %}
-        <div class="col-12">
-          <div class="card shadow-sm mt-3">
-            <div class="card-header card-header-accent fw-bold d-flex align-items-center justify-content-between" style="--card-accent: var(--color-discharge-dark); background: var(--color-discharge-bg); color: var(--color-discharge-dark);">
-              <span><i class="fas fa-table me-2"></i>自己記入式検査（患者用）</span>
-              <a class="btn btn-outline-primary btn-sm" href="{% url 'rtms_app:patient_survey_export' patient.id %}"><i class="fas fa-file-csv me-1"></i>CSV出力</a>
-            </div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table class="table table-sm table-striped mb-0 align-middle">
-                  <thead class="table-light">
-                    <tr>
-                      <th>フェーズ</th>
-                      <th>開始</th>
-                      <th>提出</th>
-                      <th>状態</th>
-                      <th>BDI-II</th>
-                      <th>SDS</th>
-                      <th>SASS-J</th>
-                      <th>PHQ-9</th>
-                      <th>Q10</th>
-                      <th>STAI X1</th>
-                      <th>STAI X2</th>
-                      <th>DAI-10</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for row in survey_summary %}
-                      <tr>
-                        <td>{{ row.session.get_phase_display }}</td>
-                        <td>{{ row.session.started_at|date:"Y/m/d H:i" }}</td>
-                        <td>{% if row.session.submitted_at %}{{ row.session.submitted_at|date:"Y/m/d H:i" }}{% else %}-{% endif %}</td>
-                        <td>{{ row.session.get_status_display }}</td>
-                        <td>{{ row.totals.bdi2|default:"-" }}</td>
-                        <td>{{ row.totals.sds|default:"-" }}</td>
-                        <td>{{ row.totals.sassj|default:"-" }}</td>
-                        <td>{{ row.totals.phq9|default:"-" }}</td>
-                        <td>{% if row.phq9_q10 is not None %}{{ row.phq9_q10 }}{% else %}-{% endif %}</td>
-                        <td>{{ row.totals.stai_x1|default:"-" }}</td>
-                        <td>{{ row.totals.stai_x2|default:"-" }}</td>
-                        <td>{{ row.totals.dai10|default:"-" }}</td>
-                      </tr>
-                    {% empty %}
-                      <tr>
-                        <td colspan="12" class="text-muted text-center py-3">実施された自己記入式検査はありません</td>
-                      </tr>
+                  <tr>
+                    <td class="fw-bold">HAM-D17</td>
+                    {% for c in trend_cols %}
+                      <td>
+                        {% if c.hamd17 is not None %}
+                          {{ c.hamd17 }}点
+                        {% else %}
+                          -
+                        {% endif %}
+                      </td>
                     {% endfor %}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-                        <td class="fw-bold">
-                          {% if c.hamd21 is not None %}
-                            {{ c.hamd21 }}
-                          {% else %}
-                            -
-                          {% endif %}
-                        </td>
-                      {% endfor %}
-                    </tr>
-                    <tr>
-                      <td class="fw-bold">HAMD 17項</td>
-                      {% for c in trend_cols %}
-                        <td>
-                          {% if c.hamd17 is not None %}
-                            {{ c.hamd17 }}
-                          {% else %}
-                            -
-                          {% endif %}
-                        </td>
-                      {% endfor %}
-                    </tr>
-                    <tr>
-                      <td class="fw-bold">改善率（HAMD17）</td>
-                      {% for c in trend_cols %}
-                        <td>
-                          {% if c.improvement_pct is not None %}
-                            {{ c.improvement_pct }}%
-                          {% else %}
-                            -
-                          {% endif %}
-                        </td>
-                      {% endfor %}
-                    </tr>
-                  {% else %}
-                    <tr>
-                      <td colspan="5" class="text-muted py-3">データなし</td>
-                    </tr>
-                  {% endif %}
+                  </tr>
+                  <tr>
+                    <td class="fw-bold">評価</td>
+                    {% for c in trend_cols %}
+                      <td>
+                        {% if c.severity_label %}
+                          {{ c.severity_label }}
+                        {% else %}
+                          -
+                        {% endif %}
+                      </td>
+                    {% endfor %}
+                  </tr>
+                  <tr>
+                    <td class="fw-bold">改善率（HAM-D17）</td>
+                    {% for c in trend_cols %}
+                      <td>
+                        {% if c.improvement_pct_17 is not None %}
+                          {{ c.improvement_pct_17 }}%
+                        {% else %}
+                          -
+                        {% endif %}
+                      </td>
+                    {% endfor %}
+                  </tr>
+                  <tr>
+                    <td class="fw-bold">HAM-D21</td>
+                    {% for c in trend_cols %}
+                      <td>
+                        {% if c.hamd21 is not None %}
+                          {{ c.hamd21 }}点
+                        {% else %}
+                          -
+                        {% endif %}
+                      </td>
+                    {% endfor %}
+                  </tr>
                 </tbody>
               </table>
-              <div class="mt-2 p-2 bg-light border rounded small text-muted">
-                <strong>※HAMD17 参考基準:</strong> 0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23-:最重症
+              <div class="small text-muted mb-4">HAM-D17基準: 0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23以上:最重症</div>
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <h6 class="fw-bold mb-0">自己記入式心理検査</h6>
+                <a class="btn btn-outline-primary btn-sm"
+                   href="{% url 'rtms_app:patient_survey_export' patient.id %}"><i class="fas fa-file-csv me-1"></i>CSV出力</a>
               </div>
+              <table class="table table-sm table-striped score-table w-auto mb-0">
+                <thead>
+                  <tr>
+                    <th>尺度</th>
+                    {% for phase in survey_phase_summary %}<th>{{ phase.label }}</th>{% endfor %}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="fw-bold">BACS</td>
+                    {% for phase in survey_phase_summary %}<td>-</td>{% endfor %}
+                  </tr>
+                  <tr>
+                    <td class="fw-bold">PHQ-9</td>
+                    {% for phase in survey_phase_summary %}
+                      <td>
+                        {% if phase.row and phase.row.totals.phq9 is not None %}
+                          {{ phase.row.totals.phq9 }}
+                        {% else %}
+                          -
+                        {% endif %}
+                      </td>
+                    {% endfor %}
+                  </tr>
+                  <tr>
+                    <td class="fw-bold">SASS-J</td>
+                    {% for phase in survey_phase_summary %}
+                      <td>
+                        {% if phase.row and phase.row.totals.sassj is not None %}
+                          {{ phase.row.totals.sassj }}
+                        {% else %}
+                          -
+                        {% endif %}
+                      </td>
+                    {% endfor %}
+                  </tr>
+                  <tr>
+                    <td class="fw-bold">BDI-II</td>
+                    {% for phase in survey_phase_summary %}
+                      <td>
+                        {% if phase.row and phase.row.totals.bdi2 is not None %}
+                          {{ phase.row.totals.bdi2 }}
+                        {% else %}
+                          -
+                        {% endif %}
+                      </td>
+                    {% endfor %}
+                  </tr>
+                  <tr>
+                    <td class="fw-bold">SDS</td>
+                    {% for phase in survey_phase_summary %}
+                      <td>
+                        {% if phase.row and phase.row.totals.sds is not None %}
+                          {{ phase.row.totals.sds }}
+                        {% else %}
+                          -
+                        {% endif %}
+                      </td>
+                    {% endfor %}
+                  </tr>
+                  <tr>
+                    <td class="fw-bold">STAI特性</td>
+                    {% for phase in survey_phase_summary %}
+                      <td>
+                        {% if phase.row and phase.row.totals.stai_x2 is not None %}
+                          {{ phase.row.totals.stai_x2 }}
+                        {% else %}
+                          -
+                        {% endif %}
+                      </td>
+                    {% endfor %}
+                  </tr>
+                  <tr>
+                    <td class="fw-bold">STAI状態</td>
+                    {% for phase in survey_phase_summary %}
+                      <td>
+                        {% if phase.row and phase.row.totals.stai_x1 is not None %}
+                          {{ phase.row.totals.stai_x1 }}
+                        {% else %}
+                          -
+                        {% endif %}
+                      </td>
+                    {% endfor %}
+                  </tr>
+                  <tr>
+                    <td class="fw-bold">DAI-10</td>
+                    {% for phase in survey_phase_summary %}
+                      <td>
+                        {% if phase.row and phase.row.totals.dai10 is not None %}
+                          {{ phase.row.totals.dai10 }}
+                        {% else %}
+                          -
+                        {% endif %}
+                      </td>
+                    {% endfor %}
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
       </div>
     </form>
-    <div class="form-section">
-      <div class="card mb-3">
-        <div class="card-header card-header-accent fw-bold" style="--card-accent: var(--color-discharge-dark); background: var(--color-discharge-bg); color: var(--color-discharge-dark);">退院時 印刷・書類</div>
-        <div class="card-body">
-          <div class="small text-muted mb-3">各ドキュメントを個別に印刷・保存できます</div>
-          <div class="d-grid gap-2">
-            <a class="btn btn-primary btn-sm" href="{% url 'rtms_app:print:patient_print_discharge' patient.id %}" target="_blank" rel="noopener">
-              <i class="fas fa-print"></i> 退院時サマリーを印刷
-            </a>
-            <a class="btn btn-primary btn-sm" href="{% url 'rtms_app:print:patient_print_referral' patient.id %}" target="_blank" rel="noopener">
-              <i class="fas fa-print"></i> 紹介状を印刷
-            </a>
-          </div>
-        </div>
-      </div>
-    </div>
     {% url 'rtms_app:dashboard' as dashboard_url %}
     {% if dashboard_date %}
       {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
-        <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
-        <script src="{% static 'rtms_app/floating.js' %}"></script>
-        <div class="fab-stack no-print">
-          <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_discharge' patient.id %}" target="_blank">
-            <i class="fas fa-file-pdf"></i> 退院時
-          </a>
-          <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_referral' patient.id %}" target="_blank">
-            <i class="fas fa-file-pdf"></i> 紹介状
-          </a>
-          <button type="button"
-                  class="btn btn-discharge fab"
-                  onclick="RTMSFloating.submitFormById('mainForm')">
+        <div class="page-exit-menu no-print d-flex flex-wrap justify-content-center gap-2 mt-4 pt-3 border-top">
+          <button type="submit" form="mainForm" class="btn btn-discharge">
             <i class="fas fa-save"></i> 保存
           </button>
-          <a class="btn btn-secondary fab" href="{{ back_url }}">
+          <a class="btn btn-primary"
+             href="{% url 'rtms_app:print:patient_print_discharge' patient.id %}"
+             target="_blank"
+             rel="noopener">
+            <i class="fas fa-print"></i> 退院時サマリーを印刷
+          </a>
+          <a class="btn btn-primary"
+             href="{% url 'rtms_app:print:patient_print_referral' patient.id %}"
+             target="_blank"
+             rel="noopener">
+            <i class="fas fa-print"></i> 紹介状を印刷
+          </a>
+          <a class="btn btn-secondary" href="{{ back_url }}">
             <i class="fas fa-undo"></i> 戻る
           </a>
         </div>
       {% endwith %}
     {% else %}
-      <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
-      <script src="{% static 'rtms_app/floating.js' %}"></script>
-      <div class="fab-stack no-print">
-        <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_discharge' patient.id %}" target="_blank">
-          <i class="fas fa-file-pdf"></i> 退院時
-        </a>
-        <a class="btn btn-primary fab" href="{% url 'rtms_app:print:patient_print_referral' patient.id %}" target="_blank">
-          <i class="fas fa-file-pdf"></i> 紹介状
-        </a>
-        <button type="button"
-                class="btn btn-discharge fab"
-                onclick="RTMSFloating.submitFormById('mainForm')">
+      <div class="page-exit-menu no-print d-flex flex-wrap justify-content-center gap-2 mt-4 pt-3 border-top">
+        <button type="submit" form="mainForm" class="btn btn-discharge">
           <i class="fas fa-save"></i> 保存
         </button>
-        <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
+        <a class="btn btn-primary"
+           href="{% url 'rtms_app:print:patient_print_discharge' patient.id %}"
+           target="_blank"
+           rel="noopener">
+          <i class="fas fa-print"></i> 退院時サマリーを印刷
+        </a>
+        <a class="btn btn-primary"
+           href="{% url 'rtms_app:print:patient_print_referral' patient.id %}"
+           target="_blank"
+           rel="noopener">
+          <i class="fas fa-print"></i> 紹介状を印刷
+        </a>
+        <a class="btn btn-secondary" href="{{ dashboard_url }}">
           <i class="fas fa-undo"></i> 戻る
         </a>
       </div>

@@ -1,14 +1,12 @@
 {% extends "rtms_app/base.html" %}
 {% load static %}
-
 {% block body_class %}page-admission{% endblock %}
-
 {% block header_breadcrumb %}
     <span class="text-white-50 ms-2">/ クリニカルパス</span>
 {% endblock header_breadcrumb %}
-
 {% block extrastyle %}
-<style>
+    <link rel="stylesheet" href="{% static 'rtms_app/page_actions.css' %}">
+    <style>
     .calendar-container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
     .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
     
@@ -53,122 +51,124 @@
         .event-item { font-size: 0.7rem; padding: 1px 2px; margin-bottom: 1px; }
     }
 
-</style>
+    </style>
 {% endblock %}
-
 {% block content %}
-<form id="mainForm" class="d-none" method="get"></form>
-<div class="stack-md">
-    {% include "rtms_app/partials/patient_inline_bar.html" with page_title="クリニカルパス (スケジュール)" title_icon="fa-calendar-alt" patient=patient %}
-
-    {% if recommendation and recommendation.status != 'pending' %}
-    <div class="alert {% if recommendation.status == 'remission' %}alert-success{% elif recommendation.status == 'ineffective' %}alert-danger{% else %}alert-info{% endif %} fw-bold">
-        <i class="fas fa-bullhorn me-1"></i>{{ recommendation.message }}
-        <div class="small fw-normal mt-1">{{ recommendation.detail }}</div>
-    </div>
-    {% endif %}
-
-    <div class="calendar-container card-like">
-        <div class="calendar-header">
-        
-            <div class="text-end small">
-                入院日: {{ patient.admission_date|default:"未定" }}<br>
-                退院予定: {% if patient.discharge_date %}{{ patient.discharge_date }}{% else %}未定{% endif %}
+    <form id="mainForm" class="d-none" method="get">
+    </form>
+    <div class="stack-md">
+        {% include "rtms_app/partials/patient_inline_bar.html" with page_title="クリニカルパス (スケジュール)" title_icon="fa-calendar-alt" patient=patient %}
+        {% if recommendation and recommendation.status != 'pending' %}
+            <div class="alert {% if recommendation.status == 'remission' %}alert-success{% elif recommendation.status == 'ineffective' %}alert-danger{% else %}alert-info{% endif %} fw-bold">
+                <i class="fas fa-bullhorn me-1"></i>{{ recommendation.message }}
+                <div class="small fw-normal mt-1">{{ recommendation.detail }}</div>
+            </div>
+        {% endif %}
+        <div class="calendar-container card-like">
+            <div class="calendar-header">
+                <div class="text-end small">
+                    入院日: {{ patient.admission_date|default:"未定" }}
+                    <br>
+                    退院予定:
+                    {% if patient.discharge_date %}
+                        {{ patient.discharge_date }}
+                    {% else %}
+                        未定
+                    {% endif %}
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="calendar-table">
+                    <thead>
+                        <tr>
+                            <th class="text-primary">月</th>
+                            <th class="text-primary">火</th>
+                            <th class="text-primary">水</th>
+                            <th class="text-primary">木</th>
+                            <th class="text-primary">金</th>
+                            <th class="text-primary">土</th>
+                            <th class="text-danger">日</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for week in calendar_weeks %}
+                            <tr>
+                                {% for day in week %}
+                                    <td class="{% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %} {% if day.url %}clickable{% endif %}"
+                                        {% if day.url %}onclick="window.location.href='{{ day.url }}'"{% endif %}
+                                        data-date="{{ day.date|date:'Y-m-d' }}">
+                                        <span class="date-num">
+                                            {{ day.date|date:"n/j" }}
+                                            {% if day.is_holiday %}<span class="badge bg-danger ms-1" style="font-size: 0.6em;">祝</span>{% endif %}
+                                        </span>
+                                        {% for event in day.events %}
+                                            {% if event.type == 'admission' %}
+                                                <a href="{{ event.url }}"
+                                                   class="event-item evt-admission"
+                                                   onclick="event.stopPropagation();"><i class="fas fa-procedures"></i> {{ event.label }}</a>
+                                            {% elif event.type == 'mapping' %}
+                                                <a href="{{ event.url }}"
+                                                   class="event-item evt-mapping"
+                                                   onclick="event.stopPropagation();"><i class="fas fa-crosshairs"></i> {{ event.label }}</a>
+                                            {% elif event.type == 'treatment' %}
+                                                <a href="{{ event.url }}"
+                                                   class="event-item evt-treatment"
+                                                   onclick="event.stopPropagation();"><i class="fas fa-bolt"></i> {{ event.label }}</a>
+                                            {% elif event.type == 'assessment' %}
+                                                <a href="{{ event.url }}"
+                                                   class="event-item evt-assessment"
+                                                   onclick="event.stopPropagation();"><i class="fas fa-clipboard-check"></i> {{ event.label }}</a>
+                                            {% elif event.type == 'discharge' %}
+                                                <a href="{{ event.url }}"
+                                                   class="event-item evt-discharge"
+                                                   onclick="event.stopPropagation();"><i class="fas fa-home"></i> {{ event.label }}</a>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
-
-        <div class="table-responsive">
-            <table class="calendar-table">
-                <thead>
-                    <tr>
-                        <th class="text-primary">月</th>
-                        <th class="text-primary">火</th>
-                        <th class="text-primary">水</th>
-                        <th class="text-primary">木</th>
-                        <th class="text-primary">金</th>
-                        <th class="text-primary">土</th>
-                        <th class="text-danger">日</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for week in calendar_weeks %}
-                    <tr>
-                        {% for day in week %}
-                        <td class="{% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %} {% if day.url %}clickable{% endif %}"
-                            {% if day.url %}onclick="window.location.href='{{ day.url }}'"{% endif %}
-                            data-date="{{ day.date|date:'Y-m-d' }}">
-                            
-                            <span class="date-num">
-                                {{ day.date|date:"n/j" }}
-                                {% if day.is_holiday %}<span class="badge bg-danger ms-1" style="font-size: 0.6em;">祝</span>{% endif %}
-                            </span>
-                            
-                            {% for event in day.events %}
-                                {% if event.type == 'admission' %}
-                                    <a href="{{ event.url }}" class="event-item evt-admission" onclick="event.stopPropagation();"><i class="fas fa-procedures"></i> {{ event.label }}</a>
-                                {% elif event.type == 'mapping' %}
-                                    <a href="{{ event.url }}" class="event-item evt-mapping" onclick="event.stopPropagation();"><i class="fas fa-crosshairs"></i> {{ event.label }}</a>
-                                {% elif event.type == 'treatment' %}
-                                    <a href="{{ event.url }}" class="event-item evt-treatment" onclick="event.stopPropagation();"><i class="fas fa-bolt"></i> {{ event.label }}</a>
-                                {% elif event.type == 'assessment' %}
-                                    <a href="{{ event.url }}" class="event-item evt-assessment" onclick="event.stopPropagation();"><i class="fas fa-clipboard-check"></i> {{ event.label }}</a>
-                                {% elif event.type == 'discharge' %}
-                                    <a href="{{ event.url }}" class="event-item evt-discharge" onclick="event.stopPropagation();"><i class="fas fa-home"></i> {{ event.label }}</a>
-                                {% endif %}
-                            {% endfor %}
-                        </td>
-                        {% endfor %}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
     </div>
-</div>
-
-{% url 'rtms_app:dashboard' as dashboard_url %}
-{% if dashboard_date %}
-    {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
-        <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
-        <script src="{% static 'rtms_app/floating.js' %}"></script>
-
-        <div class="fab-stack no-print">
+    {% url 'rtms_app:dashboard' as dashboard_url %}
+    {% if dashboard_date %}
+        {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+            <div class="page-exit-menu no-print d-flex flex-wrap justify-content-center gap-2 mt-4 pt-3 border-top">
+                {% if floating_print_options and floating_print_options.0.href %}
+                    <button type="button"
+                            class="btn btn-primary"
+                            onclick="window.open('{{ floating_print_options.0.href|escapejs }}', '{{ floating_print_options.0.target|default:"_blank" }}');">
+                        <i class="fas fa-print"></i> クリニカルパス印刷
+                    </button>
+                {% endif %}
+                <a class="btn btn-secondary" href="{{ back_url }}">
+                    <i class="fas fa-undo"></i> 戻る
+                </a>
+            </div>
+        {% endwith %}
+    {% else %}
+        <div class="page-exit-menu no-print d-flex flex-wrap justify-content-center gap-2 mt-4 pt-3 border-top">
             {% if floating_print_options and floating_print_options.0.href %}
-                <button type="button" class="btn btn-primary fab" onclick="window.open('{{ floating_print_options.0.href|escapejs }}', '{{ floating_print_options.0.target|default:"_blank" }}');">
+                <a class="btn btn-primary"
+                   href="{{ floating_print_options.0.href }}"
+                   {% if floating_print_options.0.target %}target="{{ floating_print_options.0.target }}"{% endif %}>
                     <i class="fas fa-print"></i> クリニカルパス印刷
-                </button>
+                </a>
             {% endif %}
-
-            <a class="btn btn-secondary fab" href="{{ back_url }}">
+            <a class="btn btn-patient-list" href="{{ dashboard_url }}">
                 <i class="fas fa-undo"></i> 戻る
             </a>
         </div>
-    {% endwith %}
-{% else %}
-    <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
-    <script src="{% static 'rtms_app/floating.js' %}"></script>
-
-    <div class="fab-stack no-print">
-        {% if floating_print_options and floating_print_options.0.href %}
-            <a class="btn btn-primary fab" href="{{ floating_print_options.0.href }}" {% if floating_print_options.0.target %}target="{{ floating_print_options.0.target }}"{% endif %}>
-                <i class="fas fa-print"></i> クリニカルパス印刷
-            </a>
-        {% endif %}
-
-        <a class="btn btn-patient-list fab" href="{{ dashboard_url }}">
-            <i class="fas fa-undo"></i> 戻る
-        </a>
-    </div>
-{% endif %}
-
+    {% endif %}
     <div class="my-4">
         <!-- Assessment data removed as requested -->
     </div>
-
 {% endblock %}
-
 {% block scripts %}
-<script>
+    <script>
   window.addEventListener("load", function() {
     const params = new URLSearchParams(window.location.search);
     const focus = params.get("focus");
@@ -176,5 +176,5 @@
     const el = document.querySelector(`[data-date="${focus}"]`);
     if (el) el.scrollIntoView({behavior:"smooth", block:"center"});
   });
-</script>
+    </script>
 {% endblock %}

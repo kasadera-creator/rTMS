@@ -1,57 +1,64 @@
 {% extends 'rtms_app/print/_print_base_twocolumn.html' %}
 {% load static %}
-
 {% block title %}入院時サマリー - {{ patient.name }}{% endblock %}
-
 {% block print_content %}
-{% comment %} Render directly as A4 page-sheet without outer container %}{% endcomment %}
-<div class="page-sheet">
+  {% comment %} Render directly as A4 page-sheet without outer container %}{% endcomment %}
+  <div class="page-sheet">
     <h1 class="doc-title">入院時サマリー</h1>
-
     {# 患者基本情報 #}
     <table class="summary-info-table">
       <tr>
-        <th>カルテID</th><td>{{ patient.card_id }}</td>
-        <th>氏名</th><td>{{ patient.name }} 様</td>
+        <th>カルテID</th>
+        <td>{{ patient.card_id }}</td>
+        <th>氏名</th>
+        <td>{{ patient.name }} 様</td>
       </tr>
       <tr>
-        <th>生年月日</th><td>{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）</td>
-        <th>性別</th><td>{{ patient.get_gender_display }}</td>
+        <th>生年月日</th>
+        <td>{{ patient.birth_date|date:"Y年n月j日" }}（{{ patient.age }}歳）</td>
+        <th>性別</th>
+        <td>{{ patient.get_gender_display }}</td>
       </tr>
       <tr>
-        <th>紹介元</th><td>{{ patient.referral_source|default:"-" }}</td>
-        <th>紹介医</th><td>{{ patient.referral_doctor|default:"-" }}</td>
+        <th>紹介元</th>
+        <td>{{ patient.referral_source|default:"-" }}</td>
+        <th>紹介医</th>
+        <td>{{ patient.referral_doctor|default:"-" }}</td>
       </tr>
     </table>
-	
-	<div class="content-section">
+    <div class="content-section">
       <div class="section-label">診断名</div>
-      <div class="text-content mb-3" style="text-align: left !important;">
-        {{ patient.diagnosis|default:"うつ病" }}
-      </div>
+      <div class="text-content mb-3" style="text-align: left !important;">{{ patient.diagnosis|default:"うつ病" }}</div>
     </div>
-
     <div class="content-section">
       <div class="section-label">病歴・背景</div>
-      <div class="text-content" style="text-align: left !important; line-height: 1.1; font-size: 9.5pt; padding: 0; margin: 0; border: none; background-color: transparent; min-height: auto; white-space: normal;">
+      <div class="text-content"
+           style="text-align: left !important;
+                  line-height: 1.1;
+                  font-size: 9.5pt;
+                  padding: 0;
+                  margin: 0;
+                  border: none;
+                  background-color: transparent;
+                  min-height: auto;
+                  white-space: normal">
         <div style="margin-bottom: 10pt; margin-left: 0; margin-top: 0;">
-            <strong>【主　訴】</strong> {{ patient.chief_complaint|default:""|linebreaksbr|safe }}
+          <strong>【主　訴】</strong> {{ patient.chief_complaint|default:""|linebreaksbr|safe }}
         </div>
         <div style="margin-bottom: 10pt; margin-left: 0; margin-top: 0;">
-            <strong>【生活歴】</strong> {{ patient.life_history|default:"(記載なし)"|linebreaksbr|safe }}
+          <strong>【生活歴】</strong> {{ patient.life_history|default:"(記載なし)"|linebreaksbr|safe }}
         </div>
         <div style="margin-bottom: 10pt; margin-left: 0; margin-top: 0;">
-            <strong>【既往歴】</strong> {{ patient.past_history|default:"(記載なし)"|linebreaksbr|safe }}
+          <strong>【既往歴】</strong> {{ patient.past_history|default:"(記載なし)"|linebreaksbr|safe }}
         </div>
         <div style="margin-bottom: 10pt; margin-left: 0; margin-top: 0;">
-            <strong>【現病歴】</strong> {{ patient.present_illness|default:"(記載なし)"|linebreaksbr|safe }}
+          <strong>【現病歴】</strong> {{ patient.present_illness|default:"(記載なし)"|linebreaksbr|safe }}
         </div>
         <div style="margin-left: 0; margin-top: 0;">
-            <strong>【薬物治療歴】</strong> {{ patient.medication_history|default:"(記載なし)"|linebreaksbr|safe }}
+          <strong>【薬物治療歴】</strong> {{ patient.medication_history|default:"(記載なし)"|linebreaksbr|safe }}
         </div>
       </div>
     </div>
-
     <div class="content-section">
       <div class="section-label">治療前評価（HAM-D）</div>
       <table class="table-basic" style="margin-top: 8px;">
@@ -74,17 +81,18 @@
           {% endfor %}
         {% endwith %}
         {% if assessments|length == 0 %}
-          <tr><td colspan="4">評価データは未入力です。</td></tr>
+          <tr>
+            <td colspan="4">評価データは未入力です。</td>
+          </tr>
         {% endif %}
       </table>
     </div>
-
     <div class="content-section">
       <div class="section-label">治療予定（スケジュール）</div>
       <table class="table-basic" style="margin-top: 8px;">
         <tr>
           <th>入院日</th>
-          <th>位置決め日</th>
+          <th>MT測定日</th>
           <th>治療開始日</th>
           <th>治療終了予定（30回）</th>
         </tr>
@@ -96,27 +104,27 @@
         </tr>
       </table>
     </div>
-
     <div class="page-footer">
-        <div>作成日: {{ today|date:"Y年n月j日" }}</div>
-        <div>笠寺精治寮病院</div>
+      <div>作成日: {{ today|date:"Y年n月j日" }}</div>
+      <div>笠寺精治寮病院</div>
     </div>
-</div>
+  </div>
 {% endblock %}
-
 {% block print_controls %}
-<div class="control-section">
+  <div class="control-section">
     <h5>印刷オプション</h5>
     <div class="btn-group">
-        <button id="print-btn" class="btn btn-primary">
-            <i class="fas fa-print"></i> 印刷
-        </button>
-        <button id="pdf-btn" class="btn btn-success">
-            <i class="fas fa-file-pdf"></i> PDF保存
-        </button>
-        <button id="back-btn" class="btn btn-outline-secondary" data-back-url="{{ back_url }}">
-            <i class="fas fa-arrow-left"></i> 戻る
-        </button>
+      <button id="print-btn" class="btn btn-primary">
+        <i class="fas fa-print"></i> 印刷
+      </button>
+      <button id="pdf-btn" class="btn btn-success">
+        <i class="fas fa-file-pdf"></i> PDF保存
+      </button>
+      <button id="back-btn"
+              class="btn btn-outline-secondary"
+              data-back-url="{{ back_url }}">
+        <i class="fas fa-arrow-left"></i> 戻る
+      </button>
     </div>
-</div>
+  </div>
 {% endblock %}

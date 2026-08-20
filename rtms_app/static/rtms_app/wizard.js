@@ -18,9 +18,9 @@ class ProcedureWizard {
       step5_mt_date: this.getTodayDate(),
       step5_mt_value: '60',
       step5_mt_a_x: '3',
-      step5_mt_a_y: '1',
+      step5_mt_a_y: '7',
       step5_mt_b_x: '9',
-      step5_mt_b_y: '1',
+      step5_mt_b_y: '7',
       step5_mt_note: '',
       // Step6
       step6_confirm_seconds: '2.0',
@@ -324,7 +324,7 @@ class ProcedureWizard {
       <h5 class="mb-3">Step 3: 患者さんの準備（安全確認）</h5>
       <div class="alert alert-info">
         <div class="fw-bold">確認事項</div>
-        <div class="small">チェック外れがある場合、<b>Step5で位置決め・MT測定を再度してください。</b></div>
+        <div class="small">チェック外れがある場合、<b>Step5でMT測定を再度してください。</b></div>
       </div>
       <div class="d-flex flex-column gap-2">
         <div class="form-check form-switch border rounded bg-light" style="padding-left: 3rem;">
@@ -397,21 +397,6 @@ class ProcedureWizard {
           >
         </div>
         <div class="row">
-          <div class="col-md-6">
-            <div class="form-group">
-              <label class="form-label fw-bold">MT値（%）</label>
-              <input 
-                type="number" 
-                class="form-control form-control-sm"
-                min="10" max="100"
-                value="${this.state.step5_mt_value}"
-                onchange="window.currentWizard.state.step5_mt_value = this.value;"
-              >
-              <small class="text-muted">10〜100の範囲で入力</small>
-            </div>
-          </div>
-        </div>
-        <div class="row">
           <div class="col-6">
             <div class="form-group">
               <label class="form-label fw-bold small">a_x</label>
@@ -456,6 +441,21 @@ class ProcedureWizard {
                 value="${this.state.step5_mt_b_y}"
                 onchange="window.currentWizard.state.step5_mt_b_y = this.value;"
               >
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-md-6">
+            <div class="form-group">
+              <label class="form-label fw-bold">MT（モーター閾値）</label>
+              <input 
+                type="number" 
+                class="form-control form-control-sm"
+                min="10" max="100" step="1"
+                value="${this.state.step5_mt_value}"
+                onchange="window.currentWizard.state.step5_mt_value = this.value;"
+              >
+              <small class="text-muted">10〜100の範囲で1単位入力</small>
             </div>
           </div>
         </div>
@@ -646,19 +646,19 @@ class ProcedureWizard {
           <p class="mb-2">該当する場合はチェックし、報告書を作成・送付してください。</p>
           <div class="d-flex flex-wrap gap-3" id="wizardSaeChecks">
             ${[
-              ['sae_seizure','けいれん発作'],
-              ['sae_finger_muscle','手指の筋収縮'],
-              ['sae_syncope','失神'],
-              ['sae_mania','躁病・軽躁病の出現'],
-              ['sae_suicide_attempt','自殺企図'],
-              ['sae_other','その他']
-            ].map(([id,label]) => {
-              const checked = document.getElementById(id)?.checked ? 'checked' : '';
-              return `<label class="form-check form-check-inline">
+        ['sae_seizure', 'けいれん発作'],
+        ['sae_finger_muscle', '手指の筋収縮'],
+        ['sae_syncope', '失神'],
+        ['sae_mania', '躁病・軽躁病の出現'],
+        ['sae_suicide_attempt', '自殺企図'],
+        ['sae_other', 'その他']
+      ].map(([id, label]) => {
+        const checked = document.getElementById(id)?.checked ? 'checked' : '';
+        return `<label class="form-check form-check-inline">
                         <input class="form-check-input wizard-sae-check" type="checkbox" data-target-id="${id}" ${checked}>
                         <span class="form-check-label">${label}</span>
                       </label>`;
-            }).join('')}
+      }).join('')}
           </div>
           <div class="mt-2 p-2 bg-white bg-opacity-50 rounded">
             <div class="small fw-bold">送付先メールアドレス</div>

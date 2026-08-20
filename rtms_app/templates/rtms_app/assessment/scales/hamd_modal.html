@@ -1,0 +1,392 @@
+{# MODAL VERSION: Use modal-body instead of full page extends #}
+<div class="modal-header bg-light border-bottom">
+    <h5 class="modal-title">
+        <i class="fas fa-pen"></i> {{ scale_name }}
+    </h5>
+    <button type="button"
+            class="btn-close"
+            data-bs-dismiss="modal"
+            aria-label="Close"></button>
+</div>
+<div class="modal-body">
+    <form id="hamdForm"
+          method="post"
+          action="{{ request.path }}"
+          class="needs-validation">
+        {% csrf_token %}
+        <input type="hidden" name="from" value="{{ from_page|default:'' }}">
+        <input type="hidden"
+               name="dashboard_date"
+               value="{{ dashboard_date|default:'' }}">
+        {# Date input #}
+        <div class="mb-3">
+            <label for="hamdDate" class="form-label">実施日</label>
+            <input type="date"
+                   id="hamdDate"
+                   name="date"
+                   class="form-control"
+                   value="{{ default_date|date:'Y-m-d' }}"
+                   required>
+        </div>
+        {# HAM-D items in two columns #}
+        <div class="card shadow-sm border-0">
+            <div class="card-header"
+                 style="border-left:4px solid #d32f2f;
+                        background-color: rgba(211,47,47,0.08)">
+                <div class="fw-bold">評価項目</div>
+            </div>
+            <div class="card-body bg-light">
+                <div class="row g-2">
+                    {# Left column #}
+                    <div class="col-md-6">
+                        <div class="d-flex flex-column gap-2">
+                            {% for key, label, max, text in hamd_items_left %}
+                                <div class="hamd-row p-2 d-flex align-items-center justify-content-between"
+                                     data-bs-toggle="popover"
+                                     data-bs-placement="right"
+                                     data-bs-trigger="click"
+                                     data-bs-content="{{ text }}">
+                                    <div class="d-flex align-items-center gap-2 flex-grow-1 me-2">
+                                        <div class="q-badge">Q{{ forloop.counter }}</div>
+                                        <div class="fw-bold compact-label">{{ label }}</div>
+                                    </div>
+                                    <div class="text-end">
+                                        <input type="hidden" name="{{ key }}" value="0">
+                                        <div class="btn-group hamd-btn-group"
+                                             role="group"
+                                             data-hamd-key="{{ key }}">
+                                            {% if max == 2 %}
+                                                {% for v in "012"|make_list %}
+                                                    <button type="button"
+                                                            class="btn btn-outline-primary hamd-btn"
+                                                            data-value="{{ v }}">{{ v }}</button>
+                                                {% endfor %}
+                                            {% elif max == 3 %}
+                                                {% for v in "0123"|make_list %}
+                                                    <button type="button"
+                                                            class="btn btn-outline-primary hamd-btn"
+                                                            data-value="{{ v }}">{{ v }}</button>
+                                                {% endfor %}
+                                            {% else %}
+                                                {% for v in "01234"|make_list %}
+                                                    <button type="button"
+                                                            class="btn btn-outline-primary hamd-btn"
+                                                            data-value="{{ v }}">{{ v }}</button>
+                                                {% endfor %}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {# Right column #}
+                    <div class="col-md-6">
+                        <div class="d-flex flex-column gap-2">
+                            {% for key, label, max, text in hamd_items_right %}
+                                <div class="hamd-row p-2 d-flex align-items-center justify-content-between"
+                                     data-bs-toggle="popover"
+                                     data-bs-placement="left"
+                                     data-bs-trigger="click"
+                                     data-bs-content="{{ text }}">
+                                    <div class="d-flex align-items-center gap-2 flex-grow-1 me-2">
+                                        <div class="q-badge">Q{{ forloop.counter|add:11 }}</div>
+                                        <div class="fw-bold compact-label">{{ label }}</div>
+                                    </div>
+                                    <div class="text-end">
+                                        <input type="hidden" name="{{ key }}" value="0">
+                                        <div class="btn-group hamd-btn-group"
+                                             role="group"
+                                             data-hamd-key="{{ key }}">
+                                            {% if max == 2 %}
+                                                {% for v in "012"|make_list %}
+                                                    <button type="button"
+                                                            class="btn btn-outline-primary hamd-btn"
+                                                            data-value="{{ v }}">{{ v }}</button>
+                                                {% endfor %}
+                                            {% elif max == 3 %}
+                                                {% for v in "0123"|make_list %}
+                                                    <button type="button"
+                                                            class="btn btn-outline-primary hamd-btn"
+                                                            data-value="{{ v }}">{{ v }}</button>
+                                                {% endfor %}
+                                            {% else %}
+                                                {% for v in "01234"|make_list %}
+                                                    <button type="button"
+                                                            class="btn btn-outline-primary hamd-btn"
+                                                            data-value="{{ v }}">{{ v }}</button>
+                                                {% endfor %}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {# Note #}
+        <div class="mt-3">
+            <label for="hamdNote" class="form-label">備考</label>
+            <textarea id="hamdNote"
+                      name="note"
+                      class="form-control form-control-sm"
+                      rows="2">{{ existing_note }}</textarea>
+        </div>
+        {# Score Summary #}
+        <div class="mt-3 bg-white p-2 rounded border">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="fw-bold">
+                    HAM-D17 合計：<span id="hamd17Total" style="color: var(--color-assessment);">0</span> 点
+                    <span class="ms-2">重症度：<span id="hamd17Severity" class="text-primary">正常</span></span>
+                    {% if initial_timing != 'baseline' %}
+                        <span class="ms-2">改善率：<span id="hamd17Improvement" class="text-success">-</span></span>
+                        <span class="ms-2">判定：<span id="hamd17Status" class="text-danger">-</span></span>
+                    {% endif %}
+                </div>
+                <div class="text-muted small">HAM-D17 参考基準: 0-7:正常 | 8-13:軽症 | 14-18:中等症 | 19-22:重症 | 23-:最重症</div>
+            </div>
+        </div>
+    </form>
+</div>
+{# Modal footer #}
+<div class="modal-footer bg-light">
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+    <button type="button"
+            class="btn btn-assessment"
+            onclick="submitHamdModalForm()">保存して閉じる</button>
+</div>
+<script>
+// Initialize HAM-D modal - defined as function (not IIFE) so it can be called by loadAssessmentModal()
+function initHamdModal() {
+  console.log('DEBUG initHamdModal: Starting initialization');
+  // Initialize Bootstrap popovers
+  const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
+  popoverTriggerList.forEach(popoverTriggerEl => {
+    new bootstrap.Popover(popoverTriggerEl, { html: true });
+  });
+
+  // Helper function to calculate HAM-D17 total and update display
+  function updateHAMDScores() {
+    console.log('DEBUG: updateHAMDScores called');
+    let total = 0;
+    for (let i = 1; i <= 17; i++) {
+      const hidden = document.querySelector(`input[name="q${i}"][type="hidden"]`);
+      if (hidden) {
+        const v = parseInt(hidden.value || "0", 10);
+        total += Number.isFinite(v) ? v : 0;
+      }
+    }
+    
+    console.log('DEBUG: HAM-D17 total =', total);
+    
+    // Update total
+    const totalEl = document.getElementById("hamd17Total");
+    if (totalEl) totalEl.textContent = String(total);
+    
+    // Update severity
+    let severity = "正常";
+    if (total <= 7) severity = "正常";
+    else if (total <= 13) severity = "軽症";
+    else if (total <= 18) severity = "中等症";
+    else if (total <= 22) severity = "重症";
+    else severity = "最重症";
+    
+    const sevEl = document.getElementById("hamd17Severity");
+    if (sevEl) sevEl.textContent = severity;
+    
+    // Calculate improvement if not baseline
+    const improvementEl = document.getElementById("hamd17Improvement");
+    const statusEl = document.getElementById("hamd17Status");
+    if (improvementEl && statusEl && typeof window.HAMD_BASELINE_17 !== 'undefined' && window.HAMD_BASELINE_17 !== null) {
+      const baseline = window.HAMD_BASELINE_17;
+      const improvement = Math.round(((baseline - total) / baseline) * 100);
+      improvementEl.textContent = improvement + "%";
+      
+      // Determine status
+      let status = "未判定";
+      if (improvement >= 50) status = "寛解";
+      else if (improvement >= 25) status = "反応有";
+      else status = "反応無";
+      
+      statusEl.textContent = status;
+    }
+  }
+
+  // Restore existing scores
+  const existingScores = {{ existing_scores|safe }};
+  if (existingScores && typeof existingScores === 'object') {
+    for (const [key, value] of Object.entries(existingScores)) {
+      const group = document.querySelector(`.hamd-btn-group[data-hamd-key="${key}"]`);
+      if (group) {
+        const button = group.querySelector(`button[data-value="${String(value)}"]`);
+        if (button) {
+          button.classList.add('active');
+          button.style.backgroundColor = '#d32f2f';
+          button.style.color = 'white';
+          button.style.borderColor = '#d32f2f';
+        }
+        const hiddenInput = group.closest('.hamd-row').querySelector(`input[name="${key}"]`);
+        if (hiddenInput) {
+          hiddenInput.value = value;
+        }
+      }
+    }
+  }
+  
+  // Update scores display on init
+  updateHAMDScores();
+
+  // Setup button click handler using event delegation
+  const clickHandler = function(e) {
+    const btn = e.target.closest('.hamd-btn');
+    if (!btn) return;
+    
+    e.preventDefault();
+    const group = btn.closest('.hamd-btn-group');
+    const hamdRow = group.closest('.hamd-row');
+    
+    // Deselect all buttons in this group
+    group.querySelectorAll('.hamd-btn').forEach(b => {
+      b.classList.remove('active');
+      b.style.backgroundColor = '';
+      b.style.color = '';
+      b.style.borderColor = '';
+    });
+    
+    // Select this button
+    btn.classList.add('active');
+    btn.style.backgroundColor = '#d32f2f';
+    btn.style.color = 'white';
+    btn.style.borderColor = '#d32f2f';
+    
+    // Update hidden input value
+    const key = group.dataset.hamdKey;
+    const value = btn.dataset.value;
+    const hiddenInput = hamdRow.querySelector(`input[name="${key}"]`);
+    if (hiddenInput) {
+      hiddenInput.value = value;
+      console.log(`DEBUG: Set ${key} = ${value}`);
+    }
+    
+    // Update HAM-D scores display
+    updateHAMDScores();
+    
+    // Move focus to next group
+    const allGroups = Array.from(document.querySelectorAll('.hamd-btn-group'));
+    const currentIndex = allGroups.indexOf(group);
+    if (currentIndex >= 0 && currentIndex < allGroups.length - 1) {
+      allGroups[currentIndex + 1].focus();
+    }
+  };
+  
+  // Register click handler
+  document.addEventListener('click', clickHandler);
+
+  // Keyboard input handler
+  const keydownHandler = function(e) {
+    if (!['0', '1', '2', '3', '4'].includes(e.key)) return;
+    
+    // Find currently focused button group or active row
+    let group = document.activeElement?.closest?.('.hamd-btn-group');
+    if (!group) {
+      const activeBtn = document.querySelector('.hamd-btn.active');
+      if (activeBtn) {
+        group = activeBtn.closest('.hamd-btn-group');
+      } else {
+        // Start from first group
+        group = document.querySelector('.hamd-btn-group');
+      }
+    }
+    
+    if (!group) return;
+    
+    const key = e.key;
+    const button = group.querySelector(`button[data-value="${key}"]`);
+    
+    if (button) {
+      e.preventDefault();
+      button.click();
+    }
+  };
+  
+  // Register keyboard handler
+  document.addEventListener('keydown', keydownHandler);
+  
+  // Set up window variables for improvement calculation
+  {% if initial_timing == 'baseline' %}
+    window.HAMD_SHOW_IMPROVEMENT = false;
+    window.HAMD_BASELINE_17 = null;
+  {% else %}
+    window.HAMD_SHOW_IMPROVEMENT = true;
+    {% if baseline_score_17 is not None %}
+      window.HAMD_BASELINE_17 = {{ baseline_score_17 }};
+    {% else %}
+      window.HAMD_BASELINE_17 = null;
+    {% endif %}
+  {% endif %}
+  
+  console.log('DEBUG initHamdModal: Initialization complete');
+}
+
+// Auto-initialize when the page loads (for full page view)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initHamdModal);
+} else {
+  // Already loaded (e.g., when loaded via AJAX)
+  setTimeout(() => initHamdModal(), 100);
+}
+</script>
+<style>
+/* Raise modal above floating menu (floating.css uses z-index: 2000) */
+.modal {
+  z-index: 2050 !important;
+}
+
+.modal-backdrop {
+  z-index: 2049 !important;
+}
+
+.q-badge {
+  background-color: #d32f2f;
+  color: white;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 12px;
+}
+
+.hamd-row {
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.hamd-row:hover {
+  background-color: rgba(211, 47, 47, 0.05);
+}
+
+.hamd-btn {
+  padding: 4px 8px;
+  font-size: 13px;
+  min-width: 40px;
+  transition: all 0.2s;
+}
+
+.hamd-btn.active {
+  background-color: #d32f2f;
+  color: white;
+  border-color: #d32f2f;
+}
+
+.compact-label {
+  font-size: 13px;
+  white-space: normal;
+}
+</style>

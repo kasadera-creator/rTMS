@@ -1,18 +1,24 @@
 {% extends "rtms_app/base.html" %}
 {% load static %}
-
 {% block body_class %}page-treatment{% endblock %}
-
 {% block header_breadcrumb %}
-  <a href="{% url 'rtms_app:dashboard' %}" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ダッシュボード</a>
+  <a href="{% url 'rtms_app:dashboard' %}"
+     class="nav-link text-white-50 px-1"
+     style="text-decoration: none;
+            font-size: 0.9rem">ダッシュボード</a>
   <span class="text-white-50 px-1">/</span>
-  <a href="#" class="nav-link text-white-50 px-1" style="text-decoration: none; font-size: 0.9rem;">ID {{ patient.card_id }}</a>
+  <a href="#"
+     class="nav-link text-white-50 px-1"
+     style="text-decoration: none;
+            font-size: 0.9rem">ID {{ patient.card_id }}</a>
   <span class="text-white-50 px-1">/</span>
   <span class="text-white px-1" style="font-size: 0.9rem;">治療実施</span>
 {% endblock header_breadcrumb %}
-
 {% block extrastyle %}
-<style>
+  <link rel="stylesheet" href="{% static 'rtms_app/page_actions.css' %}">
+  <style>
+    .page-treatment .modal-backdrop { z-index: 2050; }
+    .page-treatment .modal { z-index: 2060; }
     /* 印刷時の制御 */
     @media print {
         @page { size: A4; margin: 15mm; }
@@ -33,15 +39,14 @@
 
     /* iPad Landscape Optimization */
     @media only screen and (min-width: 1000px) and (orientation: landscape) {
-        .container { max-width: 98vw; padding-bottom: 80px !important; }
+      .container { max-width: 98vw; padding-bottom: 1rem !important; }
         .card-header { padding: 0.4rem 0.6rem; font-size: 0.95rem; }
         .card-body { padding: 0.6rem; }
         .form-label { margin-bottom: 0.2rem; font-size: 0.85rem; }
         .form-control, .form-select { padding: 0.2rem 0.4rem; font-size: 0.9rem; height: auto; }
         .mb-3 { margin-bottom: 0.5rem !important; }
         .mt-3 { margin-top: 0.5rem !important; }
-        .fab-stack { bottom: 15px; right: 15px; gap: 8px; }
-        .fab { padding: 6px 10px; font-size: 14px; }
+        .page-exit-menu { margin-top: 0.75rem !important; padding-top: 0.5rem !important; }
     }
 
     /* Wizard modal typography */
@@ -77,639 +82,829 @@
     }
     /* Small modals should remain compact */
     .modal-dialog.modal-sm .modal-content { max-height: none; min-height: auto; }
-</style>
+  </style>
 {% endblock %}
-
 {% block content %}
-<div class="container py-3">
-
-  {% include "rtms_app/partials/patient_inline_bar.html" with page_title="治療実施" title_icon="fa-bolt" title_controls_html=mode_switch_html %}
-  <div class="mt-2">
-    <a class="btn btn-sm btn-outline-secondary" href="{% url 'rtms_app:treatment_skip_list' patient.id %}">スキップ履歴</a>
-  </div>
-
-  {# print toolbar is only for print preview pages; remove from regular screen #}
-
-  {% if alert_msg %}
-  <div class="alert alert-danger fw-bold shadow-sm no-print mt-2">
-      <i class="fas fa-exclamation-triangle"></i> {{ alert_msg }}
-  </div>
-  {% endif %}
-
-  <form method="post" id="treatmentForm">
-    {% csrf_token %}
-    <input type="hidden" name="skip_reason" id="id_skip_reason" value="">
-
-    <div class="row g-3 mt-1">
+  <div class="container py-3">
+    {% include "rtms_app/partials/patient_inline_bar.html" with page_title="治療実施" title_icon="fa-bolt" title_controls_html=mode_switch_html %}
+    <div class="mt-2">
+      <a class="btn btn-sm btn-outline-secondary"
+         href="{% url 'rtms_app:treatment_skip_list' patient.id %}">スキップ履歴</a>
+    </div>
+    {# print toolbar is only for print preview pages; remove from regular screen #}
+    {% if alert_msg %}
+      <div class="alert alert-danger fw-bold shadow-sm no-print mt-2">
+        <i class="fas fa-exclamation-triangle"></i> {{ alert_msg }}
+      </div>
+    {% endif %}
+    <form method="post" id="treatmentForm">
+      {% csrf_token %}
+      <input type="hidden" name="skip_reason" id="id_skip_reason" value="">
+      <div class="row g-3 mt-1">
         <div class="col-12 col-lg-4">
-
-        <div class="card shadow-sm">
-          <div class="card-header fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2" style="color:#198754; background:rgba(25,135,84,.1);">
-            <div><i class="fas fa-calendar-day me-1"></i>実施日時・安全確認</div>
-            {% if plan_date_range_text %}
-              <div class="text-muted small">{{ plan_date_range_text }}</div>
-            {% endif %}
-          </div>
-          <div class="card-body">
-
-            <div class="row g-2 mb-3">
-              <div class="col-md-6">
-                <label class="form-label fw-bold">実施日</label>
-                {{ form.treatment_date }}
+          <div class="card shadow-sm">
+            <div class="card-header fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2"
+                 style="color:#198754;
+                        background:rgba(25,135,84,.1)">
+              <div>
+                <i class="fas fa-calendar-day me-1"></i>実施日時・安全確認
               </div>
-              <div class="col-md-6">
-                <label class="form-label fw-bold">開始時間</label>
-                {{ form.treatment_time }}
+              {% if plan_date_range_text %}<div class="text-muted small">{{ plan_date_range_text }}</div>{% endif %}
+            </div>
+            <div class="card-body">
+              <div class="row g-2 mb-3">
+                <div class="col-md-6">
+                  <label class="form-label fw-bold">実施日</label>
+                  {{ form.treatment_date }}
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label fw-bold">開始時間</label>
+                  {{ form.treatment_time }}
+                </div>
+              </div>
+              <hr class="my-2">
+              <div class="fw-bold text-success mb-1">安全確認（問題があればOFF）</div>
+              <div class="vstack gap-1">
+                <label class="form-check d-flex align-items-center gap-2 mb-0">
+                  {{ form.safety_sleep }}
+                  <span>睡眠時間</span>
+                </label>
+                <label class="form-check d-flex align-items-center gap-2 mb-0">
+                  {{ form.safety_alcohol }}
+                  <span>飲酒、過量のカフェイン</span>
+                </label>
+                <label class="form-check d-flex align-items-center gap-2 mb-0">
+                  {{ form.safety_meds }}
+                  <span>薬剤変更</span>
+                </label>
               </div>
             </div>
-
-            <hr class="my-2">
-
-            <div class="fw-bold text-success mb-1">安全確認（問題があればOFF）</div>
-            <div class="vstack gap-1">
-              <label class="form-check d-flex align-items-center gap-2 mb-0">
-                {{ form.safety_sleep }}
-                <span>睡眠時間</span>
-              </label>
-              <label class="form-check d-flex align-items-center gap-2 mb-0">
-                {{ form.safety_alcohol }}
-                <span>飲酒、過量のカフェイン</span>
-              </label>
-              <label class="form-check d-flex align-items-center gap-2 mb-0">
-                {{ form.safety_meds }}
-                <span>薬剤変更</span>
-              </label>
+          </div>
+          <div class="card shadow-sm mt-3">
+            <div class="card-header fw-bold"
+                 style="color: #dc3545;
+                        background: rgba(220,53,69,.1);
+                        border-left: 4px solid #dc3545">
+              <i class="fas fa-flag me-1"></i>HAM-D17 第3週評価による指示
             </div>
-
-          </div>
-        </div>
-
-        <div class="card shadow-sm mt-3">
-          <div class="card-header fw-bold" style="color: #dc3545; background: rgba(220,53,69,.1); border-left: 4px solid #dc3545;">
-            <i class="fas fa-flag me-1"></i>HAM-D17 第3週評価による指示
-          </div>
-          <div class="card-body">
-            {% if hamd3w_available %}
-              <div class="d-flex flex-wrap gap-3 align-items-center mb-2">
-                <div>
-                  <div class="small text-muted">HAM-D17（第3週）</div>
-                  <div class="fw-bold fs-5">{{ hamd3w_score }} 点</div>
+            <div class="card-body">
+              <div class="fw-bold mb-2">{{ week3_status }}</div>
+              {% if hamd3w_available %}
+                <div class="d-flex flex-wrap gap-3 align-items-center mb-2">
+                  <div>
+                    <div class="small text-muted">HAM-D17（第3週）</div>
+                    <div class="fw-bold fs-5">{{ hamd3w_score }} 点</div>
+                  </div>
+                  <div>
+                    <div class="small text-muted">改善率</div>
+                    <div class="fw-bold fs-5">
+                      {% if hamd3w_improvement_pct is not None %}
+                        {{ hamd3w_improvement_pct }}%
+                      {% else %}
+                        -
+                      {% endif %}
+                    </div>
+                  </div>
+                  <div>
+                    <div class="small text-muted">判定</div>
+                    <div class="fw-bold fs-5">
+                      {% if hamd3w_status %}
+                        {{ hamd3w_status }}
+                      {% else %}
+                        -
+                      {% endif %}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div class="small text-muted">改善率</div>
-                  <div class="fw-bold fs-5">{% if hamd3w_improvement_pct is not None %}{{ hamd3w_improvement_pct }}%{% else %}-{% endif %}</div>
+                <div class="p-2 rounded"
+                     style="background: rgba(220,53,69,.08);
+                            border: 1px solid rgba(220,53,69,.25)">
+                  <div class="fw-bold">指示</div>
+                  <div>
+                    {% if hamd_eval.instruction %}
+                      {{ hamd_eval.instruction }}
+                    {% else %}
+                      未評価
+                    {% endif %}
+                  </div>
                 </div>
-                <div>
-                  <div class="small text-muted">判定</div>
-                  <div class="fw-bold fs-5">{% if hamd3w_status %}{{ hamd3w_status }}{% else %}-{% endif %}</div>
-                </div>
-              </div>
-
-              <div class="p-2 rounded" style="background: rgba(220,53,69,.08); border: 1px solid rgba(220,53,69,.25);">
-                <div class="fw-bold">指示</div>
-                <div>{% if hamd_eval.instruction %}{{ hamd_eval.instruction }}{% else %}未評価{% endif %}</div>
-              </div>
-            {% else %}
-              <div class="text-muted">
-                第3週評価が未登録です（必要に応じて評価入力を行ってください）。
-              </div>
-            {% endif %}
+              {% else %}
+                {% if week3_status != '第3週評価前です' %}
+                  <a class="btn btn-outline-danger btn-sm"
+                     href="{{ week3_assessment_url }}">第3週評価を入力</a>
+                {% endif %}
+              {% endif %}
+            </div>
           </div>
-        </div>
-
-        <div class="card shadow-sm mt-3">
-          <div class="card-header fw-bold" style="color:#856404; background: rgba(255,193,7,.18); border-left: 4px solid #ffc107;">
-            <i class="fas fa-crosshairs me-1"></i>位置決め・MT測定（今週）
-          </div>
-          <div class="card-body">
-
-            {% if need_mapping %}
-              <div class="alert alert-warning py-2 px-2 mb-2">
-                <div class="fw-bold"><i class="fas fa-exclamation-triangle me-1"></i>位置決めをしてください</div>
-                <a class="btn btn-warning btn-sm mt-1 fw-bold" href="{{ mapping_url }}">
-                  <i class="fas fa-crosshairs me-1"></i>位置決め画面へ
-                </a>
-              </div>
-            {% endif %}
-
-            {% if needs_mapping_today and not mapping_done %}
-              <div class="alert alert-danger mb-2">
-                <div class="fw-bold">
-                  <i class="fas fa-exclamation-circle me-1"></i>本日は位置決め・MT測定が必要です
-                </div>
-                <div class="small">{{ mapping_reason }}</div>
-                <div class="mt-2">
-                  <a class="btn btn-danger btn-sm" href="{{ mapping_url }}">
-                    <i class="fas fa-external-link-alt me-1"></i>位置決め・MT測定へ
+          <div class="card shadow-sm mt-3">
+            <div class="card-header fw-bold"
+                 style="color:#856404;
+                        background: rgba(255,193,7,.18);
+                        border-left: 4px solid #ffc107">
+              <i class="fas fa-crosshairs me-1"></i>MT測定（今週）
+            </div>
+            <div class="card-body">
+              {% if need_mapping %}
+                <div class="alert alert-warning py-2 px-2 mb-2">
+                  <div class="fw-bold">
+                    <i class="fas fa-exclamation-triangle me-1"></i>MT測定をしてください
+                  </div>
+                  <a class="btn btn-warning btn-sm mt-1 fw-bold" href="{{ mapping_url }}">
+                    <i class="fas fa-crosshairs me-1"></i>MT測定画面へ
                   </a>
                 </div>
-              </div>
-            {% endif %}
-
-            {% if current_week_mapping %}
-              <div class="row g-2">
-                <div class="col-md-4">
-                  <div class="small text-muted">MT値（モーター閾値）</div>
-                  <div class="fw-bold fs-5">{{ current_week_mapping.resting_mt }}</div>
-                </div>
-                <div class="col-md-8">
-                  <div class="small text-muted">位置</div>
-                  <div class="fw-bold small">
-                    a({{ current_week_mapping.helmet_position_a_x }},{{ current_week_mapping.helmet_position_a_y }})
-                    /
-                    b({{ current_week_mapping.helmet_position_b_x }},{{ current_week_mapping.helmet_position_b_y }})
+              {% endif %}
+              {% if needs_mapping_today and not mapping_done %}
+                <div class="alert alert-danger mb-2">
+                  <div class="fw-bold">
+                    <i class="fas fa-exclamation-circle me-1"></i>本日はMT測定が必要です
+                  </div>
+                  <div class="small">{{ mapping_reason }}</div>
+                  <div class="mt-2">
+                    <a class="btn btn-danger btn-sm" href="{{ mapping_url }}">
+                      <i class="fas fa-external-link-alt me-1"></i>MT測定へ
+                    </a>
                   </div>
                 </div>
-              </div>
-            {% else %}
-              <div class="text-muted">今週の位置決め情報がありません。</div>
-            {% endif %}
-
+              {% endif %}
+              {% if current_week_mapping %}
+                <div class="row g-2">
+                  <div class="col-md-4">
+                    <div class="small text-muted">MT値（モーター閾値）</div>
+                    <div class="fw-bold fs-5">{{ current_week_mapping.resting_mt }}</div>
+                  </div>
+                  <div class="col-md-8">
+                    <div class="small text-muted">位置</div>
+                    <div class="fw-bold small">
+                      a({{ current_week_mapping.helmet_position_a_x }},{{ current_week_mapping.helmet_position_a_y }})
+                      /
+                      b({{ current_week_mapping.helmet_position_b_x }},{{ current_week_mapping.helmet_position_b_y }})
+                    </div>
+                  </div>
+                </div>
+              {% else %}
+                <div class="text-muted">今週のMT測定情報がありません。</div>
+              {% endif %}
+            </div>
           </div>
         </div>
-
-      </div>
-
-      <div class="col-12 col-lg-8">
-        <div class="card shadow-sm">
-          <div class="card-header fw-bold text-success d-flex justify-content-between align-items-center flex-wrap gap-2" style="background: rgba(25,135,84,.1); border-left: 4px solid #198754;">
-            <div><i class="fas fa-notes-medical me-1"></i>治療実施記録（本日）</div>
-            {% if course_session_text %}
-              <div class="text-muted small">{{ course_session_text }}</div>
-            {% endif %}
-          </div>
-          <div class="card-body">
-
-            <div class="mb-3 p-2 rounded" style="border:1px solid rgba(25,135,84,.22);">
-              <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                <div class="fw-bold">確認用刺激</div>
+        <div class="col-12 col-lg-8">
+          <div class="card shadow-sm">
+            <div class="card-header fw-bold text-success d-flex justify-content-between align-items-center flex-wrap gap-2"
+                 style="background: rgba(25,135,84,.1);
+                        border-left: 4px solid #198754">
+              <div>
+                <i class="fas fa-notes-medical me-1"></i>治療実施記録（本日）
               </div>
-
-              {% if confirm_alert_message %}
-                <div class="alert alert-warning small mt-2 mb-0">{{ confirm_alert_message }}</div>
-              {% endif %}
-
-              {% if mtValueDisplay %}
-                <div class="small text-muted mt-2">MT（モーター閾値）：{{ mtValueDisplay }}</div>
-              {% endif %}
-
-              <!-- 上段の重複する確認用刺激ブロックを削除しました -->
-              <hr class="my-2">
-
-              <!-- 確認用刺激: 左側に刺激強度/刺激時間をコンパクトに表示、右半分は空白 -->
-              <div class="row g-2 mt-2">
-                <div class="col-12 col-md-6">
-                  <div class="row g-2">
-                    <div class="col-6">
-                      <label class="form-label fw-bold">刺激強度（%MT）</label>
-                      <input type="number" class="form-control" name="confirm_mt_percent" id="confirm_mt_percent" step="10" value="{{ confirm_defaults.percent|default:'120' }}">
-                    </div>
-                    <div class="col-6">
-                      <label class="form-label fw-bold">刺激時間（秒）</label>
-                      <input type="number" class="form-control" name="confirm_pulse_seconds" id="confirm_pulse_seconds" step="0.5" value="{{ confirm_defaults.seconds|default:'2.0' }}">
+              {% if course_session_text %}<div class="text-muted small">{{ course_session_text }}</div>{% endif %}
+            </div>
+            <div class="card-body">
+              <div class="mb-3 p-2 rounded" style="border:1px solid rgba(25,135,84,.22)">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                  <div class="fw-bold">実施した治療刺激</div>
+                </div>
+                <div class="row g-2 mt-2 align-items-end">
+                  <div class="col-12 col-md-3">
+                    <label class="form-label fw-bold">実際の刺激強度</label>
+                    {{ form.intensity_percent }}
+                  </div>
+                  <div class="col-12 col-md-3">
+                    <label class="form-label fw-bold">%MT</label>
+                    {{ form.mt_percent }}
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label fw-bold">刺激位置</label>
+                    <div class="d-flex align-items-center gap-1">
+                      <span class="small">a</span>
+                      <input class="form-control form-control-sm"
+                             type="number"
+                             step="1"
+                             min="0"
+                             max="9"
+                             name="treatment_position_a_x"
+                             value="{{ treatment_positions.a.x }}"
+                             form="treatmentForm"
+                             aria-label="刺激位置a X">
+                      <input class="form-control form-control-sm"
+                             type="number"
+                             step="1"
+                             min="0"
+                             max="9"
+                             name="treatment_position_a_y"
+                             value="{{ treatment_positions.a.y }}"
+                             form="treatmentForm"
+                             aria-label="刺激位置a Y">
+                      <span class="small ms-1">b</span>
+                      <input class="form-control form-control-sm"
+                             type="number"
+                             step="1"
+                             min="0"
+                             max="9"
+                             name="treatment_position_b_x"
+                             value="{{ treatment_positions.b.x }}"
+                             form="treatmentForm"
+                             aria-label="刺激位置b X">
+                      <input class="form-control form-control-sm"
+                             type="number"
+                             step="1"
+                             min="0"
+                             max="9"
+                             name="treatment_position_b_y"
+                             value="{{ treatment_positions.b.y }}"
+                             form="treatmentForm"
+                             aria-label="刺激位置b Y">
                     </div>
                   </div>
                 </div>
-                <div class="col-12 col-md-6">
-                  <!-- intentionally left blank for layout balance -->
+                <div class="row g-2 mt-2">
+                  <div class="col">
+                    <label class="form-label fw-bold">周波数（Hz）</label>
+                    {{ form.frequency_hz }}
+                  </div>
+                  <div class="col">
+                    <label class="form-label fw-bold">トレイン長（秒）</label>
+                    {{ form.train_seconds }}
+                  </div>
+                  <div class="col">
+                    <label class="form-label fw-bold">トレイン間隔（秒）</label>
+                    {{ form.intertrain_seconds }}
+                  </div>
+                  <div class="col">
+                    <label class="form-label fw-bold">トレイン数</label>
+                    {{ form.train_count }}
+                  </div>
+                  <div class="col">
+                    <label class="form-label fw-bold">総パルス数</label>
+                    {{ form.total_pulses }}
+                  </div>
                 </div>
-              </div>
-            </div>
-
-            <div class="mb-3 p-2 rounded" style="border:1px solid rgba(25,135,84,.22);">
-              <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                <div class="fw-bold">実施した治療刺激</div>
-              </div>
-
-              <div class="row g-2 mt-2">
-                <!-- First row: 4 items compact -->
-                <div class="col-6 col-md-3">
-                  <label class="form-label fw-bold">刺激強度（%MT）</label>
-                  {{ form.mt_percent }}
-                </div>
-                <div class="col-6 col-md-3">
-                  <label class="form-label fw-bold">周波数（Hz）</label>
-                  {{ form.frequency_hz }}
-                </div>
-                <div class="col-6 col-md-3">
-                  <label class="form-label fw-bold">トレイン長（秒）</label>
-                  {{ form.train_seconds }}
-                </div>
-                <div class="col-6 col-md-3">
-                  <label class="form-label fw-bold">トレイン間隔（秒）</label>
-                  {{ form.intertrain_seconds }}
-                </div>
-              </div>
-
-              <div class="row g-2 mt-2">
-                <!-- Second row: remaining 3 items (train_count, total_pulses, helmet_shift_cm) -->
-                <div class="col-6 col-md-4">
-                  <label class="form-label fw-bold">トレイン数</label>
-                  {{ form.train_count }}
-                </div>
-                <div class="col-6 col-md-4">
-                  <label class="form-label fw-bold">総パルス数</label>
-                  {{ form.total_pulses }}
-                </div>
-                <div class="col-6 col-md-4">
-                  <label class="form-label fw-bold">治療時ヘルメット移動（cm）</label>
-                  <input type="number" name="helmet_shift_cm" class="form-control" step="1" value="{{ session.helmet_shift_cm|default:6 }}">
-                </div>
-              </div>
-
-              <hr class="my-2">
-
-              <div class="d-flex justify-content-start my-2">
-                <button type="button" class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#sideEffectModal">
-                  <i class="fas fa-notes-medical me-1"></i>
-                  治療実施記録票（副作用チェック票）入力
-                </button>
-              </div>
-
-              <div class="alert alert-danger" id="adverse-event-section">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                  <div class="fw-bold">重篤を含む有害事象（該当する場合チェック）</div>
-                  <button type="button" class="btn btn-danger btn-sm fw-bold" id="saeInputBtn"
-                          data-bs-toggle="modal" data-bs-target="#saeModal">
-                    <i class="fas fa-exclamation-triangle me-1"></i>有害事象入力・報告書
+                <hr class="my-2">
+                <div class="d-flex justify-content-start my-2">
+                  <button type="button"
+                          class="btn btn-primary fw-bold"
+                          data-bs-toggle="modal"
+                          data-bs-target="#sideEffectModal">
+                    <i class="fas fa-notes-medical me-1"></i>
+                    治療実施記録票（副作用チェック票）入力
                   </button>
+                  <span class="small text-success align-self-center ms-2"
+                        id="sideEffectStatus"></span>
                 </div>
-                <div class="small mb-2">※ 以下のいずれかがチェックされた場合、報告書作成が必要です</div>
-                <div class="d-flex flex-wrap gap-2">
-                  <label class="form-check"><input class="form-check-input sae-check" type="checkbox" name="sae_seizure" id="sae_seizure" {% if sae_event_types_checked.sae_seizure %}checked{% endif %}><span class="form-check-label">けいれん発作</span></label>
-                  <label class="form-check"><input class="form-check-input sae-check" type="checkbox" name="sae_finger_muscle" id="sae_finger_muscle" {% if sae_event_types_checked.sae_finger_muscle %}checked{% endif %}><span class="form-check-label">手指の筋収縮</span></label>
-                  <label class="form-check"><input class="form-check-input sae-check" type="checkbox" name="sae_syncope" id="sae_syncope" {% if sae_event_types_checked.sae_syncope %}checked{% endif %}><span class="form-check-label">失神</span></label>
-                  <label class="form-check"><input class="form-check-input sae-check" type="checkbox" name="sae_mania" id="sae_mania" {% if sae_event_types_checked.sae_mania %}checked{% endif %}><span class="form-check-label">躁病・軽躁病の出現</span></label>
-                  <label class="form-check"><input class="form-check-input sae-check" type="checkbox" name="sae_suicide_attempt" id="sae_suicide_attempt" {% if sae_event_types_checked.sae_suicide_attempt %}checked{% endif %}><span class="form-check-label">自殺企図</span></label>
-                  <label class="form-check"><input class="form-check-input sae-check" type="checkbox" name="sae_other" id="sae_other" {% if sae_event_types_checked.sae_other %}checked{% endif %}><span class="form-check-label">その他</span></label>
+                <div class="alert alert-danger" id="adverse-event-section">
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="fw-bold">重篤を含む有害事象（該当する場合チェック）</div>
+                    <button type="button"
+                            class="btn btn-danger btn-sm fw-bold"
+                            id="saeInputBtn"
+                            data-bs-toggle="modal"
+                            data-bs-target="#saeModal">
+                      <i class="fas fa-exclamation-triangle me-1"></i>有害事象入力・報告書
+                    </button>
+                    <span class="small text-danger ms-2" id="saeStatus"></span>
+                  </div>
+                  <div class="small mb-2">以下のいずれかがあった場合、報告書作成が必要です。該当症状の確認は入力モーダルで行います。</div>
+                  <ul class="small mb-0 ps-0 d-flex flex-wrap gap-2 list-unstyled">
+                    <li>けいれん発作</li>
+                    <li>手指の筋収縮</li>
+                    <li>失神</li>
+                    <li>躁病・軽躁病の出現</li>
+                    <li>自殺企図</li>
+                    <li>その他</li>
+                  </ul>
                 </div>
-                <div class="mt-2">
-                  <label class="form-label small">その他 詳細</label>
-                  <input type="text" class="form-control form-control-sm" name="sae_other_text" id="sae_other_text" placeholder="その他の詳細を入力" value="{{ sae_other_text_value }}">
+                <div id="sae_notice" class="d-none alert alert-warning mt-2">
+                  <div class="fw-bold">
+                    <i class="fas fa-bell me-1"></i>重篤を含む有害事象が発現した場合、速やかに報告書を作成し送付してください
+                  </div>
+                  <div class="small">
+                    送付先：<a href="mailto:brainsway_saeinfo@cmi.co.jp">brainsway_saeinfo@cmi.co.jp</a>
+                  </div>
+                  <div class="small mt-1">上部の「有害事象入力・報告書」ボタンから詳細を入力し、報告書を印刷してください。</div>
                 </div>
-              </div>
-
-              <div id="sae_notice" class="d-none alert alert-warning mt-2">
-                <div class="fw-bold"><i class="fas fa-bell me-1"></i>重篤を含む有害事象が発現した場合、速やかに報告書を作成し送付してください</div>
-                <div class="small">送付先：<a href="mailto:brainsway_saeinfo@cmi.co.jp">brainsway_saeinfo@cmi.co.jp</a></div>
-                <div class="small mt-1">上部の「有害事象入力・報告書」ボタンから詳細を入力し、報告書を印刷してください。</div>
               </div>
             </div>
-
           </div>
         </div>
-
       </div>
-    </div>
-  </form>
-
-</div>
-
-<div class="modal fade" id="procedureWizardModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-session-id="{{ session.id|default:'' }}">
-  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title wizard-title">
-          <i class="fas fa-route me-2"></i>手順を確認する
-        </h5>
-        <button type="button" class="btn-close js-hide-on-print" data-bs-dismiss="modal" aria-label="閉じる"></button>
-      </div>
-      <div class="modal-body wizard-body">
-        <div id="wizardContent"></div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary btn-sm" id="wizardPrevBtn" style="display:none;">
-          <i class="fas fa-arrow-left me-1"></i>戻る
-        </button>
-        <button type="button" class="btn btn-primary btn-sm" id="wizardNextBtn">
-          <i class="fas fa-arrow-right me-1"></i>次へ
-        </button>
-        <button type="button" class="btn btn-success btn-sm" id="wizardCompleteBtn" style="display:none;">
-          <i class="fas fa-check me-1"></i>完了（保存して閉じる）
-        </button>
-        <button type="button" class="btn btn-secondary btn-sm js-hide-on-print" data-bs-dismiss="modal">閉じる</button>
+    </form>
+  </div>
+  <div class="modal fade"
+       id="procedureWizardModal"
+       tabindex="-1"
+       aria-hidden="true"
+       data-bs-backdrop="static"
+       data-session-id="{{ session.id|default:'' }}">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title wizard-title">
+            <i class="fas fa-route me-2"></i>手順を確認する
+          </h5>
+          <button type="button"
+                  class="btn-close js-hide-on-print"
+                  data-bs-dismiss="modal"
+                  aria-label="閉じる"></button>
+        </div>
+        <div class="modal-body wizard-body">
+          <div id="wizardContent"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button"
+                  class="btn btn-secondary btn-sm"
+                  id="wizardPrevBtn"
+                  style="display:none">
+            <i class="fas fa-arrow-left me-1"></i>戻る
+          </button>
+          <button type="button" class="btn btn-primary btn-sm" id="wizardNextBtn">
+            <i class="fas fa-arrow-right me-1"></i>次へ
+          </button>
+          <button type="button"
+                  class="btn btn-success btn-sm"
+                  id="wizardCompleteBtn"
+                  style="display:none">
+            <i class="fas fa-check me-1"></i>完了（保存して閉じる）
+          </button>
+          <button type="button"
+                  class="btn btn-secondary btn-sm js-hide-on-print"
+                  data-bs-dismiss="modal">閉じる</button>
+        </div>
       </div>
     </div>
   </div>
-</div>
-
-<div class="modal fade" id="sideEffectModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">治療実施記録票（副作用チェック票）入力</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
-      </div>
-      <div class="modal-body">
-        <div id="sideEffectWidget" data-initial-id="sideEffectInitialRows"></div>
-        <input type="hidden" name="side_effect_rows_json" id="sideEffectRowsJson" value="{{ side_effect_rows_json|default:'[]'|escape }}" form="treatmentForm">
-        <div class="mt-2">
-          <label class="form-label fw-bold">メモ（過剰な不快感、過剰な運動反応）</label>
-          <textarea class="form-control form-control-sm" name="side_effect_memo" rows="3" form="treatmentForm">{{ side_effect_memo|default:'' }}</textarea>
+  <div class="modal fade"
+       id="sideEffectModal"
+       tabindex="-1"
+       aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">治療実施記録票（副作用チェック票）入力</h5>
+          <button type="button"
+                  class="btn-close"
+                  data-bs-dismiss="modal"
+                  aria-label="閉じる"></button>
         </div>
-        <div class="small text-muted mt-2">
-            重症度：0=なし、1=軽度、2=中等度、3=重度 ／ 関連性：0=なし、1=低い、2=あり、3=高い
+        <div class="modal-body">
+          <div id="sideEffectWidget" data-initial-id="sideEffectInitialRows"></div>
+          <input type="hidden"
+                 name="side_effect_rows_json"
+                 id="sideEffectRowsJson"
+                 value="{{ side_effect_rows_json|default:'[]'|escape }}"
+                 form="treatmentForm">
+          <div class="mt-2">
+            <label class="form-label fw-bold">メモ（過剰な不快感、過剰な運動反応）</label>
+            <textarea class="form-control form-control-sm"
+                      name="side_effect_memo"
+                      rows="3"
+                      form="treatmentForm">{{ side_effect_memo|default:'' }}</textarea>
+          </div>
+          <div class="small text-muted mt-2">重症度：0=なし、1=軽度、2=中等度、3=重度 ／ 関連性：0=なし、1=低い、2=あり、3=高い</div>
         </div>
-      </div>
-      <div class="modal-footer">
-            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">閉じる</button>
-            <button type="button" class="btn btn-success btn-sm" id="sideEffectSaveCloseBtn">保存して閉じる</button>
-            <button type="button" class="btn btn-primary btn-sm" id="sideEffectSavePrintBtn">保存して印刷</button>
+        <div class="modal-footer">
+          <button type="button"
+                  class="btn btn-secondary btn-sm"
+                  data-bs-dismiss="modal">閉じる</button>
+          <button type="button"
+                  class="btn btn-outline-success btn-sm"
+                  id="sideEffectNoneBtn">
+            <i class="fas fa-check me-1"></i>副作用なし
+          </button>
+          <button type="button"
+                  class="btn btn-success btn-sm"
+                  id="sideEffectSaveCloseBtn">保存して閉じる</button>
+          <button type="button"
+                  class="btn btn-primary btn-sm"
+                  id="sideEffectSavePrintBtn">保存して印刷</button>
+        </div>
       </div>
     </div>
   </div>
-</div>
-
-<!-- SAE入力モーダル -->
-<div class="modal fade" id="saeModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header bg-danger text-white">
-        <h5 class="modal-title"><i class="fas fa-exclamation-triangle me-2"></i>重篤を含む有害事象 報告書</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
-      </div>
-      <div class="modal-body">
-        <div class="alert alert-info">
-          <div class="fw-bold mb-1"><i class="fas fa-info-circle me-1"></i>送付先メールアドレス</div>
-          <div class="d-flex align-items-center gap-2">
-            <code class="bg-white px-2 py-1 rounded">brainsway_saeinfo@cmi.co.jp</code>
-            <small class="text-muted">印刷後、このアドレスへメールで送付してください</small>
-          </div>
+  <!-- SAE入力モーダル -->
+  <div class="modal fade" id="saeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header bg-danger text-white">
+          <h5 class="modal-title">
+            <i class="fas fa-exclamation-triangle me-2"></i>重篤を含む有害事象 報告書
+          </h5>
+          <button type="button"
+                  class="btn-close btn-close-white"
+                  data-bs-dismiss="modal"
+                  aria-label="閉じる"></button>
         </div>
-
-        <!-- チェックされた事象 -->
-        <div class="mb-3 border rounded p-2 bg-light">
-          <label class="form-label fw-bold small mb-2">該当する有害事象（チェック済み）</label>
-          <div id="saeCheckedEvents" class="d-flex flex-wrap gap-2">
-            <span class="text-muted small">事象をチェックしてください</span>
+        <div class="modal-body">
+          <div class="alert alert-info">
+            <div class="fw-bold mb-1">
+              <i class="fas fa-info-circle me-1"></i>送付先メールアドレス
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <code class="bg-white px-2 py-1 rounded">brainsway_saeinfo@cmi.co.jp</code>
+              <small class="text-muted">印刷後、このアドレスへメールで送付してください</small>
+            </div>
           </div>
-        </div>
-
-        <!-- 基本情報 -->
-        <div class="row g-2 mb-3">
-          <div class="col-md-6">
-            <label class="form-label small mb-1 fw-bold">有害事象名 <span class="text-danger">*</span></label>
-            <input type="text" class="form-control form-control-sm" id="saeEventName" placeholder="具体的な事象名を入力">
+          <!-- チェックされた事象 -->
+          <div class="mb-3 border rounded p-2 bg-light">
+            <label class="form-label fw-bold small mb-2">該当する有害事象（チェック済み）</label>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              <label class="form-check">
+                <input class="form-check-input sae-check"
+                       type="checkbox"
+                       name="sae_seizure"
+                       id="sae_seizure"
+                       form="treatmentForm"
+                       {% if sae_event_types_checked.sae_seizure %}checked{% endif %}>
+                <span class="form-check-label">けいれん発作</span>
+              </label>
+              <label class="form-check">
+                <input class="form-check-input sae-check"
+                       type="checkbox"
+                       name="sae_finger_muscle"
+                       id="sae_finger_muscle"
+                       form="treatmentForm"
+                       {% if sae_event_types_checked.sae_finger_muscle %}checked{% endif %}>
+                <span class="form-check-label">手指の筋収縮</span>
+              </label>
+              <label class="form-check">
+                <input class="form-check-input sae-check"
+                       type="checkbox"
+                       name="sae_syncope"
+                       id="sae_syncope"
+                       form="treatmentForm"
+                       {% if sae_event_types_checked.sae_syncope %}checked{% endif %}>
+                <span class="form-check-label">失神</span>
+              </label>
+              <label class="form-check">
+                <input class="form-check-input sae-check"
+                       type="checkbox"
+                       name="sae_mania"
+                       id="sae_mania"
+                       form="treatmentForm"
+                       {% if sae_event_types_checked.sae_mania %}checked{% endif %}>
+                <span class="form-check-label">躁病・軽躁病</span>
+              </label>
+              <label class="form-check">
+                <input class="form-check-input sae-check"
+                       type="checkbox"
+                       name="sae_suicide_attempt"
+                       id="sae_suicide_attempt"
+                       form="treatmentForm"
+                       {% if sae_event_types_checked.sae_suicide_attempt %}checked{% endif %}>
+                <span class="form-check-label">自殺企図</span>
+              </label>
+              <label class="form-check">
+                <input class="form-check-input sae-check"
+                       type="checkbox"
+                       name="sae_other"
+                       id="sae_other"
+                       form="treatmentForm"
+                       {% if sae_event_types_checked.sae_other %}checked{% endif %}>
+                <span class="form-check-label">その他</span>
+              </label>
+            </div>
+            <div id="saeCheckedEvents" class="d-flex flex-wrap gap-2">
+              <span class="text-muted small">事象をチェックしてください</span>
+            </div>
           </div>
-          <div class="col-md-6">
-            <label class="form-label small mb-1 fw-bold">発現日 <span class="text-danger">*</span></label>
-            <input type="date" class="form-control form-control-sm" id="saeOnsetDate" value="{{ sae_prefill.onset_date }}">
+          <!-- 基本情報 -->
+          <div class="row g-2 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small mb-1 fw-bold">
+                有害事象名 <span class="text-danger">*</span>
+              </label>
+              <input type="text"
+                     class="form-control form-control-sm"
+                     id="saeEventName"
+                     placeholder="具体的な事象名を入力">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small mb-1 fw-bold">
+                発現日 <span class="text-danger">*</span>
+              </label>
+              <input type="date"
+                     class="form-control form-control-sm"
+                     id="saeOnsetDate"
+                     value="{{ sae_prefill.onset_date }}">
+            </div>
           </div>
-        </div>
-
-        <!-- 患者情報 -->
-        <div class="row g-2 mb-3">
-          <div class="col-md-4">
-            <label class="form-label small mb-1">年齢</label>
-            <input type="number" class="form-control form-control-sm bg-light" id="saeAge" value="{{ sae_prefill.age }}" readonly>
+          <!-- 患者情報 -->
+          <div class="row g-2 mb-3">
+            <div class="col-md-4">
+              <label class="form-label small mb-1">年齢</label>
+              <input type="number"
+                     class="form-control form-control-sm bg-light"
+                     id="saeAge"
+                     value="{{ sae_prefill.age }}"
+                     readonly>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small mb-1">性別</label>
+              <input type="text"
+                     class="form-control form-control-sm bg-light"
+                     id="saeGender"
+                     value="{{ sae_prefill.gender }}"
+                     readonly>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small mb-1">イニシャル</label>
+              <input type="text"
+                     class="form-control form-control-sm"
+                     id="saeInitials"
+                     placeholder="例: T.K."
+                     maxlength="10"
+                     value="{{ sae_prefill.initials }}">
+            </div>
           </div>
-          <div class="col-md-4">
-            <label class="form-label small mb-1">性別</label>
-            <input type="text" class="form-control form-control-sm bg-light" id="saeGender" value="{{ sae_prefill.gender }}" readonly>
+          <!-- 診断・併用薬 -->
+          <div class="mb-3">
+            <label class="form-label small mb-1 fw-bold">診断名</label>
+            <div class="d-flex gap-2 mb-2">
+              <label class="form-check form-check-inline">
+                <input class="form-check-input"
+                       type="radio"
+                       name="saeDiagnosis"
+                       value="うつ病エピソード"
+                       {% if not sae_prefill.diagnosis or sae_prefill.diagnosis == 'うつ病エピソード' or 'うつ病' in sae_prefill.diagnosis %}checked{% endif %}>
+                <span class="form-check-label small">うつ病エピソード</span>
+              </label>
+              <label class="form-check form-check-inline">
+                <input class="form-check-input"
+                       type="radio"
+                       name="saeDiagnosis"
+                       value="反復性うつ病性障害"
+                       {% if sae_prefill.diagnosis == '反復性うつ病性障害' %}checked{% endif %}>
+                <span class="form-check-label small">反復性うつ病性障害</span>
+              </label>
+              <label class="form-check form-check-inline">
+                <input class="form-check-input"
+                       type="radio"
+                       name="saeDiagnosis"
+                       value="その他"
+                       {% if sae_prefill.diagnosis and sae_prefill.diagnosis != 'うつ病エピソード' and sae_prefill.diagnosis != '反復性うつ病性障害' and 'うつ病' not in sae_prefill.diagnosis %}checked{% endif %}>
+                <span class="form-check-label small">その他</span>
+              </label>
+            </div>
+            <input type="text"
+                   class="form-control form-control-sm"
+                   id="saeDiagnosisOther"
+                   placeholder="「その他」の場合、詳細を入力"
+                   value="{% if sae_prefill.diagnosis and sae_prefill.diagnosis != 'うつ病エピソード' and sae_prefill.diagnosis != '反復性うつ病性障害' and 'うつ病' not in sae_prefill.diagnosis %}{{ sae_prefill.diagnosis }}{% endif %}">
           </div>
-          <div class="col-md-4">
-            <label class="form-label small mb-1">イニシャル</label>
-            <input type="text" class="form-control form-control-sm" id="saeInitials" placeholder="例: T.K." maxlength="10" value="{{ sae_prefill.initials }}">
+          <div class="mb-3">
+            <label class="form-label small mb-1">併用薬（向精神薬に限る）</label>
+            <textarea class="form-control form-control-sm"
+                      id="saeConcomitantMeds"
+                      rows="2"
+                      placeholder="薬剤名と用量を記載（複数可）">{{ sae_prefill.concomitant_meds }}</textarea>
           </div>
-        </div>
-
-        <!-- 診断・併用薬 -->
-        <div class="mb-3">
-          <label class="form-label small mb-1 fw-bold">診断名</label>
-          <div class="d-flex gap-2 mb-2">
-            <label class="form-check form-check-inline">
-              <input class="form-check-input" type="radio" name="saeDiagnosis" value="うつ病エピソード" {% if not sae_prefill.diagnosis or sae_prefill.diagnosis == 'うつ病エピソード' or 'うつ病' in sae_prefill.diagnosis %}checked{% endif %}>
-              <span class="form-check-label small">うつ病エピソード</span>
-            </label>
-            <label class="form-check form-check-inline">
-              <input class="form-check-input" type="radio" name="saeDiagnosis" value="反復性うつ病性障害" {% if sae_prefill.diagnosis == '反復性うつ病性障害' %}checked{% endif %}>
-              <span class="form-check-label small">反復性うつ病性障害</span>
-            </label>
-            <label class="form-check form-check-inline">
-              <input class="form-check-input" type="radio" name="saeDiagnosis" value="その他" {% if sae_prefill.diagnosis and sae_prefill.diagnosis != 'うつ病エピソード' and sae_prefill.diagnosis != '反復性うつ病性障害' and 'うつ病' not in sae_prefill.diagnosis %}checked{% endif %}>
-              <span class="form-check-label small">その他</span>
-            </label>
+          <!-- 薬物・既往 -->
+          <div class="row g-2 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small mb-1">薬物・アルコール・カフェイン摂取</label>
+              <input type="text"
+                     class="form-control form-control-sm"
+                     id="saeSubstanceUse"
+                     placeholder="摂取時間・量など"
+                     value="{{ sae_prefill.substance_use }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small mb-1">てんかん・けいれん発作の既往</label>
+              <div class="input-group input-group-sm">
+                <select class="form-select" id="saeSeizureHistory">
+                  <option value="なし" selected>なし</option>
+                  <option value="あり">あり</option>
+                </select>
+                <input type="text"
+                       class="form-control"
+                       id="saeSeizureHistoryDetail"
+                       placeholder="ありの場合、時期を記載">
+              </div>
+            </div>
           </div>
-          <input type="text" class="form-control form-control-sm" id="saeDiagnosisOther" placeholder="「その他」の場合、詳細を入力" value="{% if sae_prefill.diagnosis and sae_prefill.diagnosis != 'うつ病エピソード' and sae_prefill.diagnosis != '反復性うつ病性障害' and 'うつ病' not in sae_prefill.diagnosis %}{{ sae_prefill.diagnosis }}{% endif %}">
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label small mb-1">併用薬（向精神薬に限る）</label>
-          <textarea class="form-control form-control-sm" id="saeConcomitantMeds" rows="2" placeholder="薬剤名と用量を記載（複数可）">{{ sae_prefill.concomitant_meds }}</textarea>
-        </div>
-
-        <!-- 薬物・既往 -->
-        <div class="row g-2 mb-3">
-          <div class="col-md-6">
-            <label class="form-label small mb-1">薬物・アルコール・カフェイン摂取</label>
-            <input type="text" class="form-control form-control-sm" id="saeSubstanceUse" placeholder="摂取時間・量など" value="{{ sae_prefill.substance_use }}">
-          </div>
-          <div class="col-md-6">
-            <label class="form-label small mb-1">てんかん・けいれん発作の既往</label>
-            <div class="input-group input-group-sm">
-              <select class="form-select" id="saeSeizureHistory">
-                <option value="なし" selected>なし</option>
-                <option value="あり">あり</option>
+          <!-- 治療パラメータ -->
+          <div class="row g-2 mb-3">
+            <div class="col-md-3">
+              <label class="form-label small mb-1">安静運動閾値</label>
+              <input type="number"
+                     class="form-control form-control-sm"
+                     id="saeRMT"
+                     value="{{ sae_prefill.rmt }}"
+                     step="0.1">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small mb-1">刺激強度（%MT）</label>
+              <input type="number"
+                     class="form-control form-control-sm"
+                     id="saeIntensity"
+                     value="{{ sae_prefill.intensity }}"
+                     step="0.1">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small mb-1">刺激部位</label>
+              <select class="form-select form-select-sm" id="saeSite">
+                <option value="左前頭前野" {% if sae_prefill.site == '左前頭前野' %}selected{% endif %}>左前頭前野</option>
+                <option value="左DLPFC"
+                        {% if sae_prefill.site == '左DLPFC' %}selected{% endif %}>左DLPFC</option>
+                <option value="その他"
+                        {% if sae_prefill.site and sae_prefill.site != '左前頭前野' and sae_prefill.site != '左DLPFC' %}selected{% endif %}>
+                  その他
+                </option>
               </select>
-              <input type="text" class="form-control" id="saeSeizureHistoryDetail" placeholder="ありの場合、時期を記載">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small mb-1">治療回数（○回目）</label>
+              <input type="number"
+                     class="form-control form-control-sm"
+                     id="saeTreatmentNumber"
+                     value="{{ sae_prefill.treatment_number }}">
             </div>
           </div>
-        </div>
-
-        <!-- 治療パラメータ -->
-        <div class="row g-2 mb-3">
-          <div class="col-md-3">
-            <label class="form-label small mb-1">安静運動閾値</label>
-            <input type="number" class="form-control form-control-sm" id="saeRMT" value="{{ sae_prefill.rmt }}" step="0.1">
+          <!-- 転帰 -->
+          <div class="row g-2 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small mb-1 fw-bold">
+                転帰 <span class="text-danger">*</span>
+              </label>
+              <select class="form-select form-select-sm" id="saeOutcome">
+                <option value="">選択してください</option>
+                <option value="回復">回復</option>
+                <option value="軽快">軽快</option>
+                <option value="未回復">未回復</option>
+                <option value="後遺症">後遺症（症状）</option>
+                <option value="死亡">死亡</option>
+                <option value="不明">不明</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small mb-1">転帰日</label>
+              <input type="date" class="form-control form-control-sm" id="saeOutcomeDate">
+            </div>
           </div>
-          <div class="col-md-3">
-            <label class="form-label small mb-1">刺激強度（%MT）</label>
-            <input type="number" class="form-control form-control-sm" id="saeIntensity" value="{{ sae_prefill.intensity }}" step="0.1">
+          <!-- 特記事項・その他 -->
+          <div class="mb-3">
+            <label class="form-label small mb-1">特記事項など</label>
+            <textarea class="form-control form-control-sm"
+                      id="saeNotes"
+                      rows="2"
+                      placeholder="その他特記すべき事項を記載"></textarea>
           </div>
-          <div class="col-md-3">
-            <label class="form-label small mb-1">刺激部位</label>
-            <select class="form-select form-select-sm" id="saeSite">
-              <option value="左前頭前野" {% if sae_prefill.site == '左前頭前野' %}selected{% endif %}>左前頭前野</option>
-              <option value="左DLPFC" {% if sae_prefill.site == '左DLPFC' %}selected{% endif %}>左DLPFC</option>
-              <option value="その他" {% if sae_prefill.site and sae_prefill.site != '左前頭前野' and sae_prefill.site != '左DLPFC' %}selected{% endif %}>その他</option>
-            </select>
+          <!-- 医師コメント -->
+          <div class="mb-3">
+            <label class="form-label small mb-1 fw-bold">医師コメント欄（発現から転帰までの補足説明など）</label>
+            <textarea class="form-control form-control-sm"
+                      id="saeDoctorComment"
+                      rows="4"
+                      placeholder="発現時の状況、対応内容、経過などを詳しく記載"></textarea>
           </div>
-          <div class="col-md-3">
-            <label class="form-label small mb-1">治療回数（○回目）</label>
-            <input type="number" class="form-control form-control-sm" id="saeTreatmentNumber" value="{{ sae_prefill.treatment_number }}">
-          </div>
-        </div>
-
-        <!-- 転帰 -->
-        <div class="row g-2 mb-3">
-          <div class="col-md-6">
-            <label class="form-label small mb-1 fw-bold">転帰 <span class="text-danger">*</span></label>
-            <select class="form-select form-select-sm" id="saeOutcome">
-              <option value="">選択してください</option>
-              <option value="回復">回復</option>
-              <option value="軽快">軽快</option>
-              <option value="未回復">未回復</option>
-              <option value="後遺症">後遺症（症状）</option>
-              <option value="死亡">死亡</option>
-              <option value="不明">不明</option>
-            </select>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label small mb-1">転帰日</label>
-            <input type="date" class="form-control form-control-sm" id="saeOutcomeDate">
+          <div class="alert alert-warning small">
+            <i class="fas fa-exclamation-triangle me-1"></i>
+            <span class="text-danger fw-bold">*</span> 印の項目は必須です。印刷プレビューで内容を確認後、印刷してメール送付してください。
           </div>
         </div>
-
-        <!-- 特記事項・その他 -->
-        <div class="mb-3">
-          <label class="form-label small mb-1">特記事項など</label>
-          <textarea class="form-control form-control-sm" id="saeNotes" rows="2" placeholder="その他特記すべき事項を記載"></textarea>
-        </div>
-
-        <!-- 医師コメント -->
-        <div class="mb-3">
-          <label class="form-label small mb-1 fw-bold">医師コメント欄（発現から転帰までの補足説明など）</label>
-          <textarea class="form-control form-control-sm" id="saeDoctorComment" rows="4" placeholder="発現時の状況、対応内容、経過などを詳しく記載"></textarea>
-        </div>
-
-        <div class="alert alert-warning small">
-          <i class="fas fa-exclamation-triangle me-1"></i>
-          <span class="text-danger fw-bold">*</span> 印の項目は必須です。印刷プレビューで内容を確認後、印刷してメール送付してください。
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">閉じる</button>
-        <button type="button" class="btn btn-primary btn-sm" id="saePrintPreviewBtn">
-          <i class="fas fa-print me-1"></i>印刷プレビュー
-        </button>
-        <button type="button" class="btn btn-danger btn-sm" id="saeSaveBtn">
-          <i class="fas fa-save me-1"></i>データを保存
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-{% url 'rtms_app:dashboard' as dashboard_url %}
-<link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
-<script src="{% static 'rtms_app/floating.js' %}"></script>
-
-<!-- Print Menu Modal -->
-<div class="modal fade" id="printMenuModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-sm">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">印刷の種類を選択</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <div class="d-grid gap-2">
-          <button type="button" class="btn btn-outline-primary" id="printSideEffectBtn">
-            <i class="fas fa-print me-2"></i>副作用チェック表印刷
+        <div class="modal-footer">
+          <button type="button"
+                  class="btn btn-secondary btn-sm"
+                  data-bs-dismiss="modal">閉じる</button>
+          <button type="button" class="btn btn-primary btn-sm" id="saePrintPreviewBtn">
+            <i class="fas fa-print me-1"></i>印刷プレビュー
           </button>
-          <button type="button" class="btn btn-outline-danger" id="printAdverseEventBtn">
-            <i class="fas fa-exclamation-triangle me-2"></i>有害事象報告書印刷
+          <button type="button" class="btn btn-danger btn-sm" id="saeSaveBtn">
+            <i class="fas fa-save me-1"></i>データを保存
           </button>
         </div>
       </div>
     </div>
   </div>
-</div>
-
-{% if dashboard_date %}
-  {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
-    <div class="fab-stack no-print">
-      <button type="button" class="btn btn-primary fab" id="printTreatmentRecordBtn">
+  {% url 'rtms_app:dashboard' as dashboard_url %}
+  <!-- Print Menu Modal -->
+  <div class="modal fade"
+       id="printMenuModal"
+       tabindex="-1"
+       aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">印刷の種類を選択</h5>
+          <button type="button"
+                  class="btn-close"
+                  data-bs-dismiss="modal"
+                  aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="d-grid gap-2">
+            <button type="button" class="btn btn-outline-primary" id="printSideEffectBtn">
+              <i class="fas fa-print me-2"></i>副作用チェック表印刷
+            </button>
+            <button type="button"
+                    class="btn btn-outline-danger"
+                    id="printAdverseEventBtn">
+              <i class="fas fa-exclamation-triangle me-2"></i>有害事象報告書印刷
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% if dashboard_date %}
+    {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+      <div class="page-exit-menu no-print d-flex flex-wrap justify-content-center gap-2 mt-4 pt-3 border-top">
+        <button type="button" class="btn btn-primary" id="printTreatmentRecordBtn">
+          <i class="fas fa-print"></i> 治療実施記録票（副作用チェック票）印刷
+        </button>
+        <button type="submit" class="btn btn-treatment" form="treatmentForm">
+          <i class="fas fa-save"></i> 保存
+        </button>
+        <a class="btn btn-secondary" href="{{ back_url }}">
+          <i class="fas fa-undo"></i> 戻る
+        </a>
+        <button type="button" class="btn btn-outline-warning" id="openSkipModalBtn">
+          <i class="fas fa-forward"></i> 治療スキップ・中止
+        </button>
+      </div>
+    {% endwith %}
+  {% else %}
+    <div class="page-exit-menu no-print d-flex flex-wrap justify-content-center gap-2 mt-4 pt-3 border-top">
+      <button type="button" class="btn btn-primary" id="printTreatmentRecordBtn">
         <i class="fas fa-print"></i> 治療実施記録票（副作用チェック票）印刷
       </button>
-      <button type="submit" class="btn btn-treatment fab" form="treatmentForm">
+      <button type="submit" class="btn btn-treatment" form="treatmentForm">
         <i class="fas fa-save"></i> 保存
       </button>
-      <a class="btn btn-secondary fab" href="{{ back_url }}">
+      <a class="btn btn-secondary" href="{{ dashboard_url }}">
         <i class="fas fa-undo"></i> 戻る
       </a>
-      <button type="button" class="btn btn-outline-warning fab" id="openSkipModalBtn">
+      <button type="button" class="btn btn-outline-warning" id="openSkipModalBtn2">
         <i class="fas fa-forward"></i> 治療スキップ・中止
       </button>
     </div>
-  {% endwith %}
-{% else %}
-    <div class="fab-stack no-print">
-    <button type="button" class="btn btn-primary fab" id="printTreatmentRecordBtn">
-      <i class="fas fa-print"></i> 治療実施記録票（副作用チェック票）印刷
-    </button>
-    <button type="submit" class="btn btn-treatment fab" form="treatmentForm">
-      <i class="fas fa-save"></i> 保存
-    </button>
-    <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
-      <i class="fas fa-undo"></i> 戻る
-    </a>
-    <button type="button" class="btn btn-outline-warning fab" id="openSkipModalBtn2">
-      <i class="fas fa-forward"></i> 治療スキップ・中止
-    </button>
-  </div>
-{% endif %}
-
-<!-- Skip/Cancel Modal -->
-<div class="modal fade" id="skipModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">治療スキップ・中止を選択</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
-      </div>
-      <div class="modal-body">
-        <div class="mb-3">
-          <div class="alert alert-info" role="alert">
-            <strong>操作を選択してください：</strong>
-          </div>
+  {% endif %}
+  <!-- Skip/Cancel Modal -->
+  <div class="modal fade" id="skipModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">治療スキップ・中止を選択</h5>
+          <button type="button"
+                  class="btn-close"
+                  data-bs-dismiss="modal"
+                  aria-label="閉じる"></button>
         </div>
-
-        <!-- Skip Option -->
-        <div class="card mb-3 border-primary">
-          <div class="card-header bg-primary text-white">
-            <strong><i class="fas fa-forward me-1"></i>治療スキップ</strong>
-          </div>
-          <div class="card-body">
-            <p class="card-text">本日の治療をスキップし、以降の予定を1日ずつ順延します。</p>
-            <p class="text-muted small">土日・祝日は自動的にスキップされます。</p>
-            <div class="mb-2">
-              <label class="form-label small">理由（任意）</label>
-              <textarea class="form-control form-control-sm" id="skipReasonText" rows="2" placeholder="例: 患者都合で本日欠席"></textarea>
+        <div class="modal-body">
+          <div class="mb-3">
+            <div class="alert alert-info" role="alert">
+              <strong>操作を選択してください：</strong>
             </div>
-            <button type="button" class="btn btn-primary btn-sm" id="confirmSkipBtn">
-              <i class="fas fa-check me-1"></i>スキップを実行
-            </button>
           </div>
-        </div>
-
-        <!-- Cancel Option -->
-        <div class="card border-danger">
-          <div class="card-header bg-danger text-white">
-            <strong><i class="fas fa-stop me-1"></i>治療を中止</strong>
-          </div>
-          <div class="card-body">
-            <p class="card-text">本日から治療を中止し、以降の予定を削除します。</p>
-            <p class="text-muted small">退院準備の予定日を本日に設定します。</p>
-            <div class="mb-2">
-              <label class="form-label small">理由（任意）</label>
-              <textarea class="form-control form-control-sm" id="cancelReasonText" rows="2" placeholder="例: 効果判定で治療終了"></textarea>
+          <!-- Skip Option -->
+          <div class="card mb-3 border-primary">
+            <div class="card-header bg-primary text-white">
+              <strong><i class="fas fa-forward me-1"></i>治療スキップ</strong>
             </div>
-            <button type="button" class="btn btn-danger btn-sm" id="confirmCancelBtn">
-              <i class="fas fa-check me-1"></i>中止を実行
-            </button>
+            <div class="card-body">
+              <p class="card-text">本日の治療をスキップし、以降の予定を1日ずつ順延します。</p>
+              <p class="text-muted small">土日・祝日は自動的にスキップされます。</p>
+              <div class="mb-2">
+                <label class="form-label small">理由（任意）</label>
+                <textarea class="form-control form-control-sm"
+                          id="skipReasonText"
+                          rows="2"
+                          placeholder="例: 患者都合で本日欠席"></textarea>
+              </div>
+              <button type="button" class="btn btn-primary btn-sm" id="confirmSkipBtn">
+                <i class="fas fa-check me-1"></i>スキップを実行
+              </button>
+            </div>
+          </div>
+          <!-- Cancel Option -->
+          <div class="card border-danger">
+            <div class="card-header bg-danger text-white">
+              <strong><i class="fas fa-stop me-1"></i>治療を中止</strong>
+            </div>
+            <div class="card-body">
+              <p class="card-text">本日から治療を中止し、以降の予定を削除します。</p>
+              <p class="text-muted small">退院準備の予定日を本日に設定します。</p>
+              <div class="mb-2">
+                <label class="form-label small">理由（任意）</label>
+                <textarea class="form-control form-control-sm"
+                          id="cancelReasonText"
+                          rows="2"
+                          placeholder="例: 効果判定で治療終了"></textarea>
+              </div>
+              <button type="button" class="btn btn-danger btn-sm" id="confirmCancelBtn">
+                <i class="fas fa-check me-1"></i>中止を実行
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">閉じる</button>
+        <div class="modal-footer">
+          <button type="button"
+                  class="btn btn-secondary btn-sm"
+                  data-bs-dismiss="modal">閉じる</button>
+        </div>
       </div>
     </div>
   </div>
-</div>
-
-<script src="{% static 'rtms_app/side_effect_widget_v2.js' %}"></script>
-<script>
+  <script src="{% static 'rtms_app/side_effect_widget_v2.js' %}"></script>
+  <script>
   // Print button handler: Get or create session and navigate to print screen
   (function() {
     function attachPrintHandler() {
@@ -897,10 +1092,10 @@
   };
 
   window.getCSRFToken = () => document.querySelector('[name="csrfmiddlewaretoken"]').value;
-</script>
 
-<script src="{% static 'rtms_app/wizard.js' %}"></script>
-<script>
+  </script>
+  <script src="{% static 'rtms_app/wizard.js' %}"></script>
+  <script>
   // ---- モード切替：手順解説を選ぶとモーダルを開き、閉じたら記入モードへ戻す ----
   const modeRecord = document.getElementById('treatModeRecord');
   const modeWizard = document.getElementById('treatModeWizard');
@@ -953,8 +1148,8 @@
     
     checks.forEach(c => {
       if (c.checked) {
-        const label = c.parentElement.querySelector('.form-check-label');
-        if (label) checkedEvents.push(label.textContent);
+        const label = c.closest('label');
+        if (label) checkedEvents.push(label.textContent.trim());
       }
     });
 
@@ -1040,37 +1235,36 @@
         formData.append('csrfmiddlewaretoken', csrfToken);
       }
 
-      // POSTリクエストを送信
-      fetch(`/app/session/${sessionId}/adverse-event/`, {
-        method: 'POST',
-        body: formData,
-      })
-        .then(res => {
-          if (res.ok) {
-            const modal = bootstrap.Modal.getInstance(document.getElementById('saeModal'));
-            if (modal) modal.hide();
-            alert('有害事象報告書が保存されました。印刷プレビューから確認してください。');
-            
-            // 印刷プレビューボタンを有効化
-            const printBtn = document.getElementById('saePrintPreviewBtn');
-            if (printBtn) {
-              printBtn.disabled = false;
-              printBtn.classList.remove('disabled');
-            }
-          } else {
-            alert('保存に失敗しました。もう一度お試しください。');
-          }
-        })
-        .catch(err => {
-          console.error(err);
-          alert('保存中にエラーが発生しました。');
-        });
+      // SAEのチェック状態は既存の治療フォームで保存する契約を維持する。
+      const treatmentForm = document.getElementById('treatmentForm');
+      const modal = bootstrap.Modal.getInstance(document.getElementById('saeModal'));
+      if (treatmentForm && modal) {
+        const status = document.getElementById('saeStatus');
+        if (status) status.textContent = '有害事象：入力済み';
+        modal.hide();
+      }
     });
   }
 
   // Side-effect modal save/print handlers
   const sideSaveClose = document.getElementById('sideEffectSaveCloseBtn');
   const sideSavePrint = document.getElementById('sideEffectSavePrintBtn');
+  const sideEffectNoneBtn = document.getElementById('sideEffectNoneBtn');
+  const sideEffectStatus = document.getElementById('sideEffectStatus');
+  sideEffectNoneBtn?.addEventListener('click', () => {
+    if (typeof sideEffectWidgetInstance !== 'undefined' && sideEffectWidgetInstance) {
+      sideEffectWidgetInstance.data.forEach(row => {
+        row.before = 0; row.during = 0; row.after = 0; row.relatedness = 0; row.memo = '';
+      });
+      sideEffectWidgetInstance.syncAndRender();
+    }
+    const sideEffectMemo = document.querySelector('textarea[name="side_effect_memo"]');
+    if (sideEffectMemo) {
+      sideEffectMemo.value = '副作用なし';
+      sideEffectMemo.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (sideEffectStatus) sideEffectStatus.textContent = '副作用・合併症：なし';
+  });
   function submitSideEffectForm(extraAction) {
     // flush widget to hidden input
     if (typeof window.sideEffectWidgetFlush === 'function') {
@@ -1125,7 +1319,9 @@
   }
 
   sideSaveClose?.addEventListener('click', (e) => {
-    e.preventDefault(); submitSideEffectForm('save');
+    e.preventDefault();
+    if (sideEffectStatus) sideEffectStatus.textContent = '副作用・合併症：入力済み';
+    bootstrap.Modal.getInstance(document.getElementById('sideEffectModal'))?.hide();
   });
   sideSavePrint?.addEventListener('click', (e) => {
     e.preventDefault(); submitSideEffectForm('print');
@@ -1336,5 +1532,5 @@
         if (el) el.classList.add('form-control-sm');
       });
   });
-</script>
+  </script>
 {% endblock %}

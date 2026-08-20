@@ -36,7 +36,7 @@ class Patient(models.Model):
         "診断名（今回 rTMS の適応以外の精神疾患の既往）",
         max_length=8,
         choices=HAS_PSY_CHOICES,
-        default="no",
+        default="yes",
     )
 
     # List of selected psychiatric history codes/names; JSON list for flexibility and CSV export
@@ -208,6 +208,13 @@ class TreatmentSession(models.Model):
     side_effects = models.JSONField("副作用", default=dict, blank=True, null=True)
     meta = models.JSONField("メタ", default=dict, blank=True, null=True)
     performer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+
+    def save(self, *args, **kwargs):
+        if self.intensity_percent is None and self.intensity is not None:
+            self.intensity_percent = self.intensity
+        elif self.intensity is None and self.intensity_percent is not None:
+            self.intensity = self.intensity_percent
+        super().save(*args, **kwargs)
 
     @property
     def stimulation_minutes(self):

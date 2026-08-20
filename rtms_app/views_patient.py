@@ -196,10 +196,6 @@ def instrument_view(request: HttpRequest, session_id: int, instrument: str):
     if not patient:
         return HttpResponseForbidden("患者専用ページです")
 
-    session = get_object_or_404(PatientSurveySession, id=session_id, patient=patient)
-    if session.status == "submitted":
-        return redirect("patient_portal:review", session_id=session.id)
-
     if instrument not in INSTRUMENT_SET:
         logger.warning(
             "invalid instrument",
@@ -211,6 +207,10 @@ def instrument_view(request: HttpRequest, session_id: int, instrument: str):
             },
         )
         return HttpResponseForbidden("不正な検査コードです")
+
+    session = get_object_or_404(PatientSurveySession, id=session_id, patient=patient)
+    if session.status == "submitted":
+        return redirect("patient_portal:review", session_id=session.id)
 
     try:
         instrument_def = get_instrument(instrument)

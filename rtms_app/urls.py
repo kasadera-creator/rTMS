@@ -91,15 +91,10 @@ urlpatterns = [
         name="treatment_add",
     ),
     
-    path(
-        "patient/<int:patient_id>/assessment/week4/",
-        views.assessment_week4,
-        name="assessment_week4",
-    ),
     # Short URL compatibility: redirect /assessment/<timing>/ -> /assessment/<timing>/add/
     path(
         "patient/<int:patient_id>/assessment/<str:timing>/",
-        RedirectView.as_view(pattern_name='rtms_app:assessment_add', query_string=True, permanent=False),
+        views.assessment_shortcut,
         name="assessment_shortcut",
     ),
     path(

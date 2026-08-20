@@ -76,8 +76,16 @@ def build_assessment_trend(patient, timings: Optional[List[str]] = None) -> List
         timings = ['baseline', 'week3', 'week4', 'week6']
 
     # Fetch from both models to ensure coverage
-    assessment_records = AssessmentRecord.objects.filter(patient=patient).order_by('-date')
-    legacy_assessments = Assessment.objects.filter(patient=patient).order_by('-date')
+    assessment_records = AssessmentRecord.objects.filter(
+        patient=patient,
+        course_number=patient.course_number or 1,
+        scale__code='hamd',
+    ).order_by('-date')
+    legacy_assessments = Assessment.objects.filter(
+        patient=patient,
+        course_number=patient.course_number or 1,
+        type='HAM-D',
+    ).order_by('-date')
 
     # For each timing, prefer AssessmentRecord, fall back to legacy Assessment
     latest_by_timing = {}
@@ -114,6 +122,18 @@ def build_assessment_trend(patient, timings: Optional[List[str]] = None) -> List
             label = LABELS.get(t, t)
 
         status_label = getattr(a, 'status_label', '') if a and hasattr(a, 'status_label') else ''
+        severity_label = ''
+        if hamd17 is not None:
+            if hamd17 <= 7:
+                severity_label = '正常'
+            elif hamd17 <= 13:
+                severity_label = '軽症'
+            elif hamd17 <= 18:
+                severity_label = '中等症'
+            elif hamd17 <= 22:
+                severity_label = '重症'
+            else:
+                severity_label = '最重症'
 
         cols.append({
             'timing': t,
@@ -122,6 +142,7 @@ def build_assessment_trend(patient, timings: Optional[List[str]] = None) -> List
             'hamd21': hamd21,
             'hamd17': hamd17,
             'improvement_pct_17': improvement_pct_17,
+            'severity_label': severity_label,
             'status_label': status_label,
         })
     return cols

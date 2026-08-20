@@ -1,0 +1,37 @@
+{% extends "rtms_app/assessment/scale_form_base.html" %}
+{% block scale_form_inner %}
+    <div class="card shadow-sm border-0">
+        <div class="card-header text-white"
+             style="background-color: var(--color-assessment)">
+            <div class="fw-bold">
+                <i class="fas fa-pen me-1"></i>{{ scale_name }}
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-info mb-3">
+                <div class="fw-bold">入力項目準備中</div>
+                <div class="small">この尺度の正式な質問項目と採点方法は、今後の実装で追加します。評価時点の記録だけ保存できます。</div>
+            </div>
+            <div class="mb-3">
+                <label for="assessmentDate" class="form-label fw-bold">実施日</label>
+                <input id="assessmentDate"
+                       type="date"
+                       name="date"
+                       class="form-control"
+                       value="{{ default_date|date:'Y-m-d' }}"
+                       required>
+            </div>
+            <div>
+                <label for="assessmentNote" class="form-label fw-bold">メモ</label>
+                <textarea id="assessmentNote" name="note" class="form-control" rows="4">{{ existing_note|default:"" }}</textarea>
+            </div>
+        </div>
+        <div class="card-footer bg-light d-flex justify-content-end gap-2">
+            <a class="btn btn-secondary"
+               href="{% url 'rtms_app:assessment_hub' patient.id initial_timing %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">戻る</a>
+            <button type="submit" class="btn btn-assessment">
+                <i class="fas fa-save me-1"></i>保存してHubへ戻る
+            </button>
+        </div>
+    </div>
+{% endblock %}

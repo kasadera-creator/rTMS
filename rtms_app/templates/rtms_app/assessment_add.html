@@ -1,14 +1,11 @@
 {% extends "rtms_app/base.html" %}
 {% load static %}
-
 {% block body_class %}page-assessment{% endblock %}
-
 {% block header_breadcrumb %}
   <span class="text-white-50 ms-2">/ 尺度評価</span>
 {% endblock header_breadcrumb %}
-
 {% block extrastyle %}
-<style>
+  <style>
   .score-input { width: 64px; text-align: center; font-weight: 700; }
   .hamd-row { border: 1px solid #e9ecef; border-radius: 10px; background: #fff; }
   .hamd-row:hover { border-color: var(--color-assessment); background: #fef8f8; }
@@ -46,43 +43,55 @@
       .sticky-scorebar .h5 { font-size: 1rem; }
       .sticky-scorebar .btn { padding: 0.25rem 0.5rem; font-size: 0.85rem; }
   }
-</style>
+  </style>
 {% endblock %}
-
 {% block content %}
-<div class="container py-3 mb-5">
-  {# Ensure patient info bar + floating nav appear on assessment pages #}
-  {% include "rtms_app/partials/patient_inline_bar.html" with page_title="尺度評価" title_icon="fa-chart-bar" patient=patient dashboard_date=dashboard_date %}
-
-  {% if recommendation %}
-    <div class="alert alert-info fw-bold mb-3 shadow-sm"><i class="fas fa-comment-medical"></i> {{ recommendation }}</div>
+  {% if not modal_mode %}
+    <div class="container py-3 mb-5">
+      {# Ensure patient info bar + floating nav appear on assessment pages #}
+      {% include "rtms_app/partials/patient_inline_bar.html" with page_title="尺度評価" title_icon="fa-chart-bar" patient=patient dashboard_date=dashboard_date %}
+      {% if recommendation %}
+        <div class="alert alert-info fw-bold mb-3 shadow-sm">
+          <i class="fas fa-comment-medical"></i> {{ recommendation }}
+        </div>
+      {% endif %}
+      <!-- ★ 期限ではなく評価予定日レンジ -->
+      <div class="alert alert-secondary mb-3 shadow-sm">
+        <i class="fas fa-calendar-alt me-1"></i>
+        <span class="fw-bold">評価予定日：</span>
+        {{ window_start|date:"Y年n月j日" }}〜{{ window_end|date:"Y年n月j日" }}
+        <span class="ms-2 text-muted small">（{{ initial_timing_display }}）</span>
+      </div>
+    {% else %}
+      <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="modal-title">{{ initial_timing_display }}</h5>
+          <button type="button"
+                  class="btn-close"
+                  data-bs-dismiss="modal"
+                  aria-label="Close"></button>
+        </div>
+      {% endif %}
+      <form method="post" id="assessmentForm">
+        {% csrf_token %}
+        {# Include the scale-specific inner form. The view supplies `scale_template` and scale-specific context. #}
+        {% include scale_template %}
+      </form>
+      {% if not modal_mode %}
+      </div>
+    {% else %}
+    </div>
   {% endif %}
-
-  <!-- ★ 期限ではなく評価予定日レンジ -->
-  <div class="alert alert-secondary mb-3 shadow-sm">
-    <i class="fas fa-calendar-alt me-1"></i>
-    <span class="fw-bold">評価予定日：</span>
-    {{ window_start|date:"Y年n月j日" }}〜{{ window_end|date:"Y年n月j日" }}
-    <span class="ms-2 text-muted small">（{{ initial_timing_display }}）</span>
-  </div>
-
-  <form method="post" id="assessmentForm">
-    {% csrf_token %}
-
-    {# Include the scale-specific inner form. The view supplies `scale_template` and scale-specific context. #}
-    {% include scale_template %}
-
-  </form>
-
-</div>
-{% url 'rtms_app:dashboard' as dashboard_url %}
+  {% if not modal_mode %}
+    {% url 'rtms_app:dashboard' as dashboard_url %}
     {% if dashboard_date %}
       {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
         <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
         <script src="{% static 'rtms_app/floating.js' %}"></script>
-
         <div class="fab-stack no-print">
-          <button type="button" class="btn btn-assessment fab" onclick="RTMSFloating.submitFormById('assessmentForm')">
+          <button type="button"
+                  class="btn btn-assessment fab"
+                  onclick="RTMSFloating.submitFormById('assessmentForm')">
             <i class="fas fa-save"></i> 保存
           </button>
           <a class="btn btn-secondary fab" href="{{ back_url }}">
@@ -93,9 +102,10 @@
     {% else %}
       <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
       <script src="{% static 'rtms_app/floating.js' %}"></script>
-
       <div class="fab-stack no-print">
-        <button type="button" class="btn btn-assessment fab" onclick="RTMSFloating.submitFormById('assessmentForm')">
+        <button type="button"
+                class="btn btn-assessment fab"
+                onclick="RTMSFloating.submitFormById('assessmentForm')">
           <i class="fas fa-save"></i> 保存
         </button>
         <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
@@ -103,14 +113,21 @@
         </a>
       </div>
     {% endif %}
-
+  {% else %}
+    {# Modal mode: use modal form submission #}
+    <div class="modal-footer bg-light">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+      <button type="button"
+              class="btn btn-assessment"
+              onclick="submitAssessmentModal()">保存して閉じる</button>
+    </div>
+  {% endif %}
   {# Embed scores safely and restore hidden inputs BEFORE loading the widget script #}
   {% if existing_assessment %}
     {{ existing_assessment.scores|json_script:"assessmentScores" }}
   {% else %}
     {{ "{}"|json_script:"assessmentScores" }}
   {% endif %}
-
   <script>
   (function(){
     const el = document.getElementById('assessmentScores');
@@ -124,7 +141,6 @@
   })();
   </script>
 {% endblock %}
-
 {% block scripts %}
-<script src="{% static 'rtms_app/hamd_widget.js' %}"></script>
+  <script src="{% static 'rtms_app/hamd_widget.js' %}"></script>
 {% endblock %}
