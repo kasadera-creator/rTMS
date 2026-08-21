@@ -329,9 +329,7 @@
                rel="noopener">
               <i class="fas fa-file-pdf"></i> 説明同意書（PDF）を表示・印刷
             </a>
-            <a class="btn btn-secondary" href="{{ back_url }}">
-              <i class="fas fa-undo"></i> 戻る
-            </a>
+            {% include "rtms_app/partials/page_exit_menu.html" %}
           </div>
         {% endwith %}
       {% else %}
@@ -357,9 +355,7 @@
              rel="noopener">
             <i class="fas fa-file-pdf"></i> 説明同意書（PDF）を表示・印刷
           </a>
-          <a class="btn btn-secondary" href="{{ dashboard_url }}">
-            <i class="fas fa-undo"></i> 戻る
-          </a>
+          {% include "rtms_app/partials/page_exit_menu.html" %}
         </div>
       {% endif %}
     {% endblock content %}
