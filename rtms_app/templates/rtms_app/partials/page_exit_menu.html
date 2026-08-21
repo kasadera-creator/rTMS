@@ -1,0 +1,32 @@
+{# page-exit-menu common wrapper: back button (dashboard_date branch) + optional print button. #}
+{# Relies on context vars already provided by the including template: dashboard_date, floating_print_options. #}
+{% url 'rtms_app:dashboard' as dashboard_url %}
+{% if dashboard_date %}
+    {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+        <div class="page-exit-menu no-print d-flex flex-wrap justify-content-center gap-2 mt-4 pt-3 border-top">
+            {% if floating_print_options and floating_print_options.0.href %}
+                <button type="button"
+                        class="btn btn-primary"
+                        onclick="window.open('{{ floating_print_options.0.href|escapejs }}', '{{ floating_print_options.0.target|default:"_blank" }}');">
+                    <i class="fas fa-print"></i> クリニカルパス印刷
+                </button>
+            {% endif %}
+            <a class="btn btn-secondary" href="{{ back_url }}">
+                <i class="fas fa-undo"></i> 戻る
+            </a>
+        </div>
+    {% endwith %}
+{% else %}
+    <div class="page-exit-menu no-print d-flex flex-wrap justify-content-center gap-2 mt-4 pt-3 border-top">
+        {% if floating_print_options and floating_print_options.0.href %}
+            <a class="btn btn-primary"
+               href="{{ floating_print_options.0.href }}"
+               {% if floating_print_options.0.target %}target="{{ floating_print_options.0.target }}"{% endif %}>
+                <i class="fas fa-print"></i> クリニカルパス印刷
+            </a>
+        {% endif %}
+        <a class="btn btn-patient-list" href="{{ dashboard_url }}">
+            <i class="fas fa-undo"></i> 戻る
+        </a>
+    </div>
+{% endif %}
