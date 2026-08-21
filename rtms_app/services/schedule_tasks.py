@@ -151,7 +151,7 @@ def compute_task_definitions(patient: Patient, holidays: Optional[set] = None) -
             w4_perf = _assessment_performed_date(patient, 'week4')
             tasks.append({
                 'key': 'assessment_week4',
-                'label': '4週経過後',
+                'label': '4週経過後HAM-D評価',
                 'planned_date': w4_planned,
                 'window_start': w4_planned,
                 'window_end': w4_window_end,

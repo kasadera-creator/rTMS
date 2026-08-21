@@ -26,8 +26,8 @@ sys.stderr.write("===== views.py module loaded =====\n")
 sys.stderr.flush()
 
 from .models import (
-    Patient, TreatmentSession, MappingSession, Assessment, AssessmentRecord,
-    ScaleDefinition, TimingScaleConfig, ConsentDocument, AuditLog,
+    Patient, TreatmentSession, MappingSession, MappingSchedule, Assessment, AssessmentRecord,
+    ScaleDefinition, TimingScaleConfig, AssessmentSchedule, ConsentDocument, AuditLog,
     SideEffectCheck, TreatmentSkip, PatientSurveySession,
 )
 from .forms import (
@@ -42,7 +42,7 @@ from .services.rtms_schedule import (
     format_rtms_label,
 )
 from .services.schedule_tasks import compute_dashboard_tasks
-from .services.schedule import shift_future_sessions
+from .services.schedule import shift_future_sessions, reschedule_planned_session
 
 # ==========================================
 # 祝日定義 (2024-2030) + 年末年始 (12/29-1/3)
@@ -265,6 +265,59 @@ def get_assessment_deadline(patient, timing):
         return get_nth_treatment_date(patient.first_treatment_date, 45)
     return None
 
+
+def get_hamd_effective_deadline(base_date, today=None):
+    """
+    HAM-D の「未実施なら翌治療日へ1日ずつ順延」ルールを適用した実効予定日を返す。
+    today が base_date 以前ならそのまま base_date。today が過ぎていれば、
+    base_date 翌日から today までの間で最後に到来した治療日まで順延する
+    （today 自身が治療日ならその日、休日等ならその直前の治療日）。
+    """
+    if today is None:
+        today = timezone.localdate()
+    if today <= base_date:
+        return base_date
+    effective = base_date
+    cur = base_date + timedelta(days=1)
+    while cur <= today:
+        if is_treatment_day(cur):
+            effective = cur
+        cur += timedelta(days=1)
+    return effective
+
+
+def get_hamd_baseline_default_date(patient):
+    """HAM-D 治療前評価のデフォルト予定日（初診日＝患者登録日）"""
+    return patient.created_at.date() if patient.created_at else timezone.localdate()
+
+
+def get_scale_baseline_default_date(patient):
+    """HAM-D以外の尺度の治療前評価デフォルト予定日（入院日）"""
+    return patient.admission_date or get_hamd_baseline_default_date(patient)
+
+
+# HAM-D以外の尺度は「治療前尺度評価」「治療後尺度評価」としてまとめて1件で表示・移動する際の scale_code マーカー
+OTHER_SCALES_SCHEDULE_CODE = '__other_scales__'
+
+
+def get_assessment_schedule_default_date(patient, scale, timing, treatment_end_est=None):
+    """
+    scale/timing に対応するデフォルト予定日（AssessmentSchedule に上書きが無い場合の値）。
+    """
+    is_hamd = scale.code == 'hamd'
+    if timing == 'baseline':
+        return get_hamd_baseline_default_date(patient) if is_hamd else get_scale_baseline_default_date(patient)
+    if is_hamd and timing in ('week3', 'week6'):
+        ws, _ = get_assessment_window(patient, timing)
+        return ws
+    if is_hamd and timing == 'week4':
+        # 4週経過後HAM-D評価は「4週目の最終セッション(予定)日」を基準日とする（週3/週6とは異なる）
+        _, we = get_assessment_window(patient, timing)
+        return we
+    if timing == 'post':
+        return treatment_end_est
+    return None
+
 # ★修正: カレンダーデータ生成ロジック (週単位のリストを返す)
 def generate_calendar_weeks(patient):
     # 基準となる開始日
@@ -296,13 +349,18 @@ def generate_calendar_weeks(patient):
     current_week = []
     current = start_date
 
-    mapping_dates = list(MappingSession.objects.filter(patient=patient).values_list('date', flat=True))
+    course_number = patient.course_number or 1
     treatments_done = {t.date.date(): t for t in TreatmentSession.objects.filter(patient=patient)}
     assessment_events = []  # 評価イベントを別途収集
 
     # Canonical planned treatment and mapping dates (no drift, closures honored)
     treat_dates = []
-    scheduled_mapping_dates = set()
+    # MT測定：週番号 -> 予定日（MappingSchedule のドラッグ調整があれば優先。無ければ計算式の値）
+    scheduled_mapping_by_date = {}
+    mapping_overrides = {
+        ms.week_number: ms.planned_date
+        for ms in MappingSchedule.objects.filter(patient=patient, course_number=course_number)
+    }
     if treatment_start:
         treat_dates = generate_treatment_dates(treatment_start, total=30, holidays=JP_HOLIDAYS)
         # Filter out cancelled sessions: remove dates where there's a cancel record or discharge_date is before or on that date
@@ -314,13 +372,27 @@ def generate_calendar_weeks(patient):
         mapping_base = patient.mapping_date or treatment_start
         if mapping_base:
             mapping_list = generate_mapping_dates(mapping_base, weeks=8, holidays=JP_HOLIDAYS)
-            scheduled_mapping_dates = {m['actual'] for m in mapping_list}
-            # Also filter mapping dates by discharge_date
-            if patient.discharge_date:
-                scheduled_mapping_dates = {d for d in scheduled_mapping_dates if d < patient.discharge_date}
+            for m in mapping_list:
+                wk = m['week_no']
+                if wk == 1 and patient.mapping_date and wk not in mapping_overrides:
+                    d = patient.mapping_date  # 明示的な初回MT測定日を優先（既存挙動を維持）
+                else:
+                    d = mapping_overrides.get(wk, m['actual'])
+                if patient.discharge_date and d >= patient.discharge_date:
+                    continue
+                scheduled_mapping_by_date[d] = wk
         # Set estimated end to the 30th treatment date
         if treat_dates:
             treatment_end_est = treat_dates[-1]
+
+    actual_session_by_date = {}
+    for ts_row in TreatmentSession.objects.filter(patient=patient, status__in=['planned', 'done']):
+        actual_session_by_date[ts_row.session_date] = ts_row
+
+    # 実績のあるMT測定（週番号付き）を日付でも参照できるようにする
+    actual_mapping_by_date = {}
+    for ms_row in MappingSession.objects.filter(patient=patient, course_number=course_number):
+        actual_mapping_by_date[ms_row.date] = ms_row
 
     while current <= end_date:
         is_hol = is_holiday(current)
@@ -335,35 +407,46 @@ def generate_calendar_weeks(patient):
         }
 
         if current == patient.admission_date:
-            day_info['events'].append({'type': 'admission', 'label': '入院', 'url': build_url('admission_procedure', [patient.id])})
+            day_info['events'].append({'type': 'admission', 'label': '入院', 'url': build_url('admission_procedure', [patient.id]), 'draggable': True})
 
-        # 2. MT測定（実績があれば実績、なければ毎週の予定を表示）
-        if current == patient.mapping_date or current in mapping_dates:
+        # 2. MT測定（実績があれば実績、なければ週次予定を表示。週ごとに個別ドラッグ調整可・他週への連動なし）
+        mapping_actual = actual_mapping_by_date.get(current)
+        mapping_week = mapping_actual.week_number if mapping_actual is not None else scheduled_mapping_by_date.get(current)
+        if mapping_week is not None:
+            is_mapping_done = mapping_actual is not None
             day_info['events'].append({
                 'type': 'mapping',
-                'label': 'MT測定',
-                'url': build_url("mapping_add", args=[patient.id], query={"date": current.strftime("%Y-%m-%d")})
-            })
-        elif current in scheduled_mapping_dates:
-            day_info['events'].append({
-                'type': 'mapping',
-                'label': 'MT測定',
-                'url': build_url("mapping_add", args=[patient.id], query={"date": current.strftime("%Y-%m-%d")})
+                'label': 'MT測定' + (' (済)' if is_mapping_done else ''),
+                'url': build_url("mapping_add", args=[patient.id], query={"date": current.strftime("%Y-%m-%d")}),
+                'draggable': True,
+                'status': 'done' if is_mapping_done else 'planned',
+                'week_number': mapping_week,
+                'session_id': mapping_actual.id if mapping_actual is not None else None,
             })
 
-        # 3. 治療予定・実績（実際の TreatmentSession の session_date を基準に表示）
-        # マップを作成: session_date => TreatmentSession
-        actual_session_by_date = {}
-        for ts in TreatmentSession.objects.filter(patient=patient, status__in=['planned', 'done']):
-            actual_session_by_date[ts.session_date] = ts
-
-        if current in actual_session_by_date:
-            ts = actual_session_by_date[current]
+        # 3. 治療予定・実績（canonical treat_dates を基準に表示。実績があれば actual_session_by_date で補完）
+        ts = actual_session_by_date.get(current)
+        show_treatment_slot = False
+        if treatment_start:
+            if ts is not None:
+                show_treatment_slot = True
+            elif current in treat_dates:
+                # If the very next canonical slot already has a real (materialized)
+                # session, this slot was vacated by a drag & drop reschedule (or a
+                # skip/shift) — the moved session now lives elsewhere, so we must not
+                # keep showing a stale "ghost" projection here alongside it.
+                idx_here = treat_dates.index(current)
+                next_slot_has_real = (
+                    idx_here + 1 < len(treat_dates)
+                    and actual_session_by_date.get(treat_dates[idx_here + 1]) is not None
+                )
+                show_treatment_slot = not next_slot_has_real
+        if show_treatment_slot:
             # Compute session_no and week_no based on canonical dates for consistency
             idx = None
             if current in treat_dates:
                 idx = treat_dates.index(current)
-            else:
+            elif ts is not None:
                 # If session_date is not in canonical dates (e.g., due to shift),
                 # compute ordinal position among all planned/done sessions for this patient
                 all_sessions = list(TreatmentSession.objects.filter(patient=patient, status__in=['planned', 'done']).order_by('session_date'))
@@ -374,27 +457,31 @@ def generate_calendar_weeks(patient):
 
             if idx is not None:
                 session_no = idx + 1
-                week_no = get_current_week_number(treatment_start, current) if treatment_start else 1
+                week_no = get_current_week_number(treatment_start, current)
             else:
                 session_no = "?"
                 week_no = "?"
 
-            status_label = " (済)" if current in treatments_done else ""
+            is_done = ts.status == 'done' if ts is not None else current in treatments_done
+            status_label = " (済)" if is_done else ""
             label = format_rtms_label(session_no, week_no) if isinstance(session_no, int) and isinstance(week_no, int) else f"治療 ({session_no}/{week_no})"
             day_info['events'].append({
                 'type': 'treatment',
                 'label': label + status_label,
-                'url': build_url('treatment_add', [patient.id], {'date': current})
+                'url': build_url('treatment_add', [patient.id], {'date': current}),
+                'draggable': True,
+                'status': 'done' if is_done else 'planned',
+                'session_id': ts.id if ts is not None else None,
             })
 
         # 5. 退院
         if current == patient.discharge_date:
-            day_info['events'].append({'type': 'discharge', 'label': '退院準備', 'url': build_url('patient_home', [patient.id])})
+            day_info['events'].append({'type': 'discharge', 'label': '退院準備', 'url': build_url('patient_home', [patient.id]), 'draggable': True})
 
         elif not patient.discharge_date and treatment_start:
             # Show discharge prep on the 30th treatment date (not next day)
             if treatment_end_est and current == treatment_end_est:
-                day_info['events'].append({'type': 'discharge', 'label': '退院準備', 'url': build_url('patient_home', [patient.id])})
+                day_info['events'].append({'type': 'discharge', 'label': '退院準備', 'url': build_url('patient_home', [patient.id]), 'draggable': True})
 
         current_week.append(day_info)
 
@@ -406,39 +493,83 @@ def generate_calendar_weeks(patient):
 
     if current_week: calendar_weeks.append(current_week)
 
-    # 評価イベントを window_end に追加
-    for timing in ['baseline', 'week3', 'week4', 'week6']:
-        ws, we = get_assessment_window(patient, timing)
-        if we and start_date <= we <= end_date:
-            # 該当日の day_info を探す
-            for week in calendar_weeks:
-                for day in week:
-                    if day['date'] == we:
-                        existing = Assessment.objects.filter(patient=patient, timing=timing).exists()
-                        # 括弧書き（HAM-D）と日付 (mm/dd) を除去したシンプル表記
-                        label = {
-                            'baseline': '治療前評価',
-                            'week3': '第3週目評価',
-                            'week4': '第4週目評価',
-                            'week6': '第6週目評価'
-                        }.get(timing, timing)
-                        if existing:
-                            label += ' (済)'
+    # 評価イベントを予定日に追加（AssessmentSchedule の上書きがあれば優先。HAM-Dのみ未実施なら自動順延）
+    schedule_overrides = {
+        (row.scale_id, row.timing): row.planned_date
+        for row in AssessmentSchedule.objects.filter(patient=patient, course_number=course_number)
+    }
+    configured_scales_cal = list(ScaleDefinition.objects.filter(is_active=True).order_by('code'))
+    hamd_scale = next((s for s in configured_scales_cal if s.code == 'hamd'), None)
+    other_scales_cal = [s for s in configured_scales_cal if s.code != 'hamd']
+    hamd_labels = {
+        'baseline': '治療前HAM-D評価',
+        'week3': '第3週HAM-D評価',
+        'week4': '4週経過後HAM-D評価',
+        'week6': '第6週HAM-D評価',
+    }
+    other_scales_labels = {'baseline': '治療前尺度評価', 'post': '治療後尺度評価'}
 
-                        # Use generic assessment_add URL for all timings
-                        url = build_url('assessment_add', [patient.id, timing], query={'from': 'clinical_path', 'date': we.strftime('%Y-%m-%d')})
+    def place_assessment_event(timing, label, base_date, is_done, allow_auto_postpone, url_builder, scale_code):
+        if base_date is None:
+            return
+        effective_date = base_date if is_done else (
+            get_hamd_effective_deadline(base_date) if allow_auto_postpone else base_date
+        )
+        if not (start_date <= effective_date <= end_date):
+            return
+        for week in calendar_weeks:
+            for day in week:
+                if day['date'] == effective_date:
+                    display_label = label + (' (済)' if is_done else '')
+                    event = {
+                        'type': 'assessment',
+                        'label': display_label,
+                        'url': url_builder(effective_date),
+                        'date': effective_date,
+                        'timing': timing,
+                        'scale_code': scale_code,
+                        'draggable': not is_done,
+                        'status': 'done' if is_done else 'planned',
+                        'window_end': effective_date,
+                    }
+                    day['events'].append(event)
+                    assessment_events.append(event)
+                    return
 
-                        event = {
-                            'type': 'assessment',
-                            'label': label,
-                            'url': url,
-                            'date': we,
-                            'timing': timing,
-                            'window_end': we
-                        }
-                        day['events'].append(event)
-                        assessment_events.append(event)
-                        break
+    if hamd_scale:
+        for timing in ['baseline', 'week3', 'week4', 'week6']:
+            base_date = schedule_overrides.get((hamd_scale.id, timing)) or get_assessment_schedule_default_date(patient, hamd_scale, timing, treatment_end_est)
+            is_done = (
+                Assessment.objects.filter(patient=patient, course_number=course_number, timing=timing, type='HAM-D').exists()
+                or AssessmentRecord.objects.filter(patient=patient, course_number=course_number, timing=timing, scale=hamd_scale).exists()
+            )
+            place_assessment_event(
+                timing, hamd_labels[timing], base_date, is_done, allow_auto_postpone=True,
+                url_builder=lambda d, t=timing: build_url('assessment_scale', [patient.id, t, hamd_scale.code], query={'from': 'clinical_path', 'date': d.strftime('%Y-%m-%d')}),
+                scale_code=hamd_scale.code,
+            )
+
+    # HAM-D以外の尺度は一度にまとめて実施するため、baseline/post それぞれ1件の
+    # 「尺度評価」イベントに集約する。クリック先は尺度選択HUB。ドラッグすると
+    # 対象タイミングの全尺度の予定日が連動して移動する。
+    if other_scales_cal:
+        for timing, label in other_scales_labels.items():
+            override_date = None
+            for scale in other_scales_cal:
+                v = schedule_overrides.get((scale.id, timing))
+                if v is not None:
+                    override_date = v
+                    break
+            base_date = override_date or get_assessment_schedule_default_date(patient, other_scales_cal[0], timing, treatment_end_est)
+            is_done = all(
+                AssessmentRecord.objects.filter(patient=patient, course_number=course_number, timing=timing, scale=scale).exists()
+                for scale in other_scales_cal
+            )
+            place_assessment_event(
+                timing, label, base_date, is_done, allow_auto_postpone=False,
+                url_builder=lambda d, t=timing: build_url('assessment_add', [patient.id, t], query={'from': 'clinical_path', 'date': d.strftime('%Y-%m-%d')}),
+                scale_code=OTHER_SCALES_SCHEDULE_CODE,
+            )
 
     return calendar_weeks, assessment_events
 
@@ -527,7 +658,7 @@ def dashboard_view(request):
             task_treatment.append({'obj': p, 'note': '', 'status': "実施済" if is_done else "実施未", 'color': "success" if is_done else "danger", 'session_num': n, 'todo': todo_label})
 
         # Use get_assessment_window() for week3/week4/week6 to match clinical path windows
-        for timing_code, label_name in [('week3', '第3週目評価'), ('week4', '第4週目評価'), ('week6', '第6週目評価')]:
+        for timing_code, label_name in [('week3', '第3週目評価'), ('week4', '4週経過後HAM-D評価'), ('week6', '第6週目評価')]:
             ws, we = get_assessment_window(p, timing_code)
             if ws and we and target_date == we:
                 assessment = Assessment.objects.filter(patient=p, timing=timing_code, date__range=[ws, we]).first()
@@ -1144,7 +1275,7 @@ def treatment_add(request, patient_id):
 
                     # Shift subsequent planned sessions forward by one treatment day each
                     try:
-                        shift_future_sessions(patient, s.session_date)
+                        shift_future_sessions(patient, s.session_date, s.course_number)
                     except Exception:
                         pass
                 except Exception as _outer_err:
@@ -1744,7 +1875,7 @@ def assessment_add_legacy(request, patient_id, timing):
 
 def assessment_week4(request, patient_id):
     """
-    第4週目評価用のラッパービュー
+    4週経過後HAM-D評価用のラッパービュー
     """
     return assessment_add(request, patient_id, timing='week4')
 
@@ -2635,18 +2766,6 @@ def patient_clinical_path(request, patient_id):
     last_assessment = Assessment.objects.filter(patient=patient, timing='week3').order_by('-date').first()
     baseline_assessment = Assessment.objects.filter(patient=patient, timing='baseline').order_by('-date').first()
     week6_assessment = Assessment.objects.filter(patient=patient, timing='week6').order_by('-date').first()
-    # Restore print FAB: provide direct href/target for the floating button
-    print_href = reverse('rtms_app:print:print_clinical_path', args=[patient.id])
-    floating_print_options = [{
-        'label': '印刷プレビュー',
-        'icon': 'fa-print',
-        'value': 'print_path',
-        'formaction': print_href,
-        'formmethod': 'get',
-        'formtarget': '_blank',
-        'href': print_href,
-        'target': '_blank',
-    }]
     return render(request, 'rtms_app/patient_clinical_path.html', {
         'patient': patient,
         'calendar_weeks': calendar_weeks,
@@ -2656,9 +2775,180 @@ def patient_clinical_path(request, patient_id):
         'week6_assessment': week6_assessment,
         'today': timezone.now().date(),
         'dashboard_date': dashboard_date,
-        'floating_print_options': floating_print_options,
         'can_view_audit': can_view_audit(request.user)
     })
+
+
+@login_required
+def clinical_path_reschedule(request, patient_id):
+    """クリニカルパス画面のドラッグ&ドロップによる予定変更を受け付けるAPI。
+
+    event_type: 'admission' | 'discharge' | 'treatment' | 'mapping' | 'assessment'
+    treatment / mapping の場合はさらに status: 'planned' | 'done' と session_id, source_date が必要。
+    mapping の場合、status == 'planned' のときは week_number も必要（週単位で個別に移動。他週への連動なし）。
+    assessment の場合、scale_code, timing が必要（尺度・時期単位で個別に移動。他タイミングへの連動なし。
+    実施済みの評価は移動不可）。
+    """
+    patient = get_object_or_404(Patient, pk=patient_id)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POSTメソッドが必要です'}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except (ValueError, UnicodeDecodeError):
+        return JsonResponse({'error': 'リクエスト内容が不正です'}, status=400)
+
+    event_type = payload.get('event_type')
+    target_date = parse_date(payload.get('target_date') or '')
+    if not target_date:
+        return JsonResponse({'error': '移動先の日付が不正です'}, status=400)
+
+    if event_type == 'admission':
+        patient.admission_date = target_date
+        patient.save(update_fields=['admission_date'])
+        return JsonResponse({'status': 'ok'})
+
+    if event_type == 'discharge':
+        patient.discharge_date = target_date
+        patient.save(update_fields=['discharge_date'])
+        return JsonResponse({'status': 'ok'})
+
+    if event_type == 'treatment':
+        source_date = parse_date(payload.get('source_date') or '')
+        if not source_date:
+            return JsonResponse({'error': '移動元の日付が不正です'}, status=400)
+
+        status = payload.get('status')
+        session_id = payload.get('session_id')
+
+        if status == 'done':
+            session = TreatmentSession.objects.filter(patient=patient, pk=session_id, status='done').first()
+            if not session:
+                return JsonResponse({'error': '対象の実施記録が見つかりません'}, status=404)
+            conflict = TreatmentSession.objects.filter(
+                patient=patient, course_number=session.course_number, session_date=target_date
+            ).exclude(pk=session.pk).exists()
+            if conflict:
+                return JsonResponse({'error': 'その日には既に予定・実施記録があります'}, status=400)
+            delta = target_date - session.session_date
+            if session.date:
+                session.date = session.date + delta
+            session.session_date = target_date
+            session.save(update_fields=['session_date', 'date'])
+            return JsonResponse({'status': 'ok'})
+
+        # status == 'planned'（または未指定＝実行済みDB行がまだ無いcanonical予定）
+        if not patient.first_treatment_date:
+            return JsonResponse({'error': '初回治療日が未設定です'}, status=400)
+
+        course_number = patient.course_number or 1
+        treat_dates = generate_treatment_dates(patient.first_treatment_date, total=30, holidays=JP_HOLIDAYS)
+        if patient.discharge_date:
+            treat_dates = [d for d in treat_dates if d < patient.discharge_date]
+
+        existing_dates = set(
+            TreatmentSession.objects.filter(
+                patient=patient, course_number=course_number, status__in=['planned', 'done']
+            ).values_list('session_date', flat=True)
+        )
+        to_create = [d for d in treat_dates if d >= source_date and d not in existing_dates]
+        TreatmentSession.objects.bulk_create([
+            TreatmentSession(
+                patient=patient,
+                course_number=course_number,
+                session_date=d,
+                date=timezone.make_aware(datetime.datetime.combine(d, datetime.time(hour=9))),
+                status='planned',
+            )
+            for d in to_create
+        ])
+
+        session = TreatmentSession.objects.filter(
+            patient=patient, course_number=course_number, session_date=source_date, status='planned'
+        ).first()
+        if not session:
+            return JsonResponse({'error': '移動対象の予定が見つかりません（実施済みの可能性があります）'}, status=404)
+
+        try:
+            reschedule_planned_session(patient, session, target_date)
+        except ValueError as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+        return JsonResponse({'status': 'ok'})
+
+    if event_type == 'mapping':
+        source_date = parse_date(payload.get('source_date') or '')
+        if not source_date:
+            return JsonResponse({'error': '移動元の日付が不正です'}, status=400)
+        if not is_treatment_day(target_date):
+            return JsonResponse({'error': '土日祝日にはMT測定を予定できません'}, status=400)
+
+        status = payload.get('status')
+        course_number = patient.course_number or 1
+
+        if status == 'done':
+            session_id = payload.get('session_id')
+            mapping_session = MappingSession.objects.filter(
+                patient=patient, pk=session_id, course_number=course_number
+            ).first()
+            if not mapping_session:
+                return JsonResponse({'error': '対象のMT測定記録が見つかりません'}, status=404)
+            conflict = MappingSession.objects.filter(
+                patient=patient, course_number=course_number, date=target_date,
+                stimulation_site=mapping_session.stimulation_site,
+            ).exclude(pk=mapping_session.pk).exists()
+            if conflict:
+                return JsonResponse({'error': 'その日には既にMT測定記録があります'}, status=400)
+            mapping_session.date = target_date
+            mapping_session.save(update_fields=['date'])
+            return JsonResponse({'status': 'ok'})
+
+        # status == 'planned'：その週の予定だけを個別に移動する（他週への連動・カスケードなし）
+        try:
+            week_number = int(payload.get('week_number'))
+        except (TypeError, ValueError):
+            return JsonResponse({'error': '対象の週が不明です'}, status=400)
+
+        MappingSchedule.objects.update_or_create(
+            patient=patient, course_number=course_number, week_number=week_number,
+            defaults={'planned_date': target_date},
+        )
+        return JsonResponse({'status': 'ok'})
+
+    if event_type == 'assessment':
+        if not is_treatment_day(target_date):
+            return JsonResponse({'error': '土日祝日には評価を予定できません'}, status=400)
+
+        scale_code = payload.get('scale_code')
+        timing = payload.get('timing')
+        if not scale_code or not timing:
+            return JsonResponse({'error': '対象の尺度・時期が不明です'}, status=400)
+
+        course_number = patient.course_number or 1
+
+        if scale_code == OTHER_SCALES_SCHEDULE_CODE:
+            # HAM-D以外の尺度は一括で実施するため、対象タイミングの全尺度の予定日を連動して更新する
+            scales = list(ScaleDefinition.objects.filter(is_active=True).exclude(code='hamd'))
+            if not scales:
+                return JsonResponse({'error': '対象の尺度が見つかりません'}, status=404)
+            for scale in scales:
+                AssessmentSchedule.objects.update_or_create(
+                    patient=patient, course_number=course_number, scale=scale, timing=timing,
+                    defaults={'planned_date': target_date},
+                )
+            return JsonResponse({'status': 'ok'})
+
+        scale = ScaleDefinition.objects.filter(code=scale_code).first()
+        if not scale:
+            return JsonResponse({'error': '対象の尺度が見つかりません'}, status=404)
+
+        AssessmentSchedule.objects.update_or_create(
+            patient=patient, course_number=course_number, scale=scale, timing=timing,
+            defaults={'planned_date': target_date},
+        )
+        return JsonResponse({'status': 'ok'})
+
+    return JsonResponse({'error': '不明なイベント種別です'}, status=400)
 
 @login_required
 def patient_print_path(request, patient_id):

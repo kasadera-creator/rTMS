@@ -123,6 +123,11 @@ urlpatterns = [
         name="patient_clinical_path",
     ),
     path(
+        "patient/<int:patient_id>/path/reschedule/",
+        views.clinical_path_reschedule,
+        name="clinical_path_reschedule",
+    ),
+    path(
         "calendar/month/",
         views.calendar_month_view,
         name="calendar_month",

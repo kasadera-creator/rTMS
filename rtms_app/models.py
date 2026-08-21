@@ -156,6 +156,33 @@ class MappingSession(models.Model):
             models.UniqueConstraint(fields=['patient', 'course_number', 'date', 'stimulation_site'], name='unique_mapping_per_patient_course_date_site')
         ]
 
+
+class MappingSchedule(models.Model):
+    """Overridable planned date for a weekly MT測定 slot.
+
+    Only weeks that have been manually adjusted (e.g. via clinical path drag & drop)
+    need a row here. Weeks without an override keep using the computed default from
+    `generate_mapping_dates` (nominal = mapping base date + 7 * (week-1), rolled
+    forward to the next treatment day if it falls on a weekend/holiday). Moving one
+    week's slot does not affect any other week (no cascade).
+    """
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='mapping_schedules')
+    course_number = models.IntegerField("クール数", default=1, db_index=True)
+    week_number = models.IntegerField("週", choices=MappingSession.WEEK_CHOICES)
+    planned_date = models.DateField("予定日")
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "MT測定予定"
+        verbose_name_plural = "MT測定予定"
+        constraints = [
+            models.UniqueConstraint(fields=['patient', 'course_number', 'week_number'], name='unique_mapping_schedule_per_patient_course_week')
+        ]
+
+    def __str__(self):
+        return f"MappingSchedule(patient={self.patient_id} course={self.course_number} week={self.week_number} -> {self.planned_date})"
+
+
 class TreatmentSession(models.Model):
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE)
     # 日時は詳細情報として保持しつつ、レコードの自然キーとして日付部分を別管理
@@ -440,6 +467,35 @@ class AssessmentRecord(models.Model):
             models.Index(fields=['patient', 'timing']),
             models.Index(fields=['scale', 'timing']),
         ]
+
+
+class AssessmentSchedule(models.Model):
+    """Overridable planned date for a scale's assessment timing (baseline/week3/week4/week6/post).
+
+    Only timings that have been manually adjusted (e.g. via clinical path drag & drop)
+    need a row here; otherwise the planned date is computed from a default (baseline:
+    HAM-D uses first-visit date, other scales use admission date; week3/week4/week6:
+    the standard weekly window; post: the 30th treatment date). Moving one timing does
+    not affect any other timing (no cascade). For HAM-D, an undone assessment whose
+    planned date has passed auto-postpones day by day onto the next treatment day
+    until performed - this is computed at render time and does not require a row here.
+    """
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='assessment_schedules')
+    course_number = models.IntegerField("クール数", default=1, db_index=True)
+    scale = models.ForeignKey(ScaleDefinition, on_delete=models.CASCADE, related_name='schedules')
+    timing = models.CharField("時期", max_length=20, choices=Assessment.TIMING_CHOICES)
+    planned_date = models.DateField("予定日")
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "評価予定"
+        verbose_name_plural = "評価予定"
+        constraints = [
+            models.UniqueConstraint(fields=['patient', 'course_number', 'scale', 'timing'], name='unique_assessment_schedule_per_patient_course_scale_timing')
+        ]
+
+    def __str__(self):
+        return f"AssessmentSchedule(patient={self.patient_id} course={self.course_number} scale={self.scale_id} timing={self.timing} -> {self.planned_date})"
 
 
 class PatientSurveySession(models.Model):
