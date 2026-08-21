@@ -49,33 +49,51 @@
             </tr>
         </table>
         {# --- 治療内容ブロック: 実施日 と 副作用表の間に挿入 --- #}
-        {% with mt=session.mt_percent|default:session.motor_threshold|default:"0" intensity_pct=session.intensity_percent|default:session.intensity|default:"0" %}
-            {% widthratio mt 100 intensity_pct as intensity_value %}
-            <div class="content-section mt-3">
-                <div class="section-label">治療内容</div>
-                <table class="summary-info-table" style="margin-top:6px;">
-                    <tr>
-                        <th>使用したTMSコイル</th>
-                        <td>{{ session.coil_type|default:"Brainsway" }}</td>
-                        <th>刺激部位</th>
-                        <td>{{ session.target_site|default:"左DLPFC" }}</td>
-                    </tr>
-                    <tr>
-                        <th>刺激頻度</th>
-                        <td>{{ session.frequency_hz }} Hz</td>
-                        <th>総パルス数</th>
-                        <td>{{ session.total_pulses }}</td>
-                    </tr>
-                    <tr>
-                        <th>刺激強度</th>
-                        <td colspan="3">
-                            MT値: {{ mt }}% ， 刺激: {{ intensity_pct }}%MT
-                            （計算出力: {{ intensity_value }}% ）
-                        </td>
-                    </tr>
-                </table>
-            </div>
-        {% endwith %}
+        <div class="content-section mt-3">
+            <div class="section-label">治療内容</div>
+            <table class="summary-info-table" style="margin-top:6px;">
+                <tr>
+                    <th>使用したTMSコイル</th>
+                    <td>{{ session.coil_type|default:"Brainsway" }}</td>
+                    <th>刺激部位</th>
+                    <td>{{ session.target_site|default:"左DLPFC" }}</td>
+                </tr>
+                <tr>
+                    <th>刺激頻度</th>
+                    <td>{{ session.frequency_hz }} Hz</td>
+                    <th>総パルス数</th>
+                    <td>{{ session.total_pulses }}</td>
+                </tr>
+                <tr>
+                    <th>刺激強度</th>
+                    <td colspan="3">
+                        MT値（安静運動閾値）:
+                        {% if resting_mt %}
+                            {{ resting_mt }}%
+                        {% else %}
+                            未測定
+                        {% endif %}
+                        ， 刺激強度:
+                        {% if session.intensity_percent %}
+                            {{ session.intensity_percent }}%
+                        {% else %}
+                            未入力
+                        {% endif %}
+                        （
+                        {% if session.mt_percent %}
+                            {{ session.mt_percent }}%MT
+                        {% else %}
+                            未入力
+                        {% endif %}
+                        ）
+                        {% if resting_mt and session.mt_percent %}
+                            {% widthratio resting_mt 100 session.mt_percent as calculated_output %}
+                            ／ 計算値: {{ calculated_output }}%
+                        {% endif %}
+                    </td>
+                </tr>
+            </table>
+        </div>
         <div class="content-section mt-4">
             <table class="data-table">
                 <thead>

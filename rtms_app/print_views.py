@@ -5,8 +5,8 @@ from django.utils import timezone
 from django.http import HttpResponseNotAllowed
 from urllib.parse import urlencode
 
-from .models import Patient, Assessment, ConsentDocument, TreatmentSession, SideEffectCheck
-from .views import generate_calendar_weeks
+from .models import Patient, Assessment, ConsentDocument, TreatmentSession, SideEffectCheck, MappingSession
+from .views import generate_calendar_weeks, get_current_week_number
 from .services.print_service import build_pdf_filename, CONTENT_LABELS
 from django.template.loader import render_to_string
 from django.http import HttpResponse
@@ -364,7 +364,19 @@ def _build_side_effect_context(request, patient_id, session_id):
 			patient=patient,
 			date__lte=session.date,
 		).order_by('date').count()
-	
+
+	# Actual measured motor threshold (MT値) comes from the MappingSession for this
+	# session's week, NOT from TreatmentSession.mt_percent (which is the %MT setting).
+	target_date = session.session_date if getattr(session, 'session_date', None) else (session.date.date() if getattr(session, 'date', None) else None)
+	course_number = getattr(session, 'course_number', None) or getattr(patient, 'course_number', None) or 1
+	mapping_for_session = None
+	if target_date:
+		mapping_for_session = MappingSession.objects.filter(patient=patient, course_number=course_number, date=target_date).first()
+		if not mapping_for_session and patient.first_treatment_date:
+			week_no = get_current_week_number(patient.first_treatment_date, target_date)
+			mapping_for_session = MappingSession.objects.filter(patient=patient, course_number=course_number, week_number=week_no).order_by('-date').first()
+	resting_mt = mapping_for_session.resting_mt if mapping_for_session else None
+
 	# Get side-effect check if exists
 	def default_rows():
 		return [
@@ -412,6 +424,7 @@ def _build_side_effect_context(request, patient_id, session_id):
 		'side_effect_rows': rows,
 		'side_effect_memo': memo,
 		'side_effect_signature': signature,
+		'resting_mt': resting_mt,
 		'today': timezone.now().date(),
 		'back_url': back_url,
 	}
