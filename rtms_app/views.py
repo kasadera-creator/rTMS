@@ -44,7 +44,7 @@ from .services.rtms_schedule import (
 from .services.schedule_tasks import compute_dashboard_tasks
 from .services.schedule import shift_future_sessions, reschedule_planned_session
 from .view_helpers import extract_back_url, get_dashboard_date, build_common_context, get_course_number
-from .queries.assessment_queries import get_assessments_ordered
+from .queries.assessment_queries import get_assessments_ordered, get_latest_assessment
 
 # ==========================================
 # 祝日定義 (2024-2030) + 年末年始 (12/29-1/3)
@@ -1058,7 +1058,7 @@ def treatment_add(request, patient_id):
 
     end_date_est = get_completion_date(patient.first_treatment_date)
     alert_msg = ""; instruction_msg = ""; is_remission = False
-    last_assessment = Assessment.objects.filter(patient=patient, timing='week3').order_by('-date').first(); baseline_assessment = Assessment.objects.filter(patient=patient, timing='baseline').order_by('-date').first(); judgment_info = None
+    last_assessment = get_latest_assessment(patient, 'week3'); baseline_assessment = get_latest_assessment(patient, 'baseline'); judgment_info = None
     week3_window_start, week3_window_end = get_assessment_window(patient, 'week3')
     if initial_date < week3_window_start:
         week3_status = '第3週評価前です'
@@ -1871,7 +1871,7 @@ def assessment_add_legacy(request, patient_id, timing):
     ctx['scale_name'] = 'HAM-D'
     ctx['existing_note'] = existing_assessment.note if existing_assessment else ''
     # baseline score for improvement calculations; may be None
-    baseline_assess = Assessment.objects.filter(patient=patient, timing='baseline').order_by('-date').first()
+    baseline_assess = get_latest_assessment(patient, 'baseline')
     ctx['baseline_score_17'] = baseline_assess.total_score_17 if baseline_assess else None
     return render(request, 'rtms_app/assessment_add.html', ctx)
 
@@ -2447,7 +2447,7 @@ def patient_summary_view(request, patient_id):
 
 
     sessions = TreatmentSession.objects.filter(patient=patient).order_by('date'); assessments = get_assessments_ordered(patient)
-    test_scores = assessments; score_admin = assessments.first(); score_w3 = assessments.filter(timing='week3').first(); score_w6 = assessments.filter(timing='week6').first()
+    test_scores = assessments; score_admin = assessments.first(); score_w3 = get_latest_assessment(patient, 'week3'); score_w6 = get_latest_assessment(patient, 'week6')
 
     timing_order = [
         ('baseline', '治療前'),
@@ -2456,7 +2456,7 @@ def patient_summary_view(request, patient_id):
         ('week6', '6週'),
     ]
     latest_by_timing = {
-        t: assessments.filter(timing=t).order_by('-date').first() for t, _ in timing_order
+        t: get_latest_assessment(patient, t) for t, _ in timing_order
     }
     baseline_obj = latest_by_timing.get('baseline')
     baseline_17 = getattr(baseline_obj, 'total_score_17', None)
@@ -2765,9 +2765,9 @@ def patient_clinical_path(request, patient_id):
     dashboard_date = request.GET.get('dashboard_date')
     # ★修正: generate_calendar_weeks を使用
     calendar_weeks, assessment_events = generate_calendar_weeks(patient)
-    last_assessment = Assessment.objects.filter(patient=patient, timing='week3').order_by('-date').first()
-    baseline_assessment = Assessment.objects.filter(patient=patient, timing='baseline').order_by('-date').first()
-    week6_assessment = Assessment.objects.filter(patient=patient, timing='week6').order_by('-date').first()
+    last_assessment = get_latest_assessment(patient, 'week3')
+    baseline_assessment = get_latest_assessment(patient, 'baseline')
+    week6_assessment = get_latest_assessment(patient, 'week6')
     return render(request, 'rtms_app/patient_clinical_path.html', {
         'patient': patient,
         'calendar_weeks': calendar_weeks,
