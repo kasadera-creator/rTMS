@@ -43,6 +43,7 @@ from .services.rtms_schedule import (
 )
 from .services.schedule_tasks import compute_dashboard_tasks
 from .services.schedule import shift_future_sessions, reschedule_planned_session
+from .view_helpers import extract_back_url, get_dashboard_date, build_common_context, get_course_number
 
 # ==========================================
 # 祝日定義 (2024-2030) + 年末年始 (12/29-1/3)
@@ -2977,13 +2978,10 @@ def audit_logs_view(request, patient_id):
 
     patient = get_object_or_404(Patient, pk=patient_id)
     logs = AuditLog.objects.filter(patient=patient).order_by('-created_at')
-
-    dashboard_date = request.GET.get('dashboard_date')
-    return render(request, 'rtms_app/audit_logs.html', {
-        'patient': patient,
-        'logs': logs,
-        'dashboard_date': dashboard_date,
-    })
+    dashboard_date = get_dashboard_date(request)
+    
+    context = build_common_context(patient, dashboard_date, logs=logs)
+    return render(request, 'rtms_app/audit_logs.html', context)
 
 @login_required
 def latest_consent(request):
