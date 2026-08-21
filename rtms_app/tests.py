@@ -3,7 +3,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 
 from rtms_app import assessment_rules
-from rtms_app.models import Patient, Assessment
+from rtms_app.models import Patient, Assessment, AssessmentRecord
 import datetime
 from datetime import date
 from rtms_app import services
@@ -573,11 +573,24 @@ class TestAssessmentQueries(TestCase):
     """Test assessment query helpers from queries.assessment_queries"""
     
     def setUp(self):
+        from rtms_app.models import ScaleDefinition
+        
         self.patient = Patient.objects.create(
             card_id="QUERY001",
             name="Query Test",
             birth_date=date(1980, 1, 1),
             course_number=1
+        )
+        
+        # Create ScaleDefinition for A2 tests
+        # Use get_or_create to avoid duplicate key errors if tests run multiple times
+        self.scale_hamd, _ = ScaleDefinition.objects.get_or_create(
+            code='hamd',
+            defaults={'name': 'HAM-D', 'is_active': True}
+        )
+        self.scale_phq9, _ = ScaleDefinition.objects.get_or_create(
+            code='phq9',
+            defaults={'name': 'PHQ-9', 'is_active': True}
         )
     
     def test_get_assessments_ordered_multiple(self):
@@ -840,6 +853,138 @@ class TestAssessmentQueries(TestCase):
         
         self.assertEqual(result.id, my_baseline.id)
         self.assertNotEqual(result.id, other_baseline.id)
+
+    def test_get_assessment_by_timing_with_fallback_record_only(self):
+        """Test get_assessment_by_timing_with_fallback returns AssessmentRecord when exists"""
+        from rtms_app.queries.assessment_queries import get_assessment_by_timing_with_fallback
+        
+        # Create AssessmentRecord only
+        record = AssessmentRecord.objects.create(
+            patient=self.patient,
+            course_number=1,
+            timing='baseline',
+            scale=self.scale_hamd,
+            date=date(2026, 1, 5),
+            total_score_17=20
+        )
+        
+        result = get_assessment_by_timing_with_fallback(
+            self.patient, 'baseline', self.scale_hamd, course_number=1
+        )
+        
+        self.assertIsNotNone(result)
+        self.assertEqual(result.id, record.id)
+        self.assertIsInstance(result, AssessmentRecord)
+
+    def test_get_assessment_by_timing_with_fallback_legacy_only(self):
+        """Test get_assessment_by_timing_with_fallback falls back to Assessment"""
+        from rtms_app.queries.assessment_queries import get_assessment_by_timing_with_fallback
+        
+        # Create Assessment (legacy) only
+        legacy = Assessment.objects.create(
+            patient=self.patient,
+            course_number=1,
+            timing='baseline',
+            type='HAM-D',
+            date=date(2026, 1, 5),
+            total_score_17=22
+        )
+        
+        result = get_assessment_by_timing_with_fallback(
+            self.patient, 'baseline', self.scale_hamd, course_number=1
+        )
+        
+        self.assertIsNotNone(result)
+        self.assertEqual(result.id, legacy.id)
+        self.assertIsInstance(result, Assessment)
+
+    def test_get_assessment_by_timing_with_fallback_both_prefer_record(self):
+        """Test get_assessment_by_timing_with_fallback prefers AssessmentRecord when both exist"""
+        from rtms_app.queries.assessment_queries import get_assessment_by_timing_with_fallback
+        
+        # Create both AssessmentRecord and Assessment
+        record = AssessmentRecord.objects.create(
+            patient=self.patient,
+            course_number=1,
+            timing='baseline',
+            scale=self.scale_hamd,
+            date=date(2026, 1, 5),
+            total_score_17=20
+        )
+        
+        legacy = Assessment.objects.create(
+            patient=self.patient,
+            course_number=1,
+            timing='baseline',
+            type='HAM-D',
+            date=date(2026, 1, 5),
+            total_score_17=22
+        )
+        
+        result = get_assessment_by_timing_with_fallback(
+            self.patient, 'baseline', self.scale_hamd, course_number=1
+        )
+        
+        # Should prefer AssessmentRecord
+        self.assertIsNotNone(result)
+        self.assertEqual(result.id, record.id)
+        self.assertIsInstance(result, AssessmentRecord)
+
+    def test_get_assessment_by_timing_with_fallback_none_exist(self):
+        """Test get_assessment_by_timing_with_fallback returns None when neither exists"""
+        from rtms_app.queries.assessment_queries import get_assessment_by_timing_with_fallback
+        
+        # No records created
+        result = get_assessment_by_timing_with_fallback(
+            self.patient, 'baseline', self.scale_hamd, course_number=1
+        )
+        
+        self.assertIsNone(result)
+
+    def test_get_assessment_by_timing_with_fallback_non_hamd_no_legacy(self):
+        """Test get_assessment_by_timing_with_fallback does not fallback for non-HAM-D scales"""
+        from rtms_app.queries.assessment_queries import get_assessment_by_timing_with_fallback
+        
+        # Create Assessment (legacy) - should NOT fallback for non-HAM-D
+        legacy = Assessment.objects.create(
+            patient=self.patient,
+            course_number=1,
+            timing='baseline',
+            type='HAM-D',  # Still HAM-D type, but scale is PHQ-9
+            date=date(2026, 1, 5),
+            total_score_17=22
+        )
+        
+        result = get_assessment_by_timing_with_fallback(
+            self.patient, 'baseline', self.scale_phq9, course_number=1
+        )
+        
+        # Should return None (no fallback for non-HAM-D)
+        self.assertIsNone(result)
+
+    def test_get_assessment_by_timing_with_fallback_latest_record_wins(self):
+        """Test get_assessment_by_timing_with_fallback returns latest AssessmentRecord"""
+        from rtms_app.queries.assessment_queries import get_assessment_by_timing_with_fallback
+        
+        # Note: AssessmentRecord unique constraint is (patient, course_number, timing, scale)
+        # So we can only have one AssessmentRecord per (patient, course_number, timing, scale)
+        # Test that the function returns the only existing record
+        record = AssessmentRecord.objects.create(
+            patient=self.patient,
+            course_number=1,
+            timing='week3',
+            scale=self.scale_hamd,
+            date=date(2026, 1, 15),
+            total_score_17=18
+        )
+        
+        result = get_assessment_by_timing_with_fallback(
+            self.patient, 'week3', self.scale_hamd, course_number=1
+        )
+        
+        # Should return the only record
+        self.assertIsNotNone(result)
+        self.assertEqual(result.id, record.id)
 
 
 # ============================================================================

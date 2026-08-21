@@ -44,7 +44,7 @@ from .services.rtms_schedule import (
 from .services.schedule_tasks import compute_dashboard_tasks
 from .services.schedule import shift_future_sessions, reschedule_planned_session
 from .view_helpers import extract_back_url, get_dashboard_date, build_common_context, get_course_number
-from .queries.assessment_queries import get_assessments_ordered, get_latest_assessment
+from .queries.assessment_queries import get_assessments_ordered, get_latest_assessment, get_assessment_by_timing_with_fallback
 
 # ==========================================
 # 祝日定義 (2024-2030) + 年末年始 (12/29-1/3)
@@ -2028,21 +2028,9 @@ def assessment_hub(request, patient_id, timing):
     configured_scales.sort(key=lambda scale: (scale_orders.get(scale.id, 999), scale.code))
 
     def cell_for(scale, cell_timing):
-        record = AssessmentRecord.objects.filter(
-            patient=patient,
-            course_number=course_number,
-            timing=cell_timing,
-            scale=scale,
-        ).order_by('-date').first()
-        legacy = None
-        if scale.code == 'hamd':
-            legacy = Assessment.objects.filter(
-                patient=patient,
-                course_number=course_number,
-                timing=cell_timing,
-                type='HAM-D',
-            ).order_by('-date').first()
-        existing = record or legacy
+        existing = get_assessment_by_timing_with_fallback(
+            patient, cell_timing, scale, course_number
+        )
         query = {'from': 'assessment_hub'}
         if dashboard_date:
             query['dashboard_date'] = dashboard_date
