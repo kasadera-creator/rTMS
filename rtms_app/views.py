@@ -44,6 +44,7 @@ from .services.rtms_schedule import (
 from .services.schedule_tasks import compute_dashboard_tasks
 from .services.schedule import shift_future_sessions, reschedule_planned_session
 from .view_helpers import extract_back_url, get_dashboard_date, build_common_context, get_course_number
+from .queries.assessment_queries import get_assessments_ordered
 
 # ==========================================
 # 祝日定義 (2024-2030) + 年末年始 (12/29-1/3)
@@ -1709,7 +1710,7 @@ def assessment_add_legacy(request, patient_id, timing):
     if timing not in allowed:
         return HttpResponse(status=400)
 
-    history = Assessment.objects.filter(patient=patient).order_by('date')
+    history = get_assessments_ordered(patient)
 
     # hamd_items with anchor text from HAMD_ANCHORS
     hamd_items = [
@@ -2445,7 +2446,7 @@ def patient_summary_view(request, patient_id):
         return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
 
 
-    sessions = TreatmentSession.objects.filter(patient=patient).order_by('date'); assessments = Assessment.objects.filter(patient=patient).order_by('date')
+    sessions = TreatmentSession.objects.filter(patient=patient).order_by('date'); assessments = get_assessments_ordered(patient)
     test_scores = assessments; score_admin = assessments.first(); score_w3 = assessments.filter(timing='week3').first(); score_w6 = assessments.filter(timing='week6').first()
 
     timing_order = [
