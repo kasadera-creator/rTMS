@@ -35,6 +35,33 @@ except Exception:
 	HAVE_WEASY = False
 
 
+def _extract_back_url(request, patient, fallback_view='rtms_app:patient_home'):
+	"""
+	Extract back_url from request, with fallback chain:
+	1. request.GET.get('back_url')
+	2. request.META.get('HTTP_REFERER')
+	3. fallback_view URL (default: patient_home)
+	"""
+	back_url = request.GET.get('back_url')
+	if not back_url:
+		back_url = request.META.get('HTTP_REFERER')
+	if not back_url:
+		back_url = reverse(fallback_view, args=[patient.id])
+	return back_url
+
+
+def _get_latest_assessments_by_date(patient):
+	"""
+	Get assessments, collapse to latest per date.
+	Returns list of assessments sorted by date.
+	"""
+	assessments_qs = Assessment.objects.filter(patient=patient).order_by('date')
+	latest_by_date = {}
+	for a in assessments_qs:
+		latest_by_date[a.date] = a
+	return [latest_by_date[d] for d in sorted(latest_by_date.keys())]
+
+
 def render_pdf_response(request, template, context, filename):
 	# Render template fragment (use include_mode to avoid toolbar/wrappers)
 	context = dict(context)
@@ -215,24 +242,17 @@ def print_clinical_path_pdf(request, patient_id):
 
 def _build_discharge_context(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
-	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
-    
-	# Get assessments and collapse to latest per date
-	assessments_qs = Assessment.objects.filter(patient=patient).order_by('date')
-	latest_by_date = {}
-	for a in assessments_qs:
-		latest_by_date[a.date] = a
-	test_scores = [latest_by_date[d] for d in sorted(latest_by_date.keys())]
+	back_url = _extract_back_url(request, patient)
+	test_scores = _get_latest_assessments_by_date(patient)
 	
 	context = {
 		'patient': patient,
 		'today': timezone.now().date(),
 		'test_scores': test_scores,
 		'back_url': back_url,
+		'hamd_trend_cols': _hamd_cols_for_patient(patient),
+		'pdf_filename': build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('discharge','退院時サマリー'), timezone.now().date()),
 	}
-	# build hamd trend cols using shared service so print matches screen
-	context['hamd_trend_cols'] = _hamd_cols_for_patient(patient)
-	context['pdf_filename'] = build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('discharge','退院時サマリー'), timezone.now().date())
 	return context
 
 
@@ -251,7 +271,7 @@ def patient_print_discharge_pdf(request, patient_id):
 def _build_admission_context(request, patient_id):
 	from datetime import timedelta
 	patient = get_object_or_404(Patient, pk=patient_id)
-	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
+	back_url = _extract_back_url(request, patient)
 	
 	# Get baseline assessments
 	assessments = Assessment.objects.filter(patient=patient, timing='baseline').order_by('date')
@@ -267,8 +287,8 @@ def _build_admission_context(request, patient_id):
 		'assessments': assessments,
 		'end_date_est': end_date_est,
 		'back_url': back_url,
+		'pdf_filename': build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('admission','入院時サマリ'), timezone.now().date()),
 	}
-	context['pdf_filename'] = build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('admission','入院時サマリ'), timezone.now().date())
 	return context
 
 
@@ -286,20 +306,16 @@ def patient_print_admission_pdf(request, patient_id):
 
 def _build_referral_context(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
-	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
-	# 重複があれば同日最新のみ
-	assessments_qs = Assessment.objects.filter(patient=patient).order_by('date')
-	latest_by_date = {}
-	for a in assessments_qs:
-		latest_by_date[a.date] = a
-	test_scores = [latest_by_date[d] for d in sorted(latest_by_date.keys())]
+	back_url = _extract_back_url(request, patient)
+	test_scores = _get_latest_assessments_by_date(patient)
+	
 	context = {
 		'patient': patient,
 		'today': timezone.now().date(),
 		'test_scores': test_scores,
 		'back_url': back_url,
+		'pdf_filename': build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('referral','紹介状'), timezone.now().date()),
 	}
-	context['pdf_filename'] = build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('referral','紹介状'), timezone.now().date())
 	return context
 
 
