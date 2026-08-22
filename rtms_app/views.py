@@ -44,7 +44,13 @@ from .services.rtms_schedule import (
 from .services.schedule_tasks import compute_dashboard_tasks
 from .services.schedule import shift_future_sessions, reschedule_planned_session
 from .view_helpers import extract_back_url, get_dashboard_date, build_common_context, get_course_number
-from .queries.assessment_queries import get_assessments_ordered, get_latest_assessment, get_assessment_by_timing_with_fallback
+from .queries.assessment_queries import (
+    get_assessments_ordered,
+    get_latest_assessment,
+    get_assessment_by_timing_with_fallback,
+    save_assessment_record,
+    save_assessment_hamd,
+)
 
 # ==========================================
 # 祝日定義 (2024-2030) + 年末年始 (12/29-1/3)
@@ -1799,19 +1805,13 @@ def assessment_add_legacy(request, patient_id, timing):
 
             # Upsert assessment by natural key: patient + course_number + timing + type
             course_number = patient.course_number or 1
-            defaults = {
-                'date': date,
-                'scores': scores,
-                'note': note,
-                'type': 'HAM-D',
-                'course_number': course_number,
-            }
-            assessment, created = Assessment.objects.update_or_create(
+            assessment, created = save_assessment_hamd(
                 patient=patient,
                 course_number=course_number,
                 timing=timing_post,
-                type='HAM-D',
-                defaults=defaults,
+                date=date,
+                scores=scores,
+                note=note,
             )
 
             # Ajax / modal 保存時は JSON を返す
@@ -2182,17 +2182,15 @@ def assessment_scale_form(request, patient_id, timing, scale_code):
             note = (request.POST.get('note') or '').strip()
 
             if scale.code != 'hamd':
-                record, _created = AssessmentRecord.objects.update_or_create(
+                record, _created = save_assessment_record(
                     patient=patient,
                     course_number=course_number,
                     timing=timing,
                     scale=scale,
-                    defaults={
-                        'date': assessed_date,
-                        'scores': {},
-                        'note': note,
-                        'status_label': '入力済',
-                    },
+                    date=assessed_date,
+                    scores={},
+                    note=note,
+                    defaults_override={'status_label': '入力済'},
                 )
                 if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                     return JsonResponse({'status': 'success', 'id': record.id, 'message': '保存しました。'})
@@ -2237,36 +2235,30 @@ def assessment_scale_form(request, patient_id, timing, scale_code):
                 rec_defaults['improvement_rate_17'] = improv_rate
                 rec_defaults['status_label'] = status
 
-            new_record, _created = AssessmentRecord.objects.update_or_create(
+            new_record, _created = save_assessment_record(
                 patient=patient,
                 course_number=course_number,
                 timing=timing,
                 scale=scale,
-                defaults=rec_defaults,
+                date=assessed_date,
+                scores=scores,
+                note=note,
+                defaults_override={
+                    k: v for k, v in rec_defaults.items()
+                    if k in ['improvement_rate_17', 'status_label']
+                },
             )
-
-            # CRITICAL: Ensure calculate_scores() is called and results are saved
-            new_record.calculate_scores()
-            new_record.save(update_fields=['total_score_17', 'total_score_21'])
 
             # Keep legacy table in sync
             if scale.code == 'hamd':
-                legacy_defaults = {
-                    'date': assessed_date,
-                    'scores': scores,
-                    'note': note,
-                    'type': 'HAM-D',
-                }
-                legacy_obj, _legacy_created = Assessment.objects.update_or_create(
+                legacy_obj, _legacy_created = save_assessment_hamd(
                     patient=patient,
                     course_number=course_number,
                     timing=timing,
-                    type='HAM-D',
-                    defaults=legacy_defaults,
+                    date=assessed_date,
+                    scores=scores,
+                    note=note,
                 )
-                # Ensure scores are calculated and persisted
-                legacy_obj.calculate_scores()
-                legacy_obj.save()
             else:
                 legacy_obj = None
 

@@ -307,72 +307,72 @@ class TestScheduleTasks(TestCase):
 
 class TestPrintViewHelpers(TestCase):
     """Test print view helper functions (print_views.py)"""
-    
+
     def setUp(self):
         self.patient = Patient.objects.create(
-            card_id="PRINT001", 
-            name="Print Test", 
+            card_id="PRINT001",
+            name="Print Test",
             birth_date=date(1980, 1, 1),
             course_number=1
         )
-    
+
     def test_print_extract_back_url_from_get(self):
         """Test _extract_back_url prioritizes request.GET"""
         from django.test import RequestFactory
         from rtms_app.print_views import _extract_back_url
-        
+
         factory = RequestFactory()
-        
+
         # Test 1: back_url in GET
         request = factory.get('/app/print/admission/?back_url=/custom/url')
         back_url = _extract_back_url(request, self.patient, 'rtms_app:patient_home')
         self.assertEqual(back_url, '/custom/url')
-    
+
     def test_print_extract_back_url_fallback_to_referer(self):
         """Test _extract_back_url falls back to HTTP_REFERER"""
         from django.test import RequestFactory
         from rtms_app.print_views import _extract_back_url
-        
+
         factory = RequestFactory()
-        
+
         # Test 2: back_url not in GET, but HTTP_REFERER available
         request = factory.get('/app/print/admission/')
         request.META['HTTP_REFERER'] = '/previous/page'
         back_url = _extract_back_url(request, self.patient, 'rtms_app:patient_home')
         self.assertEqual(back_url, '/previous/page')
-    
+
     def test_print_extract_back_url_fallback_to_view(self):
         """Test _extract_back_url uses view reverse as final fallback"""
         from django.test import RequestFactory
         from rtms_app.print_views import _extract_back_url
-        
+
         factory = RequestFactory()
-        
+
         # Test 3: neither GET nor referer, use fallback view
         request = factory.get('/app/print/admission/')
         back_url = _extract_back_url(request, self.patient, 'rtms_app:patient_home')
         expected_url = reverse('rtms_app:patient_home', args=[self.patient.id])
         self.assertEqual(back_url, expected_url)
-    
+
     def test_print_get_latest_assessments_by_date(self):
         """Test _get_latest_assessments_by_date collapses duplicates"""
         from rtms_app.print_views import _get_latest_assessments_by_date
         from rtms_app.models import Assessment
-        
+
         # Create assessments with different dates
         date1 = date(2026, 1, 5)
         date2 = date(2026, 1, 6)
         date3 = date(2026, 1, 7)
-        
+
         a1 = Assessment.objects.create(patient=self.patient, date=date1, timing='baseline', course_number=1, total_score_17=20)
         a2 = Assessment.objects.create(patient=self.patient, date=date2, timing='week3', course_number=1, total_score_17=19)
         a3 = Assessment.objects.create(patient=self.patient, date=date3, timing='week4', course_number=1, total_score_17=18)
-        
+
         result = _get_latest_assessments_by_date(self.patient)
-        
+
         # Should have 3 unique dates
         self.assertEqual(len(result), 3)
-        
+
         # Should be sorted by date
         self.assertEqual(result[0].date, date1)
         self.assertEqual(result[1].date, date2)
@@ -381,11 +381,11 @@ class TestPrintViewHelpers(TestCase):
 
 class TestPrintViewContextBuilding(TestCase):
     """Test print view context building functions"""
-    
+
     def setUp(self):
         self.patient = Patient.objects.create(
-            card_id="PRINTCTX001", 
-            name="Context Test", 
+            card_id="PRINTCTX001",
+            name="Context Test",
             birth_date=date(1980, 1, 1),
             course_number=2
         )
@@ -393,17 +393,17 @@ class TestPrintViewContextBuilding(TestCase):
         User = get_user_model()
         self.user = User.objects.create_user(username="printer", password="printpass")
         self.client.login(username="printer", password="printpass")
-    
+
     def test_print_discharge_context_structure(self):
         """Test _build_discharge_context returns expected keys"""
         from django.test import RequestFactory
         from rtms_app.print_views import _build_discharge_context
-        
+
         factory = RequestFactory()
         request = factory.get('/app/patient/1/print/discharge/')
-        
+
         context = _build_discharge_context(request, self.patient.id)
-        
+
         # Verify expected keys
         self.assertIn('patient', context)
         self.assertIn('today', context)
@@ -411,14 +411,14 @@ class TestPrintViewContextBuilding(TestCase):
         self.assertIn('back_url', context)
         self.assertIn('hamd_trend_cols', context)
         self.assertIn('pdf_filename', context)
-        
+
         # Verify patient
         self.assertEqual(context['patient'].id, self.patient.id)
-        
+
         # Verify pdf_filename format
         self.assertIn(self.patient.card_id, context['pdf_filename'])
         self.assertIn('pdf', context['pdf_filename'])
-    
+
     def test_print_views_html_and_pdf_endpoints(self):
         """Test discharge view returns both HTML and PDF"""
         # Test HTML view
@@ -426,7 +426,7 @@ class TestPrintViewContextBuilding(TestCase):
         response_html = self.client.get(url_html)
         self.assertEqual(response_html.status_code, 200)
         self.assertIn('text/html', response_html['Content-Type'])
-        
+
         # Test PDF view (if weasyprint available)
         try:
             from weasyprint import HTML
@@ -444,114 +444,114 @@ class TestPrintViewContextBuilding(TestCase):
 
 class TestViewHelpersFunctions(TestCase):
     """Test view_helpers.py functions"""
-    
+
     def setUp(self):
         self.patient = Patient.objects.create(
-            card_id="HELPER001", 
-            name="Helper Test", 
+            card_id="HELPER001",
+            name="Helper Test",
             birth_date=date(1980, 1, 1),
             course_number=3
         )
-    
+
     def test_extract_back_url_from_get(self):
         """Test extract_back_url prioritizes GET parameter"""
         from django.test import RequestFactory
         from rtms_app.view_helpers import extract_back_url
-        
+
         factory = RequestFactory()
         request = factory.get('/?back_url=/custom')
-        
+
         url = extract_back_url(request, 'rtms_app:dashboard')
         self.assertEqual(url, '/custom')
-    
+
     def test_extract_back_url_fallback_to_referer(self):
         """Test extract_back_url falls back to referer"""
         from django.test import RequestFactory
         from rtms_app.view_helpers import extract_back_url
-        
+
         factory = RequestFactory()
         request = factory.get('/')
         request.META['HTTP_REFERER'] = '/referer/page'
-        
+
         url = extract_back_url(request, 'rtms_app:dashboard')
         self.assertEqual(url, '/referer/page')
-    
+
     def test_extract_back_url_fallback_to_reverse(self):
         """Test extract_back_url uses reverse as final fallback"""
         from django.test import RequestFactory
         from rtms_app.view_helpers import extract_back_url
-        
+
         factory = RequestFactory()
         request = factory.get('/')
-        
+
         url = extract_back_url(request, 'rtms_app:patient_home', self.patient.id)
         expected = reverse('rtms_app:patient_home', args=[self.patient.id])
         self.assertEqual(url, expected)
-    
+
     def test_get_dashboard_date_present(self):
         """Test get_dashboard_date extracts date from GET"""
         from django.test import RequestFactory
         from rtms_app.view_helpers import get_dashboard_date
-        
+
         factory = RequestFactory()
         request = factory.get('/?dashboard_date=2026-01-15')
-        
+
         result = get_dashboard_date(request)
         self.assertEqual(result, '2026-01-15')
-    
+
     def test_get_dashboard_date_absent(self):
         """Test get_dashboard_date returns None when not present"""
         from django.test import RequestFactory
         from rtms_app.view_helpers import get_dashboard_date
-        
+
         factory = RequestFactory()
         request = factory.get('/')
-        
+
         result = get_dashboard_date(request)
         self.assertIsNone(result)
-    
+
     def test_build_common_context_basic(self):
         """Test build_common_context creates standard keys"""
         from rtms_app.view_helpers import build_common_context
-        
+
         context = build_common_context(self.patient)
-        
+
         self.assertIn('patient', context)
         self.assertIn('today', context)
         self.assertEqual(context['patient'], self.patient)
         self.assertIsNotNone(context['today'])
-    
+
     def test_build_common_context_with_dashboard_date(self):
         """Test build_common_context includes dashboard_date"""
         from rtms_app.view_helpers import build_common_context
-        
+
         context = build_common_context(self.patient, dashboard_date='2026-01-15')
-        
+
         self.assertIn('dashboard_date', context)
         self.assertEqual(context['dashboard_date'], '2026-01-15')
-    
+
     def test_build_common_context_with_extra(self):
         """Test build_common_context merges extra keys"""
         from rtms_app.view_helpers import build_common_context
-        
+
         context = build_common_context(self.patient, logs=['log1', 'log2'], custom_key='value')
-        
+
         self.assertIn('logs', context)
         self.assertIn('custom_key', context)
         self.assertEqual(context['logs'], ['log1', 'log2'])
         self.assertEqual(context['custom_key'], 'value')
-    
+
     def test_get_course_number_present(self):
         """Test get_course_number returns patient course_number"""
         from rtms_app.view_helpers import get_course_number
-        
+
         result = get_course_number(self.patient)
         self.assertEqual(result, 3)
-    
+
     def test_get_course_number_default(self):
         """Test get_course_number returns 1 when not set"""
         from rtms_app.view_helpers import get_course_number
-        
+
         # Create patient without explicit course_number (will use default)
         p = Patient.objects.create(
             card_id="COURSE_TEST",
@@ -559,7 +559,7 @@ class TestViewHelpersFunctions(TestCase):
             birth_date=date(1990, 1, 1)
             # Note: Not setting course_number, will use model default
         )
-        
+
         result = get_course_number(p)
         # Should return model default (1)
         self.assertEqual(result, 1)
@@ -571,17 +571,17 @@ class TestViewHelpersFunctions(TestCase):
 
 class TestAssessmentQueries(TestCase):
     """Test assessment query helpers from queries.assessment_queries"""
-    
+
     def setUp(self):
         from rtms_app.models import ScaleDefinition
-        
+
         self.patient = Patient.objects.create(
             card_id="QUERY001",
             name="Query Test",
             birth_date=date(1980, 1, 1),
             course_number=1
         )
-        
+
         # Create ScaleDefinition for A2 tests
         # Use get_or_create to avoid duplicate key errors if tests run multiple times
         self.scale_hamd, _ = ScaleDefinition.objects.get_or_create(
@@ -592,11 +592,11 @@ class TestAssessmentQueries(TestCase):
             code='phq9',
             defaults={'name': 'PHQ-9', 'is_active': True}
         )
-    
+
     def test_get_assessments_ordered_multiple(self):
         """Test get_assessments_ordered returns assessments in date order"""
         from rtms_app.queries.assessment_queries import get_assessments_ordered
-        
+
         # Create assessments on different dates with different timings
         a1 = Assessment.objects.create(
             patient=self.patient,
@@ -621,27 +621,27 @@ class TestAssessmentQueries(TestCase):
             total_score_17=18,
             type='HAM-D'
         )
-        
+
         # Query should return in ascending date order
         result = list(get_assessments_ordered(self.patient))
-        
+
         self.assertEqual(len(result), 3)
         self.assertEqual(result[0].id, a2.id)  # 2026-01-03
         self.assertEqual(result[1].id, a1.id)  # 2026-01-05
         self.assertEqual(result[2].id, a3.id)  # 2026-01-07
-    
+
     def test_get_assessments_ordered_empty(self):
         """Test get_assessments_ordered returns empty when no assessments"""
         from rtms_app.queries.assessment_queries import get_assessments_ordered
-        
+
         result = list(get_assessments_ordered(self.patient))
-        
+
         self.assertEqual(len(result), 0)
-    
+
     def test_get_assessments_ordered_same_date(self):
         """Test get_assessments_ordered handles multiple assessments on same date"""
         from rtms_app.queries.assessment_queries import get_assessments_ordered
-        
+
         # Create multiple assessments on same date
         same_date = date(2026, 1, 5)
         a1 = Assessment.objects.create(
@@ -660,18 +660,18 @@ class TestAssessmentQueries(TestCase):
             total_score_17=19,
             type='HAM-D'
         )
-        
+
         result = list(get_assessments_ordered(self.patient))
-        
+
         # Both should be present, both on same date
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0].date, same_date)
         self.assertEqual(result[1].date, same_date)
-    
+
     def test_get_assessments_ordered_only_for_patient(self):
         """Test get_assessments_ordered returns only patient's assessments"""
         from rtms_app.queries.assessment_queries import get_assessments_ordered
-        
+
         # Create another patient
         other_patient = Patient.objects.create(
             card_id="QUERY002",
@@ -679,7 +679,7 @@ class TestAssessmentQueries(TestCase):
             birth_date=date(1985, 1, 1),
             course_number=1
         )
-        
+
         # Create assessment for this patient
         Assessment.objects.create(
             patient=self.patient,
@@ -689,7 +689,7 @@ class TestAssessmentQueries(TestCase):
             total_score_17=20,
             type='HAM-D'
         )
-        
+
         # Create assessment for other patient
         Assessment.objects.create(
             patient=other_patient,
@@ -699,17 +699,17 @@ class TestAssessmentQueries(TestCase):
             total_score_17=18,
             type='HAM-D'
         )
-        
+
         # Query for first patient should only return first patient's assessment
         result = list(get_assessments_ordered(self.patient))
-        
+
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].patient.id, self.patient.id)
 
     def test_get_latest_assessment_baseline(self):
         """Test get_latest_assessment returns baseline assessment"""
         from rtms_app.queries.assessment_queries import get_latest_assessment
-        
+
         # Create single baseline assessment
         # (Note: unique constraint is (patient, course_number, timing, type)
         # so only one baseline per patient per course per type)
@@ -720,9 +720,9 @@ class TestAssessmentQueries(TestCase):
             course_number=1,
             scores={"q1": "0", "q2": "1"}  # Provide scores for calculation
         )
-        
+
         result = get_latest_assessment(self.patient, 'baseline')
-        
+
         self.assertIsNotNone(result)
         self.assertEqual(result.id, baseline.id)
         self.assertEqual(result.date, date(2026, 1, 5))
@@ -731,7 +731,7 @@ class TestAssessmentQueries(TestCase):
     def test_get_latest_assessment_week3(self):
         """Test get_latest_assessment returns latest week3 assessment"""
         from rtms_app.queries.assessment_queries import get_latest_assessment
-        
+
         # Create week3 assessments
         a1 = Assessment.objects.create(
             patient=self.patient,
@@ -740,9 +740,9 @@ class TestAssessmentQueries(TestCase):
             course_number=1,
             total_score_17=18
         )
-        
+
         result = get_latest_assessment(self.patient, 'week3')
-        
+
         self.assertIsNotNone(result)
         self.assertEqual(result.id, a1.id)
         self.assertEqual(result.timing, 'week3')
@@ -750,7 +750,7 @@ class TestAssessmentQueries(TestCase):
     def test_get_latest_assessment_multiple_timings(self):
         """Test get_latest_assessment returns correct assessment per timing"""
         from rtms_app.queries.assessment_queries import get_latest_assessment
-        
+
         # Create assessments with different timings
         baseline = Assessment.objects.create(
             patient=self.patient,
@@ -776,12 +776,12 @@ class TestAssessmentQueries(TestCase):
             total_score_17=18,
             type='HAM-D'
         )
-        
+
         # Each timing should return its own assessment
         baseline_result = get_latest_assessment(self.patient, 'baseline')
         week3_result = get_latest_assessment(self.patient, 'week3')
         week6_result = get_latest_assessment(self.patient, 'week6')
-        
+
         self.assertEqual(baseline_result.id, baseline.id)
         self.assertEqual(week3_result.id, week3.id)
         self.assertEqual(week6_result.id, week6.id)
@@ -789,16 +789,16 @@ class TestAssessmentQueries(TestCase):
     def test_get_latest_assessment_none_exists(self):
         """Test get_latest_assessment returns None when no assessment for timing"""
         from rtms_app.queries.assessment_queries import get_latest_assessment
-        
+
         # No assessment for 'week4'
         result = get_latest_assessment(self.patient, 'week4')
-        
+
         self.assertIsNone(result)
 
     def test_get_latest_assessment_latest_wins(self):
         """Test get_latest_assessment returns most recent when querying multiple assessments"""
         from rtms_app.queries.assessment_queries import get_latest_assessment
-        
+
         # Note: Assessment unique constraint is (patient, course_number, timing, type='HAM-D')
         # So we can only have one baseline per (patient, course_number)
         # Test with single assessment to verify behavior
@@ -810,16 +810,16 @@ class TestAssessmentQueries(TestCase):
             total_score_17=22,
             type='HAM-D'
         )
-        
+
         result = get_latest_assessment(self.patient, 'baseline')
-        
+
         self.assertEqual(result.id, baseline.id)
         self.assertEqual(result.date, date(2026, 1, 10))
 
     def test_get_latest_assessment_isolation(self):
         """Test get_latest_assessment only returns assessments for specified patient"""
         from rtms_app.queries.assessment_queries import get_latest_assessment
-        
+
         # Create another patient
         other_patient = Patient.objects.create(
             card_id="QUERY003",
@@ -827,7 +827,7 @@ class TestAssessmentQueries(TestCase):
             birth_date=date(1985, 1, 1),
             course_number=1
         )
-        
+
         # Create baseline for first patient
         my_baseline = Assessment.objects.create(
             patient=self.patient,
@@ -837,7 +837,7 @@ class TestAssessmentQueries(TestCase):
             total_score_17=22,
             type='HAM-D'
         )
-        
+
         # Create baseline for other patient (earlier date, should not be returned)
         other_baseline = Assessment.objects.create(
             patient=other_patient,
@@ -847,17 +847,17 @@ class TestAssessmentQueries(TestCase):
             total_score_17=25,
             type='HAM-D'
         )
-        
+
         # Query for first patient should only return first patient's assessment
         result = get_latest_assessment(self.patient, 'baseline')
-        
+
         self.assertEqual(result.id, my_baseline.id)
         self.assertNotEqual(result.id, other_baseline.id)
 
     def test_get_assessment_by_timing_with_fallback_record_only(self):
         """Test get_assessment_by_timing_with_fallback returns AssessmentRecord when exists"""
         from rtms_app.queries.assessment_queries import get_assessment_by_timing_with_fallback
-        
+
         # Create AssessmentRecord only
         record = AssessmentRecord.objects.create(
             patient=self.patient,
@@ -867,11 +867,11 @@ class TestAssessmentQueries(TestCase):
             date=date(2026, 1, 5),
             total_score_17=20
         )
-        
+
         result = get_assessment_by_timing_with_fallback(
             self.patient, 'baseline', self.scale_hamd, course_number=1
         )
-        
+
         self.assertIsNotNone(result)
         self.assertEqual(result.id, record.id)
         self.assertIsInstance(result, AssessmentRecord)
@@ -879,7 +879,7 @@ class TestAssessmentQueries(TestCase):
     def test_get_assessment_by_timing_with_fallback_legacy_only(self):
         """Test get_assessment_by_timing_with_fallback falls back to Assessment"""
         from rtms_app.queries.assessment_queries import get_assessment_by_timing_with_fallback
-        
+
         # Create Assessment (legacy) only
         legacy = Assessment.objects.create(
             patient=self.patient,
@@ -889,11 +889,11 @@ class TestAssessmentQueries(TestCase):
             date=date(2026, 1, 5),
             total_score_17=22
         )
-        
+
         result = get_assessment_by_timing_with_fallback(
             self.patient, 'baseline', self.scale_hamd, course_number=1
         )
-        
+
         self.assertIsNotNone(result)
         self.assertEqual(result.id, legacy.id)
         self.assertIsInstance(result, Assessment)
@@ -901,7 +901,7 @@ class TestAssessmentQueries(TestCase):
     def test_get_assessment_by_timing_with_fallback_both_prefer_record(self):
         """Test get_assessment_by_timing_with_fallback prefers AssessmentRecord when both exist"""
         from rtms_app.queries.assessment_queries import get_assessment_by_timing_with_fallback
-        
+
         # Create both AssessmentRecord and Assessment
         record = AssessmentRecord.objects.create(
             patient=self.patient,
@@ -911,7 +911,7 @@ class TestAssessmentQueries(TestCase):
             date=date(2026, 1, 5),
             total_score_17=20
         )
-        
+
         legacy = Assessment.objects.create(
             patient=self.patient,
             course_number=1,
@@ -920,11 +920,11 @@ class TestAssessmentQueries(TestCase):
             date=date(2026, 1, 5),
             total_score_17=22
         )
-        
+
         result = get_assessment_by_timing_with_fallback(
             self.patient, 'baseline', self.scale_hamd, course_number=1
         )
-        
+
         # Should prefer AssessmentRecord
         self.assertIsNotNone(result)
         self.assertEqual(result.id, record.id)
@@ -933,18 +933,18 @@ class TestAssessmentQueries(TestCase):
     def test_get_assessment_by_timing_with_fallback_none_exist(self):
         """Test get_assessment_by_timing_with_fallback returns None when neither exists"""
         from rtms_app.queries.assessment_queries import get_assessment_by_timing_with_fallback
-        
+
         # No records created
         result = get_assessment_by_timing_with_fallback(
             self.patient, 'baseline', self.scale_hamd, course_number=1
         )
-        
+
         self.assertIsNone(result)
 
     def test_get_assessment_by_timing_with_fallback_non_hamd_no_legacy(self):
         """Test get_assessment_by_timing_with_fallback does not fallback for non-HAM-D scales"""
         from rtms_app.queries.assessment_queries import get_assessment_by_timing_with_fallback
-        
+
         # Create Assessment (legacy) - should NOT fallback for non-HAM-D
         legacy = Assessment.objects.create(
             patient=self.patient,
@@ -954,18 +954,18 @@ class TestAssessmentQueries(TestCase):
             date=date(2026, 1, 5),
             total_score_17=22
         )
-        
+
         result = get_assessment_by_timing_with_fallback(
             self.patient, 'baseline', self.scale_phq9, course_number=1
         )
-        
+
         # Should return None (no fallback for non-HAM-D)
         self.assertIsNone(result)
 
     def test_get_assessment_by_timing_with_fallback_latest_record_wins(self):
         """Test get_assessment_by_timing_with_fallback returns latest AssessmentRecord"""
         from rtms_app.queries.assessment_queries import get_assessment_by_timing_with_fallback
-        
+
         # Note: AssessmentRecord unique constraint is (patient, course_number, timing, scale)
         # So we can only have one AssessmentRecord per (patient, course_number, timing, scale)
         # Test that the function returns the only existing record
@@ -977,11 +977,11 @@ class TestAssessmentQueries(TestCase):
             date=date(2026, 1, 15),
             total_score_17=18
         )
-        
+
         result = get_assessment_by_timing_with_fallback(
             self.patient, 'week3', self.scale_hamd, course_number=1
         )
-        
+
         # Should return the only record
         self.assertIsNotNone(result)
         self.assertEqual(result.id, record.id)
@@ -989,7 +989,7 @@ class TestAssessmentQueries(TestCase):
     def test_get_baseline_assessments_ordered_record_only(self):
         """Test get_baseline_assessments_ordered returns AssessmentRecord when exists"""
         from rtms_app.queries.assessment_queries import get_baseline_assessments_ordered
-        
+
         # Create baseline AssessmentRecord only
         record = AssessmentRecord.objects.create(
             patient=self.patient,
@@ -999,9 +999,9 @@ class TestAssessmentQueries(TestCase):
             date=date(2026, 1, 5),
             total_score_17=20
         )
-        
+
         result = get_baseline_assessments_ordered(self.patient)
-        
+
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].id, record.id)
         self.assertIsInstance(result[0], AssessmentRecord)
@@ -1009,7 +1009,7 @@ class TestAssessmentQueries(TestCase):
     def test_get_baseline_assessments_ordered_legacy_only(self):
         """Test get_baseline_assessments_ordered falls back to Assessment"""
         from rtms_app.queries.assessment_queries import get_baseline_assessments_ordered
-        
+
         # Create baseline Assessment (legacy) only
         legacy = Assessment.objects.create(
             patient=self.patient,
@@ -1019,9 +1019,9 @@ class TestAssessmentQueries(TestCase):
             date=date(2026, 1, 5),
             total_score_17=22
         )
-        
+
         result = get_baseline_assessments_ordered(self.patient)
-        
+
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].id, legacy.id)
         self.assertIsInstance(result[0], Assessment)
@@ -1029,7 +1029,7 @@ class TestAssessmentQueries(TestCase):
     def test_get_baseline_assessments_ordered_both_prefer_record(self):
         """Test get_baseline_assessments_ordered prefers AssessmentRecord when both exist"""
         from rtms_app.queries.assessment_queries import get_baseline_assessments_ordered
-        
+
         # Create both AssessmentRecord and Assessment
         record = AssessmentRecord.objects.create(
             patient=self.patient,
@@ -1039,7 +1039,7 @@ class TestAssessmentQueries(TestCase):
             date=date(2026, 1, 5),
             total_score_17=20
         )
-        
+
         legacy = Assessment.objects.create(
             patient=self.patient,
             course_number=1,
@@ -1048,9 +1048,9 @@ class TestAssessmentQueries(TestCase):
             date=date(2026, 1, 5),
             total_score_17=22
         )
-        
+
         result = get_baseline_assessments_ordered(self.patient)
-        
+
         # Should prefer AssessmentRecord
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].id, record.id)
@@ -1059,22 +1059,22 @@ class TestAssessmentQueries(TestCase):
     def test_get_baseline_assessments_ordered_empty(self):
         """Test get_baseline_assessments_ordered returns empty list when no assessments"""
         from rtms_app.queries.assessment_queries import get_baseline_assessments_ordered
-        
+
         result = get_baseline_assessments_ordered(self.patient)
-        
+
         self.assertEqual(len(result), 0)
         self.assertEqual(result, [])
 
     def test_get_baseline_assessments_ordered_multiple(self):
         """Test get_baseline_assessments_ordered handles multiple baseline records"""
         from rtms_app.queries.assessment_queries import get_baseline_assessments_ordered
-        
+
         # Create multiple baseline AssessmentRecords (normally shouldn't happen, but test anyway)
         # Note: Unique constraint is (patient, course_number, timing, scale)
         # So we create for different dates within same course/timing/scale
         # This is actually a constraint violation, so skip this variant.
         # Instead, test with different dates but ensure only one baseline per unique constraint
-        
+
         # Just verify that the helper handles the single baseline case properly
         record = AssessmentRecord.objects.create(
             patient=self.patient,
@@ -1084,16 +1084,16 @@ class TestAssessmentQueries(TestCase):
             date=date(2026, 1, 5),
             total_score_17=20
         )
-        
+
         result = get_baseline_assessments_ordered(self.patient)
-        
+
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].id, record.id)
 
     def test_get_baseline_assessments_ordered_only_baseline(self):
         """Test get_baseline_assessments_ordered excludes non-baseline assessments"""
         from rtms_app.queries.assessment_queries import get_baseline_assessments_ordered
-        
+
         # Create baseline and week3 assessments
         baseline = AssessmentRecord.objects.create(
             patient=self.patient,
@@ -1103,7 +1103,7 @@ class TestAssessmentQueries(TestCase):
             date=date(2026, 1, 5),
             total_score_17=20
         )
-        
+
         week3 = AssessmentRecord.objects.create(
             patient=self.patient,
             course_number=1,
@@ -1112,9 +1112,9 @@ class TestAssessmentQueries(TestCase):
             date=date(2026, 1, 20),
             total_score_17=18
         )
-        
+
         result = get_baseline_assessments_ordered(self.patient)
-        
+
         # Should only return baseline
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].id, baseline.id)
@@ -1127,24 +1127,24 @@ class TestAssessmentQueries(TestCase):
 
 class TestViewIntegration(TestCase):
     """Test actual views using helpers"""
-    
+
     def setUp(self):
         self.client = Client()
         User = get_user_model()
         self.user = User.objects.create_user(username="admin", password="admin123", is_staff=True, is_superuser=True)
         self.client.login(username="admin", password="admin123")
-        
+
         self.patient = Patient.objects.create(
-            card_id="INTG001", 
-            name="Integration Test", 
+            card_id="INTG001",
+            name="Integration Test",
             birth_date=date(1980, 1, 1),
             course_number=1
         )
-    
+
     def test_audit_logs_view_context(self):
         """Test audit_logs_view uses build_common_context"""
         from rtms_app.models import AuditLog
-        
+
         # Create audit log
         AuditLog.objects.create(
             patient=self.patient,
@@ -1154,29 +1154,29 @@ class TestViewIntegration(TestCase):
             target_pk=str(self.patient.id),
             summary='Test log'
         )
-        
+
         url = reverse('rtms_app:audit_logs', args=[self.patient.id])
         response = self.client.get(url)
-        
+
         # Should render successfully
         self.assertEqual(response.status_code, 200)
-        
+
         # Check context
         self.assertIn('patient', response.context)
         self.assertIn('logs', response.context)
         self.assertEqual(response.context['patient'].id, self.patient.id)
-    
+
     def test_audit_logs_view_with_dashboard_date(self):
         """Test audit_logs_view preserves dashboard_date parameter"""
         url = reverse('rtms_app:audit_logs', args=[self.patient.id])
         url_with_date = f"{url}?dashboard_date=2026-01-15"
-        
+
         response = self.client.get(url_with_date)
-        
+
         self.assertEqual(response.status_code, 200)
         self.assertIn('dashboard_date', response.context)
         self.assertEqual(response.context['dashboard_date'], '2026-01-15')
-    
+
     def test_print_view_backward_compatibility(self):
         """Test all print views still work after refactoring"""
         # Create assessment for context
@@ -1188,13 +1188,13 @@ class TestViewIntegration(TestCase):
             course_number=1,
             total_score_17=20
         )
-        
+
         print_views = [
             'rtms_app:print:patient_print_admission',
             'rtms_app:print:patient_print_discharge',
             'rtms_app:print:patient_print_referral',
         ]
-        
+
         for view_name in print_views:
             with self.subTest(view=view_name):
                 url = reverse(view_name, args=[self.patient.id])
@@ -1202,12 +1202,12 @@ class TestViewIntegration(TestCase):
                 self.assertEqual(response.status_code, 200, f"{view_name} should return 200")
                 self.assertIn('patient', response.context)
                 self.assertEqual(response.context['patient'].id, self.patient.id)
-    
+
     def test_decorators_patient_retrieval(self):
         """Test @get_patient_and_dashboard decorator retrieves patient"""
         from django.test import RequestFactory
         from rtms_app.decorators import get_patient_and_dashboard
-        
+
         # Create a simple test view with decorator
         @get_patient_and_dashboard()
         def test_view(request, patient_id, patient, dashboard_date):
@@ -1216,32 +1216,225 @@ class TestViewIntegration(TestCase):
                 'patient_id': patient.id,
                 'dashboard_date': dashboard_date
             })
-        
+
         factory = RequestFactory()
         request = factory.get('/?dashboard_date=2026-01-15')
-        
+
         # Mock login
         request.user = self.user
-        
+
         response = test_view(request, self.patient.id)
-        
+
         # Response should be successful
         self.assertEqual(response.status_code, 200)
-    
+
     def test_decorators_patient_404(self):
         """Test @get_patient_and_dashboard returns 404 for invalid patient"""
         from django.test import RequestFactory
         from rtms_app.decorators import get_patient_and_dashboard
         from django.http import Http404
-        
+
         @get_patient_and_dashboard()
         def test_view(request, patient_id, patient, dashboard_date):
             return None
-        
+
         factory = RequestFactory()
         request = factory.get('/')
         request.user = self.user
-        
+
         # Should raise Http404 for invalid patient_id
         with self.assertRaises(Http404):
             test_view(request, 99999)
+
+
+# ============================================================================
+# Phase 10b: Write Path Consolidation Tests
+# ============================================================================
+
+class TestAssessmentWriteHelpers(TestCase):
+    """Test save_assessment_record() and save_assessment_hamd() helpers"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        from rtms_app.models import ScaleDefinition
+
+        self.patient = Patient.objects.create(
+            card_id="WRITE_TEST_001",
+            name="Write Test Patient",
+            birth_date=date(1980, 1, 1),
+            course_number=1,
+        )
+
+        # Ensure HAM-D scale exists
+        self.hamd_scale, _ = ScaleDefinition.objects.get_or_create(
+            code='hamd',
+            defaults={'name': 'HAM-D', 'total_items': 21}
+        )
+
+    def test_save_assessment_record_creates_new(self):
+        """Test save_assessment_record() creates new AssessmentRecord"""
+        from rtms_app.queries.assessment_queries import save_assessment_record
+
+        scores = {'q1': '1', 'q2': '2', 'q3': '0'}
+        record, created = save_assessment_record(
+            patient=self.patient,
+            course_number=1,
+            timing='baseline',
+            scale=self.hamd_scale,
+            date=date.today(),
+            scores=scores,
+            note="Test note",
+        )
+
+        self.assertTrue(created)
+        self.assertEqual(record.patient, self.patient)
+        self.assertEqual(record.timing, 'baseline')
+        self.assertEqual(record.scale, self.hamd_scale)
+        self.assertEqual(record.note, "Test note")
+        self.assertEqual(record.scores, scores)
+
+    def test_save_assessment_record_updates_existing(self):
+        """Test save_assessment_record() updates existing AssessmentRecord"""
+        from rtms_app.queries.assessment_queries import save_assessment_record
+
+        # Create initial record
+        scores1 = {'q1': '1', 'q2': '2'}
+        record1, created1 = save_assessment_record(
+            patient=self.patient,
+            course_number=1,
+            timing='week3',
+            scale=self.hamd_scale,
+            date=date.today(),
+            scores=scores1,
+            note="Initial",
+        )
+        self.assertTrue(created1)
+
+        # Update same record
+        scores2 = {'q1': '2', 'q2': '3'}
+        record2, created2 = save_assessment_record(
+            patient=self.patient,
+            course_number=1,
+            timing='week3',
+            scale=self.hamd_scale,
+            date=date.today(),
+            scores=scores2,
+            note="Updated",
+        )
+
+        self.assertFalse(created2)
+        self.assertEqual(record1.id, record2.id)
+        self.assertEqual(record2.note, "Updated")
+        self.assertEqual(record2.scores, scores2)
+
+    def test_save_assessment_record_with_defaults_override(self):
+        """Test save_assessment_record() applies defaults_override"""
+        from rtms_app.queries.assessment_queries import save_assessment_record
+
+        scores = {'q1': '1'}
+        record, _ = save_assessment_record(
+            patient=self.patient,
+            course_number=1,
+            timing='week6',
+            scale=self.hamd_scale,
+            date=date.today(),
+            scores=scores,
+            note="",
+            defaults_override={
+                'improvement_rate_17': 25.5,
+                'status_label': '反応',
+            },
+        )
+
+        self.assertEqual(record.improvement_rate_17, 25.5)
+        self.assertEqual(record.status_label, '反応')
+
+    def test_save_assessment_hamd_creates_new(self):
+        """Test save_assessment_hamd() creates new Assessment"""
+        from rtms_app.queries.assessment_queries import save_assessment_hamd
+
+        scores = {'q1': '1', 'q2': '2'}
+        assessment, created = save_assessment_hamd(
+            patient=self.patient,
+            course_number=1,
+            timing='baseline',
+            date=date.today(),
+            scores=scores,
+            note="Test HAM-D",
+        )
+
+        self.assertTrue(created)
+        self.assertEqual(assessment.patient, self.patient)
+        self.assertEqual(assessment.timing, 'baseline')
+        self.assertEqual(assessment.type, 'HAM-D')
+        self.assertEqual(assessment.note, "Test HAM-D")
+
+    def test_save_assessment_hamd_updates_existing(self):
+        """Test save_assessment_hamd() updates existing Assessment"""
+        from rtms_app.queries.assessment_queries import save_assessment_hamd
+
+        # Create initial
+        scores1 = {'q1': '1', 'q2': '2'}
+        a1, c1 = save_assessment_hamd(
+            patient=self.patient,
+            course_number=1,
+            timing='week3',
+            date=date.today(),
+            scores=scores1,
+            note="Initial",
+        )
+        self.assertTrue(c1)
+
+        # Update
+        scores2 = {'q1': '2', 'q2': '3'}
+        a2, c2 = save_assessment_hamd(
+            patient=self.patient,
+            course_number=1,
+            timing='week3',
+            date=date.today(),
+            scores=scores2,
+            note="Updated",
+        )
+
+        self.assertFalse(c2)
+        self.assertEqual(a1.id, a2.id)
+        self.assertEqual(a2.note, "Updated")
+
+    def test_save_assessment_hamd_calculate_scores_auto_called(self):
+        """Test that save_assessment_hamd() auto-calls calculate_scores() via model.save()"""
+        from rtms_app.queries.assessment_queries import save_assessment_hamd
+
+        # Scores for q1-q21 with values summing to known total
+        scores = {f'q{i}': '1' for i in range(1, 22)}  # All 1s => total 21
+        assessment, _ = save_assessment_hamd(
+            patient=self.patient,
+            course_number=1,
+            timing='baseline',
+            date=date.today(),
+            scores=scores,
+            note="",
+        )
+
+        # total_score_21 should be auto-calculated
+        self.assertEqual(assessment.total_score_21, 21)
+        # total_score_17 should be calculated from q1-q17
+        self.assertEqual(assessment.total_score_17, 17)
+
+    def test_save_assessment_record_calculate_scores_auto_called(self):
+        """Test that save_assessment_record() auto-calls calculate_scores() via model.save()"""
+        from rtms_app.queries.assessment_queries import save_assessment_record
+
+        scores = {f'q{i}': '1' for i in range(1, 22)}  # All 1s
+        record, _ = save_assessment_record(
+            patient=self.patient,
+            course_number=1,
+            timing='week3',
+            scale=self.hamd_scale,
+            date=date.today(),
+            scores=scores,
+            note="",
+        )
+
+        # Scores should be auto-calculated by model.save()
+        self.assertEqual(record.total_score_21, 21)
+        self.assertEqual(record.total_score_17, 17)
