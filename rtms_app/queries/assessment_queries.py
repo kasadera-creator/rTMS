@@ -1,10 +1,11 @@
 """
 評価（Assessment）関連のクエリ最適化層
 Stage 9: Assessment query/data-access layer 重複整理
+Phase 10a: AssessmentRecord prioritization pattern (print views migration)
 """
 from django.db.models import QuerySet
 from rtms_app.models import Assessment, Patient, AssessmentRecord, ScaleDefinition
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 
 def get_assessments_ordered(patient: Patient) -> QuerySet[Assessment]:
@@ -119,3 +120,60 @@ def get_assessment_by_timing_with_fallback(
         return legacy
     
     return None
+
+
+def get_baseline_assessments_ordered(patient: Patient) -> List[Union[AssessmentRecord, Assessment]]:
+    """
+    患者のbaseline評価を全て取得（新旧モデルのfallback対応）
+    
+    Phase 10a: print_views.py の baseline query 統一用ヘルパー
+    
+    用途：
+    - 印刷ビュー（admission, suitability等）での baseline 評価一覧取得
+    - AssessmentRecord（新モデル）を優先、なければ Assessment（旧モデル）をfallback
+    - 日付昇順で返却
+    
+    Args:
+        patient: Patient インスタンス
+        
+    Returns:
+        List[Union[AssessmentRecord, Assessment]]: baseline評価を日付昇順で返す
+        - AssessmentRecordが存在 → AssessmentRecordのリストを返す
+        - AssessmentRecordがない＆Assessmentが存在 → Assessmentのリストを返す
+        - 両方ない → 空リスト []
+        
+    Fallback Logic:
+        1. AssessmentRecord（scale='hamd', timing='baseline'）を検索
+        2. レコードが存在 → その結果セットを日付昇順で返す
+        3. レコードがない → Assessment（type='HAM-D', timing='baseline'）をfallback
+        4. 両方ない → 空リスト
+        
+    Example:
+        >>> assessments = get_baseline_assessments_ordered(patient)
+        >>> for a in assessments:
+        ...     print(a.date, a.total_score_17)
+    """
+    try:
+        hamd_scale = ScaleDefinition.objects.get(code='hamd')
+    except ScaleDefinition.DoesNotExist:
+        # hamd scale が存在しない場合は Assessment をfallback
+        return list(Assessment.objects.filter(
+            patient=patient, timing='baseline', type='HAM-D'
+        ).order_by('date'))
+    
+    # Try new model first (AssessmentRecord)
+    new_records = list(AssessmentRecord.objects.filter(
+        patient=patient,
+        timing='baseline',
+        scale=hamd_scale,
+    ).order_by('date'))
+    
+    if new_records:
+        return new_records
+    
+    # Fallback to legacy model (Assessment)
+    return list(Assessment.objects.filter(
+        patient=patient,
+        timing='baseline',
+        type='HAM-D',
+    ).order_by('date'))

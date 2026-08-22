@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 from .models import Patient, Assessment, ConsentDocument, TreatmentSession, SideEffectCheck, MappingSession
 from .views import generate_calendar_weeks, get_current_week_number
 from .services.print_service import build_pdf_filename, CONTENT_LABELS
+from .queries.assessment_queries import get_baseline_assessments_ordered
 from django.template.loader import render_to_string
 from django.http import HttpResponse
 
@@ -93,7 +94,7 @@ DOC_TEMPLATES = {
 def patient_print_bundle(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
 	questionnaire = patient.questionnaire_data or {}
-	assessments = Assessment.objects.filter(patient=patient, timing='baseline').order_by('date')
+	assessments = get_baseline_assessments_ordered(patient)
 
 	# always use getlist to collect multiple docs from ?docs=...&docs=...
 	docs = request.GET.getlist("docs")
@@ -157,7 +158,7 @@ def patient_print_bundle_pdf(request, patient_id):
 	# Build same context as patient_print_bundle and render PDF
 	patient = get_object_or_404(Patient, pk=patient_id)
 	questionnaire = patient.questionnaire_data or {}
-	assessments = Assessment.objects.filter(patient=patient, timing='baseline').order_by('date')
+	assessments = get_baseline_assessments_ordered(patient)
 
 	docs = request.GET.getlist("docs")
 	docs = [d for d in docs if d]
@@ -274,8 +275,8 @@ def _build_admission_context(request, patient_id):
 	back_url = _extract_back_url(request, patient)
 	
 	# Get baseline assessments
-	assessments = Assessment.objects.filter(patient=patient, timing='baseline').order_by('date')
-	
+	assessments = get_baseline_assessments_ordered(patient)
+
 	# Calculate estimated end date (30 sessions from first treatment date)
 	end_date_est = None
 	if patient.first_treatment_date:
@@ -335,7 +336,7 @@ def patient_print_referral_pdf(request, patient_id):
 def patient_print_suitability(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
 	questionnaire = patient.questionnaire_data or {}
-	assessments = Assessment.objects.filter(patient=patient, timing='baseline').order_by('date')
+	assessments = get_baseline_assessments_ordered(patient)
 	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_first_visit', args=[patient.id])
 	context = {
 		'patient': patient,
@@ -352,7 +353,7 @@ def patient_print_suitability(request, patient_id):
 def patient_print_suitability_pdf(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
 	questionnaire = patient.questionnaire_data or {}
-	assessments = Assessment.objects.filter(patient=patient, timing='baseline').order_by('date')
+	assessments = get_baseline_assessments_ordered(patient)
 	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_first_visit', args=[patient.id])
 	context = {
 		'patient': patient,
