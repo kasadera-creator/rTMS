@@ -812,12 +812,6 @@ def patient_list_view(request):
 @login_required
 def admission_procedure(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id); dashboard_date = request.GET.get('dashboard_date')
-    course_number = patient.course_number or 1
-    existing_session = MappingSession.objects.filter(
-        patient=patient,
-        course_number=course_number,
-        date=initial_date,
-    ).first()
 
     if request.method == 'POST':
         form = AdmissionProcedureForm(request.POST, instance=patient)

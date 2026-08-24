@@ -68,6 +68,18 @@ class TestStage6ScheduleDeadlines(TestCase):
 
 
 class TestStage6PatientAndCalendar(TestCase):
+    def test_admission_procedure_get_does_not_reference_undefined_date(self):
+        patient = Patient.objects.create(
+            card_id='S6004', name='Admission', birth_date=date(1980, 1, 1),
+        )
+        user = get_user_model().objects.create_user(username='admission-viewer')
+        client = Client()
+        client.force_login(user)
+
+        response = client.get(reverse('rtms_app:admission_procedure', args=[patient.pk]))
+
+        self.assertEqual(response.status_code, 200)
+
     def test_registration_form_defaults_first_visit_to_today(self):
         from rtms_app.forms import PatientRegistrationForm
         self.assertEqual(PatientRegistrationForm().initial['first_visit_date'], timezone.localdate())
