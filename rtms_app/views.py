@@ -1923,9 +1923,26 @@ def _build_month_calendar(year, month, is_print=False):
         admission_date__isnull=False,
         admission_date__lte=grid_end,
     ).filter(Q(discharge_date__isnull=True) | Q(discharge_date__gte=grid_start)))
-    treatments = list(TreatmentSession.objects.filter(
-        session_date__range=(grid_start, grid_end),
-    ).exclude(status='skipped').select_related('patient'))
+    all_treatments = list(TreatmentSession.objects.exclude(
+        status='skipped',
+    ).select_related('patient').order_by(
+        'patient_id', 'course_number', 'session_date', 'date', 'id',
+    ))
+    treatments = [
+        session for session in all_treatments
+        if grid_start <= session.session_date <= grid_end
+    ]
+
+    treatment_number_by_id = {}
+    treatment_counts = {}
+    for session in all_treatments:
+        key = (session.patient_id, session.course_number)
+        treatment_counts[key] = treatment_counts.get(key, 0) + 1
+        treatment_number_by_id[session.id] = treatment_counts[key]
+
+    def surname(patient):
+        name = (patient.name or '').strip()
+        return name.split()[0] if name else ''
 
     inpatient_by_date = {}
     for p in patients:
@@ -1957,18 +1974,18 @@ def _build_month_calendar(year, month, is_print=False):
         events = []
         for p in patients:
             if p.admission_date == day_date:
-                events.append({'kind': 'admission', 'label': '入院', 'url': build_url('admission_procedure', [p.id])})
+                events.append({'kind': 'admission', 'label': f'入院（{surname(p)}）', 'url': build_url('admission_procedure', [p.id])})
             if p.discharge_date == day_date:
-                events.append({'kind': 'discharge', 'label': '退院', 'url': build_url('patient_home', [p.id])})
+                events.append({'kind': 'discharge', 'label': f'退院（{surname(p)}）', 'url': build_url('patient_home', [p.id])})
         for session in treatment_by_date.get(day_date, []):
             events.append({
                 'kind': 'treatment',
-                'label': 'rTMS治療',
+                'label': f'rTMS治療（{surname(session.patient)}＃{treatment_number_by_id[session.id]}回）',
                 'url': build_url('treatment_add', [session.patient_id], query={'date': day_date.isoformat()}),
                 'is_planned': session.status == 'planned',
             })
         for p in estimated_discharge_by_date.get(day_date, []):
-            events.append({'kind': 'discharge', 'label': '退院予定', 'url': build_url('patient_home', [p.id]), 'is_planned': True})
+            events.append({'kind': 'discharge', 'label': f'退院（{surname(p)}）', 'url': build_url('patient_home', [p.id]), 'is_planned': True})
         events.sort(key=lambda e: (e['kind'] != 'admission', e['kind'] != 'treatment'))
         visible_limit = 8
         current_week.append({

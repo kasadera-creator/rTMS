@@ -80,11 +80,24 @@ class TestStage6PatientAndCalendar(TestCase):
         )
         TreatmentSession.objects.create(patient=p, session_date=date(2026, 8, 24), status='planned')
         TreatmentSession.objects.create(patient=p, session_date=date(2026, 8, 25), status='skipped')
+        TreatmentSession.objects.create(patient=p, session_date=date(2026, 8, 26), status='planned')
+        discharged = Patient.objects.create(
+            card_id='S6003', name='Discharged Patient', birth_date=date(1980, 1, 1),
+            admission_date=date(2026, 8, 1), discharge_date=date(2026, 8, 12),
+        )
         context = _build_month_calendar(2026, 8)
         days = {d['date']: d for week in context['weeks'] for d in week}
-        self.assertEqual(days[date(2026, 8, 10)]['inpatient_count'], 1)
+        self.assertEqual(days[date(2026, 8, 10)]['inpatient_count'], 2)
         self.assertEqual(days[date(2026, 8, 24)]['rtms_count'], 1)
         self.assertEqual(days[date(2026, 8, 25)]['rtms_count'], 0)
+        labels = [event['label'] for event in days[date(2026, 8, 10)]['events_visible']]
+        self.assertIn('入院（Calendar）', labels)
+        labels = [event['label'] for event in days[date(2026, 8, 24)]['events_visible']]
+        self.assertIn('rTMS治療（Calendar＃1回）', labels)
+        labels = [event['label'] for event in days[date(2026, 8, 26)]['events_visible']]
+        self.assertIn('rTMS治療（Calendar＃2回）', labels)
+        labels = [event['label'] for event in days[date(2026, 8, 12)]['events_visible']]
+        self.assertIn('退院（Discharged）', labels)
 
     def test_diagnosis_choices_are_preserved_in_existing_string_format(self):
         patient = Patient.objects.create(
