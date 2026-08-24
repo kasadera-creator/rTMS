@@ -3,9 +3,15 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.utils import timezone
+from django.db import IntegrityError
+from unittest.mock import patch
+import json
 
 from rtms_app import assessment_rules
-from rtms_app.models import Patient, Assessment, AssessmentRecord, TreatmentSession
+from rtms_app.models import (
+    Patient, Assessment, AssessmentRecord, TreatmentSession,
+    MappingSession, MappingSchedule, AssessmentSchedule, ScaleDefinition,
+)
 import datetime
 from datetime import date
 from rtms_app import services
@@ -107,7 +113,7 @@ class TestStage6PatientAndCalendar(TestCase):
         labels = [event['label'] for event in days[date(2026, 8, 24)]['events_visible']]
         self.assertIn('rTMS治療（Calendar＃1回）', labels)
         labels = [event['label'] for event in days[date(2026, 8, 26)]['events_visible']]
-        self.assertIn('rTMS治療（Calendar＃2回）', labels)
+        self.assertIn('rTMS治療（Calendar＃3回）', labels)
         labels = [event['label'] for event in days[date(2026, 8, 12)]['events_visible']]
         self.assertIn('退院（Discharged）', labels)
 
@@ -216,6 +222,28 @@ class TestRedirectFocus(TestCase):
         loc = resp.get('Location', '')
         self.assertIn('focus=2026-01-02', loc)
 
+    def test_treatment_add_rejects_new_session_after_thirty(self):
+        for i in range(30):
+            TreatmentSession.objects.create(
+                patient=self.patient,
+                session_date=date(2026, 1, 5) + datetime.timedelta(days=i),
+            )
+
+        url = reverse('rtms_app:treatment_add', args=[self.patient.id])
+        response = self.client.post(url, {
+            'treatment_date': '2027-01-04',
+            'treatment_time': '09:00',
+            'mt_percent': '120',
+            'frequency_hz': '18.0',
+            'train_seconds': '2.0',
+            'intertrain_seconds': '20.0',
+            'train_count': '55',
+            'total_pulses': '1980',
+        })
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 30)
+
 
 class TestSkipSessions(TestCase):
     def setUp(self):
@@ -319,6 +347,732 @@ class TestSkipSessions(TestCase):
         new_last = expected_second
         delta = new_last - original_last
         self.assertEqual(self.patient.discharge_date, date(2026,1,31) + delta)
+
+
+class TestClinicalPathReschedule(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='path-rescheduler')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='PATH1', name='Path Test', birth_date=date(1980, 1, 1),
+            admission_date=date(2026, 8, 20),
+            first_treatment_date=date(2026, 8, 24),
+            first_visit_date=date(2026, 8, 20),
+        )
+
+    def _post(self, payload):
+        return self.client.post(
+            reverse('rtms_app:clinical_path_reschedule', args=[self.patient.pk]),
+            data=json.dumps(payload),
+            content_type='application/json',
+        )
+
+    def test_treatment_start_rebuilds_planned_sessions_from_new_business_day(self):
+        from rtms_app.services.rtms_schedule import generate_treatment_dates
+
+        old_dates = generate_treatment_dates(self.patient.first_treatment_date, total=5, holidays=set())
+        sessions = [
+            TreatmentSession.objects.create(patient=self.patient, session_date=session_date)
+            for session_date in old_dates
+        ]
+        MappingSchedule.objects.create(
+            patient=self.patient, course_number=1, week_number=1,
+            planned_date=old_dates[0],
+        )
+        MappingSchedule.objects.create(
+            patient=self.patient, course_number=1, week_number=2,
+            planned_date=old_dates[0] + datetime.timedelta(days=7),
+        )
+
+        result = schedule_service.reschedule_treatment_start_date(
+            self.patient, date(2026, 8, 21), holidays=set(),
+        )
+
+        expected = generate_treatment_dates(date(2026, 8, 21), total=5, holidays=set())
+        self.assertEqual(result['moved_count'], 5)
+        self.assertEqual(
+            list(TreatmentSession.objects.filter(patient=self.patient).order_by('session_date').values_list('session_date', flat=True)),
+            expected,
+        )
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.first_treatment_date, date(2026, 8, 21))
+        self.assertEqual(self.patient.mapping_date, date(2026, 8, 21))
+        self.assertEqual(
+            MappingSchedule.objects.get(patient=self.patient, week_number=1).planned_date,
+            date(2026, 8, 21),
+        )
+        self.assertEqual(
+            MappingSchedule.objects.get(patient=self.patient, week_number=2).planned_date,
+            date(2026, 8, 28),
+        )
+        self.assertEqual([s.pk for s in sessions], list(TreatmentSession.objects.filter(patient=self.patient).values_list('pk', flat=True)))
+
+    def test_treatment_start_preserves_done_and_skipped_rows(self):
+        first = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 8, 24), status='planned',
+        )
+        done = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 8, 25), status='done',
+        )
+        skipped = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 8, 26), status='skipped',
+        )
+        later = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 8, 27), status='planned',
+        )
+
+        schedule_service.reschedule_treatment_start_date(
+            self.patient, date(2026, 8, 21), holidays=set(),
+        )
+
+        first.refresh_from_db()
+        done.refresh_from_db()
+        skipped.refresh_from_db()
+        later.refresh_from_db()
+        self.assertEqual(first.session_date, date(2026, 8, 21))
+        self.assertEqual(done.session_date, date(2026, 8, 25))
+        self.assertEqual(done.status, 'done')
+        self.assertEqual(skipped.session_date, date(2026, 8, 26))
+        self.assertEqual(skipped.status, 'skipped')
+        self.assertEqual(later.session_date, date(2026, 8, 24))
+
+    def test_treatment_start_rebuilds_regular_rows_without_touching_overflow(self):
+        sessions = [
+            TreatmentSession.objects.create(
+                patient=self.patient,
+                session_date=date(2026, 8, 24) + datetime.timedelta(days=index),
+            )
+            for index in range(31)
+        ]
+        overflow = sessions[30]
+        overflow_date = overflow.session_date
+
+        schedule_service.reschedule_treatment_start_date(
+            self.patient, date(2026, 8, 21), holidays=set(),
+        )
+
+        overflow.refresh_from_db()
+        self.assertEqual(overflow.session_date, overflow_date)
+        self.assertEqual(overflow.status, 'planned')
+        self.assertEqual(len(sessions), 31)
+
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.first_treatment_date, date(2026, 8, 21))
+        self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 31)
+
+    def test_first_treatment_api_allows_legacy_overflow_without_modifying_it(self):
+        sessions = [
+            TreatmentSession.objects.create(
+                patient=self.patient,
+                session_date=date(2026, 8, 24) + datetime.timedelta(days=index),
+            )
+            for index in range(34)
+        ]
+        overflow_before = [
+            (session.pk, session.session_date, session.status)
+            for session in sessions[30:]
+        ]
+
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'session_id': sessions[0].pk,
+            'source_date': sessions[0].session_date.isoformat(),
+            'target_date': '2026-08-21',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 34)
+        self.assertEqual(
+            [
+                (session.pk, session.session_date, session.status)
+                for session in TreatmentSession.objects.filter(
+                    pk__in=[session.pk for session in sessions[30:]]
+                ).order_by('pk')
+            ],
+            overflow_before,
+        )
+
+    def test_first_treatment_drag_uses_course_rebuild_service(self):
+        sessions = [
+            TreatmentSession.objects.create(patient=self.patient, session_date=session_date)
+            for session_date in [
+                date(2026, 8, 24), date(2026, 8, 25), date(2026, 8, 26),
+            ]
+        ]
+
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'session_id': sessions[0].pk,
+            'source_date': '2026-08-24', 'target_date': '2026-08-21',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.first_treatment_date, date(2026, 8, 21))
+        sessions[0].refresh_from_db()
+        sessions[1].refresh_from_db()
+        sessions[2].refresh_from_db()
+        self.assertEqual(
+            [sessions[0].session_date, sessions[1].session_date, sessions[2].session_date],
+            [date(2026, 8, 21), date(2026, 8, 24), date(2026, 8, 25)],
+        )
+
+    def test_treatment_can_move_to_saturday_without_propagating_weekend(self):
+        sessions = [
+            TreatmentSession.objects.create(patient=self.patient, session_date=session_date)
+            for session_date in [
+                date(2026, 8, 24), date(2026, 8, 25), date(2026, 8, 26),
+                date(2026, 8, 27), date(2026, 8, 28), date(2026, 8, 31),
+            ]
+        ]
+
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'session_id': sessions[4].pk,
+            'source_date': '2026-08-28', 'target_date': '2026-08-29',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        sessions[4].refresh_from_db()
+        sessions[5].refresh_from_db()
+        self.assertEqual(sessions[4].session_date, date(2026, 8, 29))
+        self.assertEqual(sessions[5].session_date, date(2026, 8, 31))
+        self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 6)
+
+    def test_treatment_can_move_to_holiday_without_propagating_holiday(self):
+        session = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 9, 18), status='planned',
+        )
+        following = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 9, 23), status='planned',
+        )
+
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'session_id': session.pk,
+            'source_date': '2026-09-18', 'target_date': '2026-09-21',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        session.refresh_from_db()
+        following.refresh_from_db()
+        self.assertEqual(session.session_date, date(2026, 9, 21))
+        self.assertEqual(following.session_date, date(2026, 9, 24))
+
+    def test_first_treatment_can_be_set_to_saturday_and_following_dates_are_business_days(self):
+        sessions = [
+            TreatmentSession.objects.create(patient=self.patient, session_date=session_date)
+            for session_date in [date(2026, 8, 24), date(2026, 8, 25), date(2026, 8, 26)]
+        ]
+
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'session_id': sessions[0].pk,
+            'source_date': '2026-08-24', 'target_date': '2026-08-29',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.patient.refresh_from_db()
+        for session in sessions:
+            session.refresh_from_db()
+        self.assertEqual(self.patient.first_treatment_date, date(2026, 8, 29))
+        self.assertEqual(
+            [session.session_date for session in sessions],
+            [date(2026, 8, 29), date(2026, 8, 31), date(2026, 9, 1)],
+        )
+
+    def test_clinical_path_renders_drag_metadata_and_csrf(self):
+        TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 8, 26), status='planned',
+        )
+
+        response = self.client.get(reverse('rtms_app:patient_clinical_path', args=[self.patient.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'draggable="true"')
+        self.assertContains(response, 'data-event-type="treatment"')
+        self.assertContains(response, 'data-source-date="2026-08-26"')
+        self.assertContains(response, 'data-reschedule-url="/app/patient/%s/path/reschedule/"' % self.patient.pk)
+        self.assertContains(response, 'name="csrfmiddlewaretoken"')
+        self.assertContains(response, 'patient_clinical_path.js')
+
+    def test_first_treatment_event_contains_confirmation_metadata(self):
+        TreatmentSession.objects.create(
+            patient=self.patient, session_date=self.patient.first_treatment_date, status='planned',
+        )
+
+        response = self.client.get(reverse('rtms_app:patient_clinical_path', args=[self.patient.pk]))
+
+        self.assertContains(response, 'data-first-treatment="true"')
+        self.assertContains(response, 'data-non-business-day="true"')
+
+    def test_first_visit_contains_start_date_confirmation(self):
+        response = self.client.get(reverse('rtms_app:patient_first_visit', args=[self.patient.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-original-first-treatment-date="2026-08-24"')
+        self.assertContains(response, '治療開始日を変更すると')
+
+    def test_first_visit_post_rebuilds_treatment_calendar_from_changed_start_date(self):
+        doctor_group, _ = Group.objects.get_or_create(name='医師')
+        doctor = get_user_model().objects.create_user(username='first-visit-start-doctor')
+        doctor.groups.add(doctor_group)
+        self.client.force_login(doctor)
+        sessions = [
+            TreatmentSession.objects.create(patient=self.patient, session_date=session_date)
+            for session_date in [date(2026, 8, 24), date(2026, 8, 25), date(2026, 8, 26)]
+        ]
+
+        response = self.client.post(
+            reverse('rtms_app:patient_first_visit', args=[self.patient.pk]),
+            {
+                'card_id': '56001',
+                'name': self.patient.name,
+                'birth_date': self.patient.birth_date.isoformat(),
+                'gender': self.patient.gender,
+                'attending_physician': str(doctor.pk),
+                'admission_date': '2026-08-20',
+                'first_visit_date': '2026-08-20',
+                'first_treatment_date': '2026-08-21',
+                'has_other_psychiatric_history': 'no',
+                'psychiatric_history': [],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.patient.refresh_from_db()
+        for session in sessions:
+            session.refresh_from_db()
+        self.assertEqual(self.patient.first_treatment_date, date(2026, 8, 21))
+        self.assertEqual(
+            [session.session_date for session in sessions],
+            [date(2026, 8, 21), date(2026, 8, 24), date(2026, 8, 25)],
+        )
+
+    def test_calendar_limits_planned_mapping_to_treatment_course(self):
+        from rtms_app.views import generate_calendar_weeks
+
+        weeks, _ = generate_calendar_weeks(self.patient)
+        mapping_events = [
+            (day['date'], event)
+            for week in weeks for day in week for event in day['events']
+            if event['type'] == 'mapping'
+        ]
+
+        self.assertTrue(mapping_events)
+        self.assertLessEqual(max(event['week_number'] for _date, event in mapping_events), 7)
+
+    def test_treatment_reschedule_rebuilds_all_later_planned_sessions(self):
+        sessions = [
+            TreatmentSession.objects.create(patient=self.patient, session_date=d)
+            for d in [date(2026, 8, 24), date(2026, 8, 25), date(2026, 8, 26), date(2026, 8, 27), date(2026, 8, 28)]
+        ]
+
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'source_date': '2026-08-26', 'target_date': '2026-09-01',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(TreatmentSession.objects.filter(patient=self.patient).order_by('session_date').values_list('session_date', flat=True)),
+            [date(2026, 8, 24), date(2026, 8, 25), date(2026, 9, 1), date(2026, 9, 2), date(2026, 9, 3)],
+        )
+        for session, expected in zip(sessions, [date(2026, 8, 24), date(2026, 8, 25), date(2026, 9, 1), date(2026, 9, 2), date(2026, 9, 3)]):
+            session.refresh_from_db()
+            self.assertEqual(session.session_date, expected)
+
+    def test_treatment_reschedule_skips_holiday_and_preserves_order(self):
+        sessions = [
+            TreatmentSession.objects.create(patient=self.patient, session_date=d)
+            for d in [date(2026, 8, 7), date(2026, 8, 11), date(2026, 8, 12)]
+        ]
+
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'source_date': '2026-08-07', 'target_date': '2026-08-10',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [session.refresh_from_db() or session.session_date for session in sessions],
+            [date(2026, 8, 10), date(2026, 8, 12), date(2026, 8, 13)],
+        )
+
+    def test_treatment_reschedule_allows_backward_move_and_preserves_sequence(self):
+        sessions = [
+            TreatmentSession.objects.create(patient=self.patient, session_date=d)
+            for d in [date(2026, 8, 24), date(2026, 8, 25), date(2026, 8, 26), date(2026, 8, 27), date(2026, 8, 28)]
+        ]
+
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'session_id': sessions[3].pk,
+            'source_date': '2026-08-27', 'target_date': '2026-08-26',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(TreatmentSession.objects.filter(patient=self.patient).order_by('session_date').values_list('session_date', flat=True)),
+            [date(2026, 8, 24), date(2026, 8, 25), date(2026, 8, 26), date(2026, 8, 27), date(2026, 8, 28)],
+        )
+        sessions[3].refresh_from_db()
+        self.assertEqual(sessions[3].session_date, date(2026, 8, 26))
+        sessions[2].refresh_from_db()
+        self.assertEqual(sessions[2].session_date, date(2026, 8, 27))
+
+    def test_treatment_session_id_is_authoritative_when_date_is_ambiguous(self):
+        first = TreatmentSession.objects.create(patient=self.patient, session_date=date(2026, 8, 24))
+        second = TreatmentSession.objects.create(patient=self.patient, session_date=date(2026, 8, 25))
+
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'session_id': second.pk,
+            'source_date': '2026-08-25', 'target_date': '2026-08-27',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(first.session_date, date(2026, 8, 24))
+        self.assertEqual(second.session_date, date(2026, 8, 27))
+
+    def test_treatment_calendar_numbers_materialized_sessions_by_date_order(self):
+        from rtms_app.views import generate_calendar_weeks
+
+        for d in [date(2026, 8, 24), date(2026, 8, 26), date(2026, 8, 27), date(2026, 8, 28), date(2026, 8, 31)]:
+            TreatmentSession.objects.create(patient=self.patient, session_date=d)
+
+        weeks, _ = generate_calendar_weeks(self.patient)
+        days = {
+            day['date']: [event['label'] for event in day['events'] if event['type'] == 'treatment']
+            for week in weeks for day in week
+        }
+        self.assertIn('2回目', days[date(2026, 8, 26)][0])
+        self.assertNotIn('3回目', days[date(2026, 8, 26)][0])
+        self.assertIn('5回目', days[date(2026, 8, 31)][0])
+
+    def test_treatment_calendar_includes_materialized_session_after_canonical_30(self):
+        from rtms_app.views import generate_calendar_weeks
+        moved = TreatmentSession.objects.create(patient=self.patient, session_date=date(2026, 10, 1))
+
+        weeks, _ = generate_calendar_weeks(self.patient)
+        days = {day['date'] for week in weeks for day in week}
+
+        self.assertIn(moved.session_date, days)
+
+    def test_treatment_limit_and_deterministic_overflow_detection(self):
+        dates = [date(2026, 8, 24) + datetime.timedelta(days=i) for i in range(34)]
+        sessions = [TreatmentSession.objects.create(patient=self.patient, session_date=d) for d in dates]
+
+        self.assertFalse(schedule_service.can_create_treatment_session(self.patient, 1))
+        info = schedule_service.get_treatment_overflow_info(self.patient, 1)
+        self.assertEqual(info['count'], 34)
+        self.assertEqual(info['overflow_count'], 4)
+        self.assertEqual([s.pk for s in info['overflow_sessions']], [s.pk for s in sessions[30:]])
+        self.assertEqual(
+            list(schedule_service.get_treatment_session_number_map(self.patient, 1).values()),
+            list(range(1, 31)),
+        )
+
+    def test_course_treatment_limit_is_independent(self):
+        for i in range(30):
+            TreatmentSession.objects.create(
+                patient=self.patient,
+                course_number=1,
+                session_date=date(2026, 8, 24) + datetime.timedelta(days=i),
+            )
+
+        self.assertFalse(schedule_service.can_create_treatment_session(self.patient, 1))
+        self.assertTrue(schedule_service.can_create_treatment_session(self.patient, 2))
+
+    def test_overflow_reschedule_does_not_create_another_session(self):
+        sessions = [
+            TreatmentSession.objects.create(
+                patient=self.patient,
+                session_date=date(2026, 8, 24) + datetime.timedelta(days=i),
+            )
+            for i in range(34)
+        ]
+        ids_before = set(TreatmentSession.objects.filter(patient=self.patient).values_list('pk', flat=True))
+
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'session_id': sessions[1].pk,
+            'source_date': sessions[1].session_date.isoformat(),
+            'target_date': '2026-08-27',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 34)
+        self.assertEqual(
+            set(TreatmentSession.objects.filter(patient=self.patient).values_list('pk', flat=True)),
+            ids_before,
+        )
+
+    def test_overflow_virtual_materialize_is_rejected_without_db_change(self):
+        for i in range(34):
+            TreatmentSession.objects.create(
+                patient=self.patient,
+                session_date=date(2026, 8, 25) + datetime.timedelta(days=i),
+            )
+        ids_before = set(TreatmentSession.objects.filter(patient=self.patient).values_list('pk', flat=True))
+
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'source_date': '2026-08-24', 'target_date': '2026-08-25',
+        })
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 34)
+        self.assertEqual(
+            set(TreatmentSession.objects.filter(patient=self.patient).values_list('pk', flat=True)),
+            ids_before,
+        )
+
+    def test_thirtieth_treatment_can_move_without_creating_thirty_first(self):
+        from rtms_app.services.rtms_schedule import generate_treatment_dates
+
+        dates = generate_treatment_dates(self.patient.first_treatment_date, total=30, holidays=set())
+        sessions = [TreatmentSession.objects.create(patient=self.patient, session_date=d) for d in dates]
+        last = sessions[-1]
+
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'session_id': last.pk,
+            'source_date': last.session_date.isoformat(),
+            'target_date': '2026-10-14',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 30)
+        last.refresh_from_db()
+        self.assertEqual(last.session_date, date(2026, 10, 14))
+
+    def test_thirtieth_treatment_can_move_to_exceptional_day_without_creating_thirty_first(self):
+        from rtms_app.services.rtms_schedule import generate_treatment_dates
+
+        dates = generate_treatment_dates(self.patient.first_treatment_date, total=30, holidays=set())
+        sessions = [
+            TreatmentSession.objects.create(patient=self.patient, session_date=session_date)
+            for session_date in dates
+        ]
+
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'session_id': sessions[-1].pk,
+            'source_date': sessions[-1].session_date.isoformat(),
+            'target_date': '2026-10-10',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 30)
+        sessions[-1].refresh_from_db()
+        self.assertEqual(sessions[-1].session_date, date(2026, 10, 10))
+
+    def test_api_get_session_rejects_new_session_after_thirty(self):
+        for i in range(30):
+            TreatmentSession.objects.create(
+                patient=self.patient,
+                session_date=date(2026, 8, 24) + datetime.timedelta(days=i),
+            )
+
+        response = self.client.post(f'/app/patient/{self.patient.pk}/print/api/get-session/', {
+            'course_number': 1,
+            'session_date': '2027-01-04',
+        })
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 30)
+
+    def test_calendar_hides_legacy_overflow_without_clamping_number(self):
+        from rtms_app.views import generate_calendar_weeks
+
+        dates = [date(2026, 8, 24) + datetime.timedelta(days=i) for i in range(34)]
+        sessions = [TreatmentSession.objects.create(patient=self.patient, session_date=d) for d in dates]
+        weeks, _ = generate_calendar_weeks(self.patient)
+        events = [
+            event for week in weeks for day in week for event in day['events']
+            if event['type'] == 'treatment'
+        ]
+
+        self.assertEqual(len(events), 30)
+        self.assertTrue(any('30回目' in event['label'] for event in events))
+        self.assertFalse(any('31回目' in event['label'] for event in events))
+        self.assertFalse(any(event.get('session_id') == sessions[30].pk for event in events))
+
+    def test_invalid_source_does_not_create_canonical_sessions(self):
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'source_date': '2026-12-31', 'target_date': '2027-01-04',
+        })
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 0)
+
+    def test_malformed_target_does_not_create_canonical_sessions(self):
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'source_date': '2026-08-26', 'target_date': 'not-a-date',
+        })
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 0)
+
+    def test_transaction_rolls_back_canonical_creation_on_service_error(self):
+        with patch('rtms_app.views.reschedule_planned_session', side_effect=IntegrityError('forced')):
+            response = self._post({
+                'event_type': 'treatment', 'status': 'planned',
+                'source_date': '2026-08-26', 'target_date': '2026-09-01',
+            })
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 0)
+
+    def test_done_or_skipped_treatment_cannot_use_planned_path(self):
+        done = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 8, 26), status='done',
+        )
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'source_date': '2026-08-26', 'target_date': '2026-09-01',
+        })
+
+        self.assertEqual(response.status_code, 400)
+        done.refresh_from_db()
+        self.assertEqual(done.session_date, date(2026, 8, 26))
+
+        skipped = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 8, 27), status='skipped',
+        )
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'source_date': '2026-08-27', 'target_date': '2026-09-02',
+        })
+        self.assertEqual(response.status_code, 400)
+        skipped.refresh_from_db()
+        self.assertEqual(skipped.session_date, date(2026, 8, 27))
+
+    def test_planned_treatment_cannot_use_done_target(self):
+        TreatmentSession.objects.create(patient=self.patient, session_date=date(2026, 8, 26))
+        done = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 9, 1), status='done',
+        )
+
+        response = self._post({
+            'event_type': 'treatment', 'status': 'planned',
+            'source_date': '2026-08-26', 'target_date': '2026-09-01',
+        })
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 2)
+        done.refresh_from_db()
+        self.assertEqual(done.session_date, date(2026, 9, 1))
+
+    def test_mapping_planned_and_done_moves_validate_source(self):
+        planned = self._post({
+            'event_type': 'mapping', 'status': 'planned', 'week_number': 1,
+            'source_date': '2026-08-24', 'target_date': '2026-08-25',
+        })
+        self.assertEqual(planned.status_code, 200)
+        self.assertEqual(
+            MappingSchedule.objects.get(patient=self.patient, week_number=1).planned_date,
+            date(2026, 8, 25),
+        )
+
+        mapping = MappingSession.objects.create(
+            patient=self.patient, date=date(2026, 8, 26), week_number=1,
+            resting_mt=100,
+        )
+        done = self._post({
+            'event_type': 'mapping', 'status': 'done', 'session_id': mapping.pk,
+            'source_date': '2026-08-26', 'target_date': '2026-08-27',
+        })
+        self.assertEqual(done.status_code, 200)
+        mapping.refresh_from_db()
+        self.assertEqual(mapping.date, date(2026, 8, 27))
+
+    def test_mapping_invalid_source_and_duplicate_target_are_rejected(self):
+        invalid = self._post({
+            'event_type': 'mapping', 'status': 'planned', 'week_number': 1,
+            'source_date': '2026-08-25', 'target_date': '2026-08-26',
+        })
+        self.assertEqual(invalid.status_code, 404)
+        self.assertFalse(MappingSchedule.objects.filter(patient=self.patient).exists())
+
+        MappingSchedule.objects.create(
+            patient=self.patient, course_number=1, week_number=2,
+            planned_date=date(2026, 8, 26),
+        )
+        duplicate = self._post({
+            'event_type': 'mapping', 'status': 'planned', 'week_number': 1,
+            'source_date': '2026-08-24', 'target_date': '2026-08-26',
+        })
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertEqual(
+            MappingSchedule.objects.get(patient=self.patient, week_number=2).planned_date,
+            date(2026, 8, 26),
+        )
+
+    def test_assessment_planned_move_and_done_assessment_rejection(self):
+        hamd = ScaleDefinition.objects.get_or_create(code='hamd', defaults={'name': 'HAM-D'})[0]
+        planned = self._post({
+            'event_type': 'assessment', 'scale_code': hamd.code,
+            'timing': 'baseline', 'target_date': '2026-08-25',
+        })
+        self.assertEqual(planned.status_code, 200)
+        self.assertEqual(
+            AssessmentSchedule.objects.get(
+                patient=self.patient, scale=hamd, timing='baseline',
+            ).planned_date,
+            date(2026, 8, 25),
+        )
+
+        Assessment.objects.create(
+            patient=self.patient, timing='week3', type='HAM-D',
+            date=date(2026, 9, 1), scores={},
+        )
+        done = self._post({
+            'event_type': 'assessment', 'scale_code': hamd.code,
+            'timing': 'week3', 'target_date': '2026-09-02',
+        })
+        self.assertEqual(done.status_code, 400)
+
+    def test_other_assessment_group_move_and_invalid_timing(self):
+        other = ScaleDefinition.objects.get_or_create(code='phq9', defaults={'name': 'PHQ-9'})[0]
+        moved = self._post({
+            'event_type': 'assessment', 'scale_code': '__other_scales__',
+            'timing': 'baseline', 'target_date': '2026-08-25',
+        })
+        self.assertEqual(moved.status_code, 200)
+        self.assertEqual(
+            AssessmentSchedule.objects.get(
+                patient=self.patient, scale=other, timing='baseline',
+            ).planned_date,
+            date(2026, 8, 25),
+        )
+
+        invalid = self._post({
+            'event_type': 'assessment', 'scale_code': 'hamd',
+            'timing': 'invalid', 'target_date': '2026-08-25',
+        })
+        self.assertEqual(invalid.status_code, 400)
+
+    def test_admission_and_discharge_change_only_patient_dates(self):
+        admission = self._post({'event_type': 'admission', 'target_date': '2026-08-21'})
+        discharge = self._post({'event_type': 'discharge', 'target_date': '2026-09-10'})
+
+        self.assertEqual(admission.status_code, 200)
+        self.assertEqual(discharge.status_code, 200)
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.admission_date, date(2026, 8, 21))
+        self.assertEqual(self.patient.discharge_date, date(2026, 9, 10))
+
+        invalid = self._post({'event_type': 'admission', 'target_date': 'not-a-date'})
+        self.assertEqual(invalid.status_code, 400)
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.admission_date, date(2026, 8, 21))
 
 class TestPatientSurveyFlow(TestCase):
     def setUp(self):

@@ -27,6 +27,9 @@
     
     /* イベントバッジ */
     .event-item { font-size: 0.75rem; margin-bottom: 2px; padding: 2px 4px; border-radius: 3px; display: block; line-height: 1.2; text-decoration: none; color: inherit; }
+    .event-item[data-draggable="true"] { cursor: grab; }
+    .event-item[data-draggable="true"].is-dragging { opacity: 0.45; cursor: grabbing; }
+    .calendar-table td.is-drop-target { background-color: #eef7ff !important; outline: 2px dashed #0d6efd; outline-offset: -2px; }
     /* 機能別テーマ */
     .evt-admission { background-color: var(--color-admission-bg); color: var(--color-admission); border: 1px solid var(--color-admission); }
     .evt-mapping { background-color: var(--color-mapping-bg); color: var(--color-mapping); border: 1px solid var(--color-mapping); }
@@ -55,6 +58,7 @@
 {% endblock %}
 {% block content %}
     <form id="mainForm" class="d-none" method="get">
+        {% csrf_token %}
     </form>
     <div class="stack-md">
         {% include "rtms_app/partials/patient_inline_bar.html" with page_title="スケジュール" title_icon="fa-calendar-alt" patient=patient %}
@@ -78,7 +82,7 @@
                 </div>
             </div>
             <div class="table-responsive">
-                <table class="calendar-table">
+                <table class="calendar-table" data-reschedule-url="{% url 'rtms_app:clinical_path_reschedule' patient.id %}">
                     <thead>
                         <tr>
                             <th class="text-primary">月</th>
@@ -96,7 +100,8 @@
                                 {% for day in week %}
                                     <td class="{% if day.is_holiday %}day-holiday{% elif day.weekday == '土' %}day-sat{% elif day.weekday == '日' %}day-sun{% endif %} {% if day.url %}clickable{% endif %}"
                                         {% if day.url %}onclick="window.location.href='{{ day.url }}'"{% endif %}
-                                        data-date="{{ day.date|date:'Y-m-d' }}">
+                                        data-date="{{ day.date|date:'Y-m-d' }}"
+                                        data-non-business-day="{% if day.is_weekend or day.is_holiday %}true{% else %}false{% endif %}">
                                         <span class="date-num">
                                             {{ day.date|date:"n/j" }}
                                             {% if day.is_holiday %}<span class="badge bg-danger ms-1" style="font-size: 0.6em;">祝</span>{% endif %}
@@ -105,22 +110,27 @@
                                             {% if event.type == 'admission' %}
                                                 <a href="{{ event.url }}"
                                                    class="event-item evt-admission"
+                                                   {% if event.draggable and event.status != 'done' %}draggable="true" data-draggable="true" data-event-type="{{ event.type }}" data-source-date="{{ day.date|date:'Y-m-d' }}"{% endif %}
                                                    onclick="event.stopPropagation();"><i class="fas fa-procedures"></i> {{ event.label }}</a>
                                             {% elif event.type == 'mapping' %}
                                                 <a href="{{ event.url }}"
                                                    class="event-item evt-mapping"
+                                                   {% if event.draggable and event.status != 'done' %}draggable="true" data-draggable="true" data-event-type="{{ event.type }}" data-source-date="{{ day.date|date:'Y-m-d' }}" data-status="{{ event.status|default:'' }}" data-week-number="{{ event.week_number|default:'' }}"{% if event.session_id %} data-session-id="{{ event.session_id }}"{% endif %}{% endif %}
                                                    onclick="event.stopPropagation();"><i class="fas fa-crosshairs"></i> {{ event.label }}</a>
                                             {% elif event.type == 'treatment' %}
                                                 <a href="{{ event.url }}"
                                                    class="event-item evt-treatment"
+                                                   {% if event.draggable and event.status != 'done' %}draggable="true" data-draggable="true" data-event-type="{{ event.type }}" data-source-date="{{ day.date|date:'Y-m-d' }}" data-status="{{ event.status|default:'' }}"{% if event.first_treatment %} data-first-treatment="true"{% endif %}{% if event.session_id %} data-session-id="{{ event.session_id }}"{% endif %}{% endif %}
                                                    onclick="event.stopPropagation();"><i class="fas fa-bolt"></i> {{ event.label }}</a>
                                             {% elif event.type == 'assessment' %}
                                                 <a href="{{ event.url }}"
                                                    class="event-item evt-assessment"
+                                                   {% if event.draggable and event.status != 'done' %}draggable="true" data-draggable="true" data-event-type="{{ event.type }}" data-source-date="{{ day.date|date:'Y-m-d' }}" data-timing="{{ event.timing }}" data-scale-code="{{ event.scale_code }}"{% endif %}
                                                    onclick="event.stopPropagation();"><i class="fas fa-clipboard-check"></i> {{ event.label }}</a>
                                             {% elif event.type == 'discharge' %}
                                                 <a href="{{ event.url }}"
                                                    class="event-item evt-discharge"
+                                                   {% if event.draggable and event.status != 'done' %}draggable="true" data-draggable="true" data-event-type="{{ event.type }}" data-source-date="{{ day.date|date:'Y-m-d' }}"{% endif %}
                                                    onclick="event.stopPropagation();"><i class="fas fa-home"></i> {{ event.label }}</a>
                                             {% endif %}
                                         {% endfor %}
@@ -156,4 +166,5 @@
     if (el) el.scrollIntoView({behavior:"smooth", block:"center"});
   });
     </script>
+    <script src="{% static 'rtms_app/patient_clinical_path.js' %}"></script>
 {% endblock %}

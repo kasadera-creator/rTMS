@@ -52,7 +52,7 @@
 {% block content %}
   <div class="stack-md">
     {% include "rtms_app/partials/patient_inline_bar.html" with page_title="初診・基本情報入力" title_icon="fa-file-medical" patient=patient %}
-    <form method="post" id="mainForm" class="form-rtms">
+    <form method="post" id="mainForm" class="form-rtms" data-original-first-treatment-date="{{ patient.first_treatment_date|date:'Y-m-d' }}">
       {% csrf_token %}
       {# Hidden backing fields moved here after removing reference card #}
       <input type="hidden" name="card_id" value="{{ patient.card_id }}">
@@ -340,6 +340,22 @@
       {% endif %}
     {% endblock content %}
     {% block scripts %}
+      <script>
+        (function () {
+          const form = document.getElementById('mainForm');
+          const input = document.getElementById('id_first_treatment_date');
+          if (!form || !input) return;
+          form.addEventListener('submit', function (event) {
+            const original = form.dataset.originalFirstTreatmentDate || '';
+            if (input.value !== original) {
+              const confirmed = window.confirm(
+                '治療開始日を変更すると、現在の治療予定を新しい開始日を基準に再構成します。よろしいですか？'
+              );
+              if (!confirmed) event.preventDefault();
+            }
+          });
+        })();
+      </script>
       <script>
   // 紹介元・紹介医の連携（アップロード版を維持）
   try {

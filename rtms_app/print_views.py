@@ -3,11 +3,13 @@ from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.http import HttpResponseNotAllowed
+from django.db import transaction
 from urllib.parse import urlencode
 
 from .models import Patient, Assessment, ConsentDocument, TreatmentSession, SideEffectCheck, MappingSession
 from .views import generate_calendar_weeks, get_current_week_number
 from .services.print_service import build_pdf_filename, CONTENT_LABELS
+from .services.schedule import can_create_treatment_session, get_treatment_session_number_map
 from .queries.assessment_queries import get_baseline_assessments_ordered
 from django.template.loader import render_to_string
 from django.http import HttpResponse
@@ -370,17 +372,10 @@ def _build_side_effect_context(request, patient_id, session_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
 	session = get_object_or_404(TreatmentSession, pk=session_id, patient=patient)
 	
-	# Calculate session number (all treatment sessions for this patient up to and including this one)
-	if getattr(session, 'session_date', None):
-		session_number = TreatmentSession.objects.filter(
-			patient=patient,
-			session_date__lte=session.session_date,
-		).order_by('session_date', 'date').count()
-	else:
-		session_number = TreatmentSession.objects.filter(
-			patient=patient,
-			date__lte=session.date,
-		).order_by('date').count()
+	# Use the shared patient/course numbering. Overflow rows are not normal
+	# treatment events and therefore do not receive a treatment number.
+	number_map = get_treatment_session_number_map(patient, session.course_number or 1)
+	session_number = number_map.get(session.id)
 
 	# Actual measured motor threshold (MT値) comes from the MappingSession for this
 	# session's week, NOT from TreatmentSession.mt_percent (which is the %MT setting).
@@ -512,17 +507,28 @@ def api_get_or_create_session(request, patient_id):
 		if not session_date:
 			return JsonResponse({'error': f'Invalid session_date format: {session_date_str}'}, status=400)
 		
-		# Get or create session with empty slot
-		session, created = TreatmentSession.objects.get_or_create(
-			patient=patient,
-			course_number=course_number,
-			session_date=session_date,
-			slot='',
-			defaults={
-				'date': timezone.make_aware(timezone.datetime.combine(session_date, timezone.datetime.min.time())),
-				'performer': request.user,
-			}
-		)
+		# Get or create session with empty slot. The capacity check and insert
+		# are kept in one transaction so a new row cannot bypass the limit.
+		with transaction.atomic():
+			Patient.objects.select_for_update().get(pk=patient.pk)
+			existing_session = TreatmentSession.objects.filter(
+				patient=patient,
+				course_number=course_number,
+				session_date=session_date,
+				slot='',
+			).first()
+			if existing_session is None and not can_create_treatment_session(patient, course_number):
+				return JsonResponse({'error': 'この患者・コースは治療予定が30回以上あるため、新規作成できません'}, status=400)
+			session, created = TreatmentSession.objects.get_or_create(
+				patient=patient,
+				course_number=course_number,
+				session_date=session_date,
+				slot='',
+				defaults={
+					'date': timezone.make_aware(timezone.datetime.combine(session_date, timezone.datetime.min.time())),
+					'performer': request.user,
+				},
+			)
 		
 		return JsonResponse({
 			'session_id': session.id,
