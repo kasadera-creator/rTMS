@@ -15,7 +15,7 @@ from typing import List, Optional, Dict
 
 from django.utils import timezone
 
-from ..models import Patient, MappingSession, Assessment, TreatmentSession
+from ..models import Patient, MappingSession, Assessment, AssessmentRecord, MappingSchedule, TreatmentSession
 from .rtms_schedule import (
     is_closed,
     next_open_day,
@@ -52,13 +52,21 @@ def _assessment_performed_date(patient: Patient, timing: str) -> Optional[dateti
     - `Assessment.date` (legacy)
     - None
     """
-    a = Assessment.objects.filter(patient=patient, timing=timing).order_by('date').first()
-    if not a:
-        return None
-    # prefer performed_date if available
-    if hasattr(a, 'performed_date') and getattr(a, 'performed_date'):
-        return a.performed_date
-    return a.date
+    course_number = patient.course_number or 1
+    a = Assessment.objects.filter(
+        patient=patient, course_number=course_number, timing=timing
+    ).order_by('date').first()
+    if a:
+        # prefer performed_date if available
+        if hasattr(a, 'performed_date') and getattr(a, 'performed_date'):
+            return a.performed_date
+        if a.date:
+            return a.date
+    record = AssessmentRecord.objects.filter(
+        patient=patient, course_number=course_number, timing=timing,
+        scale__code='hamd',
+    ).order_by('date').first()
+    return record.date if record else None
 
 
 def _mapping_performed_date_for_nominal(patient: Patient, nominal_date: datetime.date) -> Optional[datetime.date]:
@@ -66,8 +74,21 @@ def _mapping_performed_date_for_nominal(patient: Patient, nominal_date: datetime
 
     MappingSession stores performed mapping `date` already; callers may match by actual date.
     """
-    ms = MappingSession.objects.filter(patient=patient, date=nominal_date).order_by('date').first()
+    ms = MappingSession.objects.filter(
+        patient=patient, course_number=patient.course_number or 1, date=nominal_date
+    ).order_by('date').first()
     return ms.date if ms else None
+
+
+def _treatment_week_window(day1: Optional[datetime.date], week_number: int,
+                           holidays: Optional[set]) -> tuple[Optional[datetime.date], Optional[datetime.date]]:
+    """Return the first/last canonical treatment date in a 5-session week."""
+    if not day1:
+        return None, None
+    dates = generate_treatment_dates(day1, total=30, holidays=holidays)
+    start = (week_number - 1) * 5
+    block = dates[start:start + 5]
+    return (block[0], block[-1]) if block else (None, None)
 
 
 def compute_task_definitions(patient: Patient, holidays: Optional[set] = None) -> List[Dict]:
@@ -90,21 +111,29 @@ def compute_task_definitions(patient: Patient, holidays: Optional[set] = None) -
         # prefer week index 1 (the "next week") as mapping appointment
         if len(mapping_list) > 1:
             mapping_task = mapping_list[1]
-            planned = mapping_task['actual']
+            planned = MappingSchedule.objects.filter(
+                patient=patient, course_number=patient.course_number or 1,
+                week_number=mapping_task['week_no'],
+            ).values_list('planned_date', flat=True).first() or mapping_task['actual']
             perf = _mapping_performed_date_for_nominal(patient, planned)
+            _, deadline = _treatment_week_window(day1, mapping_task['week_no'], holidays)
             tasks.append({
                 'key': 'mapping',
                 'label': 'MT測定',
                 'planned_date': planned,
                 'window_start': planned,
-                'window_end': planned,
+                'window_end': deadline or planned,
                 'performed_date': perf,
             })
 
     # Assessments: baseline / week3 / week4 (all-case only) / week6
     # Baseline: default to patient.created_at date if available, else today
-    baseline_planned = getattr(patient, 'created_at', None)
-    baseline_planned = baseline_planned.date() if baseline_planned else today
+    baseline_planned = getattr(patient, 'first_visit_date', None)
+    if not baseline_planned:
+        created_at = getattr(patient, 'created_at', None)
+        baseline_planned = created_at.date() if created_at else today
+    if day1 and baseline_planned > day1:
+        baseline_planned = day1
     baseline_perf = _assessment_performed_date(patient, 'baseline')
     tasks.append({
         'key': 'assessment_baseline',
@@ -116,14 +145,7 @@ def compute_task_definitions(patient: Patient, holidays: Optional[set] = None) -
     })
 
     if day1:
-        # Week3: planned = day1 + 14 (day15), window = day15..day21 (adjust business days)
-        w3_nominal_start = day1 + datetime.timedelta(days=14)
-        w3_nominal_end = day1 + datetime.timedelta(days=20)
-        w3_planned = shift_to_next_business_day_if_needed(w3_nominal_start, holidays)
-        # compute last business day <= nominal_end
-        w3_end = w3_nominal_end
-        while not is_business_day(w3_end, holidays) and w3_end > w3_nominal_start:
-            w3_end -= datetime.timedelta(days=1)
+        w3_planned, w3_end = _treatment_week_window(day1, 3, holidays)
         w3_perf = _assessment_performed_date(patient, 'week3')
         tasks.append({
             'key': 'assessment_week3',
@@ -136,18 +158,8 @@ def compute_task_definitions(patient: Patient, holidays: Optional[set] = None) -
 
         # Week4 (4週経過後): only for all-case-survey patients
         if getattr(patient, 'is_all_case_survey', False):
-            # planned = last business day of week4 (day1 + 27)
-            w4_nominal_last = day1 + datetime.timedelta(days=27)
-            w4_planned = w4_nominal_last
-            # roll back to last business day if needed
-            while not is_business_day(w4_planned, holidays) and w4_planned > day1:
-                w4_planned -= datetime.timedelta(days=1)
-            # window_end = last business day on or before planned + 7 days
-            w4_window_end_candidate = w4_planned + datetime.timedelta(days=7)
-            # move backward to last business day <= candidate
-            w4_window_end = w4_window_end_candidate
-            while not is_business_day(w4_window_end, holidays) and w4_window_end > w4_planned:
-                w4_window_end -= datetime.timedelta(days=1)
+            _, w4_planned = _treatment_week_window(day1, 4, holidays)
+            w4_window_end = w4_planned + datetime.timedelta(days=7) if w4_planned else None
             w4_perf = _assessment_performed_date(patient, 'week4')
             tasks.append({
                 'key': 'assessment_week4',
@@ -158,13 +170,8 @@ def compute_task_definitions(patient: Patient, holidays: Optional[set] = None) -
                 'performed_date': w4_perf,
             })
 
-        # Week6: planned = day1 + 35 (day36), window = day36..day42
-        w6_nominal_start = day1 + datetime.timedelta(days=35)
-        w6_nominal_end = day1 + datetime.timedelta(days=41)
-        w6_planned = shift_to_next_business_day_if_needed(w6_nominal_start, holidays)
-        w6_end = w6_nominal_end
-        while not is_business_day(w6_end, holidays) and w6_end > w6_nominal_start:
-            w6_end -= datetime.timedelta(days=1)
+        # Week6 uses the first and last canonical treatment dates in week 6.
+        w6_planned, w6_end = _treatment_week_window(day1, 6, holidays)
         w6_perf = _assessment_performed_date(patient, 'week6')
         tasks.append({
             'key': 'assessment_week6',
@@ -190,6 +197,8 @@ def compute_dashboard_tasks(patient: Patient, today: Optional[datetime.date] = N
     for t in defs:
         pd = t.get('planned_date')
         perf = t.get('performed_date')
-        if pd and pd <= today and not perf:
+        window_start = t.get('window_start') or pd
+        window_end = t.get('window_end') or pd
+        if pd and window_start <= today <= window_end and not perf:
             todo.append(t)
     return todo

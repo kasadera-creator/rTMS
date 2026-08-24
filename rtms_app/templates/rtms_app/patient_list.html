@@ -31,9 +31,14 @@
             <div>
                 <i class="fas fa-users me-2"></i>患者一覧
             </div>
-            <a href="{% url 'rtms_app:dashboard' %}" class="btn btn-patient-list btn-sm">
-                <i class="fas fa-arrow-left me-1"></i>ダッシュボードへ戻る
-            </a>
+            <div class="d-flex gap-2">
+                <a href="{% url 'rtms_app:patient_add' %}" class="btn btn-primary btn-sm">
+                    <i class="fas fa-user-plus me-1"></i>患者登録
+                </a>
+                <a href="{% url 'rtms_app:dashboard' %}" class="btn btn-patient-list btn-sm">
+                    <i class="fas fa-arrow-left me-1"></i>ダッシュボードへ戻る
+                </a>
+            </div>
         </div>
 
         <!-- 検索フィルタバー -->
@@ -163,7 +168,7 @@
                     <td class="text-center">
                         <div class="d-inline-flex gap-2">
                             <a href="{% url 'rtms_app:patient_first_visit' patient.id %}" class="btn btn-outline-first-visit btn-sm btn-nav">初診・基本情報</a>
-                            <a href="{% url 'rtms_app:patient_clinical_path' patient.id %}" class="btn btn-outline-admission btn-sm btn-nav">クリニカルパス</a>
+                            <a href="{% url 'rtms_app:patient_clinical_path' patient.id %}" class="btn btn-outline-admission btn-sm btn-nav">スケジュール</a>
                             <a href="{% url 'rtms_app:patient_home' patient.id %}" class="btn btn-outline-discharge btn-sm btn-nav">治療経過・退院準備</a>
                         </div>
                     </td>

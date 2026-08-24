@@ -1,9 +1,11 @@
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
+from django.utils import timezone
 
 from rtms_app import assessment_rules
-from rtms_app.models import Patient, Assessment, AssessmentRecord
+from rtms_app.models import Patient, Assessment, AssessmentRecord, TreatmentSession
 import datetime
 from datetime import date
 from rtms_app import services
@@ -30,6 +32,131 @@ class TestAssessmentRules(TestCase):
         imp = assessment_rules.compute_improvement_rate(20, 19)
         status = assessment_rules.classify_response_status(score_17=19, improvement=imp)
         self.assertEqual(status, "反応なし")
+
+
+class TestStage6ScheduleDeadlines(TestCase):
+    def setUp(self):
+        self.patient = Patient.objects.create(
+            card_id='S6001', name='Stage6', birth_date=date(1980, 1, 1),
+            first_treatment_date=date(2026, 1, 5),
+            first_visit_date=date(2026, 1, 5),
+            is_all_case_survey=True,
+        )
+
+    def test_mapping_is_visible_only_through_treatment_week_end(self):
+        from rtms_app.services.schedule_tasks import compute_dashboard_tasks, compute_task_definitions
+        from rtms_app.services.rtms_schedule import generate_treatment_dates
+
+        definitions = compute_task_definitions(self.patient, holidays=set())
+        mapping = next(item for item in definitions if item['key'] == 'mapping')
+        dates = generate_treatment_dates(self.patient.first_treatment_date, total=30, holidays=set())
+        self.assertEqual(mapping['planned_date'], date(2026, 1, 12))
+        self.assertEqual(mapping['window_end'], dates[9])
+        self.assertNotIn('mapping', {item['key'] for item in compute_dashboard_tasks(self.patient, date(2026, 1, 11), set())})
+        self.assertIn('mapping', {item['key'] for item in compute_dashboard_tasks(self.patient, date(2026, 1, 16), set())})
+        self.assertNotIn('mapping', {item['key'] for item in compute_dashboard_tasks(self.patient, date(2026, 1, 19), set())})
+
+    def test_hamd_week4_ends_seven_days_after_week_end(self):
+        from rtms_app.services.schedule_tasks import compute_dashboard_tasks, compute_task_definitions
+
+        definitions = compute_task_definitions(self.patient, holidays=set())
+        week4 = next(item for item in definitions if item['key'] == 'assessment_week4')
+        self.assertEqual(week4['planned_date'], date(2026, 1, 30))
+        self.assertEqual(week4['window_end'], date(2026, 2, 6))
+        self.assertIn('assessment_week4', {item['key'] for item in compute_dashboard_tasks(self.patient, date(2026, 2, 6), set())})
+        self.assertNotIn('assessment_week4', {item['key'] for item in compute_dashboard_tasks(self.patient, date(2026, 2, 7), set())})
+
+
+class TestStage6PatientAndCalendar(TestCase):
+    def test_registration_form_defaults_first_visit_to_today(self):
+        from rtms_app.forms import PatientRegistrationForm
+        self.assertEqual(PatientRegistrationForm().initial['first_visit_date'], timezone.localdate())
+
+    def test_calendar_counts_date_ranges_and_excludes_skipped(self):
+        from rtms_app.views import _build_month_calendar
+        p = Patient.objects.create(
+            card_id='S6002', name='Calendar', birth_date=date(1980, 1, 1),
+            admission_date=date(2026, 8, 10), first_treatment_date=date(2026, 8, 19),
+        )
+        TreatmentSession.objects.create(patient=p, session_date=date(2026, 8, 24), status='planned')
+        TreatmentSession.objects.create(patient=p, session_date=date(2026, 8, 25), status='skipped')
+        context = _build_month_calendar(2026, 8)
+        days = {d['date']: d for week in context['weeks'] for d in week}
+        self.assertEqual(days[date(2026, 8, 10)]['inpatient_count'], 1)
+        self.assertEqual(days[date(2026, 8, 24)]['rtms_count'], 1)
+        self.assertEqual(days[date(2026, 8, 25)]['rtms_count'], 0)
+
+    def test_diagnosis_choices_are_preserved_in_existing_string_format(self):
+        patient = Patient.objects.create(
+            card_id='56003', name='Diagnosis', birth_date=date(1980, 1, 1),
+            diagnosis='うつ病', first_treatment_date=date(2026, 1, 5),
+            psychiatric_history=[], has_other_psychiatric_history='yes',
+        )
+        doctor_group, _ = Group.objects.get_or_create(name='医師')
+        doctor = get_user_model().objects.create_user(username='stage6-doctor')
+        doctor.groups.add(doctor_group)
+        post = {
+            'card_id': patient.card_id, 'name': patient.name,
+            'birth_date': patient.birth_date.isoformat(), 'gender': patient.gender,
+            'attending_physician': str(doctor.pk), 'admission_date': '2026-01-01',
+            'first_treatment_date': '2026-01-05', 'first_visit_date': '2026-01-01',
+            'diag_list': 'うつ病エピソード（F32）',
+            'has_other_psychiatric_history': 'yes',
+            'psychiatric_history': ['F33', 'F20'],
+            'psychiatric_history_other_text': '既往診断',
+        }
+        client = Client()
+        client.force_login(doctor)
+        response = client.post(reverse('rtms_app:patient_first_visit', args=[patient.pk]), post)
+        self.assertEqual(response.status_code, 302)
+        patient.refresh_from_db()
+        self.assertEqual(
+            patient.diagnosis,
+            'うつ病エピソード（F32）, 反復性うつ病性障害（F33）, 統合失調症（F20）, その他(既往診断)',
+        )
+        self.assertIn('F33', patient.diagnosis)
+        self.assertIn('F20', patient.diagnosis)
+        self.assertEqual(patient.psychiatric_history, ['F33', 'F20'])
+
+        unchanged = Patient.objects.create(
+            card_id='56004', name='Keep Diagnosis', birth_date=date(1980, 1, 1),
+            diagnosis='旧形式の診断名', first_treatment_date=date(2026, 1, 5),
+            has_other_psychiatric_history='yes',
+        )
+        unchanged_post = dict(post)
+        unchanged_post.update({
+            'card_id': unchanged.card_id, 'name': unchanged.name,
+            'birth_date': unchanged.birth_date.isoformat(),
+            'psychiatric_history': [],
+        })
+        unchanged_post.pop('diag_list', None)
+        unchanged_post.pop('psychiatric_history_other_text', None)
+        client.post(reverse('rtms_app:patient_first_visit', args=[unchanged.pk]), unchanged_post)
+        unchanged.refresh_from_db()
+        self.assertEqual(unchanged.diagnosis, '旧形式の診断名')
+
+    def test_baseline_window_does_not_invert_when_first_visit_is_late(self):
+        from types import SimpleNamespace
+        from rtms_app.views import get_assessment_window
+        late = SimpleNamespace(
+            first_visit_date=date(2026, 1, 6),
+            first_treatment_date=date(2026, 1, 5),
+            created_at=None,
+        )
+        normal = SimpleNamespace(
+            first_visit_date=date(2026, 1, 2),
+            first_treatment_date=date(2026, 1, 5),
+            created_at=None,
+        )
+        legacy = SimpleNamespace(
+            first_visit_date=None,
+            first_treatment_date=date(2026, 1, 5),
+            created_at=timezone.make_aware(datetime.datetime(2026, 1, 2, 9, 0)),
+        )
+        for patient in (late, normal, legacy):
+            start, end = get_assessment_window(patient, 'baseline')
+            self.assertLessEqual(start, end)
+
 
 
 class TestRedirectFocus(TestCase):

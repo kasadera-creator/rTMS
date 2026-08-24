@@ -32,6 +32,7 @@
                             <input type="hidden" name="gender" value="{{ form.gender.value }}">
                             <input type="hidden" name="referral_source" value="{{ form.referral_source.value }}">
                             <input type="hidden" name="referral_doctor" value="{{ form.referral_doctor.value }}">
+                            <input type="hidden" name="first_visit_date" value="{{ form.first_visit_date.value|date:'Y-m-d' }}">
                             <input type="hidden" name="confirm_create" value="true">
                             
                             <div class="d-flex gap-3">
@@ -68,6 +69,10 @@
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">性別</label>
                                 {{ form.gender }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">初診日</label>
+                                {{ form.first_visit_date }}
                             </div>
                             <div class="col-12"><hr class="my-3"></div>
                             <h6 class="text-secondary mb-3"><i class="fas fa-hospital me-1"></i> 紹介情報 (任意)</h6>

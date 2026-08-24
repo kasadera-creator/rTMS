@@ -2,7 +2,7 @@
 {% load static %}
 {% block body_class %}page-admission{% endblock %}
 {% block header_breadcrumb %}
-    <span class="text-white-50 ms-2">/ クリニカルパス</span>
+    <span class="text-white-50 ms-2">/ スケジュール</span>
 {% endblock header_breadcrumb %}
 {% block extrastyle %}
     <link rel="stylesheet" href="{% static 'rtms_app/page_actions.css' %}">
@@ -57,7 +57,7 @@
     <form id="mainForm" class="d-none" method="get">
     </form>
     <div class="stack-md">
-        {% include "rtms_app/partials/patient_inline_bar.html" with page_title="クリニカルパス (スケジュール)" title_icon="fa-calendar-alt" patient=patient %}
+        {% include "rtms_app/partials/patient_inline_bar.html" with page_title="スケジュール" title_icon="fa-calendar-alt" patient=patient %}
         {% if recommendation and recommendation.status != 'pending' %}
             <div class="alert {% if recommendation.status == 'remission' %}alert-success{% elif recommendation.status == 'ineffective' %}alert-danger{% else %}alert-info{% endif %} fw-bold">
                 <i class="fas fa-bullhorn me-1"></i>{{ recommendation.message }}
@@ -138,7 +138,7 @@
            href="{% url 'rtms_app:print:print_clinical_path' patient.id %}"
            target="_blank"
            rel="noopener">
-            <i class="fas fa-print"></i> クリニカルパス印刷
+            <i class="fas fa-print"></i> スケジュール印刷
         </a>
         {% include "rtms_app/partials/page_exit_menu.html" %}
     </div>

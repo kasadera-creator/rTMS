@@ -114,8 +114,13 @@ def get_assessment_window(patient, timing):
     """
     # baseline
     if timing == "baseline":
-        ws = patient.created_at.date() if patient.created_at else timezone.localdate()
+        ws = patient.first_visit_date or (patient.created_at.date() if patient.created_at else timezone.localdate())
         we = patient.first_treatment_date or ws
+        # Existing baseline design ends at the first treatment date. If legacy
+        # registration data is later than that deadline, use the deadline as
+        # the valid start rather than creating an inverted interval.
+        if patient.first_treatment_date and ws > we:
+            ws = we
         return ws, we
 
     if not patient.first_treatment_date:
@@ -123,25 +128,18 @@ def get_assessment_window(patient, timing):
         return today, today
 
     ft = patient.first_treatment_date
-    if timing == "week3":
-        raw_start = ft + timedelta(days=14)
-        raw_end = ft + timedelta(days=20)
-    elif timing == "week4":
-        raw_start = ft + timedelta(days=21)
-        raw_end = ft + timedelta(days=27)
-    elif timing == "week6":
-        raw_start = ft + timedelta(days=35)
-        raw_end = ft + timedelta(days=41)
-    else:
+    week_number = {'week3': 3, 'week4': 4, 'week6': 6}.get(timing)
+    if week_number is None:
         today = timezone.localdate()
         return today, today
-
-    ws, we = _first_last_treatment_day_in_range(raw_start, raw_end)
-    # 治療日が1日も無い極端ケースのフォールバック
-    if ws is None or we is None:
-        ws = raw_start
-        we = raw_end
-    return ws, we
+    treatment_dates = generate_treatment_dates(ft, total=30, holidays=JP_HOLIDAYS)
+    week_dates = treatment_dates[(week_number - 1) * 5:week_number * 5]
+    if week_dates:
+        return week_dates[0], week_dates[-1]
+    # 治療予定が不足する極端なケースでは従来の暦日範囲へフォールバック。
+    raw_start = ft + timedelta(days=(week_number - 1) * 7)
+    raw_end = raw_start + timedelta(days=6)
+    return _first_last_treatment_day_in_range(raw_start, raw_end)
 
 # --- ヘルパー関数 ---
 
@@ -295,8 +293,11 @@ def get_hamd_effective_deadline(base_date, today=None):
 
 
 def get_hamd_baseline_default_date(patient):
-    """HAM-D 治療前評価のデフォルト予定日（初診日＝患者登録日）"""
-    return patient.created_at.date() if patient.created_at else timezone.localdate()
+    """HAM-D 治療前評価のデフォルト予定日（初診日、未設定時は登録日）"""
+    first_visit = patient.first_visit_date or (patient.created_at.date() if patient.created_at else timezone.localdate())
+    if patient.first_treatment_date and first_visit > patient.first_treatment_date:
+        return patient.first_treatment_date
+    return first_visit
 
 
 def get_scale_baseline_default_date(patient):
@@ -517,12 +518,16 @@ def generate_calendar_weeks(patient):
     }
     other_scales_labels = {'baseline': '治療前尺度評価', 'post': '治療後尺度評価'}
 
-    def place_assessment_event(timing, label, base_date, is_done, allow_auto_postpone, url_builder, scale_code):
+    def place_assessment_event(timing, label, base_date, is_done, allow_auto_postpone, url_builder, scale_code, deadline=None):
         if base_date is None:
+            return
+        if not is_done and deadline is not None and timezone.localdate() > deadline:
             return
         effective_date = base_date if is_done else (
             get_hamd_effective_deadline(base_date) if allow_auto_postpone else base_date
         )
+        if deadline is not None and effective_date > deadline:
+            effective_date = deadline
         if not (start_date <= effective_date <= end_date):
             return
         for week in calendar_weeks:
@@ -545,8 +550,13 @@ def generate_calendar_weeks(patient):
                     return
 
     if hamd_scale:
-        for timing in ['baseline', 'week3', 'week4', 'week6']:
+        hamd_timings = ['baseline', 'week3', 'week6']
+        if patient.is_all_case_survey:
+            hamd_timings.insert(2, 'week4')
+        for timing in hamd_timings:
             base_date = schedule_overrides.get((hamd_scale.id, timing)) or get_assessment_schedule_default_date(patient, hamd_scale, timing, treatment_end_est)
+            _, window_end = get_assessment_window(patient, timing)
+            deadline = window_end + timedelta(days=7) if timing == 'week4' else window_end
             is_done = (
                 Assessment.objects.filter(patient=patient, course_number=course_number, timing=timing, type='HAM-D').exists()
                 or AssessmentRecord.objects.filter(patient=patient, course_number=course_number, timing=timing, scale=hamd_scale).exists()
@@ -555,6 +565,7 @@ def generate_calendar_weeks(patient):
                 timing, hamd_labels[timing], base_date, is_done, allow_auto_postpone=True,
                 url_builder=lambda d, t=timing: build_url('assessment_scale', [patient.id, t, hamd_scale.code], query={'from': 'clinical_path', 'date': d.strftime('%Y-%m-%d')}),
                 scale_code=hamd_scale.code,
+                deadline=deadline,
             )
 
     # HAM-D以外の尺度は一度にまとめて実施するため、baseline/post それぞれ1件の
@@ -904,10 +915,18 @@ def patient_first_visit(request, patient_id):
 
         form = PatientFirstVisitForm(post, instance=patient)
         if form.is_valid():
-            p = form.save(commit=False); diag_list = request.POST.getlist('diag_list'); diag_other = request.POST.get('diag_other', '').strip()
-            full_diagnosis = ", ".join(diag_list);
-            if diag_other: full_diagnosis += f", その他({diag_other})"
-            p.diagnosis = full_diagnosis; p.save()
+            p = form.save(commit=False)
+            diag_list = request.POST.getlist('diag_list')
+            history_codes = [code for code in request.POST.getlist('psychiatric_history') if code != 'F32']
+            history_labels = dict(PatientFirstVisitForm.PSY_HISTORY_CHOICES)
+            diagnosis_items = diag_list + [history_labels[code] for code in history_codes if code in history_labels]
+            diag_other = (request.POST.get('diag_other') or request.POST.get('psychiatric_history_other_text') or '').strip()
+            if diagnosis_items or diag_other:
+                full_diagnosis = ", ".join(dict.fromkeys(diagnosis_items))
+                if diag_other:
+                    full_diagnosis += f", その他({diag_other})"
+                p.diagnosis = full_diagnosis
+            p.save()
 
             action = request.POST.get('action')
 
@@ -1895,30 +1914,82 @@ def assessment_hub_entry(request, patient_id, timing, *args, **kwargs):
 
 def _build_month_calendar(year, month, is_print=False):
     today = timezone.localdate()
-    month_days = pycalendar.monthcalendar(year, month)
+    first_day = date(year, month, 1)
+    last_day = date(year, month, pycalendar.monthrange(year, month)[1])
+    grid_start = first_day - timedelta(days=first_day.weekday())
+    grid_end = last_day + timedelta(days=6 - last_day.weekday())
+
+    patients = list(Patient.objects.filter(
+        admission_date__isnull=False,
+        admission_date__lte=grid_end,
+    ).filter(Q(discharge_date__isnull=True) | Q(discharge_date__gte=grid_start)))
+    treatments = list(TreatmentSession.objects.filter(
+        session_date__range=(grid_start, grid_end),
+    ).exclude(status='skipped').select_related('patient'))
+
+    inpatient_by_date = {}
+    for p in patients:
+        current = max(grid_start, p.admission_date)
+        end = min(grid_end, p.discharge_date) if p.discharge_date else grid_end
+        while current <= end:
+            inpatient_by_date.setdefault(current, set()).add(p.id)
+            current += timedelta(days=1)
+
+    treatment_by_date = {}
+    for session in treatments:
+        treatment_by_date.setdefault(session.session_date, []).append(session)
+
+    estimated_discharge_by_date = {}
+    for p in Patient.objects.filter(
+        first_treatment_date__isnull=False,
+        discharge_date__isnull=True,
+        first_treatment_date__lte=grid_end,
+    ):
+        dates = generate_treatment_dates(p.first_treatment_date, total=30, holidays=JP_HOLIDAYS)
+        if dates and grid_start <= dates[-1] <= grid_end:
+            estimated_discharge_by_date.setdefault(dates[-1], []).append(p)
+
     weeks = []
-    for week in month_days:
-        row = []
-        for day_number in week:
-            if day_number:
-                day_date = date(year, month, day_number)
-            else:
-                day_date = date(year, month, 1) - timedelta(days=1)
-            row.append({
-                'date': day_date,
-                'weekday': day_date.weekday(),
-                'is_holiday': is_holiday(day_date),
-                'is_current_month': day_number != 0,
-                'holiday_name': '',
-                'day_url': build_url('dashboard', query={'date': day_date.isoformat()}),
-                'events_visible': [],
-                'events_hidden_count': 0,
-                'inpatient_count': 0,
-                'rtms_count': 0,
+    current = grid_start
+    current_week = []
+    while current <= grid_end:
+        day_date = current
+        events = []
+        for p in patients:
+            if p.admission_date == day_date:
+                events.append({'kind': 'admission', 'label': '入院', 'url': build_url('admission_procedure', [p.id])})
+            if p.discharge_date == day_date:
+                events.append({'kind': 'discharge', 'label': '退院', 'url': build_url('patient_home', [p.id])})
+        for session in treatment_by_date.get(day_date, []):
+            events.append({
+                'kind': 'treatment',
+                'label': 'rTMS治療',
+                'url': build_url('treatment_add', [session.patient_id], query={'date': day_date.isoformat()}),
+                'is_planned': session.status == 'planned',
             })
-        weeks.append(row)
+        for p in estimated_discharge_by_date.get(day_date, []):
+            events.append({'kind': 'discharge', 'label': '退院予定', 'url': build_url('patient_home', [p.id]), 'is_planned': True})
+        events.sort(key=lambda e: (e['kind'] != 'admission', e['kind'] != 'treatment'))
+        visible_limit = 8
+        current_week.append({
+            'date': day_date,
+            'weekday': day_date.weekday(),
+            'is_holiday': is_holiday(day_date),
+            'is_current_month': day_date.month == month,
+            'holiday_name': '',
+            'day_url': build_url('dashboard', query={'date': day_date.isoformat()}),
+            'events_visible': events[:visible_limit],
+            'events_hidden_count': max(0, len(events) - visible_limit),
+            'inpatient_count': len(inpatient_by_date.get(day_date, set())),
+            'rtms_count': len(treatment_by_date.get(day_date, [])),
+        })
+        if day_date.weekday() == 6:
+            weeks.append(current_week)
+            current_week = []
+        current += timedelta(days=1)
     previous = date(year, month, 1) - timedelta(days=1)
     next_month = date(year + (month == 12), 1 if month == 12 else month + 1, 1)
+    all_days = [d for week in weeks for d in week]
     return {
         'year': year,
         'month': month,
@@ -1928,8 +1999,8 @@ def _build_month_calendar(year, month, is_print=False):
         'next_year': next_month.year,
         'next_month': next_month.month,
         'today': today,
-        'peak_inpatients': 0,
-        'peak_rtms': 0,
+        'peak_inpatients': max((d['inpatient_count'] for d in all_days), default=0),
+        'peak_rtms': max((d['rtms_count'] for d in all_days), default=0),
     }
 
 
@@ -2542,7 +2613,7 @@ def patient_add_view(request):
         if 'confirm_create' in request.POST and existing_patients.exists():
             latest = existing_patients.first()
             new_course_num = latest.course_number + 1
-            new_patient = Patient(card_id=latest.card_id, name=latest.name, birth_date=latest.birth_date, gender=latest.gender, referral_source=request.POST.get('referral_source') or latest.referral_source, referral_doctor=request.POST.get('referral_doctor') or latest.referral_doctor, life_history=latest.life_history, past_history=latest.past_history, diagnosis=latest.diagnosis, course_number=new_course_num)
+            new_patient = Patient(card_id=latest.card_id, name=latest.name, birth_date=latest.birth_date, gender=latest.gender, referral_source=request.POST.get('referral_source') or latest.referral_source, referral_doctor=request.POST.get('referral_doctor') or latest.referral_doctor, life_history=latest.life_history, past_history=latest.past_history, diagnosis=latest.diagnosis, first_visit_date=parse_date(request.POST.get('first_visit_date')) or timezone.localdate(), course_number=new_course_num)
             new_patient.save()
             return redirect('rtms_app:dashboard')
         if existing_patients.exists():

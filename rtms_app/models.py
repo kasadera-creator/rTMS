@@ -67,6 +67,7 @@ class Patient(models.Model):
     mapping_notes = models.TextField("位置決め記録メモ", blank=True)
     
     admission_date = models.DateField("入院予定日", null=True, blank=True)
+    first_visit_date = models.DateField("初診日", null=True, blank=True)
     
     def clean(self):
         """Validate that card_id is exactly 5 digits."""

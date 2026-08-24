@@ -14,7 +14,7 @@
     </a>
     <a class="btn btn-admission btn-sm btn-nav"
        href="{% url 'rtms_app:patient_clinical_path' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
-      <i class="fas fa-route me-1"></i> クリニカルパス
+      <i class="fas fa-route me-1"></i> スケジュール
     </a>
     <a class="btn btn-mapping btn-sm btn-nav"
        href="{% url 'rtms_app:mapping_add' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">

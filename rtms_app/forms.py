@@ -16,9 +16,14 @@ class PhysicianChoiceField(forms.ModelChoiceField):
 
 # --- 1. 新規登録フォーム ---
 class PatientRegistrationForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.initial.get('first_visit_date'):
+            self.initial['first_visit_date'] = datetime.date.today()
+
     class Meta:
         model = Patient
-        fields = ['card_id', 'name', 'birth_date', 'gender', 'referral_source', 'referral_doctor']
+        fields = ['card_id', 'name', 'birth_date', 'gender', 'referral_source', 'referral_doctor', 'first_visit_date']
         widgets = {
             'card_id': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '例: 12345', 'maxlength': '5', 'pattern': '[0-9]{5}'}),
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '例: 笠寺 太郎'}),
@@ -26,6 +31,7 @@ class PatientRegistrationForm(forms.ModelForm):
             'gender': forms.Select(attrs={'class': 'form-select'}),
             'referral_source': forms.TextInput(attrs={'class': 'form-control', 'list': 'referral-options', 'placeholder': '医療機関名 (任意)'}),
             'referral_doctor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '医師名 (任意)'}),
+            'first_visit_date': DateInput(attrs={'class': 'form-control'}),
         }
     
     def clean_card_id(self):
@@ -130,7 +136,7 @@ class PatientFirstVisitForm(forms.ModelForm):
                     'is_all_case_survey', 'estimated_onset_year', 'estimated_onset_month',
                     'weight_kg', 'is_weight_unknown',
             'has_other_psychiatric_history', 'psychiatric_history', 'psychiatric_history_other_text',
-            'admission_date', 'first_treatment_date'
+            'admission_date', 'first_treatment_date', 'first_visit_date'
         ]
         widgets = {
             'card_id': forms.TextInput(attrs={'class': 'form-control'}),
@@ -147,6 +153,7 @@ class PatientFirstVisitForm(forms.ModelForm):
             'dementia_detail': forms.TextInput(attrs={'class': 'form-control form-control-sm', 'placeholder': '', 'style': 'display: inline-block; width: auto; margin-left: 10px;'}),
             'admission_date': DateInput(attrs={'class': 'form-control'}),
             'first_treatment_date': DateInput(attrs={'class': 'form-control'}),
+            'first_visit_date': DateInput(attrs={'class': 'form-control'}),
         }
 
     # weight and unknown fields (form-only rendering control)
@@ -155,6 +162,25 @@ class PatientFirstVisitForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if not self.initial.get('first_visit_date'):
+            created_at = getattr(self.instance, 'created_at', None)
+            self.initial['first_visit_date'] = (
+                self.instance.first_visit_date
+                if getattr(self.instance, 'first_visit_date', None)
+                else (created_at.date() if created_at else datetime.date.today())
+            )
+        # Older rows may have diagnosis text but no JSON history selections.
+        # Populate the existing checklist only as a display/save compatibility fallback.
+        if not (self.instance.psychiatric_history or []):
+            diagnosis_text = self.instance.diagnosis or ''
+            inferred = [
+                code for code, label in self.PSY_HISTORY_CHOICES
+                if code != 'F32' and (code in diagnosis_text or label in diagnosis_text)
+            ]
+            if inferred:
+                self.initial['psychiatric_history'] = inferred
+            elif diagnosis_text and diagnosis_text not in ('うつ病', 'うつ病エピソード（F32）'):
+                self.initial['psychiatric_history_other_text'] = diagnosis_text
         default_medication_text = ("抗うつ薬：\n抗精神病薬：\n気分安定薬：\n抗不安薬：\n睡眠薬：\nその他：")
         if not self.instance.medication_history:
             self.instance.medication_history = default_medication_text
