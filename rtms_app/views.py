@@ -47,6 +47,7 @@ from .services.schedule import (
     MAX_TREATMENT_SESSIONS,
     can_create_treatment_session,
     get_treatment_overflow_info,
+    get_treatment_course_end_date,
     get_treatment_session_number_map,
     get_treatment_sessions,
     get_treatment_virtual_number_map,
@@ -393,6 +394,13 @@ def generate_calendar_weeks(patient):
             # If patient has a discharge_date set, filter out all treat_dates on or after discharge_date
             treat_dates = [d for d in treat_dates if d < patient.discharge_date]
 
+        # Once all 30 regular TreatmentSession rows exist, their chronological
+        # last date is the authoritative course end.  Legacy overflow rows and
+        # canonical dates must not extend the MT display range.
+        treatment_end_est = get_treatment_course_end_date(
+            patient, treat_dates, course_number=course_number
+        )
+
         # Use mapping base as patient.mapping_date if set, else first_treatment_date
         mapping_base = patient.mapping_date or treatment_start
         if mapping_base:
@@ -409,12 +417,14 @@ def generate_calendar_weeks(patient):
                     d = patient.mapping_date  # 明示的な初回MT測定日を優先（既存挙動を維持）
                 else:
                     d = mapping_overrides.get(wk, m['actual'])
+                # Apply the same limit after an explicit MT date override;
+                # otherwise a stale/manual override could reintroduce an MT
+                # event after the regular 30th treatment.
+                if treatment_end_est and d > treatment_end_est:
+                    continue
                 if patient.discharge_date and d >= patient.discharge_date:
                     continue
                 scheduled_mapping_by_date[d] = wk
-        # Set estimated end to the 30th treatment date
-        if treat_dates:
-            treatment_end_est = treat_dates[-1]
 
     actual_session_by_date = {}
     for ts_row in actual_treatment_sessions:

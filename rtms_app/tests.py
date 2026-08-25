@@ -663,6 +663,89 @@ class TestClinicalPathReschedule(TestCase):
         self.assertTrue(mapping_events)
         self.assertLessEqual(max(event['week_number'] for _date, event in mapping_events), 7)
 
+    def test_calendar_stops_planned_mapping_at_materialized_thirtieth_treatment(self):
+        from rtms_app.views import generate_calendar_weeks
+
+        sessions = [
+            TreatmentSession.objects.create(
+                patient=self.patient,
+                session_date=date(2026, 8, 24) + datetime.timedelta(days=index),
+            )
+            for index in range(30)
+        ]
+
+        weeks, _ = generate_calendar_weeks(self.patient)
+        mapping_dates = [
+            day['date']
+            for week in weeks for day in week
+            for event in day['events']
+            if event['type'] == 'mapping'
+        ]
+
+        self.assertTrue(mapping_dates)
+        self.assertLessEqual(max(mapping_dates), sessions[-1].session_date)
+
+    def test_legacy_overflow_does_not_extend_planned_mapping_range(self):
+        from rtms_app.views import generate_calendar_weeks
+
+        sessions = [
+            TreatmentSession.objects.create(
+                patient=self.patient,
+                session_date=date(2026, 8, 24) + datetime.timedelta(days=index),
+            )
+            for index in range(34)
+        ]
+        overflow_before = [
+            (session.pk, session.session_date, session.status, session.course_number)
+            for session in sessions[30:]
+        ]
+
+        weeks, _ = generate_calendar_weeks(self.patient)
+        mapping_dates = [
+            day['date']
+            for week in weeks for day in week
+            for event in day['events']
+            if event['type'] == 'mapping'
+        ]
+
+        self.assertTrue(mapping_dates)
+        self.assertLessEqual(max(mapping_dates), sessions[29].session_date)
+        self.assertEqual(
+            [
+                (session.pk, session.session_date, session.status, session.course_number)
+                for session in TreatmentSession.objects.filter(pk__in=[s.pk for s in sessions[30:]]).order_by('pk')
+            ],
+            overflow_before,
+        )
+
+    def test_mapping_override_after_materialized_course_end_is_not_displayed(self):
+        from rtms_app.views import generate_calendar_weeks
+
+        sessions = [
+            TreatmentSession.objects.create(
+                patient=self.patient,
+                session_date=date(2026, 8, 24) + datetime.timedelta(days=index),
+            )
+            for index in range(30)
+        ]
+        MappingSchedule.objects.create(
+            patient=self.patient,
+            course_number=1,
+            week_number=8,
+            planned_date=date(2026, 10, 19),
+        )
+
+        weeks, _ = generate_calendar_weeks(self.patient)
+        mapping_dates = [
+            day['date']
+            for week in weeks for day in week
+            for event in day['events']
+            if event['type'] == 'mapping'
+        ]
+
+        self.assertNotIn(date(2026, 10, 19), mapping_dates)
+        self.assertLessEqual(max(mapping_dates), sessions[-1].session_date)
+
     def test_treatment_reschedule_rebuilds_all_later_planned_sessions(self):
         sessions = [
             TreatmentSession.objects.create(patient=self.patient, session_date=d)
@@ -885,6 +968,92 @@ class TestClinicalPathReschedule(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 30)
+
+    def test_initial_session_creation_uses_holiday_aware_canonical_dates(self):
+        from rtms_app.services.rtms_schedule import generate_treatment_dates
+
+        canonical = generate_treatment_dates(
+            self.patient.first_treatment_date,
+            total=30,
+            holidays={date(2026, 9, 21), date(2026, 9, 22), date(2026, 9, 23)},
+        )
+
+        valid_response = self.client.post(
+            f'/app/patient/{self.patient.pk}/print/api/get-session/',
+            {
+                'course_number': 1,
+                'session_date': canonical[5].isoformat(),
+            },
+        )
+        self.assertEqual(valid_response.status_code, 200)
+
+        holiday_response = self.client.post(
+            f'/app/patient/{self.patient.pk}/print/api/get-session/',
+            {
+                'course_number': 1,
+                'session_date': '2026-09-21',
+            },
+        )
+        self.assertEqual(holiday_response.status_code, 400)
+        self.assertFalse(
+            TreatmentSession.objects.filter(
+                patient=self.patient, session_date=date(2026, 9, 21),
+            ).exists()
+        )
+
+        # A holiday explicitly configured through the clinical-path exception
+        # flow is an existing Session and must remain retrievable.
+        exceptional = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 9, 21), status='planned',
+        )
+        existing_response = self.client.post(
+            f'/app/patient/{self.patient.pk}/print/api/get-session/',
+            {'course_number': 1, 'session_date': '2026-09-21'},
+        )
+        self.assertEqual(existing_response.status_code, 200)
+        self.assertEqual(existing_response.json()['session_id'], exceptional.pk)
+
+    def test_start_date_rebuild_matches_initial_holiday_aware_generation(self):
+        from rtms_app.services.rtms_schedule import generate_treatment_dates
+
+        starts = [
+            date(2026, 8, 10),   # Monday
+            date(2026, 8, 7),    # Friday
+            date(2026, 9, 18),   # Before the September holiday block
+            date(2026, 12, 25),  # Before year-end closure
+        ]
+        for index, new_start in enumerate(starts):
+            patient = Patient.objects.create(
+                card_id=f'PATH-COMPARE-{index}',
+                name=f'Compare {index}',
+                birth_date=date(1980, 1, 1),
+                first_treatment_date=date(2026, 8, 24),
+                first_visit_date=date(2026, 8, 20),
+            )
+            old_dates = generate_treatment_dates(
+                patient.first_treatment_date, total=30, holidays={
+                    date(2026, 9, 21), date(2026, 9, 22), date(2026, 9, 23),
+                },
+            )
+            sessions = [
+                TreatmentSession.objects.create(patient=patient, session_date=session_date)
+                for session_date in old_dates
+            ]
+
+            result = schedule_service.reschedule_treatment_start_date(
+                patient, new_start,
+                holidays={date(2026, 9, 21), date(2026, 9, 22), date(2026, 9, 23)},
+            )
+            expected = generate_treatment_dates(
+                new_start, total=30,
+                holidays={date(2026, 9, 21), date(2026, 9, 22), date(2026, 9, 23)},
+            )
+            self.assertEqual(result['moved_count'], 30)
+            self.assertEqual(
+                list(TreatmentSession.objects.filter(patient=patient).order_by('session_date').values_list('session_date', flat=True)),
+                expected,
+            )
+            self.assertEqual(len(sessions), 30)
 
     def test_calendar_hides_legacy_overflow_without_clamping_number(self):
         from rtms_app.views import generate_calendar_weeks

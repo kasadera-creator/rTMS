@@ -7,7 +7,8 @@ from django.db import transaction
 from urllib.parse import urlencode
 
 from .models import Patient, Assessment, ConsentDocument, TreatmentSession, SideEffectCheck, MappingSession
-from .views import generate_calendar_weeks, get_current_week_number
+from .views import generate_calendar_weeks, get_current_week_number, JP_HOLIDAYS
+from .services.rtms_schedule import generate_treatment_dates
 from .services.print_service import build_pdf_filename, CONTENT_LABELS
 from .services.schedule import can_create_treatment_session, get_treatment_session_number_map
 from .queries.assessment_queries import get_baseline_assessments_ordered
@@ -506,6 +507,29 @@ def api_get_or_create_session(request, patient_id):
 		session_date = parse_date(session_date_str)
 		if not session_date:
 			return JsonResponse({'error': f'Invalid session_date format: {session_date_str}'}, status=400)
+
+		# This endpoint is used to create a normal treatment record from the
+		# treatment screen.  Keep it aligned with the canonical course schedule:
+		# weekends, Japanese holidays, year-end closures, and dates outside the
+		# 30-session course are not normal planned dates.  A holiday exception is
+		# deliberately handled only by the clinical-path drag/drop flow.
+		existing_session = TreatmentSession.objects.filter(
+			patient=patient,
+			course_number=course_number,
+			session_date=session_date,
+			slot='',
+		).first()
+		if existing_session is None and patient.first_treatment_date:
+			canonical_dates = generate_treatment_dates(
+				patient.first_treatment_date,
+				total=30,
+				holidays=JP_HOLIDAYS,
+			)
+			if session_date not in canonical_dates:
+				return JsonResponse(
+					{'error': '通常の治療予定日ではありません。スケジュール画面から例外日として設定してください'},
+					status=400,
+				)
 		
 		# Get or create session with empty slot. The capacity check and insert
 		# are kept in one transaction so a new row cannot bypass the limit.

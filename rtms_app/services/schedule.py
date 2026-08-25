@@ -65,6 +65,23 @@ def get_treatment_overflow_info(patient, course_number=None):
     }
 
 
+def get_treatment_course_end_date(patient, canonical_dates=None, course_number=None):
+    """Return the end of the regular treatment course for display purposes.
+
+    The first 30 chronological TreatmentSession rows are authoritative once
+    they are materialized.  Rows beyond 30 are legacy overflow and must not
+    extend the treatment or MT display range.  Before all rows are materialized
+    the canonical sequence remains the projection for the not-yet-created
+    portion of the course.
+    """
+    sessions = get_treatment_sessions(patient, course_number)[:MAX_TREATMENT_SESSIONS]
+    if len(sessions) >= MAX_TREATMENT_SESSIONS:
+        return sessions[-1].session_date
+    if canonical_dates:
+        return canonical_dates[-1]
+    return sessions[-1].session_date if sessions else None
+
+
 def can_create_treatment_session(patient, course_number=None, additional=1):
     """Return whether adding ``additional`` rows stays within the 30-row limit."""
     if additional < 0:
