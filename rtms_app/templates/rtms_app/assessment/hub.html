@@ -24,47 +24,117 @@
         <div class="text-muted small">評価時点と尺度が交わるセルを選択してください。</div>
       </div>
     </div>
+    {% if initial_timing == 'baseline' or initial_timing == 'post' %}
+      <form method="post" id="simpleAssessmentForm">
+        {% csrf_token %}
+        <input type="hidden" name="date" value="{% now 'Y-m-d' %}">
+    {% endif %}
+    <div class="assessment-panel-grid">
     {% for section in matrix_sections %}
-      <section class="card shadow-sm border-0 mb-3">
-        <div class="card-header text-white"
-             style="background-color: var(--color-assessment)">
-          <div class="fw-bold">
-            <i class="fas fa-table me-1"></i>{{ section.title }}
+      <section class="card shadow-sm border-0 mb-3 {% if section.title == '研究用評価尺度' %}research-scale-panel{% elif section.title == 'OT研究用評価尺度' %}ot-scale-panel{% else %}hamd-scale-panel{% endif %}">
+        {% if section.title == 'OT研究用評価尺度' and section.tables %}
+          <div class="card-header text-white"
+               style="background-color: var(--color-assessment)">
+            <div class="fw-bold">
+              <i class="fas fa-table me-1"></i>{{ section.title }}
+            </div>
           </div>
-        </div>
-        <div class="table-responsive">
-          <table class="table table-bordered align-middle mb-0 assessment-matrix">
-            <thead class="table-light">
-              <tr>
-                <th scope="col" class="scale-name-column">尺度</th>
-                {% for column in section.columns %}<th scope="col" class="text-center">{{ column.label }}</th>{% endfor %}
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in section.rows %}
+          <div class="p-3">
+            {% for table in section.tables %}
+              <div class="mb-3{% if forloop.counter0 > 0 %} mt-4{% endif %}">
+                <div class="table-responsive">
+                  <table class="table table-bordered align-middle mb-0 assessment-matrix">
+                    <thead class="table-light">
+                      <tr>
+                        <th scope="col" class="scale-name-column">尺度</th>
+                        {% for column in table.columns %}<th scope="col" class="text-center">{{ column.label }}</th>{% endfor %}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for row in table.rows %}
+                        <tr>
+                          <th scope="row" class="scale-name-column">{{ row.name }}</th>
+                          {% for cell in row.cells %}
+                            <td class="p-1">
+                              {% if cell.is_simple %}
+                                <input class="form-control text-center simple-score-input" name="{{ cell.input_name }}" type="number" min="0" step="1" value="{{ cell.input_value|default:'' }}" placeholder="未評価" aria-label="{{ row.name }} {{ column.label }}" tabindex="{{ cell.tab_index }}"><small class="assessment-cell-date">{% if cell.date %}{{ cell.date|date:"Y-m-d" }}{% endif %}</small>
+                              {% else %}
+                                <a href="{{ cell.url }}"{% if cell.is_detail %} data-detail-modal="true"{% endif %}{% if cell.is_hamd %} data-hamd-modal="true"{% endif %} data-timing-label="{{ cell.timing_label }}" class="assessment-cell {% if cell.is_done %}is-done{% endif %}">
+                                  <span class="assessment-cell-status">{{ cell.status_text }}</span>
+                                  <span class="assessment-cell-date">{% if cell.date %}{{ cell.date|date:"Y-m-d" }}{% endif %}</span>
+                                </a>
+                              {% endif %}
+                            </td>
+                          {% endfor %}
+                        </tr>
+                      {% empty %}
+                        <tr>
+                          <td colspan="{{ table.columns|length|add:1 }}"
+                              class="text-muted text-center py-3">設定された尺度はありません</td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="card-header text-white"
+               style="background-color: var(--color-assessment)">
+            <div class="fw-bold">
+              <i class="fas fa-table me-1"></i>{{ section.title }}
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-bordered align-middle mb-0 assessment-matrix">
+              <thead class="table-light">
                 <tr>
-                  <th scope="row" class="scale-name-column">{{ row.name }}</th>
-                  {% for cell in row.cells %}
-                    <td class="p-1">
-                      <a href="{{ cell.url }}"
-                         class="assessment-cell {% if cell.is_done %}is-done{% endif %}">
-                        <span class="assessment-cell-status">{{ cell.status_text }}</span>
-                        {% if cell.date %}<span class="assessment-cell-date">{{ cell.date|date:"Y-m-d" }}</span>{% endif %}
-                      </a>
-                    </td>
-                  {% endfor %}
+                  <th scope="col" class="scale-name-column">尺度</th>
+                  {% for column in section.columns %}<th scope="col" class="text-center">{{ column.label }}</th>{% endfor %}
                 </tr>
-              {% empty %}
-                <tr>
-                  <td colspan="{{ section.columns|length|add:1 }}"
-                      class="text-muted text-center py-3">設定された尺度はありません</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {% for row in section.rows %}
+                  <tr>
+                    <th scope="row" class="scale-name-column">{{ row.name }}</th>
+                    {% for cell in row.cells %}
+                      <td class="p-1">
+                        {% if cell.is_simple %}
+                          <input class="form-control text-center simple-score-input" name="{{ cell.input_name }}" type="number" min="0" step="1" value="{{ cell.input_value|default:'' }}" placeholder="未評価" aria-label="{{ row.name }} {{ column.label }}" tabindex="{{ cell.tab_index }}"><small class="assessment-cell-date">{% if cell.date %}{{ cell.date|date:"Y-m-d" }}{% endif %}</small>
+                        {% else %}
+                          <a href="{{ cell.url }}"{% if cell.is_detail %} data-detail-modal="true"{% endif %}{% if cell.is_hamd %} data-hamd-modal="true"{% endif %} data-timing-label="{{ cell.timing_label }}" class="assessment-cell {% if cell.is_done %}is-done{% endif %}">
+                            <span class="assessment-cell-status">{{ cell.status_text }}</span>
+                            <span class="assessment-cell-date">{% if cell.date %}{{ cell.date|date:"Y-m-d" }}{% endif %}</span>
+                          </a>
+                        {% endif %}
+                      </td>
+                    {% endfor %}
+                  </tr>
+                {% empty %}
+                  <tr>
+                    <td colspan="{{ section.columns|length|add:1 }}"
+                        class="text-muted text-center py-3">設定された尺度はありません</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
       </section>
     {% endfor %}
+    </div>
+    {% if initial_timing == 'baseline' or initial_timing == 'post' %}
+        <div class="d-flex justify-content-end mt-3"><button type="submit" class="btn btn-assessment"><i class="fas fa-save me-1"></i>簡易尺度を保存</button></div>
+      </form>
+    {% endif %}
+  </div>
+  <div class="modal fade" id="assessmentDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+      <div class="modal-content">
+        <div id="assessmentDetailModalBody"><div class="p-4 text-center text-muted">読み込み中...</div></div>
+      </div>
+    </div>
   </div>
   <style>
     .assessment-matrix { min-width: 620px; }
@@ -74,7 +144,13 @@
     .assessment-cell.is-done { background: #edf8f0; border-color: #9bd2a6; color: #146c2e; }
     .assessment-cell-status { font-weight: 700; font-size: .9rem; }
     .assessment-cell-date { font-size: .72rem; color: #6c757d; margin-top: .2rem; }
-    @media (max-width: 767px) { .assessment-matrix .scale-name-column { min-width: 8rem; } .assessment-cell { min-height: 4.75rem; } }
+    .simple-score-input { min-width: 5rem; min-height: 3rem; font-weight: 700; }
+    .assessment-panel-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; align-items: start; }
+    .research-scale-panel .simple-score-input { display: block; width: 55%; min-width: 0; max-width: 8rem; height: 3.25rem; margin: 0 auto; padding: .35rem .5rem; font-size: 1.05rem; line-height: 1.2; text-align: center; }
+    .research-scale-panel .assessment-matrix { min-width: 0; }
+    .assessment-cell-date:empty { min-height: 1em; }
+    #assessmentDetailModal .modal-footer { display: flex; justify-content: flex-end; gap: .75rem; padding: 1rem; border-top: 1px solid #dee2e6; }
+    @media (max-width: 767px) { .assessment-matrix { min-width: 420px; } .assessment-matrix .scale-name-column { min-width: 8rem; } .assessment-cell { min-height: 4.75rem; } }
   </style>
   {% url 'rtms_app:dashboard' as dashboard_url %}
   <link rel="stylesheet" href="{% static 'rtms_app/floating.css' %}">
@@ -95,3 +171,122 @@
     </div>
   {% endif %}
 {% endblock %}
+{% block scripts %}
+  <script>
+    (function () {
+      const modalElement = document.getElementById('assessmentDetailModal');
+      const bodyElement = document.getElementById('assessmentDetailModalBody');
+      if (!modalElement || !bodyElement || typeof bootstrap === 'undefined') return;
+      const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+      const modalLinks = document.querySelectorAll('[data-detail-modal="true"], [data-hamd-modal="true"]');
+      let hamdGroupIndex = 0;
+
+      function updateHamdTotal() {
+        let total = 0;
+        for (let index = 1; index <= 17; index += 1) {
+          const input = bodyElement.querySelector(`input[name="q${index}"][type="hidden"]`);
+          total += input ? (parseInt(input.value || '0', 10) || 0) : 0;
+        }
+        const totalElement = bodyElement.querySelector('#hamd17Total');
+        if (totalElement) totalElement.textContent = String(total);
+      }
+
+      function initHamdInteraction(link) {
+        hamdGroupIndex = 0;
+        if (bodyElement.dataset.hamdClickBound !== 'true') bodyElement.addEventListener('click', function (event) {
+          const button = event.target.closest('.hamd-btn');
+          if (!button || !bodyElement.contains(button)) return;
+          const group = button.closest('.hamd-btn-group');
+          const row = group && group.closest('.hamd-row');
+          const hidden = row && row.querySelector(`input[name="${group.dataset.hamdKey}"]`);
+          if (!group || !hidden) return;
+          group.querySelectorAll('.hamd-btn').forEach(function (item) { item.classList.remove('active'); });
+          button.classList.add('active');
+          hidden.value = button.dataset.value;
+          updateHamdTotal();
+          const groups = Array.from(bodyElement.querySelectorAll('.hamd-btn-group'));
+          const currentIndex = groups.indexOf(group);
+          if (currentIndex >= 0 && currentIndex < groups.length - 1) {
+            hamdGroupIndex = currentIndex + 1;
+            groups[hamdGroupIndex].classList.add('hamd-focused');
+          }
+        });
+        bodyElement.dataset.hamdClickBound = 'true';
+        const form = bodyElement.querySelector('form');
+        const saveButton = bodyElement.querySelector('.modal-footer button.btn-assessment');
+        if (form && saveButton) {
+          saveButton.removeAttribute('onclick');
+          saveButton.addEventListener('click', function () {
+            fetch(form.action, { method: 'POST', body: new FormData(form), headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+              .then(function (response) { if (!response.ok) throw new Error('save failed'); return response.json(); })
+              .then(function (result) {
+                const status = link.querySelector('.assessment-cell-status');
+                const date = link.querySelector('.assessment-cell-date');
+                if (status) status.textContent = `入力済 ${result.total_17}点`;
+                if (date) date.textContent = form.querySelector('[name="date"]')?.value || '';
+                link.classList.add('is-done');
+                modal.hide();
+              }).catch(function () { window.alert('保存に失敗しました。'); });
+          });
+        }
+      }
+
+      document.addEventListener('keydown', function (event) {
+        if (!['0', '1', '2', '3', '4'].includes(event.key)) return;
+        if (!modalElement.classList.contains('show') || !bodyElement.querySelector('#hamdForm')) return;
+        if (event.target.matches('input[type="text"], textarea')) return;
+        const groups = Array.from(bodyElement.querySelectorAll('.hamd-btn-group'));
+        const group = groups[hamdGroupIndex];
+        const button = group && group.querySelector(`button[data-value="${event.key}"]`);
+        if (!button) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        button.click();
+      }, true);
+
+      modalLinks.forEach(function (link) {
+        link.addEventListener('click', function (event) {
+          event.preventDefault();
+          bodyElement.innerHTML = '<div class="p-4 text-center text-muted">読み込み中...</div>';
+          fetch(link.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (response) { if (!response.ok) throw new Error('load failed'); return response.text(); })
+            .then(function (html) {
+              const parser = new DOMParser();
+              const documentFragment = parser.parseFromString(html, 'text/html');
+              documentFragment.querySelectorAll('script').forEach(function (script) { script.remove(); });
+              bodyElement.innerHTML = documentFragment.body.innerHTML;
+              modal.show();
+              if (link.dataset.hamdModal === 'true') {
+                initHamdInteraction(link);
+                updateHamdTotal();
+                const title = bodyElement.querySelector('.modal-title');
+                if (title) title.innerHTML = `HAM-D（${link.dataset.timingLabel}）`;
+                return;
+              }
+              const form = bodyElement.querySelector('form');
+              if (!form) return;
+              form.addEventListener('submit', function (submitEvent) {
+                submitEvent.preventDefault();
+                const submitButton = form.querySelector('[type="submit"]');
+                if (submitButton) submitButton.disabled = true;
+                fetch(form.action, { method: 'POST', body: new FormData(form), headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                  .then(function (saveResponse) { if (!saveResponse.ok) throw new Error('save failed'); return saveResponse.json(); })
+                  .then(function (result) {
+                    const cell = link.closest('td');
+                    const status = cell && cell.querySelector('.assessment-cell-status');
+                    const date = cell && cell.querySelector('.assessment-cell-date');
+                    if (status) status.textContent = result.summary || '入力済';
+                    if (date) date.textContent = result.date || '';
+                    link.classList.add('is-done');
+                    modal.hide();
+                  }).catch(function () {
+                    if (submitButton) submitButton.disabled = false;
+                    window.alert('保存に失敗しました。');
+                  });
+              });
+            }).catch(function () { bodyElement.innerHTML = '<div class="p-4 text-danger">読み込みに失敗しました。</div>'; modal.show(); });
+        });
+      });
+    }());
+  </script>
+{% endblock scripts %}

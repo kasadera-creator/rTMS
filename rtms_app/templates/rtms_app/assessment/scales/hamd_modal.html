@@ -160,7 +160,12 @@
 <script>
 // Initialize HAM-D modal - defined as function (not IIFE) so it can be called by loadAssessmentModal()
 function initHamdModal() {
+  const hamdForm = document.getElementById('hamdForm');
+  if (!hamdForm || hamdForm.dataset.hamdInitialized === 'true') return;
+  if (window.__hamdModalCleanup) window.__hamdModalCleanup();
+  hamdForm.dataset.hamdInitialized = 'true';
   console.log('DEBUG initHamdModal: Starting initialization');
+  let modalGroupIndex = 0;
   // Initialize Bootstrap popovers
   const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
   popoverTriggerList.forEach(popoverTriggerEl => {
@@ -274,10 +279,11 @@ function initHamdModal() {
     updateHAMDScores();
     
     // Move focus to next group
-    const allGroups = Array.from(document.querySelectorAll('.hamd-btn-group'));
+    const allGroups = Array.from(hamdForm.querySelectorAll('.hamd-btn-group'));
     const currentIndex = allGroups.indexOf(group);
     if (currentIndex >= 0 && currentIndex < allGroups.length - 1) {
-      allGroups[currentIndex + 1].focus();
+      modalGroupIndex = currentIndex + 1;
+      allGroups[modalGroupIndex].classList.add('hamd-focused');
     }
   };
   
@@ -287,18 +293,10 @@ function initHamdModal() {
   // Keyboard input handler
   const keydownHandler = function(e) {
     if (!['0', '1', '2', '3', '4'].includes(e.key)) return;
+    if (!document.getElementById('assessmentQuestionnaireModal')?.classList.contains('show')) return;
     
-    // Find currently focused button group or active row
-    let group = document.activeElement?.closest?.('.hamd-btn-group');
-    if (!group) {
-      const activeBtn = document.querySelector('.hamd-btn.active');
-      if (activeBtn) {
-        group = activeBtn.closest('.hamd-btn-group');
-      } else {
-        // Start from first group
-        group = document.querySelector('.hamd-btn-group');
-      }
-    }
+    const groups = Array.from(hamdForm.querySelectorAll('.hamd-btn-group'));
+    const group = groups[modalGroupIndex];
     
     if (!group) return;
     
@@ -307,12 +305,17 @@ function initHamdModal() {
     
     if (button) {
       e.preventDefault();
+      e.stopImmediatePropagation();
       button.click();
     }
   };
   
   // Register keyboard handler
-  document.addEventListener('keydown', keydownHandler);
+  document.addEventListener('keydown', keydownHandler, true);
+  window.__hamdModalCleanup = function () {
+    document.removeEventListener('click', clickHandler);
+    document.removeEventListener('keydown', keydownHandler, true);
+  };
   
   // Set up window variables for improvement calculation
   {% if initial_timing == 'baseline' %}

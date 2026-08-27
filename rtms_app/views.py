@@ -63,6 +63,12 @@ from .queries.assessment_queries import (
     save_assessment_record,
     save_assessment_hamd,
 )
+from .services.assessment_scales import (
+    SIMPLE_SCALE_CODES, DETAIL_FIELDS, COPM_FIELDS, SIX_MWT_VITAL_FIELDS,
+    SIX_MWT_SUBJECTIVE_FIELDS,
+    TINKERTOY_FIELDS, build_detail_scores, detail_form_context, parse_simple_score,
+    staff_timing_label, summary_for_record,
+)
 
 # ==========================================
 # 祝日定義 (2024-2030) + 年末年始 (12/29-1/3)
@@ -134,6 +140,15 @@ def get_assessment_window(patient, timing):
         if patient.first_treatment_date and ws > we:
             ws = we
         return ws, we
+
+    if timing.startswith('tinkertory_'):
+        if not patient.first_treatment_date:
+            today = timezone.localdate()
+            return today, today
+        week_index = int(timing.rsplit('_', 1)[-1])
+        start = patient.first_treatment_date + timedelta(days=(week_index - 1) * 7)
+        end = start + timedelta(days=6)
+        return start, end
 
     if not patient.first_treatment_date:
         today = timezone.localdate()
@@ -2147,11 +2162,17 @@ def assessment_hub(request, patient_id, timing):
     modal_mode = request.GET.get('modal') == '1'
     from_page = request.GET.get('from') or request.POST.get('from')
 
-    allowed = [c[0] for c in Assessment.TIMING_CHOICES]
+    allowed = [c[0] for c in Assessment.TIMING_CHOICES] + ['post'] + [f'tinkertory_{i}' for i in range(1, 8)]
     if timing not in allowed:
         return HttpResponse(status=400)
 
     timing_labels = dict(Assessment.TIMING_CHOICES)
+    research_timing_labels = {'baseline': '治療前', 'post': '治療後'}
+    ot_timing_labels = {
+        'baseline': '治療前',
+        'post': '治療後',
+        **{f'tinkertory_{index}': staff_timing_label(f'tinkertory_{index}') for index in range(1, 8)},
+    }
     date_param = (
         request.GET.get('date')
         or request.GET.get('dashboard_date')
@@ -2163,7 +2184,47 @@ def assessment_hub(request, patient_id, timing):
         'hamd': ['baseline', 'week3', 'week4', 'week6'],
         'research': ['baseline', 'post'],
     }
-    research_timing_labels = {'baseline': '治療前', 'post': '治療後'}
+    simple_order = ['phq9', 'sass-j', 'bdi-ii', 'sds', 'stai-trait', 'stai-state', 'dai-10']
+
+    if request.method == 'POST' and timing in ('baseline', 'post'):
+        try:
+            assessed_date = parse_date(request.POST.get('date', '')) or timezone.localdate()
+            for cell_timing in ('baseline', 'post'):
+                for code in SIMPLE_SCALE_CODES:
+                    scale = ScaleDefinition.objects.filter(code=code, is_active=True).first()
+                    if scale is None:
+                        continue
+                    value = parse_simple_score(request.POST.get(f'score_{code}_{cell_timing}'))
+                    if value is None:
+                        AssessmentRecord.objects.filter(
+                            patient=patient, course_number=course_number,
+                            timing=cell_timing, scale=scale,
+                        ).delete()
+                        continue
+                    save_assessment_record(
+                        patient=patient, course_number=course_number, timing=cell_timing,
+                        scale=scale, date=assessed_date,
+                        scores={'score': value},
+                        note='',
+                        defaults_override={'status_label': '入力済'},
+                    )
+            return redirect(build_url(
+                'assessment_hub', args=[patient.id, timing],
+                query={'dashboard_date': dashboard_date} if dashboard_date else None,
+            ))
+        except ValueError as exc:
+            return HttpResponseBadRequest(str(exc))
+
+    def ensure_placeholder_scale(code, name):
+        scale, _ = ScaleDefinition.objects.get_or_create(
+            code=code,
+            defaults={'name': name, 'is_active': True},
+        )
+        if scale.name != name or not scale.is_active:
+            scale.name = name
+            scale.is_active = True
+            scale.save(update_fields=['name', 'is_active'])
+        return scale
 
     configured_scales = list(
         ScaleDefinition.objects.filter(is_active=True)
@@ -2184,24 +2245,47 @@ def assessment_hub(request, patient_id, timing):
             query['dashboard_date'] = dashboard_date
         if date_param:
             query['date'] = date_param
-        if modal_mode:
+        if modal_mode or scale.code in {'hamd', 'who-das', 'bacs', 'copm', '6mwt', 'tinkertory-test'}:
             query['modal'] = '1'
         total = getattr(existing, 'total_score_17', None) if existing else None
-        if existing and scale.code == 'hamd' and total is not None:
+        existing_scores = getattr(existing, 'scores', {}) if existing else {}
+        if scale.code in SIMPLE_SCALE_CODES:
+            status_text = str(existing_scores.get('score')) if existing_scores.get('score') is not None else '未評価'
+        elif existing and scale.code == 'hamd' and total is not None:
             status_text = f'入力済 {total}点'
         elif existing:
-            status_text = '入力済'
+            status_text = summary_for_record(scale.code, existing_scores)
         else:
             status_text = '未評価'
         return {
             'is_done': existing is not None,
             'status_text': status_text,
+            'is_simple': scale.code in SIMPLE_SCALE_CODES and cell_timing in ('baseline', 'post'),
+            'input_name': f'score_{scale.code}_{cell_timing}' if cell_timing in ('baseline', 'post') else '',
+            'input_value': existing_scores.get('score') if existing else '',
+            'tab_index': (simple_order.index(scale.code) + 1 if cell_timing == 'baseline' else len(simple_order) + simple_order.index(scale.code) + 1)
+                if scale.code in SIMPLE_SCALE_CODES and cell_timing in ('baseline', 'post') else '',
+            'is_detail': scale.code in {'who-das', 'bacs', 'copm', '6mwt', 'tinkertory-test'},
+            'is_hamd': scale.code == 'hamd',
+            'timing_label': timing_labels.get(cell_timing, cell_timing),
             'date': getattr(existing, 'date', None),
             'url': build_url('assessment_scale', args=[patient.id, cell_timing, scale.code], query=query),
         }
 
     hamd_scales = [scale for scale in configured_scales if scale.code == 'hamd']
-    research_scales = [scale for scale in configured_scales if scale.code != 'hamd']
+    ot_only_scale_codes = {'who-das', 'bacs', 'copm', '6mwt', 'tinkertory-test'}
+    research_scales = [
+        scale for scale in configured_scales
+        if scale.code != 'hamd' and scale.code not in ot_only_scale_codes
+    ]
+
+    ot_standard_scales = [
+        ensure_placeholder_scale('who-das', 'WHO-DAS'),
+        ensure_placeholder_scale('bacs', 'BACS'),
+        ensure_placeholder_scale('copm', 'COPM'),
+        ensure_placeholder_scale('6mwt', '6MWT'),
+    ]
+    tinkertory_scale = ensure_placeholder_scale('tinkertory-test', 'Tinkertory Test')
 
     def build_section(title, scales, section_timings):
         return {
@@ -2220,9 +2304,50 @@ def assessment_hub(request, patient_id, timing):
             ],
         }
 
+    ot_pre_post_columns = [
+        {'code': 'baseline', 'label': '治療前'},
+        {'code': 'post', 'label': '治療後'},
+    ]
+    ot_pre_post_table = {
+        'title': 'OT研究用評価尺度',
+        'columns': ot_pre_post_columns,
+        'rows': [
+            {
+                'name': scale.name,
+                'code': scale.code,
+                'cells': [cell_for(scale, item) for item in ['baseline', 'post']],
+            }
+            for scale in ot_standard_scales
+        ],
+    }
+
+    tinkertory_table = {
+        'title': 'Tinkertory Test',
+        'columns': [
+            {'code': f'tinkertory_{i}', 'label': ot_timing_labels[f'tinkertory_{i}']}
+            for i in range(1, 8)
+        ],
+        'rows': [
+            {
+                'name': 'Tinkertory Test',
+                'code': tinkertory_scale.code,
+                'cells': [
+                    cell_for(tinkertory_scale, f'tinkertory_{i}')
+                    for i in range(1, 8)
+                ],
+            }
+        ],
+    }
+
+    ot_research_section = {
+        'title': 'OT研究用評価尺度',
+        'tables': [ot_pre_post_table, tinkertory_table],
+    }
+
     matrix_sections = [
         build_section('HAM-D', hamd_scales, matrix_timings['hamd']),
         build_section('研究用評価尺度', research_scales, matrix_timings['research']),
+        ot_research_section,
     ]
 
     ctx = {
@@ -2263,13 +2388,28 @@ def assessment_scale_form(request, patient_id, timing, scale_code):
     modal_mode = request.GET.get('modal') == '1'
     from_page = request.GET.get('from') or request.POST.get('from')
 
-    allowed = [c[0] for c in Assessment.TIMING_CHOICES] + ['post']
+    allowed = [c[0] for c in Assessment.TIMING_CHOICES] + ['post'] + [f'tinkertory_{i}' for i in range(1, 8)]
     if timing not in allowed:
         return HttpResponse(status=400)
 
-    scale = get_object_or_404(ScaleDefinition, code=scale_code)
+    detail_scale_names = {
+        'who-das': 'WHO-DAS', 'bacs': 'BACS', 'copm': 'COPM', '6mwt': '6MWT',
+        'tinkertory-test': 'Tinkertoy Test',
+    }
+    if scale_code in detail_scale_names:
+        scale, _created = ScaleDefinition.objects.get_or_create(
+            code=scale_code,
+            defaults={'name': detail_scale_names[scale_code], 'is_active': True},
+        )
+    else:
+        scale = get_object_or_404(ScaleDefinition, code=scale_code)
 
-    timing_display = dict(Assessment.TIMING_CHOICES).get(timing, timing)
+    timing_display = {
+        **dict(Assessment.TIMING_CHOICES),
+        **{
+            f'tinkertory_{i}': f'{i}回目' for i in range(1, 8)
+        },
+    }.get(timing, timing)
     window_start, window_end = get_assessment_window(patient, timing)
 
     course_number = patient.course_number or 1
@@ -2330,18 +2470,25 @@ def assessment_scale_form(request, patient_id, timing, scale_code):
             note = (request.POST.get('note') or '').strip()
 
             if scale.code != 'hamd':
+                scores = build_detail_scores(request, scale.code)
                 record, _created = save_assessment_record(
                     patient=patient,
                     course_number=course_number,
                     timing=timing,
                     scale=scale,
                     date=assessed_date,
-                    scores={},
+                    scores=scores,
                     note=note,
                     defaults_override={'status_label': '入力済'},
                 )
                 if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-                    return JsonResponse({'status': 'success', 'id': record.id, 'message': '保存しました。'})
+                    return JsonResponse({
+                        'status': 'success',
+                        'id': record.id,
+                        'message': '保存しました。',
+                        'summary': summary_for_record(scale.code, record.scores),
+                        'date': record.date.isoformat(),
+                    })
                 if from_page == 'assessment_hub':
                     return redirect(build_url('assessment_hub', args=[patient.id, timing], query={'dashboard_date': dashboard_date} if dashboard_date else None))
                 return redirect(build_url('dashboard', query={'date': dashboard_date} if dashboard_date else None))
@@ -2504,19 +2651,25 @@ def assessment_scale_form(request, patient_id, timing, scale_code):
         response = render(request, template, ctx)
         return response
 
-    return render(request, 'rtms_app/assessment/scales/placeholder.html', {
+    return render(request, 'rtms_app/assessment/scales/detail_modal.html' if modal_mode else 'rtms_app/assessment/scales/detail.html', {
         'patient': patient,
         'dashboard_date': dashboard_date,
         'scale': scale,
         'scale_name': scale.name,
+        'scale_code': scale.code,
         'initial_timing': timing,
-        'initial_timing_display': timing_display,
+        'initial_timing_display': staff_timing_label(timing),
         'window_start': window_start,
         'window_end': window_end,
         'default_date': default_date,
         'existing_note': existing_note,
         'existing_scores': existing_scores,
         'from_page': from_page,
+        'detail_fields': DETAIL_FIELDS.get(scale.code, []),
+        'copm_fields': COPM_FIELDS,
+        'six_mwt_fields': SIX_MWT_VITAL_FIELDS + SIX_MWT_SUBJECTIVE_FIELDS,
+        'tinkertoy_fields': TINKERTOY_FIELDS,
+        'detail_context': detail_form_context(scale.code, existing_scores),
     })
 
 @login_required

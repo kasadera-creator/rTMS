@@ -1,0 +1,40 @@
+<form method="post" action="{{ request.path }}?modal=1" class="assessment-detail-form">
+  {% csrf_token %}
+  <input type="hidden" name="date" value="{{ default_date|date:'Y-m-d' }}">
+  <div class="modal-header py-2">
+    <h5 class="modal-title mb-0">{{ scale_name }} <span class="text-muted fs-6">（{{ initial_timing_display }}）</span></h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+  </div>
+  <div class="modal-body p-3">
+    {% if detail_fields %}
+      {% for field in detail_context.fields %}
+        <div class="row align-items-center mb-2"><label class="col-7 col-form-label py-1" for="modal_{{ field.key }}">{{ field.label }}</label><div class="col-5"><input id="modal_{{ field.key }}" name="{{ field.key }}" type="number" step="any" class="form-control form-control-sm" value="{{ field.value|default:'' }}"></div></div>
+      {% endfor %}
+      {% if scale_code == 'who-das' %}<div class="row align-items-center border-top pt-2 mt-2"><label class="col-7 col-form-label fw-bold py-1">Total（自動計算）</label><div class="col-5"><input id="modal_who_total" type="number" class="form-control form-control-sm" value="{{ existing_scores.total|default:'' }}" readonly></div></div>{% endif %}
+    {% elif scale_code == 'copm' %}
+      {% for item in detail_context.copm_items %}
+        <fieldset class="border rounded p-2 mb-2"><legend class="float-none w-auto px-2 fs-6 mb-1">作業{{ item.index }}</legend><div class="mb-2"><label class="form-label small mb-1" for="modal_work_name_{{ item.index }}">作業名</label><input id="modal_work_name_{{ item.index }}" name="work_name_{{ item.index }}" class="form-control form-control-sm" value="{{ item.work_name|default:'' }}"></div><div class="row g-2">{% for field in item.values %}<div class="col-4"><label class="form-label small mb-1" for="modal_{{ field.key }}_{{ item.index }}">{{ field.label }}</label><input id="modal_{{ field.key }}_{{ item.index }}" name="{{ field.key }}_{{ item.index }}" type="number" step="any" class="form-control form-control-sm" value="{{ field.value|default:'' }}"></div>{% endfor %}</div></fieldset>
+      {% endfor %}
+    {% elif scale_code == '6mwt' %}
+      {% for phase in detail_context.phases %}<fieldset class="border rounded p-2 mb-2"><legend class="float-none w-auto px-2 fs-6 mb-1">{{ phase.label }}</legend><div class="row g-2">{% for field in phase.fields %}<div class="col-6"><label class="form-label small mb-1" for="modal_{{ field.key }}">{{ field.label }}</label><input id="modal_{{ field.key }}" name="{{ field.key }}" type="{{ field.kind }}" {% if field.kind == 'number' %}step="any"{% endif %} class="form-control form-control-sm" value="{{ field.value|default:'' }}"></div>{% endfor %}</div></fieldset>{% endfor %}
+      <div class="row align-items-center mb-2"><label class="col-7 col-form-label py-1" for="modal_walking_distance">歩行距離</label><div class="col-5"><input id="modal_walking_distance" name="walking_distance" type="number" step="any" class="form-control form-control-sm" value="{{ detail_context.walking_distance|default:'' }}"></div></div>
+    {% elif scale_code == 'tinkertory-test' %}
+      <div class="row g-2">{% for field in detail_context.fields %}<div class="col-6"><label class="form-label small mb-1" for="modal_{{ field.key }}">{{ field.label }}</label><input id="modal_{{ field.key }}" name="{{ field.key }}" type="{{ field.kind }}" {% if field.kind == 'number' %}step="any"{% endif %} class="form-control form-control-sm" value="{{ field.value|default:'' }}"></div>{% endfor %}</div>
+    {% endif %}
+    <div class="mt-2"><label class="form-label small mb-1" for="modal_note">メモ</label><textarea id="modal_note" name="note" class="form-control form-control-sm" rows="2">{{ existing_note|default:'' }}</textarea></div>
+  </div>
+  <div class="modal-footer py-2"><button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">キャンセル</button><button type="submit" class="btn btn-sm btn-assessment"><i class="fas fa-save me-1"></i>保存</button></div>
+</form>
+{% if scale_code == 'who-das' %}
+<script>
+(function () {
+  const form = document.currentScript.previousElementSibling;
+  if (!form) return;
+  const inputs = Array.from(form.querySelectorAll('input[name]')).filter(function (input) { return input.name !== 'date'; });
+  const total = form.querySelector('#modal_who_total');
+  function update() { total.value = inputs.reduce(function (sum, input) { return sum + (input.value === '' ? 0 : Number(input.value) || 0); }, 0); }
+  inputs.forEach(function (input) { input.addEventListener('input', update); });
+  update();
+}());
+</script>
+{% endif %}

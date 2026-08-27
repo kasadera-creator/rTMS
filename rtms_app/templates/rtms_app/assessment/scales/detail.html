@@ -1,0 +1,20 @@
+{% extends "rtms_app/assessment/scale_form_base.html" %}
+{% block scale_form_inner %}
+  <div class="card shadow-sm border-0">
+    <div class="card-header text-white" style="background-color: var(--color-assessment)"><div class="fw-bold"><i class="fas fa-pen me-1"></i>{{ scale_name }}</div></div>
+    <div class="card-body">
+      {% if detail_fields %}
+        {% for field in detail_context.fields %}<div class="mb-3"><label class="form-label fw-bold" for="id_{{ field.key }}">{{ field.label }}</label><input id="id_{{ field.key }}" name="{{ field.key }}" type="number" step="any" class="form-control" value="{{ field.value|default:'' }}"></div>{% endfor %}
+      {% elif scale_code == 'copm' %}
+        {% for item in detail_context.copm_items %}<fieldset class="border rounded p-3 mb-3"><legend class="float-none w-auto px-2 fs-6">作業 {{ item.index }}</legend><div class="mb-2"><label class="form-label" for="id_work_name_{{ item.index }}">作業名</label><input id="id_work_name_{{ item.index }}" name="work_name_{{ item.index }}" class="form-control" value="{{ item.work_name|default:'' }}"></div><div class="row g-2">{% for field in item.values %}<div class="col-md-4"><label class="form-label" for="id_{{ field.key }}_{{ item.index }}">{{ field.label }}</label><input id="id_{{ field.key }}_{{ item.index }}" name="{{ field.key }}_{{ item.index }}" type="number" step="any" class="form-control" value="{{ field.value|default:'' }}"></div>{% endfor %}</div></fieldset>{% endfor %}
+      {% elif scale_code == '6mwt' %}
+        {% for phase in detail_context.phases %}<fieldset class="border rounded p-3 mb-3"><legend class="float-none w-auto px-2 fs-6">{{ phase.label }}</legend><div class="row g-2">{% for field in phase.fields %}<div class="col-md-4"><label class="form-label" for="id_{{ field.key }}">{{ field.label }}</label><input id="id_{{ field.key }}" name="{{ field.key }}" type="{{ field.kind }}" {% if field.kind == 'number' %}step="any"{% endif %} class="form-control" value="{{ field.value|default:'' }}"></div>{% endfor %}</div></fieldset>{% endfor %}
+        <div class="mb-3"><label class="form-label fw-bold" for="id_walking_distance">歩行距離</label><input id="id_walking_distance" name="walking_distance" type="number" step="any" class="form-control" value="{{ detail_context.walking_distance|default:'' }}"></div>
+      {% elif scale_code == 'tinkertory-test' %}
+        <div class="row g-2">{% for field in detail_context.fields %}<div class="col-md-4"><label class="form-label" for="id_{{ field.key }}">{{ field.label }}</label><input id="id_{{ field.key }}" name="{{ field.key }}" type="{{ field.kind }}" {% if field.kind == 'number' %}step="any"{% endif %} class="form-control" value="{{ field.value|default:'' }}"></div>{% endfor %}</div>
+      {% endif %}
+      <div class="mt-3"><label class="form-label fw-bold" for="assessmentNote">メモ</label><textarea id="assessmentNote" name="note" class="form-control" rows="3">{{ existing_note|default:'' }}</textarea></div>
+    </div>
+    <div class="card-footer bg-light d-flex justify-content-end gap-2"><a class="btn btn-secondary" href="{% url 'rtms_app:assessment_hub' patient.id initial_timing %}">戻る</a><button type="submit" class="btn btn-assessment"><i class="fas fa-save me-1"></i>保存</button></div>
+  </div>
+{% endblock %}

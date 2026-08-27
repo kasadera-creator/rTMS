@@ -6,35 +6,73 @@
         <section class="card shadow-sm border-0 mb-3">
             <div class="card-header text-white"
                  style="background-color: var(--color-assessment)">{{ section.title }}</div>
-            <div class="table-responsive">
-                <table class="table table-bordered align-middle mb-0 assessment-matrix-modal">
-                    <thead class="table-light">
-                        <tr>
-                            <th>尺度</th>
-                            {% for column in section.columns %}<th class="text-center">{{ column.label }}</th>{% endfor %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in section.rows %}
+            {% if section.title == 'OT研究用評価尺度' and section.tables %}
+                <div class="p-3">
+                    {% for table in section.tables %}
+                        <div class="mb-3{% if forloop.counter0 > 0 %} mt-4{% endif %}">
+                            <div class="table-responsive">
+                                <table class="table table-bordered align-middle mb-0 assessment-matrix-modal">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>尺度</th>
+                                            {% for column in table.columns %}<th class="text-center">{{ column.label }}</th>{% endfor %}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for row in table.rows %}
+                                            <tr>
+                                                <th>{{ row.name }}</th>
+                                                {% for cell in row.cells %}
+                                                    <td class="p-1">
+                                                        <a href="javascript:void(0)"
+                                                           onclick="selectScale('{{ cell.url }}')"
+                                                           class="assessment-cell {% if cell.is_done %}is-done{% endif %}"><span class="assessment-cell-status">{{ cell.status_text }}</span></a>
+                                                    </td>
+                                                {% endfor %}
+                                            </tr>
+                                        {% empty %}
+                                            <tr>
+                                                <td colspan="{{ table.columns|length|add:1 }}"
+                                                    class="text-muted text-center py-3">設定された尺度はありません</td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="table-responsive">
+                    <table class="table table-bordered align-middle mb-0 assessment-matrix-modal">
+                        <thead class="table-light">
                             <tr>
-                                <th>{{ row.name }}</th>
-                                {% for cell in row.cells %}
-                                    <td class="p-1">
-                                        <a href="javascript:void(0)"
-                                           onclick="selectScale('{{ cell.url }}')"
-                                           class="assessment-cell {% if cell.is_done %}is-done{% endif %}"><span class="assessment-cell-status">{{ cell.status_text }}</span></a>
-                                    </td>
-                                {% endfor %}
+                                <th>尺度</th>
+                                {% for column in section.columns %}<th class="text-center">{{ column.label }}</th>{% endfor %}
                             </tr>
-                        {% empty %}
-                            <tr>
-                                <td colspan="{{ section.columns|length|add:1 }}"
-                                    class="text-muted text-center py-3">設定された尺度はありません</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody>
+                            {% for row in section.rows %}
+                                <tr>
+                                    <th>{{ row.name }}</th>
+                                    {% for cell in row.cells %}
+                                        <td class="p-1">
+                                            <a href="javascript:void(0)"
+                                               onclick="selectScale('{{ cell.url }}')"
+                                               class="assessment-cell {% if cell.is_done %}is-done{% endif %}"><span class="assessment-cell-status">{{ cell.status_text }}</span></a>
+                                        </td>
+                                    {% endfor %}
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="{{ section.columns|length|add:1 }}"
+                                        class="text-muted text-center py-3">設定された尺度はありません</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
         </section>
     {% endfor %}
 </div>

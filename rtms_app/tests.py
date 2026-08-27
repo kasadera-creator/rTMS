@@ -190,6 +190,237 @@ class TestStage6PatientAndCalendar(TestCase):
 
 
 
+class TestAssessmentHubOtResearchSection(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='ot-hub-user', password='pass1234')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='OT001',
+            name='OT Test',
+            birth_date=date(1980, 1, 1),
+            first_treatment_date=date(2026, 1, 5),
+            first_visit_date=date(2026, 1, 5),
+        )
+
+    def test_hub_renders_ot_research_section_and_moves_bacs(self):
+        response = self.client.get(reverse('rtms_app:assessment_hub', args=[self.patient.pk, 'baseline']))
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+
+        self.assertIn('OT研究用評価尺度', html)
+        self.assertIn('WHO-DAS', html)
+        self.assertIn('BACS', html)
+        self.assertIn('COPM', html)
+        self.assertIn('6MWT', html)
+        self.assertIn('Tinkertory Test', html)
+        self.assertIn('治療前', html)
+        self.assertIn('1回目', html)
+        self.assertIn('7回目', html)
+        self.assertEqual(html.count('<th scope="col" class="scale-name-column">尺度</th>'), 4)
+
+        research_section = next(section for section in response.context['matrix_sections'] if section['title'] == '研究用評価尺度')
+        research_names = [row['name'] for row in research_section['rows']]
+        self.assertNotIn('BACS', research_names)
+        self.assertNotIn('WHO-DAS', research_names)
+        self.assertNotIn('COPM', research_names)
+        self.assertNotIn('6MWT', research_names)
+        self.assertNotIn('Tinkertory Test', research_names)
+
+        ot_section = next(section for section in response.context['matrix_sections'] if section['title'] == 'OT研究用評価尺度')
+        self.assertIn('tables', ot_section)
+        self.assertEqual(len(ot_section['tables']), 2)
+
+        pre_post_table = ot_section['tables'][0]
+        self.assertEqual([column['label'] for column in pre_post_table['columns']], ['治療前', '治療後'])
+        ot_names = [row['name'] for row in pre_post_table['rows']]
+        self.assertIn('BACS', ot_names)
+        self.assertIn('WHO-DAS', ot_names)
+        self.assertIn('COPM', ot_names)
+        self.assertIn('6MWT', ot_names)
+
+        tinkertory_table = ot_section['tables'][1]
+        self.assertEqual(tinkertory_table['columns'][0]['label'], '1回目')
+        self.assertEqual(tinkertory_table['columns'][-1]['label'], '7回目')
+        self.assertEqual(tinkertory_table['rows'][0]['name'], 'Tinkertory Test')
+        self.assertNotIn('OT研究用評価尺度２', response.content.decode())
+        self.assertNotIn('回数', response.content.decode())
+
+
+class TestStage7AssessmentEntry(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='stage7-user', password='pass1234')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='STAGE7', name='Stage 7 Test', birth_date=date(1980, 1, 1), course_number=1,
+        )
+
+    def test_simple_assessment_baseline_post_update_and_blank(self):
+        url = reverse('rtms_app:assessment_hub', args=[self.patient.pk, 'baseline'])
+        response = self.client.post(url, {'date': '2026-08-01', 'score_phq9_baseline': '9', 'score_phq9_post': ''})
+        self.assertEqual(response.status_code, 302)
+        scale = ScaleDefinition.objects.get(code='phq9')
+        record = AssessmentRecord.objects.get(patient=self.patient, scale=scale, timing='baseline')
+        self.assertEqual(record.scores, {'score': 9})
+
+        response = self.client.post(url, {'date': '2026-08-02', 'score_phq9_baseline': '12', 'score_phq9_post': ''})
+        self.assertEqual(response.status_code, 302)
+        record.refresh_from_db()
+        self.assertEqual(record.scores, {'score': 12})
+        self.assertEqual(AssessmentRecord.objects.filter(patient=self.patient, scale=scale, timing='baseline').count(), 1)
+
+        post_url = reverse('rtms_app:assessment_hub', args=[self.patient.pk, 'post'])
+        self.client.post(post_url, {'date': '2026-08-03', 'score_phq9_baseline': '', 'score_phq9_post': '7'})
+        self.assertEqual(
+            AssessmentRecord.objects.get(patient=self.patient, scale=scale, timing='post').scores,
+            {'score': 7},
+        )
+
+        self.client.post(url, {'date': '2026-08-04', 'score_phq9_baseline': '', 'score_phq9_post': ''})
+        self.assertFalse(AssessmentRecord.objects.filter(patient=self.patient, scale=scale, timing='baseline').exists())
+
+    def test_detail_assessments_store_excel_shapes(self):
+        for scale_code in ('who-das', 'bacs', 'copm', '6mwt', 'tinkertory-test'):
+            response = self.client.get(reverse('rtms_app:assessment_scale', args=[self.patient.pk, 'baseline', scale_code]))
+            self.assertEqual(response.status_code, 200)
+
+        who_url = reverse('rtms_app:assessment_scale', args=[self.patient.pk, 'baseline', 'who-das'])
+        response = self.client.post(who_url, {
+            'date': '2026-08-01', 'cognition': '4', 'mobility': '5', 'self_care': '2',
+            'interpersonal': '3', 'life_activities': '6', 'social_participation': '6',
+        })
+        self.assertEqual(response.status_code, 302)
+        who = AssessmentRecord.objects.get(patient=self.patient, timing='baseline', scale__code='who-das')
+        self.assertEqual(who.scores['total'], 26)
+
+        bacs_url = reverse('rtms_app:assessment_scale', args=[self.patient.pk, 'post', 'bacs'])
+        self.client.post(bacs_url, {'composite': '0.2', 'verbal_memory': '0.7', 'working_memory': '-0.6', 'motor_speed': '1', 'verbal_fluency': '0.4', 'attention': '0', 'executive_function': '-0.3'})
+        bacs = AssessmentRecord.objects.get(patient=self.patient, timing='post', scale__code='bacs')
+        self.assertEqual(bacs.scores['working_memory'], -0.6)
+
+        copm_url = reverse('rtms_app:assessment_scale', args=[self.patient.pk, 'baseline', 'copm'])
+        self.client.post(copm_url, {
+            'work_name_1': '仕事', 'importance_1': '10', 'performance_1': '1', 'satisfaction_1': '1',
+            'work_name_2': '家事', 'importance_2': '8', 'performance_2': '2', 'satisfaction_2': '3',
+            'work_name_3': '外出', 'importance_3': '7', 'performance_3': '4', 'satisfaction_3': '5',
+        })
+        copm = AssessmentRecord.objects.get(patient=self.patient, timing='baseline', scale__code='copm')
+        self.assertEqual(len(copm.scores['items']), 3)
+        copm_modal = self.client.get(copm_url, {'modal': '1'})
+        self.assertContains(copm_modal, '重要度')
+        self.assertContains(copm_modal, '仕事')
+
+        mwt_url = reverse('rtms_app:assessment_scale', args=[self.patient.pk, 'post', '6mwt'])
+        self.client.post(mwt_url, {'before_blood_pressure': '117/100', 'before_pulse': '87', 'after_blood_pressure': '118/109', 'after_pulse': '88', 'walking_distance': '465', 'before_knee_pain': '0', 'after_knee_pain': '0'})
+        mwt = AssessmentRecord.objects.get(patient=self.patient, timing='post', scale__code='6mwt')
+        self.assertEqual(mwt.scores['vitals']['before']['blood_pressure'], '117/100')
+        self.assertEqual(mwt.scores['vitals']['after']['blood_pressure'], '118/109')
+        self.assertEqual(mwt.scores['walking_distance'], 465)
+        mwt_modal = self.client.get(mwt_url, {'modal': '1'})
+        self.assertContains(mwt_modal, '歩行距離')
+        self.assertContains(mwt_modal, '117/100')
+        self.assertContains(mwt_modal, '465')
+
+    def test_tinkertoy_uses_evaluation_timing_and_hub_status(self):
+        for index in range(1, 8):
+            url = reverse('rtms_app:assessment_scale', args=[self.patient.pk, f'tinkertory_{index}', 'tinkertory-test'])
+            self.client.post(url, {'date': f'2026-08-{index:02d}', 'pieces': str(index), 'time': '530', 'work_name': f'作品{index}', 'total': str(index + 10), 'z_score': '1.34347'})
+        records = AssessmentRecord.objects.filter(patient=self.patient, scale__code='tinkertory-test').order_by('timing')
+        self.assertEqual(records.count(), 7)
+        record = AssessmentRecord.objects.get(patient=self.patient, timing='tinkertory_1', scale__code='tinkertory-test')
+        self.assertEqual(record.scores['total'], 11)
+        hub = self.client.get(reverse('rtms_app:assessment_hub', args=[self.patient.pk, 'baseline']))
+        self.assertContains(hub, '総合計 11')
+        self.assertContains(hub, '2026-08-01')
+
+    def test_simple_inputs_have_pre_then_post_tab_order(self):
+        response = self.client.get(reverse('rtms_app:assessment_hub', args=[self.patient.pk, 'baseline']))
+        html = response.content.decode()
+        expected = ['phq9', 'sass-j', 'bdi-ii', 'sds', 'stai-trait', 'stai-state', 'dai-10']
+        for index, code in enumerate(expected, start=1):
+            baseline_start = html.index(f'name="score_{code}_baseline"')
+            post_start = html.index(f'name="score_{code}_post"')
+            self.assertLess(baseline_start, html.index(f'tabindex="{index}"', baseline_start))
+            self.assertLess(post_start, html.index(f'tabindex="{index + len(expected)}"', post_start))
+
+    def test_detail_scale_get_returns_compact_modal_fragment(self):
+        for scale_code in ('who-das', 'bacs', 'copm', '6mwt', 'tinkertory-test'):
+            response = self.client.get(
+                reverse('rtms_app:assessment_scale', args=[self.patient.pk, 'baseline', scale_code]),
+                {'modal': '1'},
+                HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, 'assessment-detail-form')
+            self.assertNotContains(response, '<html')
+
+    def test_non_hamd_timing_labels_are_staff_facing(self):
+        expected = {
+            'baseline': '治療前', 'post': '治療後',
+            'tinkertory_1': '1回目', 'tinkertory_2': '2回目',
+            'tinkertory_3': '3回目', 'tinkertory_4': '4回目',
+            'tinkertory_5': '5回目', 'tinkertory_6': '6回目',
+            'tinkertory_7': '7回目',
+        }
+        for timing, label in expected.items():
+            response = self.client.get(
+                reverse('rtms_app:assessment_scale', args=[self.patient.pk, timing, 'copm']),
+                {'modal': '1'},
+            )
+            self.assertContains(response, f'（{label}）')
+            self.assertNotContains(response, f'（{timing}）')
+
+    def test_hub_uses_single_column_assessment_panels(self):
+        response = self.client.get(reverse('rtms_app:assessment_hub', args=[self.patient.pk, 'baseline']))
+        html = response.content.decode()
+        self.assertIn('assessment-panel-grid', html)
+        self.assertIn('grid-template-columns: minmax(0, 1fr)', html)
+
+    def test_detail_ajax_save_returns_cell_summary(self):
+        response = self.client.post(
+            reverse('rtms_app:assessment_scale', args=[self.patient.pk, 'baseline', 'who-das']) + '?modal=1',
+            {'cognition': '1', 'mobility': '2', 'self_care': '3', 'interpersonal': '4', 'life_activities': '5', 'social_participation': '6'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['summary'], '合計 21')
+
+    def test_hub_ot_links_are_modal_targets_and_hamd_is_unchanged(self):
+        response = self.client.get(reverse('rtms_app:assessment_hub', args=[self.patient.pk, 'baseline']))
+        html = response.content.decode()
+        self.assertEqual(html.count('data-detail-modal="true" data-timing-label='), 15)
+        self.assertNotIn('data-detail-modal="true" class="assessment-cell', html.split('HAM-D', 1)[1].split('研究用評価尺度', 1)[0])
+        bootstrap_position = html.index('bootstrap.bundle.min.js')
+        handler_position = html.index("const modalElement = document.getElementById('assessmentDetailModal')")
+        self.assertLess(bootstrap_position, handler_position)
+        self.assertEqual(html.count('id="assessmentDetailModal"'), 1)
+        for timing in ('tinkertory_1', 'tinkertory_2', 'tinkertory_3', 'tinkertory_4', 'tinkertory_5', 'tinkertory_6', 'tinkertory_7'):
+            self.assertIn(f'/assessment/{timing}/tinkertory-test/', html)
+
+    def test_hamd_hub_links_use_modal_route_without_ot_handler(self):
+        response = self.client.get(reverse('rtms_app:assessment_hub', args=[self.patient.pk, 'baseline']))
+        html = response.content.decode()
+        self.assertEqual(html.count('data-hamd-modal="true" data-timing-label='), 4)
+        self.assertNotIn('data-detail-modal="true" data-hamd-modal="true"', html)
+        self.assertIn('/assessment/baseline/hamd/?from=assessment_hub&amp;modal=1', html)
+        modal_response = self.client.get(
+            reverse('rtms_app:assessment_scale', args=[self.patient.pk, 'baseline', 'hamd']),
+            {'modal': '1'},
+        )
+        self.assertContains(modal_response, 'id="hamdForm"')
+        self.assertContains(modal_response, 'function initHamdModal()')
+
+    def test_hamd_hub_modal_uses_initial_visit_modal_shell(self):
+        response = self.client.get(reverse('rtms_app:assessment_hub', args=[self.patient.pk, 'baseline']))
+        html = response.content.decode()
+        self.assertIn('id="assessmentDetailModal"', html)
+        self.assertIn('class="modal-dialog modal-xl modal-dialog-centered"', html)
+        self.assertNotIn('assessment-detail-dialog', html)
+        self.assertNotIn('modal-dialog-scrollable assessment-detail-dialog', html)
+
+
 class TestRedirectFocus(TestCase):
     def setUp(self):
         self.client = Client()
