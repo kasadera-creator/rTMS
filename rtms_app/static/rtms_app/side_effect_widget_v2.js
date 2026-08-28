@@ -21,6 +21,7 @@ class SideEffectWidget {
     // Sync hidden input with the loaded data.
     // IMPORTANT: parseInitialData() tries hidden input as a fallback so we don't wipe DB-backed state.
     this.updateHiddenInput();
+    this.notifyUpdated();
   }
 
   parseInitialData(initialData) {
@@ -227,6 +228,7 @@ class SideEffectWidget {
     this.render();
     this.attachEventListeners();
     this.updateHiddenInput();
+    this.notifyUpdated();
     
   }
 
@@ -237,6 +239,12 @@ class SideEffectWidget {
       hiddenInput.value = jsonData;
     } else {
       console.warn('[SideEffectWidget] Hidden input #sideEffectRowsJson not found');
+    }
+  }
+
+  notifyUpdated() {
+    if (this.container) {
+      this.container.dispatchEvent(new CustomEvent('sideeffect:updated', { detail: this.data }));
     }
   }
 

@@ -11,6 +11,7 @@ from rtms_app import assessment_rules
 from rtms_app.models import (
     Patient, Assessment, AssessmentRecord, TreatmentSession,
     MappingSession, MappingSchedule, AssessmentSchedule, ScaleDefinition,
+    SideEffectCheck, SeriousAdverseEvent, AdverseEventReport,
 )
 import datetime
 from datetime import date
@@ -421,6 +422,66 @@ class TestStage7AssessmentEntry(TestCase):
         self.assertNotIn('modal-dialog-scrollable assessment-detail-dialog', html)
 
 
+class TestTreatmentRecordPrintRoute(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='print-user', password='pass1234')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='PRINT1', name='Print Test', birth_date=date(1980, 1, 1), course_number=1,
+        )
+        self.session = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 8, 3), status='done',
+        )
+
+    def test_treatment_record_alias_renders_existing_side_effect_print(self):
+        response = self.client.get(
+            reverse('rtms_app:print:print_treatment_record_preview', args=[self.patient.pk, self.session.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '副作用チェック表')
+        self.assertContains(response, self.patient.card_id)
+        self.assertContains(response, self.session.session_date.isoformat())
+
+    def test_treatment_form_renders_coil_and_site_tabs_with_defaults(self):
+        from rtms_app.forms import TreatmentForm
+        form = TreatmentForm()
+        self.assertEqual(form.initial['coil_type'], 'Brainsway H1')
+        self.assertEqual(form.initial['target_site'], '左DLPFC')
+        response = self.client.get(reverse('rtms_app:treatment_add', args=[self.patient.pk]))
+        self.assertContains(response, '使用したTMSコイル')
+        self.assertContains(response, 'value="Brainsway H1"')
+        self.assertContains(response, 'value="左DLPFC"')
+
+    def test_existing_coil_and_site_values_are_preserved_in_form(self):
+        existing = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 8, 4),
+            coil_type='H1', target_site='左背外側前頭前野',
+        )
+        from rtms_app.forms import TreatmentForm
+        form = TreatmentForm(instance=existing)
+        self.assertEqual(form.initial['coil_type'], 'H1')
+        self.assertEqual(form.initial['target_site'], '左背外側前頭前野')
+        self.assertIn(('H1', 'H1'), list(form.fields['coil_type'].choices))
+        self.assertIn(('左背外側前頭前野', '左背外側前頭前野'), list(form.fields['target_site'].choices))
+
+    def test_selected_coil_and_site_are_saved_and_printed(self):
+        response = self.client.post(reverse('rtms_app:treatment_add', args=[self.patient.pk]), {
+            'treatment_date': self.session.session_date.isoformat(),
+            'treatment_time': '09:00', 'coil_type': 'Brainsway H1', 'target_site': '左DLPFC',
+            'mt_percent': '120', 'intensity_percent': '60', 'frequency_hz': '18.0',
+            'train_seconds': '2.0', 'intertrain_seconds': '20.0', 'train_count': '55',
+            'total_pulses': '1980',
+        })
+        self.assertIn(response.status_code, (302, 303))
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.coil_type, 'Brainsway H1')
+        self.assertEqual(self.session.target_site, '左DLPFC')
+        print_response = self.client.get(reverse('rtms_app:print:print_treatment_record_preview', args=[self.patient.pk, self.session.pk]))
+        self.assertContains(print_response, 'Brainsway H1')
+        self.assertContains(print_response, '左DLPFC')
+
+
 class TestRedirectFocus(TestCase):
     def setUp(self):
         self.client = Client()
@@ -474,6 +535,212 @@ class TestRedirectFocus(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 30)
+
+
+class TestSideEffectAndAdverseEventFlow(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='side-effect-user', password='pass1234')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='SIDE1', name='Side Effect Test', birth_date=date(1980, 1, 1), course_number=1,
+        )
+
+    def treatment_post(self, **extra):
+        request_headers = {}
+        if 'HTTP_X_REQUESTED_WITH' in extra:
+            request_headers['HTTP_X_REQUESTED_WITH'] = extra.pop('HTTP_X_REQUESTED_WITH')
+        data = {
+            'treatment_date': '2026-08-03', 'treatment_time': '09:00', 'mt_percent': '120',
+            'frequency_hz': '18.0', 'train_seconds': '2.0', 'intertrain_seconds': '20.0',
+            'train_count': '55', 'total_pulses': '1980', 'side_effect_rows_json': '[]',
+        }
+        data.update(extra)
+        return self.client.post(reverse('rtms_app:treatment_add', args=[self.patient.pk]), data, **request_headers)
+
+    def test_side_effect_status_and_candidate_are_rendered(self):
+        session = TreatmentSession.objects.create(patient=self.patient, session_date=date(2026, 8, 3))
+        SideEffectCheck.objects.create(session=session, rows=[], memo='副作用なし')
+        response = self.client.get(reverse('rtms_app:treatment_add', args=[self.patient.pk]) + '?date=2026-08-03')
+        self.assertContains(response, '副作用なし')
+        self.assertContains(response, '副作用入力')
+        self.assertContains(response, '有害事象候補')
+
+    def test_new_side_effect_modal_starts_without_adverse_report_selection(self):
+        response = self.client.get(reverse('rtms_app:treatment_add', args=[self.patient.pk]))
+        html = response.content.decode()
+        self.assertIn('id="sideEffectCandidates" class="alert alert-warning d-none', html)
+        self.assertIn('id="reportAsAdverseEvent"', html)
+        self.assertNotIn('id="reportAsAdverseEvent" checked', html)
+
+    def test_existing_sae_restores_report_selection_in_side_effect_modal(self):
+        session = TreatmentSession.objects.create(patient=self.patient, session_date=date(2026, 8, 3))
+        SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=1, session=session, event_types=['seizure'],
+        )
+        response = self.client.get(reverse('rtms_app:treatment_add', args=[self.patient.pk]) + '?date=2026-08-03')
+        html = response.content.decode()
+        self.assertIn('id="reportAsAdverseEvent" checked', html)
+        self.assertIn('id="candidateEventTypes" class=" mt-2"', html)
+
+    def test_legacy_adverse_event_block_is_replaced_by_modal_choices(self):
+        response = self.client.get(reverse('rtms_app:treatment_add', args=[self.patient.pk]))
+        html = response.content.decode()
+        self.assertNotIn('重篤を含む有害事象（該当する場合チェック）', html)
+        self.assertIn('有害事象として報告する', html)
+        for label in ('けいれん発作', '手指の筋収縮', '失神', '躁病・軽躁病の出現', '自殺企図', 'その他'):
+            self.assertIn(label, html)
+
+    def test_adverse_candidate_panel_starts_hidden_and_hides_without_candidate(self):
+        response = self.client.get(reverse('rtms_app:treatment_add', args=[self.patient.pk]))
+        html = response.content.decode()
+        self.assertIn('id="sideEffectCandidates" class="alert alert-warning d-none', html)
+        self.assertIn("panel.classList.add('d-none')", html)
+        self.assertIn("reportCheckbox.checked = false", html)
+
+    def test_candidate_defaults_apply_only_on_first_report_enable(self):
+        response = self.client.get(reverse('rtms_app:treatment_add', args=[self.patient.pk]))
+        html = response.content.decode()
+        self.assertIn('const candidateOverrides = new Set()', html)
+        self.assertIn('let candidateDefaultsApplied =', html)
+        self.assertIn("if (defaults.has(label) && !candidateOverrides.has(input.dataset.target)) input.checked = true", html)
+        self.assertIn('candidateOverrides.add(input.dataset.target)', html)
+        self.assertIn('if (event.target.checked) applyCandidateDefaults()', html)
+
+    def test_report_action_saves_adverse_event_report_and_types(self):
+        session = TreatmentSession.objects.create(patient=self.patient, session_date=date(2026, 8, 3))
+        SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=1, session=session, event_types=['seizure'],
+        )
+        response = self.treatment_post(
+            action='save_sae_report', sae_seizure='on',
+            event_name='けいれん発作', onset_date='2026-08-03', age='46', gender='男性',
+            initials='S.T.', diagnosis='うつ病エピソード', outcome='軽快',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        session = TreatmentSession.objects.get(patient=self.patient, session_date=date(2026, 8, 3))
+        report = AdverseEventReport.objects.get(session=session)
+        self.assertEqual(report.adverse_event_name, 'けいれん発作')
+        self.assertEqual(report.event_types, ['seizure'])
+        self.assertTrue(SeriousAdverseEvent.objects.get(session=session).event_types == ['seizure'])
+
+    def test_report_save_does_not_resave_treatment_side_effect_or_sae(self):
+        session = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 8, 3), intensity_percent=80,
+            treatment_notes='治療メモ',
+        )
+        side_effect = SideEffectCheck.objects.create(session=session, rows=[{'item': '頭痛', 'after': 1}], memo='')
+        sae = SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=1, session=session, event_types=['suicide_attempt'], other_text='既存',
+        )
+        treatment_updated = session.updated_at if hasattr(session, 'updated_at') else None
+        response = self.treatment_post(
+            action='save_sae_report', event_name='自殺企図', onset_date='2026-08-03',
+            age='46', gender='男性', initials='S.T.', diagnosis='うつ病エピソード', outcome='未回復',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        session.refresh_from_db()
+        side_effect.refresh_from_db()
+        sae.refresh_from_db()
+        self.assertEqual(session.intensity_percent, 80)
+        self.assertEqual(session.treatment_notes, '治療メモ')
+        self.assertEqual(side_effect.memo, '')
+        self.assertEqual(side_effect.rows, [{'item': '頭痛', 'after': 1}])
+        self.assertEqual(sae.event_types, ['suicide_attempt'])
+        self.assertEqual(sae.other_text, '既存')
+
+    def test_clear_side_effects_removes_only_target_adverse_records(self):
+        target = TreatmentSession.objects.create(patient=self.patient, session_date=date(2026, 8, 3))
+        other = TreatmentSession.objects.create(patient=self.patient, session_date=date(2026, 8, 4))
+        SideEffectCheck.objects.create(session=target, rows=[{'item': 'けいれん', 'after': 1}], memo='')
+        target_sae = SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=1, session=target, event_types=['seizure'],
+        )
+        target_report = AdverseEventReport.objects.create(session=target, adverse_event_name='けいれん発作')
+        other_sae = SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=1, session=other, event_types=['syncope'],
+        )
+        other_report = AdverseEventReport.objects.create(session=other, adverse_event_name='失神')
+        response = self.client.post(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+            {'action': 'clear_side_effects', 'treatment_date': '2026-08-03'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(SeriousAdverseEvent.objects.filter(pk=target_sae.pk).exists())
+        self.assertFalse(AdverseEventReport.objects.filter(pk=target_report.pk).exists())
+        self.assertTrue(SeriousAdverseEvent.objects.filter(pk=other_sae.pk).exists())
+        self.assertTrue(AdverseEventReport.objects.filter(pk=other_report.pk).exists())
+        target_check = SideEffectCheck.objects.get(session=target)
+        self.assertEqual(target_check.rows, [])
+        self.assertEqual(target_check.memo, '副作用なし')
+
+        empty_target = TreatmentSession.objects.create(patient=self.patient, session_date=date(2026, 8, 5))
+        response = self.client.post(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+            {'action': 'clear_side_effects', 'treatment_date': '2026-08-05'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(SideEffectCheck.objects.get(session=empty_target).memo, '副作用なし')
+
+    def test_new_report_modal_prefills_from_session_and_sae(self):
+        session = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 8, 3), mt_percent=110,
+            target_site='左DLPFC', treatment_notes='治療メモ',
+        )
+        mapping = MappingSession.objects.create(
+            patient=self.patient, course_number=1, date=date(2026, 8, 3), week_number=1, resting_mt=52,
+        )
+        SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=1, session=session, event_types=['suicide_attempt'],
+        )
+        response = self.client.get(reverse('rtms_app:treatment_add', args=[self.patient.pk]) + '?date=2026-08-03')
+        self.assertContains(response, '自殺企図')
+        self.assertContains(response, '2026-08-03')
+        self.assertContains(response, 'value="52"')
+        self.assertContains(response, 'value="110"')
+        self.assertContains(response, 'MT測定値')
+
+    def test_existing_report_values_override_session_prefill(self):
+        session = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 8, 3), mt_percent=110,
+        )
+        report = AdverseEventReport.objects.create(
+            session=session, adverse_event_name='編集済み', onset_date=date(2026, 8, 9),
+            age=99, sex='編集済み性別', initials='E.D.',
+        )
+        response = self.client.get(reverse('rtms_app:treatment_add', args=[self.patient.pk]) + '?date=2026-08-03')
+        self.assertContains(response, 'value="編集済み"')
+        self.assertContains(response, 'value="2026-08-09"')
+        self.assertContains(response, 'value="99"')
+
+    def test_new_report_prefill_does_not_infer_initials_and_uses_default_diagnosis(self):
+        session = TreatmentSession.objects.create(patient=self.patient, session_date=date(2026, 8, 3))
+        SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=1, session=session, event_types=['seizure'],
+        )
+        response = self.client.get(reverse('rtms_app:treatment_add', args=[self.patient.pk]) + '?date=2026-08-03')
+        self.assertContains(response, 'id="saeInitials"')
+        self.assertContains(response, 'id="saeDiagnosisOther"')
+        self.assertContains(response, 'value="うつ病エピソード"')
+        self.assertNotContains(response, 'value="サ"')
+        self.assertNotContains(response, 'value="テ"')
+
+    def test_existing_report_initials_and_free_text_are_preserved(self):
+        session = TreatmentSession.objects.create(patient=self.patient, session_date=date(2026, 8, 3))
+        SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=1, session=session, event_types=['other'],
+        )
+        AdverseEventReport.objects.create(
+            session=session, initials='A.B.', diagnosis_category='other',
+            diagnosis_other_text='保存済み診断', adverse_event_name='その他',
+        )
+        response = self.client.get(reverse('rtms_app:treatment_add', args=[self.patient.pk]) + '?date=2026-08-03')
+        self.assertContains(response, 'value="A.B."')
+        self.assertContains(response, 'value="保存済み診断"')
 
 
 class TestSkipSessions(TestCase):

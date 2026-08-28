@@ -29,7 +29,8 @@ sys.stderr.flush()
 from .models import (
     Patient, TreatmentSession, MappingSession, MappingSchedule, Assessment, AssessmentRecord,
     ScaleDefinition, TimingScaleConfig, AssessmentSchedule, ConsentDocument, AuditLog,
-    SideEffectCheck, TreatmentSkip, PatientSurveySession,
+    SideEffectCheck, TreatmentSkip, PatientSurveySession, AdverseEventReport,
+    SeriousAdverseEvent,
 )
 from .forms import (
     PatientFirstVisitForm, MappingForm, TreatmentForm,
@@ -1087,6 +1088,78 @@ def treatment_add(request, patient_id):
         initial_date = t or now.date()
     else: initial_date = now.date()
     course_number = patient.course_number or 1
+
+    if request.method == 'POST' and request.POST.get('action') == 'save_sae_report':
+        session_date = parse_date(request.POST.get('treatment_date') or '') or initial_date
+        session = TreatmentSession.objects.filter(
+            patient=patient, course_number=course_number, session_date=session_date, slot=''
+        ).first()
+        if session is None:
+            return JsonResponse({'error': '対象の治療セッションが見つかりません。'}, status=404)
+
+        def report_int(name):
+            try:
+                return int(request.POST.get(name)) if request.POST.get(name) else None
+            except (TypeError, ValueError):
+                return None
+
+        def report_date(name):
+            value = request.POST.get(name, '')
+            return parse_date(value) if value else None
+
+        diagnosis = request.POST.get('diagnosis', 'うつ病エピソード')
+        diagnosis_category = {
+            'うつ病エピソード': 'depressive_episode',
+            '反復性うつ病性障害': 'recurrent_depressive_disorder',
+        }.get(diagnosis, 'other')
+        existing_sae = SeriousAdverseEvent.objects.filter(
+            patient=patient, course_number=course_number, session=session
+        ).first()
+        report, _ = AdverseEventReport.objects.update_or_create(
+            session=session,
+            defaults={
+                'event_types': existing_sae.event_types if existing_sae else [],
+                'adverse_event_name': (request.POST.get('event_name') or '').strip(),
+                'onset_date': report_date('onset_date'),
+                'age': report_int('age'),
+                'sex': (request.POST.get('gender') or '').strip(),
+                'initials': (request.POST.get('initials') or '').strip(),
+                'diagnosis_category': diagnosis_category,
+                'diagnosis_other_text': (request.POST.get('diagnosis_other') or '').strip(),
+                'concomitant_meds_text': request.POST.get('concomitant_meds', ''),
+                'substance_intake_text': request.POST.get('substance_use', ''),
+                'seizure_history_flag': request.POST.get('seizure_history') == 'あり',
+                'seizure_history_date_text': request.POST.get('seizure_history_detail', ''),
+                'rmt_value': report_int('rmt'),
+                'intensity_value': report_int('intensity'),
+                'stimulation_site_category': 'other' if request.POST.get('site') == 'その他' else 'left_dlpfc',
+                'stimulation_site_other_text': request.POST.get('site', '') if request.POST.get('site') == 'その他' else '',
+                'treatment_course_number': report_int('treatment_number'),
+                'outcome_flags': [request.POST.get('outcome')] if request.POST.get('outcome') else [],
+                'outcome_date': report_date('outcome_date'),
+                'special_notes': request.POST.get('notes', ''),
+                'physician_comment': request.POST.get('doctor_comment', ''),
+                'prefilled_snapshot': {'source': 'treatment_add', 'session_date': session_date.isoformat()},
+            },
+        )
+        return JsonResponse({'status': 'success', 'report_id': report.id})
+
+    if request.method == 'POST' and request.POST.get('action') == 'clear_side_effects':
+        session_date = parse_date(request.POST.get('treatment_date') or '') or initial_date
+        session = TreatmentSession.objects.filter(
+            patient=patient, course_number=course_number, session_date=session_date, slot=''
+        ).first()
+        if session is None:
+            return JsonResponse({'error': '対象の治療セッションが見つかりません。'}, status=404)
+        SideEffectCheck.objects.update_or_create(
+            session=session,
+            defaults={'rows': [], 'memo': '副作用なし', 'physician_signature': ''},
+        )
+        SeriousAdverseEvent.objects.filter(
+            patient=patient, course_number=course_number, session=session
+        ).delete()
+        AdverseEventReport.objects.filter(session=session).delete()
+        return JsonResponse({'status': 'success', 'side_effect_status': '副作用なし'})
     # Session number is derived from materialized TreatmentSession order.
     session_num = None
 
@@ -1276,7 +1349,6 @@ def treatment_add(request, patient_id):
             sec.physician_signature = signature or sec.physician_signature or ""
             sec.save()
 
-            from .models import SeriousAdverseEvent
             sae_map = {
                 'sae_seizure': 'seizure',
                 'sae_finger_muscle': 'finger_muscle',
@@ -1314,6 +1386,50 @@ def treatment_add(request, patient_id):
                 SeriousAdverseEvent.objects.filter(
                     patient=patient, course_number=course_number, session=s
                 ).delete()
+
+            if request.POST.get('action') == 'save_sae_report':
+                def report_int(name):
+                    try:
+                        return int(request.POST.get(name)) if request.POST.get(name) else None
+                    except (TypeError, ValueError):
+                        return None
+                def report_date(name):
+                    value = request.POST.get(name, '')
+                    return parse_date(value) if value else None
+                diagnosis = request.POST.get('diagnosis', 'うつ病エピソード')
+                diagnosis_category = {
+                    'うつ病エピソード': 'depressive_episode',
+                    '反復性うつ病性障害': 'recurrent_depressive_disorder',
+                }.get(diagnosis, 'other')
+                report, _ = AdverseEventReport.objects.update_or_create(
+                    session=s,
+                    defaults={
+                        'event_types': sae_event_types,
+                        'adverse_event_name': (request.POST.get('event_name') or '').strip(),
+                        'onset_date': report_date('onset_date'),
+                        'age': report_int('age'),
+                        'sex': (request.POST.get('gender') or '').strip(),
+                        'initials': (request.POST.get('initials') or '').strip(),
+                        'diagnosis_category': diagnosis_category,
+                        'diagnosis_other_text': (request.POST.get('diagnosis_other') or '').strip(),
+                        'concomitant_meds_text': request.POST.get('concomitant_meds', ''),
+                        'substance_intake_text': request.POST.get('substance_use', ''),
+                        'seizure_history_flag': request.POST.get('seizure_history') == 'あり',
+                        'seizure_history_date_text': request.POST.get('seizure_history_detail', ''),
+                        'rmt_value': report_int('rmt'),
+                        'intensity_value': report_int('intensity'),
+                        'stimulation_site_category': 'other' if request.POST.get('site') == 'その他' else 'left_dlpfc',
+                        'stimulation_site_other_text': request.POST.get('site', '') if request.POST.get('site') == 'その他' else '',
+                        'treatment_course_number': report_int('treatment_number'),
+                        'outcome_flags': [request.POST.get('outcome')] if request.POST.get('outcome') else [],
+                        'outcome_date': report_date('outcome_date'),
+                        'special_notes': request.POST.get('notes', ''),
+                        'physician_comment': request.POST.get('doctor_comment', ''),
+                        'prefilled_snapshot': {'source': 'treatment_add', 'session_date': session_date.isoformat()},
+                    },
+                )
+                if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                    return JsonResponse({'status': 'success', 'report_id': report.id})
 
             # Check if print action is requested
             action = request.POST.get('action')
@@ -1533,6 +1649,7 @@ def treatment_add(request, patient_id):
     side_effect_rows = []
     side_effect_signature = ''
     side_effect_memo = ''
+    side_effect_status = '未評価'
     existing_session = None
 
     # Find a treatment session for this patient on the initial_date using session_date field
@@ -1570,11 +1687,21 @@ def treatment_add(request, patient_id):
             side_effect_rows = sec.rows or []
             side_effect_signature = sec.physician_signature or ''
             side_effect_memo = sec.memo or ''
+            has_effect_value = any(
+                any((row.get(key) or 0) for key in ('before', 'during', 'after', 'relatedness'))
+                or (row.get('memo') or '').strip()
+                for row in side_effect_rows if isinstance(row, dict)
+            )
+            if side_effect_memo == '副作用なし':
+                side_effect_status = '副作用なし'
+            elif has_effect_value or side_effect_memo.strip():
+                side_effect_status = '副作用入力済み'
 
     sae_event_types_checked = {}
     sae_other_text_value = ''
+    sae_report_exists = False
+    sae_prefill = {}
     if existing_session:
-        from .models import SeriousAdverseEvent
         existing_sae = SeriousAdverseEvent.objects.filter(
             patient=patient, course_number=course_number, session=existing_session
         ).first()
@@ -1583,6 +1710,42 @@ def treatment_add(request, patient_id):
                 f'sae_{event_code}': True for event_code in existing_sae.event_types
             }
             sae_other_text_value = existing_sae.other_text or ''
+        sae_report_exists = AdverseEventReport.objects.filter(session=existing_session).exists()
+        report = AdverseEventReport.objects.filter(session=existing_session).first()
+        same_day_mapping = MappingSession.objects.filter(
+            patient=patient, course_number=course_number, date=existing_session.session_date,
+        ).first()
+        if report:
+            sae_prefill = {
+                'event_name': report.adverse_event_name,
+                'onset_date': report.onset_date.isoformat() if report.onset_date else '',
+                'age': report.age or '', 'gender': report.sex, 'initials': report.initials,
+                'concomitant_meds': report.concomitant_meds_text,
+                'substance_use': report.substance_intake_text,
+                'rmt': report.rmt_value or '', 'intensity': report.intensity_value or '',
+                'treatment_number': report.treatment_course_number or '',
+                'outcome': (report.outcome_flags or [''])[0],
+                'diagnosis': report.diagnosis_other_text if report.diagnosis_category == 'other' else dict(AdverseEventReport.DIAGNOSIS_CHOICES).get(report.diagnosis_category, ''),
+                'site': report.stimulation_site_other_text if report.stimulation_site_category == 'other' else dict(AdverseEventReport.SITE_CHOICES).get(report.stimulation_site_category, ''),
+            }
+        else:
+            event_labels = dict(SeriousAdverseEvent.EVENT_CHOICES)
+            selected_labels = [event_labels.get(code, code) for code in (existing_sae.event_types if existing_sae else [])]
+            sae_prefill = {
+                'event_name': '、'.join(selected_labels),
+                'onset_date': existing_session.session_date.isoformat(),
+                'age': patient.age,
+                'gender': patient.get_gender_display(),
+                'initials': '',
+                'diagnosis': patient.diagnosis if patient.diagnosis in {
+                    'うつ病エピソード', '反復性うつ病性障害',
+                } else 'うつ病エピソード',
+                'concomitant_meds': patient.medication_history or '',
+                'rmt': same_day_mapping.resting_mt if same_day_mapping else '',
+                'intensity': existing_session.mt_percent or '',
+                'site': existing_session.target_site or '',
+                'treatment_number': session_num or '',
+            }
 
     # If no SideEffectCheck exists for this session/date, keep an empty array;
     # the widget renders default rows client-side.
@@ -1644,6 +1807,10 @@ def treatment_add(request, patient_id):
         'side_effect_memo': side_effect_memo,
         'sae_event_types_checked': sae_event_types_checked,
         'sae_other_text_value': sae_other_text_value,
+        'session': existing_session,
+        'sae_report_exists': sae_report_exists,
+        'sae_prefill': sae_prefill,
+        'side_effect_status': side_effect_status,
         'print_options': print_options,
         'today': timezone.now().date(),
         'initial_timing_display': '',

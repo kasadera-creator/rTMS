@@ -278,6 +278,29 @@ class TreatmentForm(forms.ModelForm):
     # ★修正: 日付と時間を分離
     treatment_date = forms.DateField(label='実施日', widget=DateInput(attrs={'class': 'form-control', 'required': True}))
     treatment_time = forms.TimeField(label='開始時間', widget=TimeInput(attrs={'class': 'form-control', 'required': True}))
+    COIL_CHOICES = [('Brainsway H1', 'Brainsway H1')]
+    SITE_CHOICES = [('左DLPFC', '左DLPFC')]
+
+    coil_type = forms.ChoiceField(label='使用したTMSコイル', choices=COIL_CHOICES, required=False)
+    target_site = forms.ChoiceField(label='刺激部位', choices=SITE_CHOICES, required=False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Keep legacy saved values selectable without changing historical rows.
+        for field_name in ('coil_type', 'target_site'):
+            current = getattr(self.instance, field_name, '') if self.instance and self.instance.pk else ''
+            choices = list(self.fields[field_name].choices)
+            values = {value for value, _label in choices}
+            if current and current not in values:
+                self.fields[field_name].choices = [(current, current)] + choices
+            if not self.is_bound and not current:
+                self.initial[field_name] = choices[0][0]
+
+    def clean_coil_type(self):
+        return self.cleaned_data.get('coil_type') or self.COIL_CHOICES[0][0]
+
+    def clean_target_site(self):
+        return self.cleaned_data.get('target_site') or self.SITE_CHOICES[0][0]
 
     class Meta:
         model = TreatmentSession
