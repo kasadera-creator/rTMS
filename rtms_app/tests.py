@@ -5,13 +5,15 @@ from django.contrib.auth.models import Group
 from django.utils import timezone
 from django.db import IntegrityError
 from unittest.mock import patch
+import csv
+import io
 import json
 
 from rtms_app import assessment_rules
 from rtms_app.models import (
     Patient, Assessment, AssessmentRecord, TreatmentSession,
     MappingSession, MappingSchedule, AssessmentSchedule, ScaleDefinition,
-    SideEffectCheck, SeriousAdverseEvent, AdverseEventReport,
+    SideEffectCheck, SeriousAdverseEvent, AdverseEventReport, TimingScaleConfig,
 )
 import datetime
 from datetime import date
@@ -3011,3 +3013,236 @@ class TestAssessmentWriteHelpers(TestCase):
         # Scores should be auto-calculated by model.save()
         self.assertEqual(record.total_score_21, 21)
         self.assertEqual(record.total_score_17, 17)
+
+
+class TestResearchDataExport(TestCase):
+    """Stage 7 Phase 3: research CSV export (summary / treatment detail / adverse events)."""
+
+    def setUp(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username='research-admin', password='pass1234', email='a@example.com'
+        )
+        self.staff_user = get_user_model().objects.create_user(
+            username='research-staff', password='pass1234', is_staff=True,
+        )
+        self.client = Client()
+
+        self.patient = Patient.objects.create(
+            card_id='RSRCH1', name='Research One', birth_date=date(1980, 1, 1),
+            course_number=1, gender='F', diagnosis='うつ病',
+            first_visit_date=date(2026, 1, 1), first_treatment_date=date(2026, 1, 5),
+        )
+        self.other_patient = Patient.objects.create(
+            card_id='RSRCH2', name='Research Two', birth_date=date(1990, 5, 5),
+            course_number=1,
+        )
+
+        # 'hamd' ScaleDefinition + baseline/week3/week4/week6 TimingScaleConfig
+        # already exist via migration 0022; add 'bacs' explicitly to exercise
+        # the dynamic (non-hamd) scale path and blank-vs-zero handling.
+        self.bacs_scale, _ = ScaleDefinition.objects.get_or_create(
+            code='bacs', defaults={'name': 'BACS'}
+        )
+        for timing in ('baseline', 'post'):
+            TimingScaleConfig.objects.get_or_create(
+                timing=timing, scale=self.bacs_scale,
+                defaults={'is_enabled': True, 'display_order': 10},
+            )
+
+    def _urls(self):
+        return {
+            'summary': reverse('rtms_app:export_research_csv'),
+            'detail': reverse('rtms_app:export_research_treatment_detail_csv'),
+            'ae': reverse('rtms_app:export_research_adverse_events_csv'),
+            'zip': reverse('rtms_app:export_research_zip'),
+        }
+
+    def test_non_superuser_cannot_access_any_research_csv(self):
+        self.client.force_login(self.staff_user)
+        for url in self._urls().values():
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 403)
+
+    def test_anonymous_user_redirected_to_login(self):
+        for url in self._urls().values():
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 302)
+
+    def test_admin_research_export_page_requires_superuser(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.get('/admin/research-export/')
+        self.assertEqual(response.status_code, 403)
+
+        self.client.force_login(self.superuser)
+        response = self.client.get('/admin/research-export/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'research_summary.csv')
+        self.assertContains(response, 'research_treatment_detail.csv')
+        self.assertContains(response, 'research_adverse_events.csv')
+
+    def test_summary_csv_has_no_patients_without_error(self):
+        Patient.objects.all().delete()
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse('rtms_app:export_research_csv'))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode('utf-8-sig')
+        lines = content.strip().splitlines()
+        self.assertEqual(len(lines), 1)  # header only
+        self.assertIn('HAMD_baseline_total17', lines[0])
+
+    def test_summary_csv_one_row_per_patient_and_timing_columns_present(self):
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse('rtms_app:export_research_csv'))
+        content = response.content.decode('utf-8-sig')
+        reader = csv.DictReader(content.splitlines())
+        rows = list(reader)
+        self.assertEqual(len(rows), 2)  # 1 row per patient (each patient = 1 course here)
+        header = reader.fieldnames
+        for col in (
+            'HAMD_baseline_total17', 'HAMD_week3_total17', 'HAMD_week4_total17', 'HAMD_week6_total17',
+            'BACS_baseline_composite', 'BACS_post_composite',
+        ):
+            self.assertIn(col, header)
+        self.assertNotIn('name', header)
+
+    def test_summary_csv_missing_assessment_is_blank_not_zero(self):
+        AssessmentRecord.objects.create(
+            patient=self.patient, course_number=1, timing='baseline', scale=self.bacs_scale,
+            scores={'composite': 0}, date=date(2026, 1, 10),
+        )
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse('rtms_app:export_research_csv'))
+        content = response.content.decode('utf-8-sig')
+        rows = list(csv.DictReader(content.splitlines()))
+        row = next(r for r in rows if r['card_id'] == 'RSRCH1')
+        # A real 0 score must be preserved...
+        self.assertEqual(row['BACS_baseline_composite'], '0')
+        # ...while an unassessed timing/scale must stay blank, not become 0.
+        self.assertEqual(row['BACS_post_composite'], '')
+        self.assertEqual(row['HAMD_baseline_total17'], '')
+
+    def test_summary_csv_adverse_event_flags_are_boolean(self):
+        session = TreatmentSession.objects.create(
+            patient=self.patient, course_number=1, session_date=date(2026, 1, 5),
+        )
+        SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=1, session=session, event_types=['seizure'],
+        )
+        AdverseEventReport.objects.create(session=session, adverse_event_name='けいれん発作')
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse('rtms_app:export_research_csv'))
+        rows = list(csv.DictReader(response.content.decode('utf-8-sig').splitlines()))
+        row = next(r for r in rows if r['card_id'] == 'RSRCH1')
+        self.assertEqual(row['sae_seizure'], '1')
+        self.assertEqual(row['sae_syncope'], '0')
+        self.assertEqual(row['ae_report_exists'], '1')
+        other_row = next(r for r in rows if r['card_id'] == 'RSRCH2')
+        self.assertEqual(other_row['sae_seizure'], '0')
+        self.assertEqual(other_row['ae_report_exists'], '0')
+
+    def test_treatment_detail_csv_multiple_sessions_become_multiple_rows(self):
+        TreatmentSession.objects.create(
+            patient=self.patient, course_number=1, session_date=date(2026, 1, 5),
+            coil_type='Brainsway H1', target_site='左DLPFC', mt_percent=110, intensity_percent=60,
+        )
+        TreatmentSession.objects.create(
+            patient=self.patient, course_number=1, session_date=date(2026, 1, 6),
+            coil_type='Brainsway H1', target_site='左DLPFC',
+        )
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse('rtms_app:export_research_treatment_detail_csv'))
+        rows = list(csv.DictReader(response.content.decode('utf-8-sig').splitlines()))
+        patient_rows = [r for r in rows if r['card_id'] == 'RSRCH1']
+        self.assertEqual(len(patient_rows), 2)
+        self.assertEqual(patient_rows[0]['session_no'], '1')
+        self.assertEqual(patient_rows[1]['session_no'], '2')
+        self.assertEqual(patient_rows[0]['coil_type'], 'Brainsway H1')
+        self.assertEqual(patient_rows[0]['target_site'], '左DLPFC')
+
+    def test_treatment_detail_csv_session_without_side_effect_check_is_blank(self):
+        TreatmentSession.objects.create(
+            patient=self.patient, course_number=1, session_date=date(2026, 1, 5),
+        )
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse('rtms_app:export_research_treatment_detail_csv'))
+        rows = list(csv.DictReader(response.content.decode('utf-8-sig').splitlines()))
+        row = next(r for r in rows if r['card_id'] == 'RSRCH1')
+        self.assertEqual(row['sideeffect_headache_post_before'], '')
+        self.assertEqual(row['sideeffect_seizure_before'], '')
+
+    def test_treatment_detail_csv_side_effect_values_are_mapped(self):
+        session = TreatmentSession.objects.create(
+            patient=self.patient, course_number=1, session_date=date(2026, 1, 5),
+        )
+        SideEffectCheck.objects.create(
+            session=session,
+            rows=[{'item': '頭痛 (刺激後)', 'before': 0, 'during': 1, 'after': 2, 'relatedness': 3, 'memo': 'メモ'}],
+        )
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse('rtms_app:export_research_treatment_detail_csv'))
+        rows = list(csv.DictReader(response.content.decode('utf-8-sig').splitlines()))
+        row = next(r for r in rows if r['card_id'] == 'RSRCH1')
+        self.assertEqual(row['sideeffect_headache_post_before'], '0')
+        self.assertEqual(row['sideeffect_headache_post_during'], '1')
+        self.assertEqual(row['sideeffect_headache_post_after'], '2')
+        self.assertEqual(row['sideeffect_headache_post_relatedness'], '3')
+        self.assertEqual(row['sideeffect_headache_post_memo'], 'メモ')
+
+    def test_adverse_events_csv_no_events_is_empty_but_valid(self):
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse('rtms_app:export_research_adverse_events_csv'))
+        content = response.content.decode('utf-8-sig')
+        lines = content.strip().splitlines()
+        self.assertEqual(len(lines), 1)  # header only
+        self.assertIn('event_types', lines[0])
+
+    def test_adverse_events_csv_joins_sae_and_report(self):
+        session = TreatmentSession.objects.create(
+            patient=self.patient, course_number=1, session_date=date(2026, 1, 5),
+        )
+        SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=1, session=session, event_types=['seizure', 'syncope'],
+        )
+        AdverseEventReport.objects.create(
+            session=session, adverse_event_name='けいれん発作', age=46, sex='男性', initials='S.T.',
+            rmt_value=52, intensity_value=60, outcome_flags=['improvement'],
+            special_notes='経過観察中',
+        )
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse('rtms_app:export_research_adverse_events_csv'))
+        rows = list(csv.DictReader(response.content.decode('utf-8-sig').splitlines()))
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row['card_id'], 'RSRCH1')
+        self.assertEqual(row['event_types'], 'seizure,syncope')
+        self.assertEqual(row['adverse_event_name'], 'けいれん発作')
+        self.assertEqual(row['age'], '46')
+        self.assertEqual(row['rmt_value'], '52')
+        self.assertEqual(row['outcome'], '軽快')
+        self.assertEqual(row['notes'], '経過観察中')
+
+    def test_zip_bundle_contains_three_csvs(self):
+        import zipfile
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse('rtms_app:export_research_zip'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/zip')
+        archive = zipfile.ZipFile(io.BytesIO(response.content))
+        self.assertEqual(
+            set(archive.namelist()),
+            {'research_summary.csv', 'research_treatment_detail.csv', 'research_adverse_events.csv'},
+        )
+
+    def test_japanese_text_is_not_mangled(self):
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse('rtms_app:export_research_csv'))
+        content = response.content.decode('utf-8-sig')
+        self.assertIn('うつ病', content)
+
+    def test_existing_discharge_survey_csv_is_untouched(self):
+        """The discharge screen's self-report survey CSV must keep working as-is."""
+        staff = get_user_model().objects.create_user(username='discharge-staff', password='pw', is_staff=True)
+        self.client.force_login(staff)
+        response = self.client.get(reverse('rtms_app:patient_survey_export', args=[self.patient.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('text/csv', response['Content-Type'])

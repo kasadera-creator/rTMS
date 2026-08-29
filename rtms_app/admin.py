@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, reverse
 from django.shortcuts import render
 from django.core.exceptions import PermissionDenied
 from django.db import models
@@ -208,6 +208,10 @@ class RTMSAdminSite(admin.AdminSite):
         context = {
             'title': '研究用データ出力',
             'site_header': self.site_header,
+            'summary_csv_url': reverse('rtms_app:export_research_csv'),
+            'treatment_detail_csv_url': reverse('rtms_app:export_research_treatment_detail_csv'),
+            'adverse_events_csv_url': reverse('rtms_app:export_research_adverse_events_csv'),
+            'zip_url': reverse('rtms_app:export_research_zip'),
         }
         return render(request, 'admin/research_export.html', context)
 

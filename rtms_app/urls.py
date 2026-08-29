@@ -4,6 +4,7 @@ from . import views
 from django.views.generic.base import RedirectView
 from . import views_health
 from . import views_survey_export
+from . import views_research_export
 
 from django.conf import settings
 from django.conf.urls.static import static
@@ -55,6 +56,30 @@ urlpatterns = [
         "patient/<int:patient_id>/surveys/export.csv",
         views_survey_export.export_patient_surveys_csv,
         name="patient_survey_export",
+    ),
+
+    # =========================
+    # 研究用データ出力（superuser限定、/admin/research-export/ から利用）
+    # =========================
+    path(
+        "research-export/summary.csv",
+        views_research_export.export_research_summary_csv,
+        name="export_research_csv",
+    ),
+    path(
+        "research-export/treatment-detail.csv",
+        views_research_export.export_research_treatment_detail_csv,
+        name="export_research_treatment_detail_csv",
+    ),
+    path(
+        "research-export/adverse-events.csv",
+        views_research_export.export_research_adverse_events_csv,
+        name="export_research_adverse_events_csv",
+    ),
+    path(
+        "research-export/all.zip",
+        views_research_export.export_research_zip,
+        name="export_research_zip",
     ),
 
     # ★ 適正質問票（別画面）

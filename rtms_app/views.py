@@ -3022,20 +3022,6 @@ def patient_add_view(request):
 
 
 @login_required
-def export_treatment_csv(request):
-    response = HttpResponse(content_type='text/csv; charset=utf-8-sig'); response['Content-Disposition'] = 'attachment; filename="treatment_data.csv"'; writer = csv.writer(response); writer.writerow(['ID', '氏名', '実施日時', 'MT(%)', '強度(%)', 'パルス数', '実施者', '副作用'])
-    treatments = TreatmentSession.objects.all().select_related('patient', 'performer').order_by('date')
-    rows = treatments.count()
-    for t in treatments: se_str = json.dumps(t.side_effects, ensure_ascii=False) if t.side_effects else ""; writer.writerow([t.patient.card_id, t.patient.name, t.date.strftime('%Y-%m-%d %H:%M'), t.motor_threshold, t.intensity, t.total_pulses, t.performer.username if t.performer else "", se_str])
-    meta = {
-        'export_type': 'csv',
-        'filters': {},
-        'rows': rows,
-    }
-    log_audit_action(None, 'EXPORT', 'TreatmentSession', '', '治療データCSVエクスポート', meta)
-    return response
-
-@login_required
 def download_db(request):
     if not request.user.is_staff: return HttpResponse("Forbidden", 403)
     db_path = settings.DATABASES['default']['NAME']
