@@ -43,6 +43,170 @@ class TestAssessmentRules(TestCase):
         self.assertEqual(status, "反応なし")
 
 
+class TestTreatmentAddWeek3Hamd17(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='week3-hamd-user', password='pass1234')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='HAMD17', name='Week Three', birth_date=date(1980, 1, 1),
+            first_treatment_date=date(2026, 1, 5), course_number=1,
+        )
+        self.hamd = ScaleDefinition.objects.get_or_create(code='hamd', defaults={'name': 'HAM-D'})[0]
+
+    def _create_record(self, timing, total):
+        record = AssessmentRecord.objects.filter(
+            patient=self.patient, course_number=1, timing=timing, scale=self.hamd,
+        ).first()
+        if record is None:
+            return AssessmentRecord.objects.create(
+                patient=self.patient, course_number=1, timing=timing, scale=self.hamd,
+                date=date(2026, 1, 5), scores={'q1': total},
+            )
+        record.date = date(2026, 1, 5)
+        record.scores = {'q1': total}
+        record.save()
+        return record
+
+    def _response_for(self, treatment_date):
+        return self.client.get(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]), {'date': treatment_date.isoformat()}
+        )
+
+    def test_session_and_week_display_match_canonical_calendar_numbers(self):
+        from rtms_app.views import generate_calendar_weeks
+
+        for session_date in (
+            date(2026, 1, 5), date(2026, 1, 6), date(2026, 1, 7),
+            date(2026, 1, 8), date(2026, 1, 9), date(2026, 1, 13),
+        ):
+            TreatmentSession.objects.create(
+                patient=self.patient, course_number=1, session_date=session_date
+            )
+
+        checks = (
+            (date(2026, 1, 5), 1, 1), (date(2026, 1, 6), 2, 1),
+            (date(2026, 1, 13), 6, 2), (date(2026, 1, 19), 10, 3),
+            (date(2026, 1, 26), 15, 4),
+        )
+        weeks, _ = generate_calendar_weeks(self.patient)
+        labels = {
+            day['date']: next((event['label'] for event in day['events'] if event['type'] == 'treatment'), '')
+            for week in weeks for day in week
+        }
+        for treatment_date, session_number, week_number in checks:
+            response = self._response_for(treatment_date)
+            label = f'{session_number}回目（第{week_number}週）'
+            self.assertContains(response, label)
+            self.assertIn(label, labels[treatment_date])
+
+    def test_rescheduled_exceptional_dates_match_calendar_and_hamd_week(self):
+        from rtms_app.views import generate_calendar_weeks
+
+        for index, target_date in enumerate((date(2026, 1, 17), date(2026, 1, 12))):
+            patient = Patient.objects.create(
+                card_id=f'RESCHED{index}', name='Rescheduled', birth_date=date(1980, 1, 1),
+                first_treatment_date=date(2026, 1, 5), course_number=1,
+            )
+            session = TreatmentSession.objects.create(
+                patient=patient, course_number=1, session_date=date(2026, 1, 5), status='planned',
+            )
+            schedule_service.reschedule_planned_session(
+                patient, session, target_date, allow_exceptional_day=True,
+            )
+
+            weeks, _ = generate_calendar_weeks(patient)
+            calendar_label = next(
+                event['label']
+                for week in weeks
+                for day in week
+                if day['date'] == target_date
+                for event in day['events']
+                if event['type'] == 'treatment'
+            )
+            response = self.client.get(
+                reverse('rtms_app:treatment_add', args=[patient.pk]), {'date': target_date.isoformat()}
+            )
+            self.assertContains(response, calendar_label.removeprefix('rTMS治療 '))
+            self.assertContains(response, '評価期間前')
+
+    def test_rescheduled_third_week_uses_hamd_instruction(self):
+        session = TreatmentSession.objects.create(
+            patient=self.patient, course_number=1, session_date=date(2026, 1, 5), status='planned',
+        )
+        schedule_service.reschedule_planned_session(
+            self.patient, session, date(2026, 1, 19), allow_exceptional_day=True,
+        )
+
+        response = self._response_for(date(2026, 1, 19))
+        self.assertContains(response, '1回目（第3週）')
+        self.assertContains(response, 'HAM-Dを実施してください')
+
+    def test_week3_hamd17_instruction_priorities_and_thresholds(self):
+        response = self._response_for(date(2026, 1, 13))
+        self.assertContains(response, '評価期間前')
+
+        response = self._response_for(date(2026, 1, 19))
+        self.assertContains(response, 'HAM-Dを実施してください')
+
+        self._create_record('baseline', 20)
+        self._create_record('week3', 7)
+        response = self._response_for(date(2026, 1, 19))
+        self.assertContains(response, '寛解：治療を中止または漸減してください')
+
+        self._create_record('week3', 5)
+        response = self._response_for(date(2026, 1, 19))
+        self.assertContains(response, '寛解：治療を中止または漸減してください')
+
+        self._create_record('week3', 0)
+        response = self._response_for(date(2026, 1, 19))
+        self.assertContains(response, '0 点')
+        self.assertContains(response, '寛解：治療を中止または漸減してください')
+
+        self._create_record('week3', 18)
+        response = self._response_for(date(2026, 1, 19))
+        self.assertContains(response, '改善不十分：治療を中止してください')
+
+        self._create_record('week3', 15)
+        response = self._response_for(date(2026, 1, 19))
+        self.assertContains(response, '治療継続')
+
+        self._create_record('baseline', 25)
+        response = self._response_for(date(2026, 1, 19))
+        self.assertContains(response, '40.0%')
+        self.assertContains(response, '治療継続')
+
+    def test_remission_taper_limits_for_weeks_four_to_six(self):
+        self._create_record('baseline', 20)
+        self._create_record('week3', 7)
+
+        for treatment_date, taper_limit in (
+            (date(2026, 1, 26), '第4週：最大週3回'),
+            (date(2026, 2, 2), '第5週：最大週2回'),
+            (date(2026, 2, 9), '第6週：最大週1回'),
+        ):
+            response = self._response_for(treatment_date)
+            self.assertContains(response, taper_limit)
+
+    def test_hamd17_uses_record_ignores_total21_and_handles_zero_baseline(self):
+        baseline = self._create_record('baseline', 0)
+        week3 = self._create_record('week3', 15)
+        AssessmentRecord.objects.filter(pk=week3.pk).update(total_score_21=5)
+        Assessment.objects.create(
+            patient=self.patient, course_number=1, timing='week3', type='HAM-D', scores={'q1': 5},
+        )
+
+        response = self._response_for(date(2026, 1, 19))
+        self.assertContains(response, '15 点')
+        self.assertContains(response, '改善率を判定できません')
+        self.assertNotContains(response, '寛解：治療を中止または漸減してください')
+        self.assertEqual(baseline.total_score_17, 0)
+
+    def test_response_threshold_is_inclusive_at_twenty_percent(self):
+        self.assertEqual(assessment_rules.classify_response_status(15, 0.199), '反応なし')
+        self.assertEqual(assessment_rules.classify_response_status(15, 0.20), '反応')
+
+
 class TestStage6ScheduleDeadlines(TestCase):
     def setUp(self):
         self.patient = Patient.objects.create(

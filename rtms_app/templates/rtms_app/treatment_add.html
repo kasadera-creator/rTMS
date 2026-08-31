@@ -189,7 +189,7 @@
                   </div>
                 </div>
               {% else %}
-                {% if week3_status != '第3週評価前です' %}
+                {% if week3_status == 'HAM-Dを実施してください' %}
                   <a class="btn btn-outline-danger btn-sm"
                      href="{{ week3_assessment_url }}">第3週評価を入力</a>
                 {% endif %}
@@ -259,6 +259,11 @@
               {% if course_session_text %}<div class="text-muted small">{{ course_session_text }}</div>{% endif %}
             </div>
             <div class="card-body">
+              {% if session_num and week_num %}
+                <div class="mb-3 px-2 py-1 border-start border-4 border-success bg-light fw-bold">
+                  {{ session_num }}回目（第{{ week_num }}週）
+                </div>
+              {% endif %}
               <div class="mb-3 p-2 rounded" style="border:1px solid rgba(25,135,84,.22)">
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                   <div class="fw-bold">実施した治療刺激</div>

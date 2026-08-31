@@ -64,6 +64,7 @@ from .queries.assessment_queries import (
     save_assessment_record,
     save_assessment_hamd,
 )
+from .assessment_rules import classify_response_status, compute_improvement_rate
 from .services.assessment_scales import (
     SIMPLE_SCALE_CODES, DETAIL_FIELDS, COPM_FIELDS, SIX_MWT_VITAL_FIELDS,
     SIX_MWT_SUBJECTIVE_FIELDS,
@@ -224,6 +225,67 @@ def get_current_week_number(start_date, target_date):
 
     days_diff = (t - s).days
     return (days_diff // 7) + 1
+
+
+def get_week3_hamd17_evaluation(patient, course_number, current_week):
+    """Build the week-3 HAM-D17 instruction for the treatment-entry screen."""
+    evaluation = {
+        'available': False,
+        'score': None,
+        'improvement_pct': None,
+        'status': None,
+        'instruction': '',
+    }
+    if current_week < 3:
+        return evaluation | {'week3_status': '評価期間前'}
+
+    hamd_scale = ScaleDefinition.objects.filter(code='hamd').first()
+    if hamd_scale:
+        week3_assessment = get_assessment_by_timing_with_fallback(
+            patient, 'week3', hamd_scale, course_number
+        )
+        baseline_assessment = get_assessment_by_timing_with_fallback(
+            patient, 'baseline', hamd_scale, course_number
+        )
+    else:
+        week3_assessment = Assessment.objects.filter(
+            patient=patient, course_number=course_number, timing='week3', type='HAM-D'
+        ).order_by('-date').first()
+        baseline_assessment = Assessment.objects.filter(
+            patient=patient, course_number=course_number, timing='baseline', type='HAM-D'
+        ).order_by('-date').first()
+
+    if week3_assessment is None:
+        return evaluation | {
+            'week3_status': 'HAM-Dを実施してください',
+            'instruction': 'HAM-Dを実施してください',
+        }
+
+    score = week3_assessment.total_score_17
+    baseline_score = getattr(baseline_assessment, 'total_score_17', None)
+    improvement = compute_improvement_rate(baseline_score, score)
+    improvement_pct = round(improvement * 100, 1) if improvement is not None else None
+    status = classify_response_status(score, improvement)
+    if status == '寛解':
+        instruction = '寛解：治療を中止または漸減してください'
+        taper_limits = {4: '第4週：最大週3回', 5: '第5週：最大週2回', 6: '第6週：最大週1回'}
+        if current_week in taper_limits:
+            instruction = f'{instruction}（{taper_limits[current_week]}）'
+    elif improvement is None:
+        instruction = '治療開始前HAM-D17が未入力または0点のため、改善率を判定できません'
+    elif improvement < 0.20:
+        instruction = '改善不十分：治療を中止してください'
+    else:
+        instruction = '治療継続'
+
+    return evaluation | {
+        'available': True,
+        'score': score,
+        'improvement_pct': improvement_pct,
+        'status': status,
+        'instruction': instruction,
+        'week3_status': '第3週評価：実施済み',
+    }
 
 def get_session_count(patient, target_date=None):
     query = TreatmentSession.objects.filter(patient=patient)
@@ -1188,18 +1250,16 @@ def treatment_add(request, patient_id):
         tdates = generate_treatment_dates(patient.first_treatment_date, total=30, holidays=JP_HOLIDAYS)
         materialized_sessions = get_treatment_sessions(patient, course_number)
         number_map = get_treatment_session_number_map(patient, course_number)
+        virtual_number_map = get_treatment_virtual_number_map(patient, tdates, course_number)
         current_session = next(
             (item for item in materialized_sessions if item.session_date == initial_date),
             None,
         )
         if current_session is not None:
             session_num = number_map.get(current_session.id)
-        elif initial_date in tdates and len(materialized_sessions) < MAX_TREATMENT_SESSIONS:
-            remaining_dates = tdates[len(materialized_sessions):MAX_TREATMENT_SESSIONS]
-            if initial_date in remaining_dates:
-                session_num = len(materialized_sessions) + remaining_dates.index(initial_date) + 1
-        if initial_date in tdates:
-            week_num = get_current_week_number(patient.first_treatment_date, initial_date)
+        else:
+            session_num = virtual_number_map.get(initial_date)
+        week_num = get_current_week_number(patient.first_treatment_date, initial_date)
 
     # Fetch current week mapping: same date first, then same week
     same_date_mapping = MappingSession.objects.filter(patient=patient, course_number=course_number, date=initial_date).first()
@@ -1210,27 +1270,12 @@ def treatment_add(request, patient_id):
         current_week_mapping = MappingSession.objects.filter(patient=patient, course_number=course_number, week_number=week_num).order_by('-date').first()
 
     end_date_est = get_completion_date(patient.first_treatment_date)
-    alert_msg = ""; instruction_msg = ""; is_remission = False
-    last_assessment = get_latest_assessment(patient, 'week3'); baseline_assessment = get_latest_assessment(patient, 'baseline'); judgment_info = None
-    week3_window_start, week3_window_end = get_assessment_window(patient, 'week3')
-    if initial_date < week3_window_start:
-        week3_status = '第3週評価前です'
-    elif last_assessment:
-        week3_status = '第3週評価：実施済み'
-    else:
-        week3_status = '第3週評価を実施してください'
+    hamd_eval = get_week3_hamd17_evaluation(patient, course_number, week_num)
+    alert_msg = ""; instruction_msg = hamd_eval['instruction']; judgment_info = hamd_eval['status']
+    is_remission = hamd_eval['status'] == '寛解'
+    week3_status = hamd_eval['week3_status']
     week3_assessment_url = build_url('assessment_add', args=[patient.id, 'week3'], query={'date': initial_date.isoformat(), 'from': 'treatment'})
-    if last_assessment:
-        score_now = last_assessment.total_score_17
-        if score_now <= 7:
-            is_remission = True; judgment_info = f"寛解 (HAM-D17: {score_now}点)"; instruction_msg = "【指示】第4週以降は漸減プロトコルに従ってください。"
-        else:
-            if baseline_assessment and baseline_assessment.total_score_17 > 0:
-                imp_rate = (baseline_assessment.total_score_17 - score_now) / baseline_assessment.total_score_17
-                if imp_rate >= 0.2: judgment_info = f"有効 (改善率 {int(imp_rate*100)}%)"; instruction_msg = "【指示】有効性あり。治療を継続してください。"
-                else: judgment_info = f"無効/反応不良 (改善率 {int(imp_rate*100)}%)"; instruction_msg = "【指示】治療未反応。続行または中止を検討してください。"
-            else: judgment_info = f"判定不能 (Baseデータなし)"
-        if is_remission and week_num >= 4:
+    if is_remission and week_num >= 4:
             weekly_count = get_weekly_session_count(patient, initial_date); current_weekly = weekly_count + 1
             if week_num == 4:
                 if current_weekly > 3: alert_msg = f"【制限超過】第4週(週3回まで)です。今回で週{current_weekly}回目になります。"
@@ -1800,6 +1845,11 @@ def treatment_add(request, patient_id):
         'instruction_msg': instruction_msg,
         'judgment_info': judgment_info,
         'week3_status': week3_status,
+        'hamd3w_available': hamd_eval['available'],
+        'hamd3w_score': hamd_eval['score'],
+        'hamd3w_improvement_pct': hamd_eval['improvement_pct'],
+        'hamd3w_status': hamd_eval['status'],
+        'hamd_eval': hamd_eval,
         'week3_assessment_url': week3_assessment_url,
         'side_effect_items': side_effect_items,
         'side_effect_rows_json': side_effect_rows_json,
