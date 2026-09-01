@@ -43,6 +43,66 @@ class TestAssessmentRules(TestCase):
         self.assertEqual(status, "反応なし")
 
 
+class TestQuestionnaireEdit(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='questionnaire-user', password='pass1234')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='QUEST', name='Questionnaire', birth_date=date(1980, 1, 1),
+            questionnaire_data={'q_past_rtms': 'はい', 'q_cur_headache': 'いいえ', 'q_details': '既存回答'},
+        )
+
+    def test_modal_get_renders_questions_and_existing_answers(self):
+        response = self.client.get(
+            reverse('rtms_app:questionnaire_edit', args=[self.patient.pk]), {'modal': '1'}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'rTMS 適正質問票')
+        self.assertContains(response, 'rTMS実施経験（治験・研究を含む）')
+        self.assertContains(response, '家族内にてんかんを持っているかた')
+        self.assertContains(response, 'name="q_past_rtms"')
+        self.assertContains(response, 'value="はい"\n                               checked')
+        self.assertContains(response, '既存回答')
+
+    def test_modal_post_preserves_all_questionnaire_keys_and_details(self):
+        from rtms_app.views import _questionnaire_questions
+
+        questions_past, questions_current, keys = _questionnaire_questions()
+        expected_keys = [
+            'q_past_rtms', 'q_past_side_effect', 'q_past_ect', 'q_past_seizure',
+            'q_past_loc', 'q_past_stroke', 'q_past_trauma', 'q_past_surgery',
+            'q_past_neuro', 'q_past_internal', 'q_past_abuse', 'q_cur_headache',
+            'q_cur_metal', 'q_cur_device', 'q_cur_abuse', 'q_cur_preg',
+            'q_cur_family_epilepsy', 'q_details',
+        ]
+        self.assertEqual([question['no'] for question in questions_past + questions_current], list(range(1, 18)))
+        self.assertEqual(keys, expected_keys)
+
+        answers = {
+            key: 'はい' if index % 2 == 0 else 'いいえ'
+            for index, key in enumerate(expected_keys[:-1])
+        }
+        expected_data = {**answers, 'q_details': '保存後も表示される詳細'}
+        response = self.client.post(
+            reverse('rtms_app:questionnaire_edit', args=[self.patient.pk]) + '?modal=1',
+            expected_data,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'success')
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.questionnaire_data, expected_data)
+
+        response = self.client.get(
+            reverse('rtms_app:questionnaire_edit', args=[self.patient.pk]), {'modal': '1'}
+        )
+        for key, answer in answers.items():
+            self.assertContains(response, f'name="{key}"\n                               value="{answer}"\n                               checked')
+        self.assertContains(response, expected_data['q_details'])
+
+
 class TestTreatmentAddWeek3Hamd17(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='week3-hamd-user', password='pass1234')

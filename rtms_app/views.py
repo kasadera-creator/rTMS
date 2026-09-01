@@ -43,6 +43,33 @@ from .services.rtms_schedule import (
     session_info_for_date,
     format_rtms_label,
 )
+
+
+def _questionnaire_questions():
+    questions_past = [
+        {'no': 1, 'key': 'q_past_rtms', 'label': 'rTMS実施経験（治験・研究を含む）'},
+        {'no': 2, 'key': 'q_past_side_effect', 'label': 'rTMS後に副作用などの不快な経験'},
+        {'no': 3, 'key': 'q_past_ect', 'label': '電気けいれん療法（ECT）の実施歴'},
+        {'no': 4, 'key': 'q_past_seizure', 'label': 'けいれん発作（てんかん診断の有無を問わない）'},
+        {'no': 5, 'key': 'q_past_loc', 'label': '意識消失発作'},
+        {'no': 6, 'key': 'q_past_stroke', 'label': '脳卒中（脳梗塞・脳出血など）'},
+        {'no': 7, 'key': 'q_past_trauma', 'label': '頭部外傷（意識消失を伴うなど重度なもの）'},
+        {'no': 8, 'key': 'q_past_surgery', 'label': '頭部の手術歴'},
+        {'no': 9, 'key': 'q_past_neuro', 'label': '脳外科もしくは神経内科の病気'},
+        {'no': 10, 'key': 'q_past_internal', 'label': '脳障害をおこす可能性のある内科疾患'},
+        {'no': 11, 'key': 'q_past_abuse', 'label': 'アルコールや薬物の乱用'},
+    ]
+    questions_current = [
+        {'no': 12, 'key': 'q_cur_headache', 'label': '頻繁または重度な頭痛'},
+        {'no': 13, 'key': 'q_cur_metal', 'label': '頭の中に金属や磁性体（チタン製品かどうか要確認）'},
+        {'no': 14, 'key': 'q_cur_device', 'label': '体内埋め込み式の医療機器（心臓ペースメーカーなど）'},
+        {'no': 15, 'key': 'q_cur_abuse', 'label': '多量の飲酒や薬物の乱用'},
+        {'no': 16, 'key': 'q_cur_preg', 'label': '妊娠中、もしくは妊娠の可能性が否定されない'},
+        {'no': 17, 'key': 'q_cur_family_epilepsy', 'label': '家族内にてんかんを持っているかた'},
+    ]
+    keys = [question['key'] for question in (questions_past + questions_current)] + ['q_details']
+    return questions_past, questions_current, keys
+
 from .services.schedule_tasks import compute_dashboard_tasks
 from .services.schedule import (
     MAX_TREATMENT_SESSIONS,
