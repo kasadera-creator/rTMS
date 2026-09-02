@@ -250,6 +250,26 @@ class TestMappingTreatmentCourseIsolation(TestCase):
         self.assertEqual(first.treatment_course_id, self.course_one.id)
         self.assertEqual(second.treatment_course_id, self.course_two.id)
 
+    def test_mapping_add_course_two_uses_course_first_treatment_date(self):
+        user = get_user_model().objects.create_user(username='mapping-week-user', password='pw')
+        self.client = Client()
+        self.client.force_login(user)
+        self.patient.first_treatment_date = date(2026, 1, 5)
+        self.patient.save(update_fields=['first_treatment_date'])
+        self.course_one.first_treatment_date = date(2026, 1, 5)
+        self.course_one.save(update_fields=['first_treatment_date'])
+        self.course_two.first_treatment_date = date(2026, 4, 1)
+        self.course_two.save(update_fields=['first_treatment_date'])
+
+        response = self.client.get(
+            reverse('rtms_app:mapping_add', args=[self.patient.pk]),
+            {'course_number': 2, 'date': '2026-04-08'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['week_no_default'], 2)
+        self.assertEqual(response.context['form'].initial['week_number'], 2)
+
 
 class TestTreatmentCourseWriteIsolation(TestCase):
     def setUp(self):
@@ -706,6 +726,46 @@ class TestTreatmentCourseScheduleIsolation(TestCase):
 
         self.assertEqual(treatment_ids(first_weeks), {first.pk})
         self.assertEqual(treatment_ids(second_weeks), {second.pk})
+
+    def test_clinical_path_print_link_preserves_selected_course(self):
+        user = get_user_model().objects.create_user(username='path-print-user', password='pw')
+        client = Client()
+        client.force_login(user)
+        first = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_one,
+            course_number=1,
+            session_date=date(2026, 1, 5),
+        )
+        second = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_two,
+            course_number=2,
+            session_date=date(2026, 4, 1),
+        )
+
+        path_response = client.get(
+            reverse('rtms_app:patient_clinical_path', args=[self.patient.pk]),
+            {'course_number': 2},
+        )
+        self.assertContains(
+            path_response,
+            f'href="{reverse("rtms_app:print:print_clinical_path", args=[self.patient.pk])}?course_number=2"',
+        )
+
+        print_response = client.get(
+            reverse('rtms_app:print:print_clinical_path', args=[self.patient.pk]),
+            {'course_number': 2},
+        )
+        printed_ids = {
+            event['session_id']
+            for week in print_response.context['calendar_weeks']
+            for day in week
+            for event in day['events']
+            if event['type'] == 'treatment' and event['session_id'] is not None
+        }
+        self.assertEqual(printed_ids, {second.pk})
+        self.assertNotIn(first.pk, printed_ids)
 
     def test_calendar_uses_patient_mapping_date_when_course_date_is_null(self):
         from rtms_app.views import generate_calendar_weeks

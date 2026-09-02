@@ -1065,8 +1065,13 @@ def mapping_add(request, patient_id):
 
     # Calculate week_no with day-based rollover anchored to first treatment date
     week_no_default = 1
-    if patient.first_treatment_date:
-        week_no_default = get_current_week_number(patient.first_treatment_date, initial_date)
+    first_treatment_date = (
+        treatment_course.first_treatment_date
+        if treatment_course and treatment_course.first_treatment_date
+        else patient.first_treatment_date
+    )
+    if first_treatment_date:
+        week_no_default = get_current_week_number(first_treatment_date, initial_date)
 
     existing_session = MappingSession.objects.filter(
         **mapping_scope, date=initial_date,
