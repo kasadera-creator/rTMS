@@ -41,6 +41,7 @@ DEBUG = env_bool("DJANGO_DEBUG", "0")
 
 DEFAULT_ALLOWED_HOSTS = (
     "rtms.lan",
+    "rtms.kshp",
     "seichiryo.jp",
     "192.168.100.50",
     "localhost",
