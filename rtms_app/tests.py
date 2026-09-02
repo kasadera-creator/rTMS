@@ -650,6 +650,23 @@ class TestTreatmentCourseScheduleIsolation(TestCase):
         self.assertEqual(treatment_ids(first_weeks), {first.pk})
         self.assertEqual(treatment_ids(second_weeks), {second.pk})
 
+    def test_calendar_uses_patient_mapping_date_when_course_date_is_null(self):
+        from rtms_app.views import generate_calendar_weeks
+
+        self.patient.mapping_date = date(2026, 4, 1)
+        self.patient.save(update_fields=['mapping_date'])
+
+        weeks, _ = generate_calendar_weeks(self.patient, treatment_course=self.course_two)
+        mapping_dates = {
+            day['date']
+            for week in weeks
+            for day in week
+            for event in day['events']
+            if event['type'] == 'mapping'
+        }
+
+        self.assertIn(date(2026, 4, 1), mapping_dates)
+
     def test_rescheduling_one_course_does_not_move_the_other_course(self):
         first = TreatmentSession.objects.create(
             patient=self.patient,
@@ -1997,6 +2014,113 @@ class TestClinicalPathReschedule(TestCase):
         self.assertEqual(course_one.first_treatment_date, date(2026, 8, 25))
         self.assertEqual(self.patient.first_treatment_date, date(2026, 8, 25))
 
+    def test_course_two_mapping_date_and_schedule_are_isolated(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=1,
+            first_treatment_date=date(2026, 8, 24),
+            mapping_date=date(2026, 8, 24),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=2,
+            first_treatment_date=date(2026, 10, 1),
+            mapping_date=date(2026, 10, 1),
+        )
+        self.patient.first_treatment_date = date(2026, 8, 24)
+        self.patient.mapping_date = date(2026, 8, 24)
+        self.patient.save(update_fields=['first_treatment_date', 'mapping_date'])
+        first_schedule = MappingSchedule.objects.create(
+            patient=self.patient,
+            treatment_course=course_one,
+            course_number=1,
+            week_number=1,
+            planned_date=date(2026, 8, 24),
+        )
+        second_schedule = MappingSchedule.objects.create(
+            patient=self.patient,
+            treatment_course=course_two,
+            course_number=2,
+            week_number=1,
+            planned_date=date(2026, 10, 1),
+        )
+
+        schedule_service.reschedule_treatment_start_date(
+            self.patient,
+            date(2026, 10, 5),
+            course_number=2,
+            holidays=set(),
+        )
+
+        course_one.refresh_from_db()
+        course_two.refresh_from_db()
+        first_schedule.refresh_from_db()
+        second_schedule.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(course_one.mapping_date, date(2026, 8, 24))
+        self.assertEqual(course_two.mapping_date, date(2026, 10, 5))
+        self.assertEqual(first_schedule.planned_date, date(2026, 8, 24))
+        self.assertEqual(second_schedule.planned_date, date(2026, 10, 5))
+        self.assertEqual(self.patient.mapping_date, date(2026, 8, 24))
+
+    def test_course_two_planned_mapping_drag_uses_course_mapping_date(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=1,
+            first_treatment_date=date(2026, 8, 24),
+            mapping_date=date(2026, 8, 24),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=2,
+            first_treatment_date=date(2026, 10, 1),
+            mapping_date=date(2026, 10, 5),
+        )
+        self.patient.mapping_date = date(2026, 8, 24)
+        self.patient.save(update_fields=['mapping_date'])
+        response = self.client.post(
+            reverse('rtms_app:clinical_path_reschedule', args=[self.patient.pk]),
+            data=json.dumps({
+                'event_type': 'mapping',
+                'status': 'planned',
+                'course_number': 2,
+                'week_number': 1,
+                'source_date': '2026-10-05',
+                'target_date': '2026-10-06',
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            MappingSchedule.objects.get(treatment_course=course_two, week_number=1).planned_date,
+            date(2026, 10, 6),
+        )
+        self.assertFalse(MappingSchedule.objects.filter(treatment_course=course_one).exists())
+
+    def test_course_one_mapping_date_keeps_patient_compatibility(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=1,
+            first_treatment_date=date(2026, 8, 24),
+            mapping_date=date(2026, 8, 24),
+        )
+        self.patient.first_treatment_date = date(2026, 8, 24)
+        self.patient.mapping_date = date(2026, 8, 24)
+        self.patient.save(update_fields=['first_treatment_date', 'mapping_date'])
+
+        schedule_service.reschedule_treatment_start_date(
+            self.patient,
+            date(2026, 8, 25),
+            course_number=1,
+            holidays=set(),
+        )
+
+        course_one.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(course_one.mapping_date, date(2026, 8, 25))
+        self.assertEqual(self.patient.mapping_date, date(2026, 8, 25))
+
     def test_treatment_start_preserves_done_and_skipped_rows(self):
         first = TreatmentSession.objects.create(
             patient=self.patient, session_date=date(2026, 8, 24), status='planned',
@@ -2831,6 +2955,71 @@ class TestClinicalPathReschedule(TestCase):
         self.assertEqual(invalid.status_code, 400)
         self.patient.refresh_from_db()
         self.assertEqual(self.patient.admission_date, date(2026, 8, 21))
+
+    def test_course_two_discharge_change_isolated_from_patient_and_course_one(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1, discharge_date=date(2026, 9, 30),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2, discharge_date=date(2026, 10, 31),
+        )
+        self.patient.discharge_date = date(2026, 9, 30)
+        self.patient.save(update_fields=['discharge_date'])
+
+        response = self._post({
+            'event_type': 'discharge',
+            'course_number': 2,
+            'target_date': '2026-11-05',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        course_one.refresh_from_db()
+        course_two.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.discharge_date, date(2026, 9, 30))
+        self.assertEqual(course_one.discharge_date, date(2026, 9, 30))
+        self.assertEqual(course_two.discharge_date, date(2026, 11, 5))
+
+    def test_course_one_discharge_change_keeps_patient_compatibility(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1, discharge_date=date(2026, 9, 30),
+        )
+        self.patient.discharge_date = date(2026, 9, 30)
+        self.patient.save(update_fields=['discharge_date'])
+
+        response = self._post({
+            'event_type': 'discharge',
+            'course_number': 1,
+            'target_date': '2026-10-01',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        course_one.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(course_one.discharge_date, date(2026, 10, 1))
+        self.assertEqual(self.patient.discharge_date, date(2026, 10, 1))
+
+    def test_course_discharge_null_uses_patient_fallback_in_calendar(self):
+        from rtms_app.views import generate_calendar_weeks
+
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            first_treatment_date=date(2026, 8, 24),
+        )
+        self.patient.discharge_date = date(2026, 9, 10)
+        self.patient.save(update_fields=['discharge_date'])
+
+        calendar_weeks, _ = generate_calendar_weeks(
+            self.patient, treatment_course=course_two,
+        )
+        discharge_dates = {
+            day['date']
+            for week in calendar_weeks
+            for day in week
+            if any(event['type'] == 'discharge' for event in day['events'])
+        }
+
+        self.assertIn(date(2026, 9, 10), discharge_dates)
 
     def test_course_two_admission_change_isolated_from_patient_and_course_one(self):
         course_one = TreatmentCourse.objects.create(

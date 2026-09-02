@@ -74,15 +74,15 @@
                     入院日: {{ course_admission_date|default:"未定" }}
                     <br>
                     退院予定:
-                    {% if patient.discharge_date %}
-                        {{ patient.discharge_date }}
+                    {% if course_discharge_date %}
+                        {{ course_discharge_date }}
                     {% else %}
                         未定
                     {% endif %}
                 </div>
             </div>
             <div class="table-responsive">
-                <table class="calendar-table" data-reschedule-url="{% url 'rtms_app:clinical_path_reschedule' patient.id %}">
+                <table class="calendar-table" data-reschedule-url="{% url 'rtms_app:clinical_path_reschedule' patient.id %}" data-course-number="{{ course_number }}">
                     <thead>
                         <tr>
                             <th class="text-primary">月</th>

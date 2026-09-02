@@ -1080,6 +1080,11 @@ def patient_first_visit(request, patient_id):
         course_number=request.GET.get('course_number') or request.POST.get('course_number'),
     )
     course_number = treatment_course.course_number if treatment_course else patient.course_number or 1
+    course_discharge_date = (
+        treatment_course.discharge_date
+        if treatment_course and treatment_course.discharge_date
+        else patient.discharge_date
+    )
 
     all_patients = Patient.objects.all(); referral_map = {}; referral_sources_set = set()
     for p in all_patients:
@@ -1114,11 +1119,13 @@ def patient_first_visit(request, patient_id):
 
         old_first_treatment_date = patient.first_treatment_date
         old_admission_date = patient.admission_date
+        old_mapping_date = patient.mapping_date
         form = PatientFirstVisitForm(post, instance=patient)
         if form.is_valid():
             p = form.save(commit=False)
             treatment_start_changed = p.first_treatment_date != old_first_treatment_date
             admission_date_changed = p.admission_date != old_admission_date
+            mapping_date_changed = p.mapping_date != old_mapping_date
             diag_list = request.POST.getlist('diag_list')
             history_codes = [code for code in request.POST.getlist('psychiatric_history') if code != 'F32']
             history_labels = dict(PatientFirstVisitForm.PSY_HISTORY_CHOICES)
@@ -1152,12 +1159,17 @@ def patient_first_visit(request, patient_id):
                     p.first_treatment_date = old_first_treatment_date
                     if admission_date_changed:
                         treatment_course.admission_date = p.admission_date
+                    if mapping_date_changed or treatment_start_changed:
+                        treatment_course.mapping_date = p.mapping_date
                     course_update_fields = []
                     if admission_date_changed:
                         course_update_fields.append('admission_date')
+                    if mapping_date_changed or treatment_start_changed:
+                        course_update_fields.append('mapping_date')
                     if course_update_fields:
                         treatment_course.save(update_fields=course_update_fields)
                     p.admission_date = old_admission_date
+                    p.mapping_date = old_mapping_date
                 p.save()
                 action = request.POST.get('action')
 
@@ -1668,6 +1680,7 @@ def treatment_add(request, patient_id):
                     snapshot = {
                         'affected_sessions': snapshot_list,
                         'patient_discharge_date': patient.discharge_date.isoformat() if getattr(patient, 'discharge_date', None) else None,
+                        'course_discharge_date': s.treatment_course.discharge_date.isoformat() if s.treatment_course and s.treatment_course.discharge_date else None,
                         'skipped_session_id': s.id,
                         'skipped_session_date': s.session_date.isoformat() if s.session_date else None,
                     }
@@ -1768,9 +1781,16 @@ def treatment_add(request, patient_id):
                     for ts in futures:
                         ts.delete()
 
-                    # Set patient discharge_date to today
-                    patient.discharge_date = s.session_date
-                    patient.save(update_fields=['discharge_date'])
+                    # Set the selected course discharge_date; Course #1 keeps the legacy mirror.
+                    if s.treatment_course is not None:
+                        s.treatment_course.discharge_date = s.session_date
+                        s.treatment_course.save(update_fields=['discharge_date'])
+                        if s.treatment_course.course_number == 1:
+                            patient.discharge_date = s.session_date
+                            patient.save(update_fields=['discharge_date'])
+                    else:
+                        patient.discharge_date = s.session_date
+                        patient.save(update_fields=['discharge_date'])
 
                     # Audit
                     try:
@@ -1790,8 +1810,15 @@ def treatment_add(request, patient_id):
                             performed_by=request.user,
                         )
                         # Still try to set discharge_date
-                        patient.discharge_date = s.session_date
-                        patient.save(update_fields=['discharge_date'])
+                        if s.treatment_course is not None:
+                            s.treatment_course.discharge_date = s.session_date
+                            s.treatment_course.save(update_fields=['discharge_date'])
+                            if s.treatment_course.course_number == 1:
+                                patient.discharge_date = s.session_date
+                                patient.save(update_fields=['discharge_date'])
+                        else:
+                            patient.discharge_date = s.session_date
+                            patient.save(update_fields=['discharge_date'])
                     except Exception:
                         pass
                     # Audit
@@ -2111,11 +2138,19 @@ def treatment_skip_undo(request, skip_id):
                     except Exception:
                         continue
 
-        # restore patient discharge_date if snapshot provided
+        # restore course discharge_date if snapshot provided
         try:
+            from datetime import date as _d
+            treatment_course = getattr(sk.treatment, 'treatment_course', None)
+            cdd = snap.get('course_discharge_date') if isinstance(snap, dict) else None
             pdd = snap.get('patient_discharge_date') if isinstance(snap, dict) else None
-            if pdd:
-                from datetime import date as _d
+            if treatment_course is not None and 'course_discharge_date' in snap:
+                treatment_course.discharge_date = _d.fromisoformat(cdd) if cdd else None
+                treatment_course.save(update_fields=['discharge_date'])
+                if treatment_course.course_number == 1 and 'patient_discharge_date' in snap:
+                    patient.discharge_date = _d.fromisoformat(pdd) if pdd else None
+                    patient.save(update_fields=['discharge_date'])
+            elif treatment_course is None and pdd:
                 patient.discharge_date = _d.fromisoformat(pdd)
                 patient.save(update_fields=['discharge_date'])
         except Exception:
@@ -3108,11 +3143,14 @@ def patient_summary_view(request, patient_id):
         patient.discharge_prescription = request.POST.get('discharge_prescription', '')
 
         d_date = request.POST.get('discharge_date')
-        if d_date:
-            patient.discharge_date = parse_date(d_date)
+        discharge_date = parse_date(d_date) if d_date else None
+        if treatment_course is not None:
+            treatment_course.discharge_date = discharge_date
+            treatment_course.save(update_fields=['discharge_date'])
+            if treatment_course.course_number == 1:
+                patient.discharge_date = discharge_date
         else:
-            patient.discharge_date = None
-
+            patient.discharge_date = discharge_date
         patient.save()
 
         action = request.POST.get('action')
@@ -3207,13 +3245,13 @@ def patient_summary_view(request, patient_id):
         except Exception:
             start_date_str = str(first_date) if first_date else "未開始"
         try:
-            end_date_str = patient.discharge_date.strftime('%Y年%m月%d日') if patient.discharge_date else (last_date.strftime('%Y年%m月%d日') if last_date else "未定")
+            end_date_str = course_discharge_date.strftime('%Y年%m月%d日') if course_discharge_date else (last_date.strftime('%Y年%m月%d日') if last_date else "未定")
         except Exception:
-            end_date_str = str(last_date) if last_date else (patient.discharge_date.strftime('%Y年%m月%d日') if patient.discharge_date else "未定")
+            end_date_str = str(last_date) if last_date else (course_discharge_date.strftime('%Y年%m月%d日') if course_discharge_date else "未定")
         total_count = len(history_list)
     else:
         start_date_str = "未開始"
-        end_date_str = patient.discharge_date.strftime('%Y年%m月%d日') if patient.discharge_date else "未定"
+        end_date_str = course_discharge_date.strftime('%Y年%m月%d日') if course_discharge_date else "未定"
         total_count = 0
     admission_date_str = patient.admission_date.strftime('%Y年%m月%d日') if patient.admission_date else "不明"
     created_at_str = patient.created_at.strftime('%Y年%m月%d日')
@@ -3258,6 +3296,7 @@ def patient_summary_view(request, patient_id):
     return render(request, 'rtms_app/patient_summary.html', {
         'patient': patient,
         'summary_text': summary_text,
+        'course_discharge_date': course_discharge_date,
         'history_list': history_list,
         'today': timezone.now().date(),
         'test_scores': test_scores,
@@ -3482,6 +3521,11 @@ def patient_clinical_path(request, patient_id):
         if treatment_course and treatment_course.admission_date
         else patient.admission_date
     )
+    course_discharge_date = (
+        treatment_course.discharge_date
+        if treatment_course and treatment_course.discharge_date
+        else patient.discharge_date
+    )
     # ★修正: generate_calendar_weeks を使用
     calendar_weeks, assessment_events = generate_calendar_weeks(
         patient, treatment_course=treatment_course, course_number=course_number,
@@ -3500,6 +3544,7 @@ def patient_clinical_path(request, patient_id):
         'treatment_course': treatment_course,
         'course_number': course_number,
         'course_admission_date': course_admission_date,
+        'course_discharge_date': course_discharge_date,
         'calendar_weeks': calendar_weeks,
         'assessment_events': assessment_events,
         'treatment_overflow': get_treatment_overflow_info(patient),
@@ -3556,8 +3601,19 @@ def clinical_path_reschedule(request, patient_id):
         return JsonResponse({'status': 'ok'})
 
     if event_type == 'discharge':
-        patient.discharge_date = target_date
-        patient.save(update_fields=['discharge_date'])
+        try:
+            course_number = int(payload.get('course_number', patient.course_number or 1))
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'クール番号が不正です'}, status=400)
+        treatment_course = TreatmentCourse.objects.filter(
+            patient=patient, course_number=course_number,
+        ).first()
+        if treatment_course is not None:
+            treatment_course.discharge_date = target_date
+            treatment_course.save(update_fields=['discharge_date'])
+        if treatment_course is None or treatment_course.course_number == 1:
+            patient.discharge_date = target_date
+            patient.save(update_fields=['discharge_date'])
         return JsonResponse({'status': 'ok'})
 
     if event_type == 'treatment':
@@ -3789,7 +3845,14 @@ def clinical_path_reschedule(request, patient_id):
         if week_number not in dict(MappingSession.WEEK_CHOICES):
             return JsonResponse({'error': '対象の週が不正です'}, status=400)
 
-        mapping_base = patient.mapping_date or patient.first_treatment_date
+        course_mapping_date = getattr(treatment_course, 'mapping_date', None)
+        course_first_treatment_date = getattr(treatment_course, 'first_treatment_date', None)
+        mapping_base = (
+            course_mapping_date
+            or (patient.mapping_date if treatment_course is None else None)
+            or course_first_treatment_date
+            or patient.first_treatment_date
+        )
         if mapping_base is None:
             return JsonResponse({'error': 'MT測定の基準日が未設定です'}, status=400)
         override = MappingSchedule.objects.filter(

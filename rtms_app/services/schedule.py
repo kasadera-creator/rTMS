@@ -2,8 +2,14 @@ from datetime import timedelta, date
 
 from django.db import transaction
 
-from rtms_app.models import TreatmentSession, Patient, MappingSchedule
+from rtms_app.models import TreatmentSession, TreatmentCourse, Patient, MappingSchedule
 from rtms_app.services.rtms_schedule import generate_treatment_dates, generate_mapping_dates
+from rtms_app.services.strict_writes import (
+    save_treatment_session_legacy,
+    save_treatment_session_strict,
+    update_or_create_mapping_schedule_legacy,
+    update_or_create_mapping_schedule_strict,
+)
 
 
 MAX_TREATMENT_SESSIONS = 30
@@ -17,15 +23,59 @@ except Exception:
 EXTRA_HOLIDAYS: set[date] = set()
 
 
+def _save_course_aware_session(session, patient):
+    if session.treatment_course is not None:
+        return save_treatment_session_strict(
+            session,
+            patient,
+            session.treatment_course,
+            course_number=session.course_number,
+        )
+    return save_treatment_session_legacy(session, patient, session.course_number)
+
+
+def _session_scope(patient, course_number, session=None):
+    treatment_course = getattr(session, 'treatment_course', None) if session is not None else None
+    if treatment_course is None:
+        treatment_course = TreatmentCourse.objects.filter(
+            patient=patient, course_number=course_number,
+        ).first()
+    if treatment_course is not None:
+        return {'treatment_course': treatment_course}
+    return {'patient': patient, 'course_number': course_number}
+
+
+def _shift_discharge_date(patient, treatment_course, source_date, delta):
+    discharge_date = (
+        getattr(treatment_course, 'discharge_date', None)
+        if treatment_course is not None
+        else getattr(patient, 'discharge_date', None)
+    )
+    if not discharge_date or discharge_date < source_date:
+        return
+    new_discharge_date = discharge_date + delta
+    if treatment_course is not None:
+        treatment_course.discharge_date = new_discharge_date
+        treatment_course.save(update_fields=['discharge_date'])
+        if treatment_course.course_number == 1:
+            patient.discharge_date = new_discharge_date
+            patient.save(update_fields=['discharge_date'])
+        return
+    patient.discharge_date = new_discharge_date
+    patient.save(update_fields=['discharge_date'])
+
+
 def get_treatment_sessions(patient, course_number=None):
     """Return all treatment rows in chronological order for one patient/course."""
     if course_number is None:
         course_number = patient.course_number or 1
+    treatment_course = TreatmentCourse.objects.filter(
+        patient=patient,
+        course_number=course_number,
+    ).first()
+    filters = _session_scope(patient, course_number)
     return list(
-        TreatmentSession.objects.filter(
-            patient=patient,
-            course_number=course_number,
-        ).order_by('session_date', 'id')
+        TreatmentSession.objects.filter(**filters).order_by('session_date', 'id')
     )
 
 
@@ -134,22 +184,18 @@ def _reflow_sessions(patient: Patient, course_number: int, source_date: date, ta
 
     Must be called within a transaction.
     """
+    session_scope = _session_scope(patient, course_number, moved_session)
     if moved_session is not None:
         pivot_date = min(source_date, target_date)
         others_qs = (
             TreatmentSession.objects
-            .filter(
-                patient=patient,
-                course_number=course_number,
-                status='planned',
-                session_date__gte=pivot_date,
-            )
+            .filter(**session_scope, status='planned', session_date__gte=pivot_date)
             .order_by('session_date', 'id')
         )
     else:
         others_qs = (
             TreatmentSession.objects
-            .filter(patient=patient, course_number=course_number, status='planned', session_date__gt=source_date)
+            .filter(**session_scope, status='planned', session_date__gt=source_date)
             .order_by('session_date', 'id')
         )
     if moved_session is not None:
@@ -168,9 +214,7 @@ def _reflow_sessions(patient: Patient, course_number: int, source_date: date, ta
         # in both directions.
         blocked_dates = set(
             TreatmentSession.objects.filter(
-                patient=patient,
-                course_number=course_number,
-                status__in=['done', 'skipped'],
+                **session_scope, status__in=['done', 'skipped'],
             ).exclude(pk=moved_session.pk).values_list('session_date', flat=True)
         )
         assignments.append((moved_session, source_date, target_date))
@@ -193,7 +237,7 @@ def _reflow_sessions(patient: Patient, course_number: int, source_date: date, ta
     temp_base = date(1901, 1, 1)
     for i, (obj, _orig, _new) in enumerate(assignments):
         obj.session_date = temp_base + timedelta(days=i)
-        obj.save(update_fields=['session_date'])
+        _save_course_aware_session(obj, patient)
 
     # Phase 2: apply final dates, shifting the `.date` datetime by the same delta.
     for obj, orig, new in assignments:
@@ -204,12 +248,15 @@ def _reflow_sessions(patient: Patient, course_number: int, source_date: date, ta
         except Exception:
             pass
         obj.session_date = new
-        obj.save(update_fields=['session_date', 'date'])
+        _save_course_aware_session(obj, patient)
 
-    if getattr(patient, 'discharge_date', None) and patient.discharge_date >= source_date:
-        delta = new_last - original_last
-        patient.discharge_date = patient.discharge_date + delta
-        patient.save(update_fields=['discharge_date'])
+    treatment_course = getattr(moved_session, 'treatment_course', None)
+    if treatment_course is None:
+        treatment_course = TreatmentCourse.objects.filter(
+            patient=patient, course_number=course_number,
+        ).first()
+    delta = new_last - original_last
+    _shift_discharge_date(patient, treatment_course, source_date, delta)
 
     return {'new_date': target_date.isoformat() if target_date else None, 'affected_count': len(assignments)}
 
@@ -257,11 +304,9 @@ def reschedule_planned_session(
     if target_date == source_date:
         raise ValueError("移動先は現在の日付と異なる治療日を指定してください")
 
+    session_scope = _session_scope(patient, session.course_number, session)
     conflict = TreatmentSession.objects.filter(
-        patient=patient,
-        course_number=session.course_number,
-        session_date=target_date,
-        status__in=['done', 'skipped'],
+        **session_scope, session_date=target_date, status__in=['done', 'skipped'],
     ).exclude(pk=session.pk).exists()
     if conflict:
         raise ValueError("移動先には実施済みまたはスキップ済みの治療があります")
@@ -322,7 +367,7 @@ def reschedule_treatment_start_date(
         )
         sessions = list(
             TreatmentSession.objects.select_for_update().filter(
-                patient=locked_patient, course_number=course_number,
+                **_session_scope(locked_patient, course_number),
             ).order_by('session_date', 'id')
         )
         regular_sessions = sessions[:MAX_TREATMENT_SESSIONS]
@@ -361,7 +406,7 @@ def reschedule_treatment_start_date(
         temporary_base = date(1901, 1, 1)
         for index, (session, _new_date) in enumerate(assignments):
             session.session_date = temporary_base + timedelta(days=index)
-            session.save(update_fields=['session_date'])
+            _save_course_aware_session(session, locked_patient)
 
         for session, new_date in assignments:
             old_date = original_dates[session.pk]
@@ -369,15 +414,21 @@ def reschedule_treatment_start_date(
             if session.date:
                 session.date = session.date + delta
             session.session_date = new_date
-            session.save(update_fields=['session_date', 'date'])
+            _save_course_aware_session(session, locked_patient)
+
+        if treatment_course is not None:
+            treatment_course.mapping_date = new_start_date
+            treatment_course.save(update_fields=['mapping_date'])
 
         if treatment_course is None or treatment_course.course_number == 1:
             locked_patient.first_treatment_date = new_start_date
-        locked_patient.mapping_date = new_start_date
-        patient_update_fields = ['mapping_date']
+            locked_patient.mapping_date = new_start_date
+        patient_update_fields = []
         if treatment_course is None or treatment_course.course_number == 1:
             patient_update_fields.insert(0, 'first_treatment_date')
-        locked_patient.save(update_fields=patient_update_fields)
+            patient_update_fields.append('mapping_date')
+        if patient_update_fields:
+            locked_patient.save(update_fields=patient_update_fields)
 
         generated_mapping = {
             item['week_no']: item['actual']
@@ -385,15 +436,35 @@ def reschedule_treatment_start_date(
                 new_start_date, weeks=mapping_weeks, holidays=holidays,
             )
         }
-        for schedule in MappingSchedule.objects.select_for_update().filter(
+        treatment_course = TreatmentCourse.objects.filter(
             patient=locked_patient, course_number=course_number,
+        ).first()
+        mapping_scope = {'treatment_course': treatment_course} if treatment_course else {
+            'patient': locked_patient, 'course_number': course_number,
+        }
+        for schedule in MappingSchedule.objects.select_for_update().filter(
+            **mapping_scope,
         ):
             if schedule.week_number in generated_mapping:
-                schedule.planned_date = generated_mapping[schedule.week_number]
-                schedule.save(update_fields=['planned_date', 'updated_at'])
+                planned_date = generated_mapping[schedule.week_number]
+                if treatment_course is not None:
+                    update_or_create_mapping_schedule_strict(
+                        locked_patient,
+                        treatment_course,
+                        week_number=schedule.week_number,
+                        planned_date=planned_date,
+                        course_number=course_number,
+                    )
+                else:
+                    update_or_create_mapping_schedule_legacy(
+                        locked_patient,
+                        course_number,
+                        week_number=schedule.week_number,
+                        planned_date=planned_date,
+                    )
 
     return {
-        'old_start_date': patient.first_treatment_date,
+        'old_start_date': old_start_date,
         'new_start_date': new_start_date,
         'moved_count': len(assignments),
         'mapping_rebuilt': bool(generated_mapping),
