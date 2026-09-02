@@ -139,7 +139,7 @@ JAZZMIN_SETTINGS = {
     "copyright": "K. Iwata @ Kasadera Seichiryo Hospital",
     "site_logo": "img/logo.jpg",
     "navigation_expanded": True,
-    "topmenu_links": [{"name": "◀ トップへ戻る", "url": "/app/dashboard/"}],
+    "topmenu_links": [{"name": "◀ ダッシュボードに戻る", "url": "/app/dashboard/"}],
     "order_with_respect_to": [
         "rtms_app.ConsentDocument",
         "rtms_app.Patient",

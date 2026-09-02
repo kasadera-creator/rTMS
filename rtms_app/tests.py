@@ -1329,6 +1329,49 @@ class TestStage6PatientAndCalendar(TestCase):
 
 
 
+class TestPatientListNavigation(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='patient-list-viewer')
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def test_inpatient_status_is_displayed_for_hospitalized_patient(self):
+        patient = Patient.objects.create(
+            card_id='S6010', name='Hospitalized', birth_date=date(1980, 1, 1),
+            admission_date=date(2026, 8, 1), status='inpatient',
+        )
+        TreatmentCourse.objects.create(
+            patient=patient, course_number=2, course_status='waiting_admission',
+        )
+
+        response = self.client.get(reverse('rtms_app:patient_list'))
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertIn('入院中', html)
+        self.assertNotIn('入院待ち</span>', html)
+
+    def test_patient_list_includes_course_aware_scale_link(self):
+        patient = Patient.objects.create(
+            card_id='S6011', name='Scale Link', birth_date=date(1980, 1, 1),
+            course_number=2,
+        )
+
+        response = self.client.get(reverse('rtms_app:patient_list'))
+
+        self.assertEqual(response.status_code, 200)
+        expected_url = reverse('rtms_app:assessment_add', args=[patient.pk, 'baseline'])
+        self.assertContains(response, f'href="{expected_url}?course_number=2"')
+        self.assertContains(response, '>尺度</a>')
+
+    def test_monthly_calendar_includes_dashboard_return_link(self):
+        response = self.client.get(reverse('rtms_app:calendar_month'), {'year': 2026, 'month': 8})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'href="{reverse("rtms_app:dashboard")}"')
+        self.assertContains(response, '>ダッシュボードに戻る</a>')
+
+
 class TestAssessmentHubOtResearchSection(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='ot-hub-user', password='pass1234')

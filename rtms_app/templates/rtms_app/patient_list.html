@@ -169,7 +169,8 @@
                         <div class="d-inline-flex gap-2">
                             <a href="{% url 'rtms_app:patient_first_visit' patient.id %}" class="btn btn-outline-first-visit btn-sm btn-nav">初診・基本情報</a>
                             <a href="{% url 'rtms_app:patient_clinical_path' patient.id %}" class="btn btn-outline-admission btn-sm btn-nav">スケジュール</a>
-                            <a href="{% url 'rtms_app:patient_home' patient.id %}" class="btn btn-outline-discharge btn-sm btn-nav">治療経過・退院準備</a>
+                              <a href="{% url 'rtms_app:patient_home' patient.id %}" class="btn btn-outline-discharge btn-sm btn-nav">治療経過・退院準備</a>
+                              <a href="{% url 'rtms_app:assessment_add' patient.id 'baseline' %}?course_number={{ patient.course_number }}{% if dashboard_date %}&dashboard_date={{ dashboard_date }}{% endif %}" class="btn btn-outline-assessment btn-sm btn-nav">尺度</a>
                         </div>
                     </td>
                 </tr>
