@@ -144,7 +144,9 @@
             <tbody>
                 {% for patient in patients %}
                 <tr>
-                    <td>{% if patient.list_status == "inpatient" %}<span class="badge bg-success">入院中</span>
+                    <td>{% if patient.list_status == "inpatient_waiting_treatment" %}<span class="badge bg-success">入院中（治療待ち）</span>
+                    {% elif patient.list_status == "treatment_in_progress" %}<span class="badge bg-success">入院中（治療中）</span>
+                    {% elif patient.list_status == "treatment_finished_waiting_discharge" %}<span class="badge bg-success">入院中（治療後）</span>
                     {% elif patient.list_status == "waiting" %}<span class="badge bg-warning text-dark">入院待ち</span>
                     {% elif patient.list_status == "discharged" %}<span class="badge bg-secondary">退院済</span>{% endif %}
                     </td>

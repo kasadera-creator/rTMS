@@ -26,6 +26,7 @@ from rtms_app import services
 from rtms_app.services import schedule as schedule_service
 from rtms_app.surveys import INSTRUMENT_ORDER, get_instrument
 from rtms_app.services.patient_accounts import ensure_patient_group
+from rtms_app.views import get_patient_admission_status
 
 
 class TestDashboardCourseIsolation(TestCase):
@@ -1369,6 +1370,109 @@ class TestPatientListNavigation(TestCase):
 
         self.assertEqual(response.context['patients'][0].list_status, 'waiting')
         self.assertContains(response, '<span class="badge bg-warning text-dark">入院待ち</span>')
+
+    def test_patient_list_derives_all_treatment_lifecycle_states(self):
+        as_of = date(2026, 9, 2)
+        cases = [
+            ('S6013', '入院待ち', date(2026, 9, 3), date(2026, 9, 10), None, 'waiting'),
+            ('S6014', '治療待ち', date(2026, 9, 1), None, None, 'inpatient_waiting_treatment'),
+            ('S6015', '治療中', date(2026, 9, 1), date(2026, 9, 2), None, 'treatment_in_progress'),
+            ('S6016', '治療後', date(2026, 7, 1), date(2026, 7, 2), None, 'treatment_finished_waiting_discharge'),
+            ('S6017', '退院済', date(2026, 8, 1), date(2026, 8, 3), as_of, 'discharged'),
+        ]
+        patients = []
+        for card_id, name, admission_date, first_treatment_date, discharge_date, expected in cases:
+            patient = Patient.objects.create(
+                card_id=card_id, name=name, birth_date=date(1980, 1, 1),
+                admission_date=admission_date, first_treatment_date=first_treatment_date,
+                discharge_date=discharge_date,
+            )
+            TreatmentCourse.objects.create(
+                patient=patient, course_number=1, admission_date=admission_date,
+                first_treatment_date=first_treatment_date, discharge_date=discharge_date,
+            )
+            patients.append((patient, expected))
+
+        with patch('rtms_app.views.timezone.localdate', return_value=as_of):
+            response = self.client.get(reverse('rtms_app:patient_list'))
+
+        statuses = {patient.card_id: patient.list_status for patient in response.context['patients']}
+        for patient, expected in patients:
+            self.assertEqual(statuses[patient.card_id], expected)
+        self.assertContains(response, '入院待ち')
+        self.assertContains(response, '入院中（治療待ち）')
+        self.assertContains(response, '入院中（治療中）')
+        self.assertContains(response, '入院中（治療後）')
+        self.assertContains(response, '退院済')
+
+        inpatient_response = self.client.get(
+            reverse('rtms_app:patient_list'), {'status': 'inpatient'},
+        )
+        inpatient_cards = {
+            patient.card_id for patient in inpatient_response.context['patients']
+        }
+        self.assertEqual(
+            inpatient_cards,
+            {'S6014', 'S6015', 'S6016'},
+        )
+
+    def test_patient_list_treatment_boundaries_are_inclusive(self):
+        as_of = date(2026, 9, 2)
+        patient = Patient.objects.create(
+            card_id='S6018', name='Boundary', birth_date=date(1980, 1, 1),
+            admission_date=date(2026, 9, 2), first_treatment_date=as_of,
+        )
+        course = TreatmentCourse.objects.create(
+            patient=patient, course_number=1,
+            admission_date=as_of, first_treatment_date=as_of,
+        )
+
+        self.assertEqual(
+            get_patient_admission_status(patient, as_of=as_of, treatment_course=course),
+            'treatment_in_progress',
+        )
+
+        treatment_end = schedule_service.get_treatment_course_end_date(
+            patient,
+            schedule_service.generate_treatment_dates(as_of, total=30, holidays=set()),
+            course_number=1,
+        )
+        self.assertEqual(
+            get_patient_admission_status(patient, as_of=treatment_end, treatment_course=course),
+            'treatment_in_progress',
+        )
+        course.discharge_date = treatment_end
+        course.save(update_fields=['discharge_date'])
+        self.assertEqual(
+            get_patient_admission_status(patient, as_of=treatment_end, treatment_course=course),
+            'discharged',
+        )
+
+    def test_patient_list_treatment_status_isolated_between_courses(self):
+        as_of = date(2026, 9, 2)
+        patient = Patient.objects.create(
+            card_id='S6019', name='Course Lifecycle', birth_date=date(1980, 1, 1),
+            course_number=2,
+        )
+        course_one = TreatmentCourse.objects.create(
+            patient=patient, course_number=1,
+            admission_date=date(2026, 1, 1), first_treatment_date=date(2026, 1, 5),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=patient, course_number=2,
+            admission_date=date(2026, 9, 1), first_treatment_date=date(2026, 9, 10),
+        )
+
+        self.assertEqual(
+            get_patient_admission_status(patient, as_of=as_of, treatment_course=course_one),
+            'treatment_finished_waiting_discharge',
+        )
+        self.assertEqual(
+            get_patient_admission_status(patient, as_of=as_of, treatment_course=course_two),
+            'inpatient_waiting_treatment',
+        )
+        response = self.client.get(reverse('rtms_app:patient_list'))
+        self.assertEqual(response.context['patients'][0].list_status, 'inpatient_waiting_treatment')
 
     def test_patient_list_includes_course_aware_scale_link(self):
         patient = Patient.objects.create(

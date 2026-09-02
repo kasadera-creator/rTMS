@@ -948,7 +948,7 @@ def dashboard_view(request):
     return render(request, 'rtms_app/dashboard.html', {'today': target_date, 'target_date_display': target_date_display, 'prev_day': prev_day, 'next_day': next_day, 'today_raw': jst_now.date(), 'dashboard_tasks': dashboard_tasks})
 
 def get_patient_admission_status(patient, *, as_of=None, treatment_course=None):
-    """Return the list status using the selected course's admission range."""
+    """Return the selected course's derived treatment lifecycle status."""
     as_of = as_of or timezone.localdate()
     course = treatment_course
     if course is None:
@@ -956,21 +956,32 @@ def get_patient_admission_status(patient, *, as_of=None, treatment_course=None):
             patient=patient,
             course_number=patient.course_number or 1,
         ).first()
-    admission_date = (
-        course.admission_date
-        if course and course.admission_date
-        else patient.admission_date
-    )
-    discharge_date = (
-        course.discharge_date
-        if course and course.discharge_date
-        else patient.discharge_date
-    )
+    course_number = course.course_number if course else patient.course_number or 1
+
+    def course_date(field_name):
+        course_value = getattr(course, field_name, None) if course else None
+        return course_value if course_value is not None else getattr(patient, field_name, None)
+
+    admission_date = course_date('admission_date')
+    discharge_date = course_date('discharge_date')
+    treatment_start = course_date('first_treatment_date')
+
     if discharge_date and discharge_date <= as_of:
         return 'discharged'
-    if admission_date and admission_date <= as_of:
-        return 'inpatient'
-    return 'waiting'
+    if not admission_date or admission_date > as_of:
+        return 'waiting'
+    if not treatment_start or treatment_start > as_of:
+        return 'inpatient_waiting_treatment'
+
+    canonical_dates = generate_treatment_dates(
+        treatment_start, total=MAX_TREATMENT_SESSIONS, holidays=JP_HOLIDAYS,
+    )
+    treatment_end = get_treatment_course_end_date(
+        patient, canonical_dates, course_number=course_number,
+    )
+    if treatment_end and as_of <= treatment_end:
+        return 'treatment_in_progress'
+    return 'treatment_finished_waiting_discharge'
 
 
 @login_required
@@ -1038,8 +1049,17 @@ def patient_list_view(request):
             patient,
             treatment_course=courses.get(patient.pk),
         )
-    if status in {'waiting', 'inpatient', 'discharged'}:
-        patients = [patient for patient in patients if patient.list_status == status]
+    status_groups = {
+        'waiting': {'waiting'},
+        'inpatient': {
+            'inpatient_waiting_treatment',
+            'treatment_in_progress',
+            'treatment_finished_waiting_discharge',
+        },
+        'discharged': {'discharged'},
+    }
+    if status in status_groups:
+        patients = [patient for patient in patients if patient.list_status in status_groups[status]]
 
     # ===== sort link 用：検索条件を保持 =====
     preserved_params = request.GET.copy()
