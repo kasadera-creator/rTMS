@@ -312,6 +312,14 @@ def reschedule_treatment_start_date(
 
     with transaction.atomic():
         locked_patient = Patient.objects.select_for_update().get(pk=patient.pk)
+        treatment_course = TreatmentCourse.objects.select_for_update().filter(
+            patient=locked_patient, course_number=course_number,
+        ).first()
+        old_start_date = (
+            treatment_course.first_treatment_date
+            if treatment_course is not None
+            else locked_patient.first_treatment_date
+        )
         sessions = list(
             TreatmentSession.objects.select_for_update().filter(
                 patient=locked_patient, course_number=course_number,
@@ -363,9 +371,13 @@ def reschedule_treatment_start_date(
             session.session_date = new_date
             session.save(update_fields=['session_date', 'date'])
 
-        locked_patient.first_treatment_date = new_start_date
+        if treatment_course is None or treatment_course.course_number == 1:
+            locked_patient.first_treatment_date = new_start_date
         locked_patient.mapping_date = new_start_date
-        locked_patient.save(update_fields=['first_treatment_date', 'mapping_date'])
+        patient_update_fields = ['mapping_date']
+        if treatment_course is None or treatment_course.course_number == 1:
+            patient_update_fields.insert(0, 'first_treatment_date')
+        locked_patient.save(update_fields=patient_update_fields)
 
         generated_mapping = {
             item['week_no']: item['actual']

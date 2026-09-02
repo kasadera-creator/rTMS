@@ -1088,7 +1088,12 @@ def patient_first_visit(request, patient_id):
             if p.referral_source not in referral_map: referral_map[p.referral_source] = set()
             referral_map[p.referral_source].add(p.referral_doctor)
     referral_map_json = {k: sorted(list(v)) for k, v in referral_map.items()}; referral_options = sorted(list(referral_sources_set))
-    end_date_est = get_completion_date(patient.first_treatment_date)
+    course_first_treatment_date = (
+        treatment_course.first_treatment_date
+        if treatment_course and treatment_course.first_treatment_date
+        else patient.first_treatment_date
+    )
+    end_date_est = get_completion_date(course_first_treatment_date)
     assessment_scope = {'treatment_course': treatment_course} if treatment_course else {
         'patient': patient, 'course_number': course_number,
     }
@@ -1141,6 +1146,8 @@ def patient_first_visit(request, patient_id):
                     p = None
 
             if p is not None:
+                if treatment_course is not None and treatment_course.course_number != 1:
+                    p.first_treatment_date = old_first_treatment_date
                 p.save()
                 action = request.POST.get('action')
 

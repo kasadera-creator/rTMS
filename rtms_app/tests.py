@@ -1919,6 +1919,84 @@ class TestClinicalPathReschedule(TestCase):
         )
         self.assertEqual([s.pk for s in sessions], list(TreatmentSession.objects.filter(patient=self.patient).values_list('pk', flat=True)))
 
+    def test_course_two_treatment_start_isolated_from_patient_and_course_one(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=1,
+            first_treatment_date=date(2026, 8, 24),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=2,
+            first_treatment_date=date(2026, 10, 1),
+        )
+        self.patient.first_treatment_date = date(2026, 8, 24)
+        self.patient.save(update_fields=['first_treatment_date'])
+        course_one_sessions = [
+            TreatmentSession.objects.create(
+                patient=self.patient,
+                treatment_course=course_one,
+                course_number=1,
+                session_date=session_date,
+            )
+            for session_date in (date(2026, 8, 24), date(2026, 8, 25))
+        ]
+        course_two_sessions = [
+            TreatmentSession.objects.create(
+                patient=self.patient,
+                treatment_course=course_two,
+                course_number=2,
+                session_date=session_date,
+            )
+            for session_date in (date(2026, 10, 1), date(2026, 10, 2))
+        ]
+        course_one_dates_before = [session.session_date for session in course_one_sessions]
+
+        result = schedule_service.reschedule_treatment_start_date(
+            self.patient,
+            date(2026, 10, 5),
+            course_number=2,
+            holidays=set(),
+        )
+
+        self.assertEqual(result['new_start_date'], date(2026, 10, 5))
+        course_one.refresh_from_db()
+        course_two.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(course_one.first_treatment_date, date(2026, 8, 24))
+        self.assertEqual(course_two.first_treatment_date, date(2026, 10, 5))
+        self.assertEqual(self.patient.first_treatment_date, date(2026, 8, 24))
+        self.assertEqual(
+            list(TreatmentSession.objects.filter(treatment_course=course_one).order_by('session_date').values_list('session_date', flat=True)),
+            course_one_dates_before,
+        )
+        self.assertEqual(
+            list(TreatmentSession.objects.filter(treatment_course=course_two).order_by('session_date').values_list('session_date', flat=True)),
+            [date(2026, 10, 5), date(2026, 10, 6)],
+        )
+
+    def test_course_one_treatment_start_keeps_patient_compatibility(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=1,
+            first_treatment_date=date(2026, 8, 24),
+        )
+        self.patient.first_treatment_date = date(2026, 8, 24)
+        self.patient.save(update_fields=['first_treatment_date'])
+
+        result = schedule_service.reschedule_treatment_start_date(
+            self.patient,
+            date(2026, 8, 25),
+            course_number=1,
+            holidays=set(),
+        )
+
+        course_one.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(result['old_start_date'], date(2026, 8, 24))
+        self.assertEqual(course_one.first_treatment_date, date(2026, 8, 25))
+        self.assertEqual(self.patient.first_treatment_date, date(2026, 8, 25))
+
     def test_treatment_start_preserves_done_and_skipped_rows(self):
         first = TreatmentSession.objects.create(
             patient=self.patient, session_date=date(2026, 8, 24), status='planned',
