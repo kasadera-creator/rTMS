@@ -453,8 +453,13 @@ def _build_side_effect_context(request, patient_id, session_id):
 	mapping_for_session = None
 	if target_date:
 		mapping_for_session = MappingSession.objects.filter(**mapping_scope, date=target_date).first()
-		if not mapping_for_session and patient.first_treatment_date:
-			week_no = get_current_week_number(patient.first_treatment_date, target_date)
+		first_treatment_date = (
+			treatment_course.first_treatment_date
+			if treatment_course and treatment_course.first_treatment_date
+			else patient.first_treatment_date
+		)
+		if not mapping_for_session and first_treatment_date:
+			week_no = get_current_week_number(first_treatment_date, target_date)
 			mapping_for_session = MappingSession.objects.filter(**mapping_scope, week_number=week_no).order_by('-date').first()
 	resting_mt = mapping_for_session.resting_mt if mapping_for_session else None
 

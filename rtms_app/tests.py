@@ -1900,6 +1900,65 @@ class TestAdverseEventCourseIsolation(TestCase):
             session_date=date(2026, 8, 4),
         )
 
+    def test_side_effect_mt_fallback_uses_selected_course_start_date(self):
+        from rtms_app.print_views import _build_side_effect_context
+
+        self.patient.first_treatment_date = date(2026, 1, 5)
+        self.patient.save(update_fields=['first_treatment_date'])
+        self.course_one.first_treatment_date = date(2026, 1, 5)
+        self.course_one.save(update_fields=['first_treatment_date'])
+        self.course_two.first_treatment_date = date(2026, 4, 1)
+        self.course_two.save(update_fields=['first_treatment_date'])
+        MappingSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_one,
+            course_number=1,
+            date=date(2026, 1, 6),
+            week_number=14,
+            resting_mt=11,
+        )
+        MappingSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_two,
+            course_number=2,
+            date=date(2026, 4, 2),
+            week_number=2,
+            resting_mt=72,
+        )
+        self.session_two.session_date = date(2026, 4, 8)
+        self.session_two.save(update_fields=['session_date'])
+
+        context = _build_side_effect_context(
+            RequestFactory().get('/app/patient/1/print/side_effect/1/'),
+            self.patient.pk,
+            self.session_two.pk,
+        )
+
+        self.assertEqual(context['resting_mt'], 72)
+
+    def test_side_effect_mt_fallback_keeps_legacy_patient_start_date(self):
+        from rtms_app.print_views import _build_side_effect_context
+
+        legacy_patient = Patient.objects.create(
+            card_id='LEGACY-MT', name='Legacy MT Patient', birth_date=date(1980, 1, 1),
+            first_treatment_date=date(2026, 5, 4), course_number=1,
+        )
+        legacy_session = TreatmentSession.objects.create(
+            patient=legacy_patient, course_number=1, session_date=date(2026, 5, 11),
+        )
+        MappingSession.objects.create(
+            patient=legacy_patient, course_number=1, date=date(2026, 5, 5),
+            week_number=2, resting_mt=63,
+        )
+
+        context = _build_side_effect_context(
+            RequestFactory().get('/app/patient/1/print/side_effect/1/'),
+            legacy_patient.pk,
+            legacy_session.pk,
+        )
+
+        self.assertEqual(context['resting_mt'], 63)
+
     def test_treatment_page_and_skip_list_are_course_scoped(self):
         SideEffectCheck.objects.create(session=self.session_one, memo='course-one-side-effect')
         SideEffectCheck.objects.create(session=self.session_two, memo='course-two-side-effect')
