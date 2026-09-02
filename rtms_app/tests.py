@@ -1953,6 +1953,43 @@ class TestSkipSessions(TestCase):
         delta = new_last - original_last
         self.assertEqual(self.patient.discharge_date, date(2026,1,31) + delta)
 
+    def test_course_two_skip_shifts_only_course_discharge_and_sessions(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1, discharge_date=date(2026, 1, 31),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2, discharge_date=date(2026, 1, 31),
+        )
+        self.patient.discharge_date = date(2026, 1, 31)
+        self.patient.save(update_fields=['discharge_date'])
+        course_one_session = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=course_one, course_number=1,
+            session_date=date(2026, 1, 5),
+        )
+        skipped = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=course_two, course_number=2,
+            session_date=date(2026, 1, 9),
+        )
+        course_two_session = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=course_two, course_number=2,
+            session_date=date(2026, 1, 10),
+        )
+
+        schedule_service.shift_future_sessions(
+            self.patient, skipped.session_date, course_number=2,
+        )
+
+        course_one.refresh_from_db()
+        course_two.refresh_from_db()
+        self.patient.refresh_from_db()
+        course_one_session.refresh_from_db()
+        course_two_session.refresh_from_db()
+        self.assertEqual(course_one.discharge_date, date(2026, 1, 31))
+        self.assertEqual(course_two.discharge_date, date(2026, 2, 2))
+        self.assertEqual(self.patient.discharge_date, date(2026, 1, 31))
+        self.assertEqual(course_one_session.session_date, date(2026, 1, 5))
+        self.assertEqual(course_two_session.session_date, date(2026, 1, 12))
+
 
 class TestClinicalPathReschedule(TestCase):
     def setUp(self):

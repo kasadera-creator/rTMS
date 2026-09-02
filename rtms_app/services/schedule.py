@@ -417,8 +417,9 @@ def reschedule_treatment_start_date(
             _save_course_aware_session(session, locked_patient)
 
         if treatment_course is not None:
+            treatment_course.first_treatment_date = new_start_date
             treatment_course.mapping_date = new_start_date
-            treatment_course.save(update_fields=['mapping_date'])
+            treatment_course.save(update_fields=['first_treatment_date', 'mapping_date'])
 
         if treatment_course is None or treatment_course.course_number == 1:
             locked_patient.first_treatment_date = new_start_date
