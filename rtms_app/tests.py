@@ -870,6 +870,101 @@ class TestTreatmentAddWeek3Hamd17(TestCase):
             reverse('rtms_app:treatment_add', args=[self.patient.pk]), {'date': treatment_date.isoformat()}
         )
 
+    def test_course_two_treatment_add_uses_course_dates(self):
+        from rtms_app.views import get_completion_date
+
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            first_treatment_date=date(2026, 1, 5),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            first_treatment_date=date(2026, 3, 2),
+        )
+
+        response = self.client.get(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+            {'date': '2026-03-02', 'course_number': 2},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['start_date'], course_two.first_treatment_date)
+        self.assertEqual(response.context['week_num'], 1)
+        self.assertEqual(
+            response.context['end_date_est'],
+            get_completion_date(course_two.first_treatment_date),
+        )
+        self.assertNotEqual(
+            response.context['start_date'], course_one.first_treatment_date,
+        )
+
+    def test_course_two_weekly_count_excludes_course_one_sessions(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            first_treatment_date=date(2026, 1, 5),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            first_treatment_date=date(2026, 3, 2),
+        )
+        for session_date in (date(2026, 3, 2), date(2026, 3, 3), date(2026, 3, 4)):
+            TreatmentSession.objects.create(
+                patient=self.patient, treatment_course=course_one,
+                course_number=1, session_date=session_date,
+            )
+        TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=course_two,
+            course_number=2, session_date=date(2026, 3, 5),
+        )
+
+        from rtms_app.views import get_weekly_session_count
+
+        self.assertEqual(
+            get_weekly_session_count(self.patient, date(2026, 3, 5), course_number=2),
+            1,
+        )
+
+    def test_course_two_treatment_add_does_not_change_course_one_sessions(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            first_treatment_date=date(2026, 1, 5),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            first_treatment_date=date(2026, 3, 2),
+        )
+        course_one_session = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=course_one,
+            course_number=1, session_date=date(2026, 1, 5),
+        )
+        TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=course_two,
+            course_number=2, session_date=date(2026, 3, 2),
+        )
+
+        response = self.client.get(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+            {'date': '2026-03-02', 'course_number': 2},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        course_one_session.refresh_from_db()
+        self.assertEqual(course_one_session.session_date, date(2026, 1, 5))
+        self.assertEqual(
+            TreatmentSession.objects.filter(treatment_course=course_one).count(),
+            1,
+        )
+
+    def test_legacy_treatment_add_uses_patient_date_fallback(self):
+        response = self.client.get(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+            {'date': '2026-01-05'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['start_date'], self.patient.first_treatment_date)
+        self.assertEqual(response.context['week_num'], 1)
+
     def test_session_and_week_display_match_canonical_calendar_numbers(self):
         from rtms_app.views import generate_calendar_weeks
 

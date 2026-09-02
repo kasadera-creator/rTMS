@@ -347,14 +347,23 @@ def get_session_count(patient, target_date=None):
         query = query.filter(date__date__lte=target_date)
     return query.count()
 
-def get_weekly_session_count(patient, target_date):
-    if not patient.first_treatment_date: return 0
-    start_date = patient.first_treatment_date
+def get_weekly_session_count(patient, target_date, course_number=None):
+    course_number = course_number or patient.course_number or 1
+    treatment_course = resolve_treatment_course(patient, course_number=course_number)
+    start_date = (
+        treatment_course.first_treatment_date
+        if treatment_course and treatment_course.first_treatment_date
+        else patient.first_treatment_date
+    )
+    if not start_date: return 0
     days_diff = (target_date - start_date).days
     week_start_offset = (days_diff // 7) * 7
     week_start_date = start_date + timedelta(days=week_start_offset)
     week_end_date = week_start_date + timedelta(days=6)
-    return TreatmentSession.objects.filter(patient=patient, date__date__range=[week_start_date, week_end_date]).count()
+    return sum(
+        week_start_date <= session.session_date <= week_end_date
+        for session in get_treatment_sessions(patient, course_number)
+    )
 
 def get_assessment_timing_for_date(patient, target_date):
     """
@@ -1422,8 +1431,13 @@ def treatment_add(request, patient_id):
         </div>
         """
     )
-    if patient.first_treatment_date:
-        tdates = generate_treatment_dates(patient.first_treatment_date, total=30, holidays=JP_HOLIDAYS)
+    course_first_treatment_date = (
+        treatment_course.first_treatment_date
+        if treatment_course and treatment_course.first_treatment_date
+        else patient.first_treatment_date
+    )
+    if course_first_treatment_date:
+        tdates = generate_treatment_dates(course_first_treatment_date, total=30, holidays=JP_HOLIDAYS)
         materialized_sessions = get_treatment_sessions(patient, course_number)
         number_map = get_treatment_session_number_map(patient, course_number)
         virtual_number_map = get_treatment_virtual_number_map(patient, tdates, course_number)
@@ -1435,7 +1449,7 @@ def treatment_add(request, patient_id):
             session_num = number_map.get(current_session.id)
         else:
             session_num = virtual_number_map.get(initial_date)
-        week_num = get_current_week_number(patient.first_treatment_date, initial_date)
+        week_num = get_current_week_number(course_first_treatment_date, initial_date)
 
     # Fetch current week mapping: same date first, then same week
     same_date_mapping = MappingSession.objects.filter(**mapping_scope, date=initial_date).first()
@@ -1447,14 +1461,14 @@ def treatment_add(request, patient_id):
             **mapping_scope, week_number=week_num,
         ).order_by('-date').first()
 
-    end_date_est = get_completion_date(patient.first_treatment_date)
+    end_date_est = get_completion_date(course_first_treatment_date)
     hamd_eval = get_week3_hamd17_evaluation(patient, course_number, week_num)
     alert_msg = ""; instruction_msg = hamd_eval['instruction']; judgment_info = hamd_eval['status']
     is_remission = hamd_eval['status'] == '寛解'
     week3_status = hamd_eval['week3_status']
     week3_assessment_url = build_url('assessment_add', args=[patient.id, 'week3'], query={'date': initial_date.isoformat(), 'from': 'treatment'})
     if is_remission and week_num >= 4:
-            weekly_count = get_weekly_session_count(patient, initial_date); current_weekly = weekly_count + 1
+            weekly_count = get_weekly_session_count(patient, initial_date, course_number); current_weekly = weekly_count + 1
             if week_num == 4:
                 if current_weekly > 3: alert_msg = f"【制限超過】第4週(週3回まで)です。今回で週{current_weekly}回目になります。"
                 else: alert_msg = f"【漸減】第4週です。週3回まで (現在: 週{current_weekly}回目)"
@@ -2047,7 +2061,7 @@ def treatment_add(request, patient_id):
         'session_num': session_num,
         'week_num': week_num,
         'end_date_est': end_date_est,
-        'start_date': patient.first_treatment_date,
+        'start_date': course_first_treatment_date,
         'dashboard_date': dashboard_date,
         'alert_msg': alert_msg,
         'instruction_msg': instruction_msg,
