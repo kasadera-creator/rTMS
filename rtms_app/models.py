@@ -767,6 +767,19 @@ class SeriousAdverseEvent(models.Model):
             models.UniqueConstraint(fields=["patient", "course_number", "session"], name="unique_sae_per_session")
         ]
 
+    def save(self, *args, **kwargs):
+        session = TreatmentSession.objects.get(pk=self.session_id)
+        if session.patient_id != self.patient_id:
+            raise ValidationError("SeriousAdverseEvent patient and session patient must match")
+        if session.course_number != self.course_number:
+            raise ValidationError("SeriousAdverseEvent course_number and session must match")
+        if session.treatment_course_id is not None:
+            if session.treatment_course.patient_id != self.patient_id:
+                raise ValidationError("SeriousAdverseEvent session Course patient must match")
+            if session.treatment_course.course_number != self.course_number:
+                raise ValidationError("SeriousAdverseEvent session Course must match")
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         return f"SAE patient={self.patient_id} session={self.session_id} {self.event_types}"
 

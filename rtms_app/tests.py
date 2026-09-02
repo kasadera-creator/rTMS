@@ -1791,6 +1791,35 @@ class TestAdverseEventCourseIsolation(TestCase):
         self.assertContains(course_two_skips, 'course-two-skip')
         self.assertNotContains(course_two_skips, 'course-one-skip')
 
+    def test_sae_rejects_cross_course_session_mismatch(self):
+        sae_one = SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=1, session=self.session_one,
+            event_types=['seizure'],
+        )
+        sae_two = SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=2, session=self.session_two,
+            event_types=['syncope'],
+        )
+
+        with self.assertRaises(ValidationError):
+            SeriousAdverseEvent.objects.create(
+                patient=self.patient, course_number=2, session=self.session_one,
+                event_types=['mania'],
+            )
+        with self.assertRaises(ValidationError):
+            SeriousAdverseEvent.objects.create(
+                patient=self.patient, course_number=1, session=self.session_two,
+                event_types=['other'],
+            )
+
+        sae_one.refresh_from_db()
+        sae_two.refresh_from_db()
+        self.assertEqual(sae_one.event_types, ['seizure'])
+        self.assertEqual(sae_two.event_types, ['syncope'])
+        self.assertEqual(
+            SeriousAdverseEvent.objects.filter(patient=self.patient).count(), 2,
+        )
+
     def test_course_two_post_creates_session_and_side_effect_on_course_two(self):
         response = self.client.post(reverse('rtms_app:treatment_add', args=[self.patient.pk]), {
             'course_number': '2', 'treatment_date': '2026-08-05', 'treatment_time': '09:00',
