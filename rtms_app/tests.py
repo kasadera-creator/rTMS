@@ -1026,6 +1026,26 @@ class TestStage6ScheduleDeadlines(TestCase):
         self.assertIn('mapping', {item['key'] for item in compute_dashboard_tasks(self.patient, date(2026, 1, 16), set())})
         self.assertNotIn('mapping', {item['key'] for item in compute_dashboard_tasks(self.patient, date(2026, 1, 19), set())})
 
+    def test_course_mapping_task_uses_course_mapping_date(self):
+        from rtms_app.services.schedule_tasks import compute_task_definitions
+
+        course = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=2,
+            first_treatment_date=date(2026, 3, 2),
+            mapping_date=date(2026, 3, 9),
+        )
+        self.patient.mapping_date = date(2026, 1, 5)
+        self.patient.save(update_fields=['mapping_date'])
+
+        mapping = next(
+            item for item in compute_task_definitions(
+                self.patient, holidays=set(), treatment_course=course,
+            ) if item['key'] == 'mapping'
+        )
+
+        self.assertEqual(mapping['planned_date'], date(2026, 3, 16))
+
     def test_hamd_week4_ends_seven_days_after_week_end(self):
         from rtms_app.services.schedule_tasks import compute_dashboard_tasks, compute_task_definitions
 
@@ -3324,6 +3344,22 @@ class TestCourseAwarePhase2F4Workflows(TestCase):
         )}
         self.assertIn('assessment_week3', one_tasks)
         self.assertNotIn('assessment_week3', two_tasks)
+
+    def test_baseline_task_uses_explicit_course_performed_date(self):
+        from rtms_app.services.schedule_tasks import compute_task_definitions
+
+        Assessment.objects.create(
+            patient=self.patient, treatment_course=self.course_one, course_number=1,
+            timing='baseline', date=date(2026, 1, 5), type='HAM-D',
+        )
+
+        course_two_baseline = next(
+            item for item in compute_task_definitions(
+                self.patient, holidays=set(), treatment_course=self.course_two,
+            ) if item['key'] == 'assessment_baseline'
+        )
+
+        self.assertIsNone(course_two_baseline['performed_date'])
 
     def test_recommendation_uses_explicit_course_assessments(self):
         from rtms_app.services.recommendation import get_patient_recommendation

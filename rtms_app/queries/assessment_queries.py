@@ -5,10 +5,36 @@ Phase 10a: AssessmentRecord prioritization pattern (print views migration)
 Phase 10b: Assessment write path consolidation
 """
 from django.db.models import QuerySet
-from rtms_app.models import Assessment, Patient, AssessmentRecord, ScaleDefinition
+from rtms_app.models import Assessment, Patient, TreatmentCourse, AssessmentRecord, ScaleDefinition
 from typing import Optional, Union, List, Dict, Any, Tuple
 
 
+def resolve_legacy_treatment_course(patient: Patient, course_number: int = None):
+    course_number = course_number or patient.course_number or 1
+    return TreatmentCourse.objects.filter(
+        patient=patient, course_number=course_number,
+    ).first()
+
+
+def validate_treatment_course_scope(patient: Patient, course_number: int, treatment_course: TreatmentCourse):
+    if treatment_course is None:
+        raise ValueError("TreatmentCourse is required for a normal Course write")
+    if treatment_course.patient_id != patient.id:
+        raise ValueError("TreatmentCourse belongs to a different patient")
+    if course_number is not None and treatment_course.course_number != course_number:
+        raise ValueError("TreatmentCourse and course_number do not match")
+    return treatment_course
+
+
+def require_treatment_course(patient: Patient, course_number: int, treatment_course: TreatmentCourse):
+    """Validate the explicit Course required by a normal write path."""
+    return validate_treatment_course_scope(patient, course_number, treatment_course)
+
+
+def resolve_treatment_course(patient: Patient, course_number: int = None, treatment_course=None):
+    if treatment_course is not None:
+        return validate_treatment_course_scope(patient, course_number, treatment_course)
+    return resolve_legacy_treatment_course(patient, course_number)
 def get_assessments_ordered(patient: Patient) -> QuerySet[Assessment]:
     """
     患者の全Assessmentを日付順に取得
