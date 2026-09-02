@@ -1,16 +1,21 @@
 from typing import List, Dict, Any, Optional
 from django.utils import timezone
 from rtms_app.models import TreatmentSession, Assessment, AssessmentRecord
+from rtms_app.queries.assessment_queries import resolve_treatment_course
 
 
-def build_treatment_session_display(patient, course_number: int = 1) -> List[Dict[str, Any]]:
+def build_treatment_session_display(patient, course_number: int = None, treatment_course=None) -> List[Dict[str, Any]]:
     """Return a list of display dicts for treatment sessions for the patient/course.
 
     Each dict contains keys used by templates: count, date, mt, stim_pct_mt,
     output_pct, frequency_hz, train_seconds, intertrain_seconds, train_count, se
     """
+    treatment_course = resolve_treatment_course(patient, course_number, treatment_course)
+    scope = {'treatment_course': treatment_course} if treatment_course else {
+        'patient': patient, 'course_number': course_number,
+    }
     sessions = (
-        TreatmentSession.objects.filter(patient=patient, course_number=course_number)
+        TreatmentSession.objects.filter(**scope)
         .order_by('session_date', 'date')
     )
     out = []
