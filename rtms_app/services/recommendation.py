@@ -4,7 +4,8 @@ from typing import Optional, Dict, Any
 
 from django.utils import timezone
 
-from ..models import Assessment, Patient
+from ..models import Assessment, Patient, ScaleDefinition
+from ..queries.assessment_queries import get_assessment_by_timing_with_fallback, resolve_treatment_course
 
 
 @dataclass
@@ -40,7 +41,9 @@ def _choose_scale(score17: int, score21: int) -> tuple[str, int]:
     return ('HAMD17', 0)
 
 
-def get_patient_recommendation(patient: Patient) -> Recommendation:
+def get_patient_recommendation(
+    patient: Patient, treatment_course=None, course_number: int = None,
+) -> Recommendation:
     """
     Compute week-3 recommendation based on HAMD.
     Rules:
@@ -50,8 +53,25 @@ def get_patient_recommendation(patient: Patient) -> Recommendation:
     """
     now = timezone.localtime(timezone.now())
 
-    baseline = Assessment.objects.filter(patient=patient, timing='baseline').order_by('-date').first()
-    week3 = Assessment.objects.filter(patient=patient, timing='week3').order_by('-date').first()
+    treatment_course = resolve_treatment_course(
+        patient, course_number=course_number, treatment_course=treatment_course,
+    )
+    scope = {'treatment_course': treatment_course} if treatment_course else {
+        'patient': patient, 'course_number': course_number or patient.course_number or 1,
+    }
+    hamd_scale = ScaleDefinition.objects.filter(code='hamd').first()
+    if hamd_scale is not None:
+        baseline = get_assessment_by_timing_with_fallback(
+            patient, 'baseline', hamd_scale, course_number=course_number,
+            treatment_course=treatment_course,
+        )
+        week3 = get_assessment_by_timing_with_fallback(
+            patient, 'week3', hamd_scale, course_number=course_number,
+            treatment_course=treatment_course,
+        )
+    else:
+        baseline = Assessment.objects.filter(**scope, timing='baseline').order_by('-date').first()
+        week3 = Assessment.objects.filter(**scope, timing='week3').order_by('-date').first()
 
     if not week3 or not (week3.total_score_17 or week3.total_score_21):
         return Recommendation(

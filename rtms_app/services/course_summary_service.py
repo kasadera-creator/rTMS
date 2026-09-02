@@ -66,7 +66,12 @@ def build_treatment_session_display(patient, course_number: int = 1) -> List[Dic
     return out
 
 
-def build_assessment_trend(patient, timings: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+def build_assessment_trend(
+    patient,
+    timings: Optional[List[str]] = None,
+    treatment_course=None,
+    course_number: int = None,
+) -> List[Dict[str, Any]]:
     """Build trend columns for HAMD display. Returns list of dicts (label,date_str,hamd21,hamd17,improvement_pct_17,status_label)
 
     Default timings are baseline, week3, week4, week6 (same as UI elsewhere).
@@ -76,14 +81,23 @@ def build_assessment_trend(patient, timings: Optional[List[str]] = None) -> List
         timings = ['baseline', 'week3', 'week4', 'week6']
 
     # Fetch from both models to ensure coverage
+    treatment_course = resolve_treatment_course(
+        patient, course_number=course_number, treatment_course=treatment_course,
+    )
+    resolved_course_number = (
+        treatment_course.course_number
+        if treatment_course is not None
+        else course_number or patient.course_number or 1
+    )
+    assessment_scope = {'treatment_course': treatment_course} if treatment_course else {
+        'patient': patient, 'course_number': resolved_course_number,
+    }
     assessment_records = AssessmentRecord.objects.filter(
-        patient=patient,
-        course_number=patient.course_number or 1,
+        **assessment_scope,
         scale__code='hamd',
     ).order_by('-date')
     legacy_assessments = Assessment.objects.filter(
-        patient=patient,
-        course_number=patient.course_number or 1,
+        **assessment_scope,
         type='HAM-D',
     ).order_by('-date')
 

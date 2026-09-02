@@ -3379,6 +3379,50 @@ class TestCourseAwarePhase2F4Workflows(TestCase):
         self.assertEqual(get_patient_recommendation(self.patient, self.course_one).status, 'ineffective')
         self.assertEqual(get_patient_recommendation(self.patient, self.course_two).status, 'remission')
 
+    def test_course_two_hamd_trend_isolated_from_course_one(self):
+        from rtms_app.services.course_summary_service import build_assessment_trend
+
+        hamd = ScaleDefinition.objects.get_or_create(
+            code='hamd', defaults={'name': 'HAM-D'},
+        )[0]
+        AssessmentRecord.objects.create(
+            patient=self.patient, treatment_course=self.course_one, course_number=1,
+            timing='baseline', scale=hamd, date=date(2026, 1, 5),
+            scores={'q1': 25},
+        )
+        AssessmentRecord.objects.create(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            timing='baseline', scale=hamd, date=date(2026, 6, 1),
+            scores={'q1': 12},
+        )
+
+        trend = build_assessment_trend(
+            self.patient, timings=['baseline'], course_number=2,
+        )
+
+        self.assertEqual(trend[0]['hamd17'], 12)
+
+    def test_course_two_recommendation_uses_assessment_record_scope(self):
+        from rtms_app.services.recommendation import get_patient_recommendation
+
+        hamd = ScaleDefinition.objects.get_or_create(
+            code='hamd', defaults={'name': 'HAM-D'},
+        )[0]
+        AssessmentRecord.objects.create(
+            patient=self.patient, treatment_course=self.course_one, course_number=1,
+            timing='week3', scale=hamd, date=date(2026, 1, 19),
+            scores={'q1': 20},
+        )
+        AssessmentRecord.objects.create(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            timing='week3', scale=hamd, date=date(2026, 6, 15),
+            scores={'q1': 5},
+        )
+
+        recommendation = get_patient_recommendation(self.patient, course_number=2)
+
+        self.assertEqual(recommendation.status, 'remission')
+
 
 # ============================================================================
 # GROUP A: Print View Helpers Unit Tests
@@ -3954,6 +3998,30 @@ class TestAssessmentQueries(TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result.id, record.id)
         self.assertIsInstance(result, AssessmentRecord)
+
+    def test_get_assessment_by_timing_with_fallback_isolates_explicit_course(self):
+        from rtms_app.queries.assessment_queries import get_assessment_by_timing_with_fallback
+
+        course_one = TreatmentCourse.objects.create(patient=self.patient, course_number=1)
+        course_two = TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+        record_one = AssessmentRecord.objects.create(
+            patient=self.patient, treatment_course=course_one, course_number=1,
+            timing='baseline', scale=self.scale_hamd, date=date(2026, 1, 5),
+            scores={'q1': 25},
+        )
+        record_two = AssessmentRecord.objects.create(
+            patient=self.patient, treatment_course=course_two, course_number=2,
+            timing='baseline', scale=self.scale_hamd, date=date(2026, 6, 1),
+            scores={'q1': 12},
+        )
+
+        result = get_assessment_by_timing_with_fallback(
+            self.patient, 'baseline', self.scale_hamd,
+            course_number=2, treatment_course=course_two,
+        )
+
+        self.assertEqual(result.id, record_two.id)
+        self.assertNotEqual(result.id, record_one.id)
 
     def test_get_assessment_by_timing_with_fallback_legacy_only(self):
         """Test get_assessment_by_timing_with_fallback falls back to Assessment"""
