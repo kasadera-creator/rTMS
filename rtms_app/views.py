@@ -1169,7 +1169,7 @@ def patient_first_visit(request, patient_id):
                     reschedule_treatment_start_date(
                         patient,
                         p.first_treatment_date,
-                        course_number=patient.course_number or 1,
+                        course_number=course_number,
                         holidays=JP_HOLIDAYS,
                         allow_exceptional_day=bool(
                             p.first_treatment_date and not is_treatment_day(p.first_treatment_date)

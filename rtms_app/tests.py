@@ -2440,6 +2440,57 @@ class TestClinicalPathReschedule(TestCase):
             [date(2026, 8, 21), date(2026, 8, 24), date(2026, 8, 25)],
         )
 
+    def test_course_two_first_visit_rebuild_does_not_change_course_one(self):
+        doctor_group, _ = Group.objects.get_or_create(name='医師')
+        doctor = get_user_model().objects.create_user(username='course-two-first-visit-doctor')
+        doctor.groups.add(doctor_group)
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            first_treatment_date=date(2026, 8, 24), mapping_date=date(2026, 8, 24),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            first_treatment_date=date(2026, 9, 1), mapping_date=date(2026, 9, 1),
+        )
+        course_one_session = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=course_one, course_number=1,
+            session_date=date(2026, 8, 24), status='planned',
+        )
+        course_two_session = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=course_two, course_number=2,
+            session_date=date(2026, 9, 1), status='planned',
+        )
+
+        self.client.force_login(doctor)
+        response = self.client.post(
+            f'{reverse("rtms_app:patient_first_visit", args=[self.patient.pk])}?course_number=2',
+            {
+                'course_number': '2',
+                'card_id': '56001',
+                'name': self.patient.name,
+                'birth_date': self.patient.birth_date.isoformat(),
+                'gender': self.patient.gender,
+                'attending_physician': str(doctor.pk),
+                'admission_date': '2026-08-20',
+                'first_visit_date': '2026-08-20',
+                'first_treatment_date': '2026-09-02',
+                'has_other_psychiatric_history': 'no',
+                'psychiatric_history': [],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        course_one_session.refresh_from_db()
+        course_two_session.refresh_from_db()
+        self.patient.refresh_from_db()
+        course_one.refresh_from_db()
+        course_two.refresh_from_db()
+        self.assertEqual(course_one_session.session_date, date(2026, 8, 24))
+        self.assertEqual(course_two_session.session_date, date(2026, 9, 2))
+        self.assertEqual(course_one.first_treatment_date, date(2026, 8, 24))
+        self.assertEqual(course_two.first_treatment_date, date(2026, 9, 2))
+        self.assertEqual(self.patient.first_treatment_date, date(2026, 8, 24))
+
     def test_calendar_limits_planned_mapping_to_treatment_course(self):
         from rtms_app.views import generate_calendar_weeks
 
