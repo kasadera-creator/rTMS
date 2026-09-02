@@ -35,7 +35,17 @@ def resolve_treatment_course(patient: Patient, course_number: int = None, treatm
     if treatment_course is not None:
         return validate_treatment_course_scope(patient, course_number, treatment_course)
     return resolve_legacy_treatment_course(patient, course_number)
-def get_assessments_ordered(patient: Patient) -> QuerySet[Assessment]:
+
+
+def _assessment_scope(patient: Patient, course_number: int = None, treatment_course=None):
+    treatment_course = resolve_treatment_course(patient, course_number, treatment_course)
+    if treatment_course is not None:
+        return {"treatment_course": treatment_course}
+    course_number = course_number or patient.course_number or 1
+    return {"patient": patient, "course_number": course_number}
+
+
+def get_assessments_ordered(patient: Patient, treatment_course=None, course_number: int = None) -> QuerySet[Assessment]:
     """
     患者の全Assessmentを日付順に取得
 
@@ -54,10 +64,12 @@ def get_assessments_ordered(patient: Patient) -> QuerySet[Assessment]:
         >>> for a in history:
         ...     print(a.date, a.timing, a.total_score_17)
     """
-    return Assessment.objects.filter(patient=patient).order_by('date')
+    return Assessment.objects.filter(
+        **_assessment_scope(patient, course_number, treatment_course)
+    ).order_by('date')
 
 
-def get_latest_assessment(patient: Patient, timing: str) -> Optional[Assessment]:
+def get_latest_assessment(patient: Patient, timing: str, treatment_course=None, course_number: int = None) -> Optional[Assessment]:
     """
     患者の指定タイミングでの最新評価を取得
 
@@ -79,14 +91,17 @@ def get_latest_assessment(patient: Patient, timing: str) -> Optional[Assessment]
         ...     print(f"Baseline score: {baseline.total_score_17}")
         >>> week3 = get_latest_assessment(patient, 'week3')
     """
-    return Assessment.objects.filter(patient=patient, timing=timing).order_by('-date').first()
+    return Assessment.objects.filter(
+        **_assessment_scope(patient, course_number, treatment_course), timing=timing
+    ).order_by('-date').first()
 
 
 def get_assessment_by_timing_with_fallback(
     patient: Patient,
     timing: str,
     scale: ScaleDefinition,
-    course_number: int = None
+    course_number: int = None,
+    treatment_course=None,
 ) -> Optional[Union[AssessmentRecord, Assessment]]:
     """
     患者の指定タイミングでの評価を取得（新旧モデルのfallback対応）
@@ -122,13 +137,11 @@ def get_assessment_by_timing_with_fallback(
         >>> if baseline:
         ...     print(f"Score: {baseline.total_score_17}")
     """
-    if course_number is None:
-        course_number = patient.course_number or 1
+    scope = _assessment_scope(patient, course_number, treatment_course)
 
     # Try new model first (AssessmentRecord)
     record = AssessmentRecord.objects.filter(
-        patient=patient,
-        course_number=course_number,
+        **scope,
         timing=timing,
         scale=scale,
     ).order_by('-date').first()
@@ -139,8 +152,7 @@ def get_assessment_by_timing_with_fallback(
     # Fallback to legacy model (Assessment) only for HAM-D
     if scale.code == 'hamd':
         legacy = Assessment.objects.filter(
-            patient=patient,
-            course_number=course_number,
+            **scope,
             timing=timing,
             type='HAM-D',
         ).order_by('-date').first()
@@ -149,7 +161,7 @@ def get_assessment_by_timing_with_fallback(
     return None
 
 
-def get_baseline_assessments_ordered(patient: Patient) -> List[Union[AssessmentRecord, Assessment]]:
+def get_baseline_assessments_ordered(patient: Patient, treatment_course=None, course_number: int = None) -> List[Union[AssessmentRecord, Assessment]]:
     """
     患者のbaseline評価を全て取得（新旧モデルのfallback対応）
 
@@ -185,12 +197,13 @@ def get_baseline_assessments_ordered(patient: Patient) -> List[Union[AssessmentR
     except ScaleDefinition.DoesNotExist:
         # hamd scale が存在しない場合は Assessment をfallback
         return list(Assessment.objects.filter(
-            patient=patient, timing='baseline', type='HAM-D'
+            **_assessment_scope(patient, course_number, treatment_course), timing='baseline', type='HAM-D'
         ).order_by('date'))
 
     # Try new model first (AssessmentRecord)
+    scope = _assessment_scope(patient, course_number, treatment_course)
     new_records = list(AssessmentRecord.objects.filter(
-        patient=patient,
+        **scope,
         timing='baseline',
         scale=hamd_scale,
     ).order_by('date'))
@@ -200,7 +213,7 @@ def get_baseline_assessments_ordered(patient: Patient) -> List[Union[AssessmentR
 
     # Fallback to legacy model (Assessment)
     return list(Assessment.objects.filter(
-        patient=patient,
+        **scope,
         timing='baseline',
         type='HAM-D',
     ).order_by('date'))
@@ -218,7 +231,10 @@ def save_assessment_record(
     date: Any,
     scores: Dict[str, Any],
     note: str = "",
-    defaults_override: Optional[Dict[str, Any]] = None
+    defaults_override: Optional[Dict[str, Any]] = None,
+    treatment_course: Optional[TreatmentCourse] = None,
+    *,
+    _legacy: bool = False,
 ) -> Tuple[AssessmentRecord, bool]:
     """
     AssessmentRecord を作成・更新（共通ロジック）
@@ -258,17 +274,31 @@ def save_assessment_record(
         ...     note="改善あり"
         ... )
     """
+    explicit_course = defaults_override.get('treatment_course') if defaults_override else None
+    if _legacy:
+        treatment_course = resolve_treatment_course(
+            patient, course_number, treatment_course or explicit_course,
+        )
+    else:
+        treatment_course = require_treatment_course(
+            patient, course_number, treatment_course or explicit_course,
+        )
     defaults = {
+        'patient': patient,
+        'course_number': course_number,
         'date': date,
         'scores': scores,
         'note': note,
     }
     if defaults_override:
         defaults.update(defaults_override)
+    defaults['treatment_course'] = treatment_course
 
+    scope = {'treatment_course': treatment_course} if treatment_course is not None else {
+        'patient': patient, 'course_number': course_number,
+    }
     record, created = AssessmentRecord.objects.update_or_create(
-        patient=patient,
-        course_number=course_number,
+        **scope,
         timing=timing,
         scale=scale,
         defaults=defaults,
@@ -283,7 +313,10 @@ def save_assessment_hamd(
     timing: str,
     date: Any,
     scores: Dict[str, Any],
-    note: str = ""
+    note: str = "",
+    treatment_course: Optional[TreatmentCourse] = None,
+    *,
+    _legacy: bool = False,
 ) -> Tuple[Assessment, bool]:
     """
     Assessment (HAM-D) を作成・更新（共通ロジック）
@@ -321,18 +354,51 @@ def save_assessment_hamd(
         ...     note=""
         ... )
     """
+    if _legacy:
+        treatment_course = resolve_treatment_course(patient, course_number, treatment_course)
+    else:
+        treatment_course = require_treatment_course(patient, course_number, treatment_course)
     defaults = {
+        'patient': patient,
+        'course_number': course_number,
         'date': date,
         'scores': scores,
         'note': note,
         'type': 'HAM-D',
     }
+    defaults['treatment_course'] = treatment_course
+    scope = {'treatment_course': treatment_course} if treatment_course is not None else {
+        'patient': patient, 'course_number': course_number,
+    }
     legacy, created = Assessment.objects.update_or_create(
-        patient=patient,
-        course_number=course_number,
+        **scope,
         timing=timing,
         type='HAM-D',
         defaults=defaults,
     )
     # Model.save() will automatically call calculate_scores() if type == 'HAM-D'
     return legacy, created
+
+
+def save_assessment_record_legacy(*args, **kwargs):
+    """Legacy AssessmentRecord write with explicit legacy Course resolution."""
+    patient = kwargs.get('patient') or args[0]
+    course_number = kwargs.get('course_number')
+    treatment_course = kwargs.get('treatment_course')
+    if treatment_course is None:
+        treatment_course = resolve_legacy_treatment_course(patient, course_number)
+    kwargs['treatment_course'] = treatment_course
+    kwargs['_legacy'] = True
+    return save_assessment_record(*args, **kwargs)
+
+
+def save_assessment_hamd_legacy(*args, **kwargs):
+    """Legacy HAM-D write with explicit legacy Course resolution."""
+    patient = kwargs.get('patient') or args[0]
+    course_number = kwargs.get('course_number')
+    treatment_course = kwargs.get('treatment_course')
+    if treatment_course is None:
+        treatment_course = resolve_legacy_treatment_course(patient, course_number)
+    kwargs['treatment_course'] = treatment_course
+    kwargs['_legacy'] = True
+    return save_assessment_hamd(*args, **kwargs)

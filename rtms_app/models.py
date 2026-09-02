@@ -663,7 +663,8 @@ class AssessmentSchedule(models.Model):
         verbose_name = "評価予定"
         verbose_name_plural = "評価予定"
         constraints = [
-            models.UniqueConstraint(fields=['patient', 'course_number', 'scale', 'timing'], name='unique_assessment_schedule_per_patient_course_scale_timing')
+            models.UniqueConstraint(fields=['patient', 'course_number', 'scale', 'timing'], name='unique_assessment_schedule_per_patient_course_scale_timing'),
+            models.UniqueConstraint(fields=['treatment_course', 'scale', 'timing'], name='unique_assessment_schedule_per_treatment_course_scale_timing'),
         ]
 
     def __str__(self):
