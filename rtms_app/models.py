@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.contrib.auth.models import User
 import os
@@ -101,6 +102,120 @@ class Patient(models.Model):
         verbose_name_plural = "患者"
 
 
+class TreatmentCourse(models.Model):
+    COURSE_STATUS_CHOICES = [
+        ("waiting_admission", "入院待ち"),
+        ("inpatient_waiting_treatment", "入院中（rTMS待ち）"),
+        ("treatment_in_progress", "rTMS中"),
+        ("treatment_finished_waiting_discharge", "rTMS終了（退院待ち）"),
+        ("discharged", "退院済"),
+        ("cancelled", "中止"),
+        ("withdrawn", "撤回"),
+        ("on_hold", "保留"),
+    ]
+    COURSE_END_REASON_CHOICES = [
+        ("completed", "完了"),
+        ("cancelled", "キャンセル"),
+        ("discontinued", "中止"),
+        ("physician_decision", "医師判断"),
+        ("adverse_event", "有害事象"),
+        ("withdrawn", "撤回"),
+    ]
+
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.PROTECT,
+        related_name="treatment_courses",
+    )
+    course_number = models.PositiveIntegerField("クール数")
+
+    course_status = models.CharField(
+        "クール状態",
+        max_length=48,
+        choices=COURSE_STATUS_CHOICES,
+        default="waiting_admission",
+        db_index=True,
+    )
+    course_end_reason = models.CharField(
+        "クール終了理由",
+        max_length=32,
+        choices=COURSE_END_REASON_CHOICES,
+        blank=True,
+        default="",
+    )
+
+    chief_complaint = models.TextField("主訴", blank=True, default="")
+    diagnosis = models.CharField("診断名", max_length=200, default="うつ病")
+    life_history = models.TextField("生活歴", blank=True, default="")
+    past_history = models.TextField("既往歴", blank=True, default="")
+    present_illness = models.TextField("現病歴", blank=True, default="")
+    medication_history = models.TextField("薬剤治療歴", blank=True, default="")
+    has_other_psychiatric_history = models.CharField(
+        "その他の精神疾患既往",
+        max_length=8,
+        choices=Patient.HAS_PSY_CHOICES,
+        default="yes",
+    )
+    psychiatric_history = models.JSONField("既往精神疾患", default=list, blank=True, null=True)
+    psychiatric_history_other_text = models.TextField("既往精神疾患（その他）", blank=True, default="")
+    estimated_onset_year = models.IntegerField("原疾患推定発症年", null=True, blank=True)
+    estimated_onset_month = models.IntegerField("原疾患推定発症月", null=True, blank=True)
+
+    weight_kg = models.DecimalField("体重 (kg)", max_digits=4, decimal_places=1, null=True, blank=True)
+    is_weight_unknown = models.BooleanField("体重不明", default=False)
+
+    attending_physician = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="担当医",
+    )
+    referral_source = models.CharField("紹介元医療機関", max_length=200, blank=True, default="")
+    referral_doctor = models.CharField("紹介医", max_length=100, blank=True, default="")
+
+    first_visit_date = models.DateField("初診日", null=True, blank=True)
+    admission_date = models.DateField("入院予定日", null=True, blank=True)
+    admission_type = models.CharField(
+        "入院形態",
+        max_length=20,
+        choices=Patient.ADMISSION_TYPES,
+        default="voluntary",
+    )
+    is_admission_procedure_done = models.BooleanField("入院手続き完了", default=False)
+    first_treatment_date = models.DateField("初回治療日", null=True, blank=True)
+    mapping_date = models.DateField("初回位置決め日", null=True, blank=True)
+    mapping_notes = models.TextField("位置決め記録メモ", blank=True, default="")
+
+    is_all_case_survey = models.BooleanField("全例調査対象", default=False)
+    questionnaire_data = models.JSONField("適正質問票", default=dict, blank=True, null=True)
+
+    summary_text = models.TextField("サマリー本文", blank=True, default="")
+    discharge_prescription = models.TextField("退院時処方", blank=True, default="")
+    discharge_date = models.DateField("退院日", null=True, blank=True)
+    completed_at = models.DateTimeField("治療完了日時", null=True, blank=True)
+    discharged_at = models.DateTimeField("退院確定日時", null=True, blank=True)
+
+    created_at = models.DateTimeField("登録日時", auto_now_add=True)
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "治療クール"
+        verbose_name_plural = "治療クール"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["patient", "course_number"],
+                name="unique_treatment_course_per_patient_number",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["patient", "course_status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.patient} - {self.course_number}クール"
+
+
 def consent_upload_to(instance, filename):
     # 拡張子を維持（.pdf想定）
     ext = os.path.splitext(filename)[1].lower() or ".pdf"
@@ -129,6 +244,13 @@ class MappingSession(models.Model):
         (7, '第7週'), (8, '第8週')
     ]
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE)
+    treatment_course = models.ForeignKey(
+        TreatmentCourse,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="mapping_sessions",
+    )
     # クール数を記録（自然キーの一部）
     course_number = models.IntegerField("クール数", default=1, db_index=True)
     date = models.DateField("実施日", default=timezone.now)
@@ -154,7 +276,8 @@ class MappingSession(models.Model):
         verbose_name = "位置決めセッション"
         verbose_name_plural = "位置決めセッション"
         constraints = [
-            models.UniqueConstraint(fields=['patient', 'course_number', 'date', 'stimulation_site'], name='unique_mapping_per_patient_course_date_site')
+            models.UniqueConstraint(fields=['patient', 'course_number', 'date', 'stimulation_site'], name='unique_mapping_per_patient_course_date_site'),
+            models.UniqueConstraint(fields=['treatment_course', 'date', 'stimulation_site'], name='unique_mapping_per_treatment_course_date_site'),
         ]
 
 
@@ -168,6 +291,13 @@ class MappingSchedule(models.Model):
     week's slot does not affect any other week (no cascade).
     """
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='mapping_schedules')
+    treatment_course = models.ForeignKey(
+        TreatmentCourse,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="mapping_schedules",
+    )
     course_number = models.IntegerField("クール数", default=1, db_index=True)
     week_number = models.IntegerField("週", choices=MappingSession.WEEK_CHOICES)
     planned_date = models.DateField("予定日")
@@ -177,7 +307,8 @@ class MappingSchedule(models.Model):
         verbose_name = "MT測定予定"
         verbose_name_plural = "MT測定予定"
         constraints = [
-            models.UniqueConstraint(fields=['patient', 'course_number', 'week_number'], name='unique_mapping_schedule_per_patient_course_week')
+            models.UniqueConstraint(fields=['patient', 'course_number', 'week_number'], name='unique_mapping_schedule_per_patient_course_week'),
+            models.UniqueConstraint(fields=['treatment_course', 'week_number'], name='unique_mapping_schedule_per_treatment_course_week'),
         ]
 
     def __str__(self):
@@ -186,6 +317,13 @@ class MappingSchedule(models.Model):
 
 class TreatmentSession(models.Model):
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE)
+    treatment_course = models.ForeignKey(
+        "TreatmentCourse",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="treatment_sessions",
+    )
     # 日時は詳細情報として保持しつつ、レコードの自然キーとして日付部分を別管理
     date = models.DateTimeField("日時", default=timezone.now)
     # クール数を記録（自然キーの一部）
@@ -238,6 +376,12 @@ class TreatmentSession(models.Model):
     performer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
 
     def save(self, *args, **kwargs):
+        if self.treatment_course_id is not None:
+            treatment_course = TreatmentCourse.objects.get(pk=self.treatment_course_id)
+            if treatment_course.patient_id != self.patient_id:
+                raise ValidationError("TreatmentSession patient and TreatmentCourse patient must match")
+            if treatment_course.course_number != self.course_number:
+                raise ValidationError("TreatmentSession course_number and TreatmentCourse must match")
         if self.intensity_percent is None and self.intensity is not None:
             self.intensity_percent = self.intensity
         elif self.intensity is None and self.intensity_percent is not None:
@@ -276,7 +420,8 @@ class TreatmentSession(models.Model):
         verbose_name = "治療セッション"
         verbose_name_plural = "治療セッション"
         constraints = [
-            models.UniqueConstraint(fields=['patient', 'course_number', 'session_date', 'slot'], name='unique_treatment_per_patient_course_date_slot')
+            models.UniqueConstraint(fields=['patient', 'course_number', 'session_date', 'slot'], name='unique_treatment_per_patient_course_date_slot'),
+            models.UniqueConstraint(fields=['treatment_course', 'session_date', 'slot'], name='unique_treatment_per_course_date_slot'),
         ]
 
 
@@ -348,6 +493,13 @@ class Assessment(models.Model):
         ('other', 'その他'),
     ]
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE)
+    treatment_course = models.ForeignKey(
+        TreatmentCourse,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="assessments",
+    )
     # クール数を記録（自然キーの一部）
     course_number = models.IntegerField("クール数", default=1, db_index=True)
     date = models.DateField("日", default=timezone.now)
@@ -375,6 +527,7 @@ class Assessment(models.Model):
         verbose_name_plural = "評価"
         constraints = [
             models.UniqueConstraint(fields=['patient', 'course_number', 'timing', 'type'], name='unique_assessment_per_patient_course_timing_type')
+            ,models.UniqueConstraint(fields=['treatment_course', 'timing', 'type'], name='unique_assessment_per_treatment_course_timing_type')
         ]
 
 
@@ -426,6 +579,13 @@ class AssessmentRecord(models.Model):
     """
 
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE)
+    treatment_course = models.ForeignKey(
+        TreatmentCourse,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="assessment_records",
+    )
     course_number = models.IntegerField("クール数", default=1, db_index=True)
     timing = models.CharField("時期", max_length=20, choices=Assessment.TIMING_CHOICES, db_index=True)
     scale = models.ForeignKey(ScaleDefinition, on_delete=models.PROTECT, related_name="records")
@@ -462,7 +622,11 @@ class AssessmentRecord(models.Model):
             models.UniqueConstraint(
                 fields=['patient', 'course_number', 'timing', 'scale'],
                 name='unique_assessment_record_per_patient_course_timing_scale',
-            )
+            ),
+            models.UniqueConstraint(
+                fields=['treatment_course', 'timing', 'scale'],
+                name='unique_assessment_record_per_treatment_course_timing_scale',
+            ),
         ]
         indexes = [
             models.Index(fields=['patient', 'timing']),
@@ -482,6 +646,13 @@ class AssessmentSchedule(models.Model):
     until performed - this is computed at render time and does not require a row here.
     """
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='assessment_schedules')
+    treatment_course = models.ForeignKey(
+        TreatmentCourse,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="assessment_schedules",
+    )
     course_number = models.IntegerField("クール数", default=1, db_index=True)
     scale = models.ForeignKey(ScaleDefinition, on_delete=models.CASCADE, related_name='schedules')
     timing = models.CharField("時期", max_length=20, choices=Assessment.TIMING_CHOICES)
