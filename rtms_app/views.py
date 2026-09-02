@@ -11,7 +11,7 @@ from django.http import HttpResponse, FileResponse, JsonResponse, HttpResponseBa
 from django.conf import settings
 from django.contrib.auth import logout
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import F, Q
 import os
 import csv
 import json
@@ -173,38 +173,44 @@ def _first_last_treatment_day_in_range(start_d, end_d):
 
 
 
-def get_assessment_window(patient, timing):
+def get_assessment_window(patient, timing, treatment_course=None):
     """
     評価予定日レンジ(window)を返す: (window_start, window_end)
     baseline: 初診日(created_at)〜初回治療日
     week3: 第3週(14-20日後)の治療日(平日・祝日除外)の最初〜最後
     week6: 第6週(35-41日後)の治療日(平日・祝日除外)の最初〜最後
     """
+    first_treatment_date = (
+        treatment_course.first_treatment_date
+        if treatment_course and treatment_course.first_treatment_date
+        else patient.first_treatment_date
+    )
+
     # baseline
     if timing == "baseline":
         ws = patient.first_visit_date or (patient.created_at.date() if patient.created_at else timezone.localdate())
-        we = patient.first_treatment_date or ws
+        we = first_treatment_date or ws
         # Existing baseline design ends at the first treatment date. If legacy
         # registration data is later than that deadline, use the deadline as
         # the valid start rather than creating an inverted interval.
-        if patient.first_treatment_date and ws > we:
+        if first_treatment_date and ws > we:
             ws = we
         return ws, we
 
     if timing.startswith('tinkertory_'):
-        if not patient.first_treatment_date:
+        if not first_treatment_date:
             today = timezone.localdate()
             return today, today
         week_index = int(timing.rsplit('_', 1)[-1])
-        start = patient.first_treatment_date + timedelta(days=(week_index - 1) * 7)
+        start = first_treatment_date + timedelta(days=(week_index - 1) * 7)
         end = start + timedelta(days=6)
         return start, end
 
-    if not patient.first_treatment_date:
+    if not first_treatment_date:
         today = timezone.localdate()
         return today, today
 
-    ft = patient.first_treatment_date
+    ft = first_treatment_date
     week_number = {'week3': 3, 'week4': 4, 'week6': 6}.get(timing)
     if week_number is None:
         today = timezone.localdate()
@@ -800,54 +806,77 @@ def dashboard_view(request):
     target_date_display = f"{target_date.year}年{target_date.month}月{target_date.day}日 ({weekdays[target_date.weekday()]})"
     prev_day = target_date - timedelta(days=1); next_day = target_date + timedelta(days=1)
 
-    task_first_visit = [{'obj': p, 'status': "診察済", 'todo': "初診"} for p in Patient.objects.filter(created_at__date=target_date)]
+    try:
+        requested_course_number = int(request.GET.get('course_number')) if request.GET.get('course_number') else None
+    except (TypeError, ValueError):
+        requested_course_number = None
+    if requested_course_number is not None:
+        course_queryset = TreatmentCourse.objects.select_related('patient').filter(
+            course_number=requested_course_number,
+        )
+    else:
+        course_queryset = TreatmentCourse.objects.select_related('patient').filter(
+            course_number=F('patient__course_number'),
+        )
+    dashboard_rows = [(course.patient, course) for course in course_queryset]
+    dashboard_rows.extend(
+        (patient, None) for patient in Patient.objects.filter(treatment_courses__isnull=True)
+    )
+
+    def date_for(patient, course, field_name):
+        return getattr(course, field_name, None) if course else getattr(patient, field_name, None)
+
+    def task_for(patient, course, **values):
+        return {'obj': patient, 'course_number': course.course_number if course else patient.course_number or 1, **values}
+
+    task_first_visit = [task_for(p, course, status="診察済", todo="初診") for p, course in dashboard_rows if p.created_at.date() == target_date]
     task_admission = []; task_mapping = []; task_treatment = []; task_assessment = []; task_discharge = []
 
-    for p in Patient.objects.filter(admission_date=target_date):
+    for p, course in dashboard_rows:
+        if date_for(p, course, 'admission_date') != target_date:
+            continue
         status = "手続済" if p.is_admission_procedure_done else "要手続"; color = "success" if p.is_admission_procedure_done else "warning"
-        task_admission.append({'obj': p, 'status': status, 'color': color, 'todo': "入院手続き"})
-    for p in Patient.objects.filter(mapping_date=target_date):
-        course = TreatmentCourse.objects.filter(
-            patient=p, course_number=p.course_number or 1,
-        ).first()
+        task_admission.append(task_for(p, course, status=status, color=color, todo="入院手続き"))
+    for p, course in dashboard_rows:
+        if date_for(p, course, 'mapping_date') != target_date:
+            continue
         mapping_scope = {'treatment_course': course} if course else {
             'patient': p, 'course_number': p.course_number or 1,
         }
         is_done = MappingSession.objects.filter(**mapping_scope, date=target_date).exists()
-        task_mapping.append({'obj': p, 'status': "実施済" if is_done else "実施未", 'color': "success" if is_done else "danger", 'todo': "MT測定"})
+        task_mapping.append(task_for(p, course, status="実施済" if is_done else "実施未", color="success" if is_done else "danger", todo="MT測定"))
 
-    pre_candidates = Patient.objects.filter(admission_date__lte=target_date).filter(Q(first_treatment_date__isnull=True) | Q(first_treatment_date__gte=target_date))
-    for p in pre_candidates:
-        current_course = TreatmentCourse.objects.filter(
-            patient=p, course_number=p.course_number or 1,
-        ).first()
+    for p, current_course in dashboard_rows:
+        admission_date = date_for(p, current_course, 'admission_date')
+        first_treatment_date = date_for(p, current_course, 'first_treatment_date')
+        if not (admission_date and admission_date <= target_date and (first_treatment_date is None or first_treatment_date >= target_date)):
+            continue
         assessment_scope = {'treatment_course': current_course} if current_course else {
             'patient': p, 'course_number': p.course_number or 1,
         }
-        ws, we = get_assessment_window(p, 'baseline')
+        ws, we = get_assessment_window(p, 'baseline', treatment_course=current_course)
         if ws <= target_date <= we:
             done = Assessment.objects.filter(**assessment_scope, timing='baseline').exists()
-            if not done: task_assessment.append({'obj': p, 'status': "実施未", 'color': "danger", 'timing_code': 'baseline', 'todo': f"治療前評価 ({we.strftime('%m/%d')})"})
-            elif Assessment.objects.filter(**assessment_scope, timing='baseline', date=target_date).exists(): task_assessment.append({'obj': p, 'status': "実施済", 'color': "success", 'timing_code': 'baseline', 'todo': "治療前評価 (完了)"})
+            if not done: task_assessment.append(task_for(p, current_course, status="実施未", color="danger", timing_code='baseline', todo=f"治療前評価 ({we.strftime('%m/%d')})"))
+            elif Assessment.objects.filter(**assessment_scope, timing='baseline', date=target_date).exists(): task_assessment.append(task_for(p, current_course, status="実施済", color="success", timing_code='baseline', todo="治療前評価 (完了)"))
 
-    active_candidates = Patient.objects.filter(first_treatment_date__lte=target_date).order_by('card_id')
-    for p in active_candidates:
-        current_course = TreatmentCourse.objects.filter(
-            patient=p, course_number=p.course_number or 1,
-        ).first()
+    active_candidates = [(p, course) for p, course in dashboard_rows if date_for(p, course, 'first_treatment_date') and date_for(p, course, 'first_treatment_date') <= target_date]
+    active_candidates.sort(key=lambda row: row[0].card_id)
+    for p, current_course in active_candidates:
         activity_scope = {'treatment_course': current_course} if current_course else {
             'patient': p, 'course_number': p.course_number or 1,
         }
         # Use canonical treat_dates for session/week labels
         info = None
-        if p.first_treatment_date:
-            tdates = generate_treatment_dates(p.first_treatment_date, total=30, holidays=JP_HOLIDAYS)
+        first_treatment_date = date_for(p, current_course, 'first_treatment_date')
+        if first_treatment_date:
+            tdates = generate_treatment_dates(first_treatment_date, total=30, holidays=JP_HOLIDAYS)
             if target_date in tdates:
                 idx = tdates.index(target_date)
                 info = {
                     'session_no': idx + 1,
                     # Week number rolls over on the same weekday anchored to first treatment date
-                    'week_no': get_current_week_number(p.first_treatment_date, target_date)
+                    'week_no': get_current_week_number(first_treatment_date, target_date)
                 }
 
         if info:
@@ -855,43 +884,41 @@ def dashboard_view(request):
             week = info['week_no']
             today_session = TreatmentSession.objects.filter(**activity_scope, date__date=target_date).first(); is_done = today_session is not None
             todo_label = format_rtms_label(n, week)
-            task_treatment.append({'obj': p, 'note': '', 'status': "実施済" if is_done else "実施未", 'color': "success" if is_done else "danger", 'session_num': n, 'todo': todo_label})
+            task_treatment.append(task_for(p, current_course, note='', status="実施済" if is_done else "実施未", color="success" if is_done else "danger", session_num=n, todo=todo_label))
 
         # Use get_assessment_window() for week3/week4/week6 to match clinical path windows
         for timing_code, label_name in [('week3', '第3週目評価'), ('week4', '4週経過後HAM-D評価'), ('week6', '第6週目評価')]:
-            ws, we = get_assessment_window(p, timing_code)
+            ws, we = get_assessment_window(p, timing_code, treatment_course=current_course)
             if ws and we and target_date == we:
                 assessment = Assessment.objects.filter(**activity_scope, timing=timing_code, date__range=[ws, we]).first()
                 if assessment:
                     # mark as done
-                    task_assessment.append({'obj': p, 'status': "実施済", 'color': "success", 'timing_code': timing_code, 'todo': f"{label_name} (完了)"})
+                    task_assessment.append(task_for(p, current_course, status="実施済", color="success", timing_code=timing_code, todo=f"{label_name} (完了)"))
                 else:
-                    task_assessment.append({'obj': p, 'status': "実施未", 'color': "danger", 'timing_code': timing_code, 'todo': f"{label_name} ({we.strftime('%m/%d')})"})
+                    task_assessment.append(task_for(p, current_course, status="実施未", color="danger", timing_code=timing_code, todo=f"{label_name} ({we.strftime('%m/%d')})"))
         # Discharge readiness is handled below via confirmed/estimated dates; avoid DB-count based labels
 
     # 退院準備: 退院日が確定している患者
-    discharge_patients = Patient.objects.filter(discharge_date=target_date)
-    for p in discharge_patients:
-        task_discharge.append({'obj': p, 'status': "退院準備", 'color': "info", 'todo': "サマリー・紹介状作成"})
+    for p, course in dashboard_rows:
+        if date_for(p, course, 'discharge_date') == target_date:
+            task_discharge.append(task_for(p, course, status="退院準備", color="info", todo="サマリー・紹介状作成"))
 
     # 退院準備: 退院日未設定だが30回目治療日の患者（同日に表示）
-    for p in active_candidates:
-        if p.discharge_date: continue  # 既に上記で追加済み
-        if p.first_treatment_date:
-            tdates = generate_treatment_dates(p.first_treatment_date, total=30, holidays=JP_HOLIDAYS)
+    for p, current_course in active_candidates:
+        if date_for(p, current_course, 'discharge_date'): continue  # 既に上記で追加済み
+        first_treatment_date = date_for(p, current_course, 'first_treatment_date')
+        if first_treatment_date:
+            tdates = generate_treatment_dates(first_treatment_date, total=30, holidays=JP_HOLIDAYS)
             treatment_end_est = tdates[-1] if tdates else None
         else:
             treatment_end_est = None
         if treatment_end_est and target_date == treatment_end_est:
-            task_discharge.append({'obj': p, 'status': "退院準備（予定）", 'color': "info", 'todo': "サマリー・紹介状作成"})
+            task_discharge.append(task_for(p, current_course, status="退院準備（予定）", color="info", todo="サマリー・紹介状作成"))
 
     # サービス化したスケジュールタスクをダッシュボードに反映
     # compute_dashboard_tasks は planned_date <= today の未実施タスクを返す
-    for p in Patient.objects.all():
+    for p, current_course in dashboard_rows:
         try:
-            current_course = TreatmentCourse.objects.filter(
-                patient=p, course_number=p.course_number or 1,
-            ).first()
             svc_tasks = compute_dashboard_tasks(
                 p, today=target_date, holidays=JP_HOLIDAYS,
                 treatment_course=current_course,
@@ -903,10 +930,10 @@ def dashboard_view(request):
             label = tt.get('label') or '未実施タスク'
             perf = tt.get('performed_date')
             if key == 'mapping':
-                task_mapping.append({'obj': p, 'status': "実施済" if perf else "実施未", 'color': "success" if perf else "danger", 'todo': label})
+                task_mapping.append(task_for(p, current_course, status="実施済" if perf else "実施未", color="success" if perf else "danger", todo=label))
             elif key.startswith('assessment'):
                 timing = key.replace('assessment_', '')
-                task_assessment.append({'obj': p, 'status': "実施済" if perf else "実施未", 'color': "success" if perf else "danger", 'timing_code': timing, 'todo': label})
+                task_assessment.append(task_for(p, current_course, status="実施済" if perf else "実施未", color="success" if perf else "danger", timing_code=timing, todo=label))
 
     dashboard_tasks = [{'list': task_first_visit, 'title': "① 初診", 'color_class': "bg-g-first-visit", 'icon': "fa-user-plus"}, {'list': task_admission, 'title': "② 入院", 'color_class': "bg-g-admission", 'icon': "fa-procedures"}, {'list': task_mapping, 'title': "③ MT測定", 'color_class': "bg-g-mapping", 'icon': "fa-crosshairs"}, {'list': task_treatment, 'title': "④ 治療実施", 'color_class': "bg-g-treatment", 'icon': "fa-bolt"}, {'list': task_assessment, 'title': "⑤ 尺度評価", 'color_class': "bg-g-assessment", 'icon': "fa-clipboard-check"}, {'list': task_discharge, 'title': "⑥ 退院準備", 'color_class': "bg-g-discharge", 'icon': "fa-file-export"}]
     return render(request, 'rtms_app/dashboard.html', {'today': target_date, 'target_date_display': target_date_display, 'prev_day': prev_day, 'next_day': next_day, 'today_raw': jst_now.date(), 'dashboard_tasks': dashboard_tasks})

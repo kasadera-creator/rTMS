@@ -158,27 +158,27 @@
                             {% for item in task_group.list %}
                                 <div class="list-group-item">
                                     {% if task_group.title == "① 初診" %}
-                                        <a href="{% url 'rtms_app:patient_first_visit' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
+                                        <a href="{% url 'rtms_app:patient_first_visit' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
                                         {% elif task_group.title == "② 入院" %}
-                                            <a href="{% url 'rtms_app:admission_procedure' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
+                                            <a href="{% url 'rtms_app:admission_procedure' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
                                             {% elif task_group.title == "③ MT測定" %}
-                                                <a href="{% url 'rtms_app:mapping_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                                                <a href="{% url 'rtms_app:mapping_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
                                                 {% elif task_group.title == "④ 治療実施" %}
-                                                    <a href="{% url 'rtms_app:treatment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                                                    <a href="{% url 'rtms_app:treatment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
                                                     {% elif task_group.title == "⑤ 尺度評価" %}
                                                         {% if item.timing_code == 'baseline' %}
-                                                            <a href="{% url 'rtms_app:assessment_add' item.obj.id 'baseline' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                                                            <a href="{% url 'rtms_app:assessment_add' item.obj.id 'baseline' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
                                                             {% elif item.timing_code == 'week3' %}
-                                                                <a href="{% url 'rtms_app:assessment_add' item.obj.id 'week3' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                                                                <a href="{% url 'rtms_app:assessment_add' item.obj.id 'week3' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
                                                                 {% elif item.timing_code == 'week4' %}
-                                                                    <a href="{% url 'rtms_app:assessment_add' item.obj.id 'week4' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                                                                    <a href="{% url 'rtms_app:assessment_add' item.obj.id 'week4' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
                                                                     {% elif item.timing_code == 'week6' %}
-                                                                        <a href="{% url 'rtms_app:assessment_add' item.obj.id 'week6' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                                                                        <a href="{% url 'rtms_app:assessment_add' item.obj.id 'week6' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
                                                                         {% else %}
-                                                                            <a href="{% url 'rtms_app:assessment_add' item.obj.id 'baseline' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}">
+                                                                            <a href="{% url 'rtms_app:assessment_add' item.obj.id 'baseline' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
                                                                             {% endif %}
                                                                         {% elif task_group.title == "⑥ 退院準備" %}
-                                                                            <a href="{% url 'rtms_app:patient_home' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}">
+                                                                            <a href="{% url 'rtms_app:patient_home' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
                                                                             {% endif %}
                                                                             <!-- 1. やること (上) -->
                                                                             <div class="todo-row">

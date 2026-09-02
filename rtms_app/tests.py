@@ -28,6 +28,63 @@ from rtms_app.surveys import INSTRUMENT_ORDER, get_instrument
 from rtms_app.services.patient_accounts import ensure_patient_group
 
 
+class TestDashboardCourseIsolation(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='dashboard-course-user', password='pw')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='DASHCOURSE', name='Dashboard Course Patient', birth_date=date(1980, 1, 1),
+            course_number=1,
+            admission_date=date(2026, 1, 1), mapping_date=date(2026, 1, 2),
+            first_treatment_date=date(2026, 1, 5), discharge_date=date(2026, 2, 13),
+        )
+        self.course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            admission_date=date(2026, 1, 1), mapping_date=date(2026, 1, 2),
+            first_treatment_date=date(2026, 1, 5), discharge_date=date(2026, 2, 13),
+        )
+        self.course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            admission_date=date(2026, 8, 1), mapping_date=date(2026, 8, 3),
+            first_treatment_date=date(2026, 8, 4), discharge_date=date(2026, 9, 11),
+        )
+
+    def _tasks_for(self, response, title):
+        return next(group['list'] for group in response.context['dashboard_tasks'] if group['title'] == title)
+
+    def test_course_two_dates_are_isolated_from_patient_and_course_one(self):
+        response = self.client.get('/app/dashboard/?date=2026-08-03&course_number=2')
+
+        mapping_tasks = self._tasks_for(response, '③ MT測定')
+        self.assertEqual(len(mapping_tasks), 1)
+        self.assertEqual(mapping_tasks[0]['course_number'], 2)
+        self.assertContains(response, 'course_number=2')
+        self.assertNotContains(response, 'course_number=1')
+        self.assertEqual(self.patient.refresh_from_db(), None)
+        self.assertEqual(self.patient.admission_date, date(2026, 1, 1))
+        self.assertEqual(self.course_one.admission_date, date(2026, 1, 1))
+        self.assertEqual(self.course_one.mapping_date, date(2026, 1, 2))
+
+    def test_default_dashboard_keeps_course_one_compatibility(self):
+        response = self.client.get('/app/dashboard/?date=2026-01-02')
+
+        mapping_tasks = self._tasks_for(response, '③ MT測定')
+        self.assertEqual(len(mapping_tasks), 1)
+        self.assertEqual(mapping_tasks[0]['course_number'], 1)
+
+    def test_patients_without_course_use_patient_date_fallback(self):
+        legacy = Patient.objects.create(
+            card_id='DASHLEGACY', name='Dashboard Legacy Patient', birth_date=date(1980, 1, 1),
+            admission_date=date(2026, 7, 1), course_number=1,
+        )
+
+        response = self.client.get('/app/dashboard/?date=2026-07-01')
+
+        admission_tasks = self._tasks_for(response, '② 入院')
+        self.assertEqual([item['obj'].id for item in admission_tasks], [legacy.id])
+
+
 class TestAssessmentRules(TestCase):
     def test_classify_response_status_baseline20_improvement20_is_response(self):
         # baseline 20 -> current 16 => improvement 20% -> 反応
