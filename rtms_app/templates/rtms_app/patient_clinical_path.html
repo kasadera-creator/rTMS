@@ -71,7 +71,7 @@
         <div class="calendar-container card-like">
             <div class="calendar-header">
                 <div class="text-end small">
-                    入院日: {{ patient.admission_date|default:"未定" }}
+                    入院日: {{ course_admission_date|default:"未定" }}
                     <br>
                     退院予定:
                     {% if patient.discharge_date %}

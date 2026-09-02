@@ -1113,10 +1113,12 @@ def patient_first_visit(request, patient_id):
                 post[f] = str(v)
 
         old_first_treatment_date = patient.first_treatment_date
+        old_admission_date = patient.admission_date
         form = PatientFirstVisitForm(post, instance=patient)
         if form.is_valid():
             p = form.save(commit=False)
             treatment_start_changed = p.first_treatment_date != old_first_treatment_date
+            admission_date_changed = p.admission_date != old_admission_date
             diag_list = request.POST.getlist('diag_list')
             history_codes = [code for code in request.POST.getlist('psychiatric_history') if code != 'F32']
             history_labels = dict(PatientFirstVisitForm.PSY_HISTORY_CHOICES)
@@ -1148,6 +1150,14 @@ def patient_first_visit(request, patient_id):
             if p is not None:
                 if treatment_course is not None and treatment_course.course_number != 1:
                     p.first_treatment_date = old_first_treatment_date
+                    if admission_date_changed:
+                        treatment_course.admission_date = p.admission_date
+                    course_update_fields = []
+                    if admission_date_changed:
+                        course_update_fields.append('admission_date')
+                    if course_update_fields:
+                        treatment_course.save(update_fields=course_update_fields)
+                    p.admission_date = old_admission_date
                 p.save()
                 action = request.POST.get('action')
 
@@ -3467,6 +3477,11 @@ def patient_clinical_path(request, patient_id):
     treatment_course = TreatmentCourse.objects.filter(
         patient=patient, course_number=course_number,
     ).first()
+    course_admission_date = (
+        treatment_course.admission_date
+        if treatment_course and treatment_course.admission_date
+        else patient.admission_date
+    )
     # ★修正: generate_calendar_weeks を使用
     calendar_weeks, assessment_events = generate_calendar_weeks(
         patient, treatment_course=treatment_course, course_number=course_number,
@@ -3484,6 +3499,7 @@ def patient_clinical_path(request, patient_id):
         'patient': patient,
         'treatment_course': treatment_course,
         'course_number': course_number,
+        'course_admission_date': course_admission_date,
         'calendar_weeks': calendar_weeks,
         'assessment_events': assessment_events,
         'treatment_overflow': get_treatment_overflow_info(patient),
@@ -3524,8 +3540,19 @@ def clinical_path_reschedule(request, patient_id):
         return JsonResponse({'error': '移動先の日付が不正です'}, status=400)
 
     if event_type == 'admission':
-        patient.admission_date = target_date
-        patient.save(update_fields=['admission_date'])
+        try:
+            course_number = int(payload.get('course_number', patient.course_number or 1))
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'クール番号が不正です'}, status=400)
+        treatment_course = TreatmentCourse.objects.filter(
+            patient=patient, course_number=course_number,
+        ).first()
+        if treatment_course is not None:
+            treatment_course.admission_date = target_date
+            treatment_course.save(update_fields=['admission_date'])
+        if treatment_course is None or treatment_course.course_number == 1:
+            patient.admission_date = target_date
+            patient.save(update_fields=['admission_date'])
         return JsonResponse({'status': 'ok'})
 
     if event_type == 'discharge':

@@ -2832,6 +2832,49 @@ class TestClinicalPathReschedule(TestCase):
         self.patient.refresh_from_db()
         self.assertEqual(self.patient.admission_date, date(2026, 8, 21))
 
+    def test_course_two_admission_change_isolated_from_patient_and_course_one(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1, admission_date=date(2026, 8, 20),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2, admission_date=date(2026, 10, 1),
+        )
+        self.patient.admission_date = date(2026, 8, 20)
+        self.patient.save(update_fields=['admission_date'])
+
+        response = self._post({
+            'event_type': 'admission',
+            'course_number': 2,
+            'target_date': '2026-10-05',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        course_one.refresh_from_db()
+        course_two.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(course_one.admission_date, date(2026, 8, 20))
+        self.assertEqual(course_two.admission_date, date(2026, 10, 5))
+        self.assertEqual(self.patient.admission_date, date(2026, 8, 20))
+
+    def test_course_one_admission_change_keeps_patient_compatibility(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1, admission_date=date(2026, 8, 20),
+        )
+        self.patient.admission_date = date(2026, 8, 20)
+        self.patient.save(update_fields=['admission_date'])
+
+        response = self._post({
+            'event_type': 'admission',
+            'course_number': 1,
+            'target_date': '2026-08-21',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        course_one.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(course_one.admission_date, date(2026, 8, 21))
+        self.assertEqual(self.patient.admission_date, date(2026, 8, 21))
+
 class TestPatientSurveyFlow(TestCase):
     def setUp(self):
         self.client = Client()
