@@ -2039,6 +2039,39 @@ class TestClinicalPathReschedule(TestCase):
             content_type='application/json',
         )
 
+    def test_print_session_api_uses_selected_course_first_treatment_date(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            first_treatment_date=date(2026, 8, 24),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            first_treatment_date=date(2026, 10, 5),
+        )
+        course_one_session = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=course_one, course_number=1,
+            session_date=date(2026, 10, 5), slot='',
+        )
+        response = self.client.post(
+            f'/app/patient/{self.patient.pk}/print/api/get-session/',
+            {
+                'course_number': 2,
+                'session_date': '2026-10-05',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        session = TreatmentSession.objects.get(pk=response.json()['session_id'])
+        self.assertEqual(session.treatment_course_id, course_two.id)
+        self.assertEqual(session.course_number, 2)
+        self.assertNotEqual(session.pk, course_one_session.pk)
+        self.assertEqual(
+            TreatmentSession.objects.filter(
+                treatment_course=course_one,
+            ).count(),
+            1,
+        )
+
     def test_treatment_start_rebuilds_planned_sessions_from_new_business_day(self):
         from rtms_app.services.rtms_schedule import generate_treatment_dates
 

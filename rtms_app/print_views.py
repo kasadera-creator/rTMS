@@ -11,7 +11,11 @@ from .views import generate_calendar_weeks, get_current_week_number, JP_HOLIDAYS
 from .services.rtms_schedule import generate_treatment_dates
 from .services.print_service import build_pdf_filename, CONTENT_LABELS
 from .services.schedule import can_create_treatment_session, get_treatment_session_number_map
-from .queries.assessment_queries import get_baseline_assessments_ordered
+from .queries.assessment_queries import get_baseline_assessments_ordered, resolve_treatment_course
+from .services.strict_writes import (
+	get_or_create_treatment_session_legacy,
+	get_or_create_treatment_session_strict,
+)
 from django.template.loader import render_to_string
 from django.http import HttpResponse
 
@@ -561,6 +565,13 @@ def api_get_or_create_session(request, patient_id):
 	try:
 		patient = get_object_or_404(Patient, pk=patient_id)
 		course_number = int(data.get('course_number', patient.course_number or 1))
+		treatment_course = TreatmentCourse.objects.filter(
+			patient=patient,
+			course_number=course_number,
+		).first()
+		session_scope = {'treatment_course': treatment_course} if treatment_course else {
+			'patient': patient, 'course_number': course_number,
+		}
 		session_date_str = data.get('session_date')
 		
 		if not session_date_str:
@@ -578,14 +589,18 @@ def api_get_or_create_session(request, patient_id):
 		# 30-session course are not normal planned dates.  A holiday exception is
 		# deliberately handled only by the clinical-path drag/drop flow.
 		existing_session = TreatmentSession.objects.filter(
-			patient=patient,
-			course_number=course_number,
+			**session_scope,
 			session_date=session_date,
 			slot='',
 		).first()
-		if existing_session is None and patient.first_treatment_date:
+		course_first_treatment_date = (
+			treatment_course.first_treatment_date
+			if treatment_course and treatment_course.first_treatment_date
+			else patient.first_treatment_date
+		)
+		if existing_session is None and course_first_treatment_date:
 			canonical_dates = generate_treatment_dates(
-				patient.first_treatment_date,
+				course_first_treatment_date,
 				total=30,
 				holidays=JP_HOLIDAYS,
 			)
@@ -600,16 +615,28 @@ def api_get_or_create_session(request, patient_id):
 		with transaction.atomic():
 			Patient.objects.select_for_update().get(pk=patient.pk)
 			existing_session = TreatmentSession.objects.filter(
-				patient=patient,
-				course_number=course_number,
+				**session_scope,
 				session_date=session_date,
 				slot='',
 			).first()
 			if existing_session is None and not can_create_treatment_session(patient, course_number):
 				return JsonResponse({'error': 'この患者・コースは治療予定が30回以上あるため、新規作成できません'}, status=400)
-			session, created = TreatmentSession.objects.get_or_create(
-				patient=patient,
+			if treatment_course is not None:
+				session, created = get_or_create_treatment_session_strict(
+				patient,
+				treatment_course,
 				course_number=course_number,
+				session_date=session_date,
+				slot='',
+				defaults={
+					'date': timezone.make_aware(timezone.datetime.combine(session_date, timezone.datetime.min.time())),
+					'performer': request.user,
+				},
+			)
+			else:
+				session, created = get_or_create_treatment_session_legacy(
+				patient,
+				course_number,
 				session_date=session_date,
 				slot='',
 				defaults={
