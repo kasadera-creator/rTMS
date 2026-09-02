@@ -342,7 +342,7 @@ def reschedule_treatment_start_date(
         raise ValueError("初回治療日は正しい日付を指定してください")
 
     course_number = course_number or patient.course_number or 1
-    if allow_exceptional_day and not is_treatment_day(new_start_date):
+    if allow_exceptional_day:
         generated_treatments = [new_start_date] + generate_treatment_dates(
             new_start_date + timedelta(days=1),
             total=MAX_TREATMENT_SESSIONS - 1,
