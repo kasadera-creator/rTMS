@@ -1351,6 +1351,25 @@ class TestPatientListNavigation(TestCase):
         self.assertIn('入院中', html)
         self.assertNotIn('入院待ち</span>', html)
 
+    def test_patient_list_uses_selected_course_admission_range(self):
+        patient = Patient.objects.create(
+            card_id='S6012', name='Course Status', birth_date=date(1980, 1, 1),
+            admission_date=date(2026, 8, 1), course_number=2,
+        )
+        TreatmentCourse.objects.create(
+            patient=patient, course_number=1,
+            admission_date=date(2026, 8, 1),
+        )
+        TreatmentCourse.objects.create(
+            patient=patient, course_number=2,
+            admission_date=date(2026, 10, 1),
+        )
+
+        response = self.client.get(reverse('rtms_app:patient_list'))
+
+        self.assertEqual(response.context['patients'][0].list_status, 'waiting')
+        self.assertContains(response, '<span class="badge bg-warning text-dark">入院待ち</span>')
+
     def test_patient_list_includes_course_aware_scale_link(self):
         patient = Patient.objects.create(
             card_id='S6011', name='Scale Link', birth_date=date(1980, 1, 1),
@@ -1363,6 +1382,11 @@ class TestPatientListNavigation(TestCase):
         expected_url = reverse('rtms_app:assessment_add', args=[patient.pk, 'baseline'])
         self.assertContains(response, f'href="{expected_url}?course_number=2"')
         self.assertContains(response, '>尺度</a>')
+        self.assertContains(response, '>初診</a>')
+        self.assertContains(response, '>スケジュール</a>')
+        self.assertContains(response, '>退院</a>')
+        self.assertNotContains(response, '初診・基本情報')
+        self.assertNotContains(response, '治療経過・退院準備')
 
     def test_monthly_calendar_includes_dashboard_return_link(self):
         response = self.client.get(reverse('rtms_app:calendar_month'), {'year': 2026, 'month': 8})

@@ -947,6 +947,32 @@ def dashboard_view(request):
     dashboard_tasks = [{'list': task_first_visit, 'title': "① 初診", 'color_class': "bg-g-first-visit", 'icon': "fa-user-plus"}, {'list': task_admission, 'title': "② 入院", 'color_class': "bg-g-admission", 'icon': "fa-procedures"}, {'list': task_mapping, 'title': "③ MT測定", 'color_class': "bg-g-mapping", 'icon': "fa-crosshairs"}, {'list': task_treatment, 'title': "④ 治療実施", 'color_class': "bg-g-treatment", 'icon': "fa-bolt"}, {'list': task_assessment, 'title': "⑤ 尺度評価", 'color_class': "bg-g-assessment", 'icon': "fa-clipboard-check"}, {'list': task_discharge, 'title': "⑥ 退院準備", 'color_class': "bg-g-discharge", 'icon': "fa-file-export"}]
     return render(request, 'rtms_app/dashboard.html', {'today': target_date, 'target_date_display': target_date_display, 'prev_day': prev_day, 'next_day': next_day, 'today_raw': jst_now.date(), 'dashboard_tasks': dashboard_tasks})
 
+def get_patient_admission_status(patient, *, as_of=None, treatment_course=None):
+    """Return the list status using the selected course's admission range."""
+    as_of = as_of or timezone.localdate()
+    course = treatment_course
+    if course is None:
+        course = TreatmentCourse.objects.filter(
+            patient=patient,
+            course_number=patient.course_number or 1,
+        ).first()
+    admission_date = (
+        course.admission_date
+        if course and course.admission_date
+        else patient.admission_date
+    )
+    discharge_date = (
+        course.discharge_date
+        if course and course.discharge_date
+        else patient.discharge_date
+    )
+    if discharge_date and discharge_date <= as_of:
+        return 'discharged'
+    if admission_date and admission_date <= as_of:
+        return 'inpatient'
+    return 'waiting'
+
+
 @login_required
 def patient_list_view(request):
     dashboard_date = request.GET.get('dashboard_date')
@@ -998,12 +1024,22 @@ def patient_list_view(request):
     if card:
         qs = qs.filter(card_id__icontains=card)
 
-    if status:
-        # 予期しない値は無視（安全）
-        if status in {'waiting', 'inpatient', 'discharged'}:
-            qs = qs.filter(status=status)
-
-    patients = qs.order_by(*ordering)
+    patients = list(qs.order_by(*ordering))
+    course_numbers = {patient.course_number or 1 for patient in patients}
+    courses = {
+        course.patient_id: course
+        for course in TreatmentCourse.objects.filter(
+            patient_id__in=[patient.pk for patient in patients],
+            course_number__in=course_numbers,
+        )
+    }
+    for patient in patients:
+        patient.list_status = get_patient_admission_status(
+            patient,
+            treatment_course=courses.get(patient.pk),
+        )
+    if status in {'waiting', 'inpatient', 'discharged'}:
+        patients = [patient for patient in patients if patient.list_status == status]
 
     # ===== sort link 用：検索条件を保持 =====
     preserved_params = request.GET.copy()
