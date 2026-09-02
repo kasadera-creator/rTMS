@@ -1,19 +1,24 @@
 from django.test import TestCase, Client
+from django.apps import apps as django_apps
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.utils import timezone
+from django.db import transaction
 from django.db import IntegrityError
+from django.core.exceptions import ValidationError
 from unittest.mock import patch
+from copy import deepcopy
 import csv
 import io
 import json
+from importlib import import_module
 
 from rtms_app import assessment_rules
 from rtms_app.models import (
-    Patient, Assessment, AssessmentRecord, TreatmentSession,
-    MappingSession, MappingSchedule, AssessmentSchedule, ScaleDefinition,
-    SideEffectCheck, SeriousAdverseEvent, AdverseEventReport, TimingScaleConfig,
+    Patient, TreatmentCourse, Assessment, AssessmentRecord, TreatmentSession,
+    MappingSession, MappingSchedule, AssessmentSchedule, ScaleDefinition, TreatmentSkip,
+    SideEffectCheck, PatientSurveySession, SeriousAdverseEvent, AdverseEventReport, TimingScaleConfig,
 )
 import datetime
 from datetime import date
@@ -41,6 +46,664 @@ class TestAssessmentRules(TestCase):
         imp = assessment_rules.compute_improvement_rate(20, 19)
         status = assessment_rules.classify_response_status(score_17=19, improvement=imp)
         self.assertEqual(status, "反応なし")
+
+
+class TestTreatmentCourseModel(TestCase):
+    def setUp(self):
+        self.patient = Patient.objects.create(
+            card_id="54321", name="Course Patient", birth_date=date(1980, 1, 1)
+        )
+
+    def test_patient_can_have_three_courses(self):
+        courses = [
+            TreatmentCourse.objects.create(patient=self.patient, course_number=number)
+            for number in (1, 2, 3)
+        ]
+
+        self.assertEqual(
+            list(self.patient.treatment_courses.values_list("course_number", flat=True)),
+            [1, 2, 3],
+        )
+        self.assertEqual(courses[0].course_status, "waiting_admission")
+
+    def test_duplicate_course_number_for_patient_is_rejected(self):
+        TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+
+    def test_different_patients_can_each_have_course_one(self):
+        other_patient = Patient.objects.create(
+            card_id="54322", name="Other Patient", birth_date=date(1981, 1, 1)
+        )
+
+        TreatmentCourse.objects.create(patient=self.patient, course_number=1)
+        TreatmentCourse.objects.create(patient=other_patient, course_number=1)
+
+        self.assertEqual(TreatmentCourse.objects.filter(course_number=1).count(), 2)
+
+    def test_status_choices_and_end_reason_are_available(self):
+        course = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=1,
+            course_status="treatment_in_progress",
+            course_end_reason="adverse_event",
+        )
+
+        self.assertEqual(dict(TreatmentCourse.COURSE_STATUS_CHOICES)[course.course_status], "rTMS中")
+        self.assertEqual(dict(TreatmentCourse.COURSE_END_REASON_CHOICES)[course.course_end_reason], "有害事象")
+
+
+class TestPatientRegistrationLifecycle(TestCase):
+    def test_registration_creates_initial_course_one(self):
+        from rtms_app.services.patient_registration import register_patient_with_initial_course
+
+        patient, course = register_patient_with_initial_course(
+            Patient(card_id="54329", name="Registered Patient", birth_date=date(1980, 1, 1))
+        )
+
+        self.assertEqual(course.patient_id, patient.id)
+        self.assertEqual(course.course_number, 1)
+        self.assertEqual(course.course_status, "waiting_admission")
+        self.assertEqual(
+            TreatmentCourse.objects.filter(patient=patient, course_number=1).count(),
+            1,
+        )
+
+    def test_initial_course_creation_is_idempotent(self):
+        from rtms_app.services.patient_registration import ensure_initial_treatment_course
+
+        patient = Patient.objects.create(
+            card_id="54330", name="Existing Patient", birth_date=date(1980, 1, 1)
+        )
+        first = ensure_initial_treatment_course(patient)
+        second = ensure_initial_treatment_course(patient)
+
+        self.assertEqual(first.id, second.id)
+        self.assertEqual(
+            TreatmentCourse.objects.filter(patient=patient, course_number=1).count(),
+            1,
+        )
+
+    def test_registration_rolls_back_patient_when_course_creation_fails(self):
+        from rtms_app.services.patient_registration import register_patient_with_initial_course
+
+        patient = Patient(card_id="54331", name="Rollback Patient", birth_date=date(1980, 1, 1))
+        with patch(
+            "rtms_app.services.patient_registration.TreatmentCourse.objects.get_or_create",
+            side_effect=RuntimeError("course creation failed"),
+        ):
+            with self.assertRaises(RuntimeError):
+                register_patient_with_initial_course(patient)
+
+        self.assertFalse(Patient.objects.filter(card_id="54331").exists())
+        self.assertFalse(TreatmentCourse.objects.filter(patient__card_id="54331").exists())
+
+
+class TestMappingTreatmentCourseIsolation(TestCase):
+    def setUp(self):
+        self.patient = Patient.objects.create(
+            card_id="54323", name="Mapping Course Patient", birth_date=date(1980, 1, 1)
+        )
+        self.course_one = TreatmentCourse.objects.create(patient=self.patient, course_number=1)
+        self.course_two = TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+
+    def test_mapping_sessions_are_isolated_by_treatment_course(self):
+        first = MappingSession.objects.create(
+            patient=self.patient,
+            course_number=1,
+            treatment_course=self.course_one,
+            date=date(2026, 1, 5),
+            resting_mt=50,
+            stimulation_site="left",
+        )
+        second = MappingSession.objects.create(
+            patient=self.patient,
+            course_number=2,
+            treatment_course=self.course_two,
+            date=date(2026, 1, 5),
+            resting_mt=60,
+            stimulation_site="left",
+        )
+
+        self.assertEqual(list(self.course_one.mapping_sessions.all()), [first])
+        self.assertEqual(list(self.course_two.mapping_sessions.all()), [second])
+        self.assertEqual(first.treatment_course_id, self.course_one.id)
+        self.assertEqual(second.treatment_course_id, self.course_two.id)
+
+    def test_mapping_schedules_are_isolated_by_treatment_course(self):
+        first = MappingSchedule.objects.create(
+            patient=self.patient,
+            course_number=1,
+            treatment_course=self.course_one,
+            week_number=1,
+            planned_date=date(2026, 1, 5),
+        )
+        second = MappingSchedule.objects.create(
+            patient=self.patient,
+            course_number=2,
+            treatment_course=self.course_two,
+            week_number=1,
+            planned_date=date(2026, 6, 1),
+        )
+
+        self.assertEqual(list(self.course_one.mapping_schedules.all()), [first])
+        self.assertEqual(list(self.course_two.mapping_schedules.all()), [second])
+        self.assertEqual(first.treatment_course_id, self.course_one.id)
+        self.assertEqual(second.treatment_course_id, self.course_two.id)
+
+
+class TestTreatmentCourseWriteIsolation(TestCase):
+    def setUp(self):
+        self.patient = Patient.objects.create(
+            card_id="WRITE_COURSE_001", name="Write Course Patient", birth_date=date(1980, 1, 1)
+        )
+        self.course_one = TreatmentCourse.objects.create(patient=self.patient, course_number=1)
+        self.course_two = TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+        self.scale = ScaleDefinition.objects.create(code="write-course-scale", name="Write Course Scale")
+
+    def test_explicit_course_two_is_saved_on_every_course_owned_model(self):
+        from rtms_app.queries.assessment_queries import save_assessment_hamd, save_assessment_record
+
+        session = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            session_date=date(2026, 9, 1),
+        )
+        assessment, _ = save_assessment_hamd(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            timing="baseline", date=date(2026, 9, 1), scores={},
+        )
+        record, _ = save_assessment_record(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            timing="baseline", scale=self.scale, date=date(2026, 9, 1), scores={},
+        )
+        assessment_schedule = AssessmentSchedule.objects.create(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            scale=self.scale, timing="baseline", planned_date=date(2026, 9, 1),
+        )
+        mapping = MappingSession.objects.create(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            date=date(2026, 9, 1), resting_mt=50, stimulation_site="left",
+        )
+        mapping_schedule = MappingSchedule.objects.create(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            week_number=1, planned_date=date(2026, 9, 1),
+        )
+
+        self.assertEqual(self.patient.course_number, 1)
+        self.assertEqual(session.treatment_course_id, self.course_two.id)
+        self.assertEqual(assessment.treatment_course_id, self.course_two.id)
+        self.assertEqual(record.treatment_course_id, self.course_two.id)
+        self.assertEqual(assessment_schedule.treatment_course_id, self.course_two.id)
+        self.assertEqual(mapping.treatment_course_id, self.course_two.id)
+        self.assertEqual(mapping_schedule.treatment_course_id, self.course_two.id)
+        self.assertEqual(self.course_one.treatment_sessions.count(), 0)
+        self.assertEqual(self.course_one.assessments.count(), 0)
+        self.assertEqual(self.course_one.assessment_records.count(), 0)
+        self.assertEqual(self.course_one.assessment_schedules.count(), 0)
+        self.assertEqual(self.course_one.mapping_sessions.count(), 0)
+        self.assertEqual(self.course_one.mapping_schedules.count(), 0)
+
+    def test_assessment_writes_reject_course_scope_mismatch(self):
+        from rtms_app.queries.assessment_queries import save_assessment_hamd
+
+        with self.assertRaises(ValueError):
+            save_assessment_hamd(
+                patient=self.patient, treatment_course=self.course_two, course_number=1,
+                timing="baseline", date=date(2026, 9, 2), scores={},
+            )
+
+        other_patient = Patient.objects.create(
+            card_id="WRITE_COURSE_002", name="Other Patient", birth_date=date(1981, 1, 1)
+        )
+        other_course = TreatmentCourse.objects.create(patient=other_patient, course_number=1)
+        with self.assertRaises(ValueError):
+            save_assessment_hamd(
+                patient=self.patient, treatment_course=other_course, course_number=1,
+                timing="week3", date=date(2026, 9, 2), scores={},
+            )
+
+
+class TestStrictCourseWriteAPIs(TestCase):
+    def setUp(self):
+        self.patient = Patient.objects.create(
+            card_id="STRICT_WRITE_001", name="Strict Write Patient", birth_date=date(1980, 1, 1),
+            course_number=1,
+        )
+        self.course_one = TreatmentCourse.objects.create(patient=self.patient, course_number=1)
+        self.course_two = TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+        self.scale = ScaleDefinition.objects.create(code="strict-write-scale", name="Strict Write Scale")
+
+    def test_course_two_isolation_for_all_six_models(self):
+        from rtms_app.queries.assessment_queries import save_assessment_hamd, save_assessment_record
+        from rtms_app.services.strict_writes import (
+            create_treatment_session_strict,
+            save_mapping_session_strict,
+            update_or_create_assessment_schedule_strict,
+            update_or_create_mapping_schedule_strict,
+        )
+
+        session = create_treatment_session_strict(
+            self.patient, self.course_two, session_date=date(2026, 9, 1),
+        )
+        assessment, _ = save_assessment_hamd(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            timing="baseline", date=date(2026, 9, 1), scores={},
+        )
+        record, _ = save_assessment_record(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            timing="baseline", scale=self.scale, date=date(2026, 9, 1), scores={},
+        )
+        assessment_schedule, _ = update_or_create_assessment_schedule_strict(
+            self.patient, self.course_two, scale=self.scale, timing="baseline",
+            planned_date=date(2026, 9, 1),
+        )
+        mapping = save_mapping_session_strict(
+            MappingSession(date=date(2026, 9, 1), resting_mt=50),
+            self.patient, self.course_two,
+        )
+        mapping_schedule, _ = update_or_create_mapping_schedule_strict(
+            self.patient, self.course_two, week_number=1, planned_date=date(2026, 9, 1),
+        )
+
+        for obj in (session, assessment, record, assessment_schedule, mapping, mapping_schedule):
+            self.assertEqual(obj.treatment_course_id, self.course_two.id)
+        self.assertEqual(self.patient.course_number, 1)
+        self.assertEqual(self.course_one.treatment_sessions.count(), 0)
+        self.assertEqual(self.course_one.assessments.count(), 0)
+        self.assertEqual(self.course_one.assessment_records.count(), 0)
+        self.assertEqual(self.course_one.assessment_schedules.count(), 0)
+        self.assertEqual(self.course_one.mapping_sessions.count(), 0)
+        self.assertEqual(self.course_one.mapping_schedules.count(), 0)
+
+    def test_strict_apis_reject_none_and_scope_mismatches(self):
+        from rtms_app.services.strict_writes import (
+            create_treatment_session_strict,
+            save_mapping_session_strict,
+            update_or_create_assessment_schedule_strict,
+            update_or_create_mapping_schedule_strict,
+        )
+
+        strict_calls = [
+            lambda: create_treatment_session_strict(self.patient, None, session_date=date.today()),
+            lambda: save_mapping_session_strict(MappingSession(date=date.today(), resting_mt=50), self.patient, None),
+            lambda: update_or_create_mapping_schedule_strict(self.patient, None, week_number=1, planned_date=date.today()),
+            lambda: update_or_create_assessment_schedule_strict(self.patient, None, scale=self.scale, timing="baseline", planned_date=date.today()),
+        ]
+        for call in strict_calls:
+            with self.assertRaises(ValidationError):
+                call()
+
+        other_patient = Patient.objects.create(
+            card_id="STRICT_WRITE_002", name="Other Patient", birth_date=date(1981, 1, 1),
+        )
+        other_course = TreatmentCourse.objects.create(patient=other_patient, course_number=2)
+        with self.assertRaises(ValidationError):
+            create_treatment_session_strict(self.patient, other_course, session_date=date.today())
+        with self.assertRaises(ValidationError):
+            create_treatment_session_strict(self.patient, self.course_two, course_number=1, session_date=date.today())
+
+    def test_explicit_legacy_apis_preserve_course_less_compatibility(self):
+        from rtms_app.queries.assessment_queries import save_assessment_hamd_legacy, save_assessment_record_legacy
+        from rtms_app.services.strict_writes import (
+            get_or_create_treatment_session_legacy,
+            save_mapping_session_legacy,
+            update_or_create_assessment_schedule_legacy,
+            update_or_create_mapping_schedule_legacy,
+            update_or_create_treatment_session_legacy,
+        )
+
+        patient = Patient.objects.create(
+            card_id="STRICT_WRITE_LEGACY", name="Legacy Patient", birth_date=date(1982, 1, 1),
+            course_number=1,
+        )
+        session, created = get_or_create_treatment_session_legacy(
+            patient, 1, session_date=date(2026, 9, 1), slot="",
+        )
+        self.assertTrue(created)
+        self.assertIsNone(session.treatment_course_id)
+        session, created = update_or_create_treatment_session_legacy(
+            patient, 1, session_date=date(2026, 9, 1), slot="",
+            defaults={"status": "planned"},
+        )
+        self.assertFalse(created)
+        self.assertIsNone(session.treatment_course_id)
+
+        mapping = save_mapping_session_legacy(
+            MappingSession(date=date(2026, 9, 2), resting_mt=50), patient, 1,
+        )
+        mapping_schedule, _ = update_or_create_mapping_schedule_legacy(
+            patient, 1, week_number=1, planned_date=date(2026, 9, 2),
+        )
+        assessment_schedule, _ = update_or_create_assessment_schedule_legacy(
+            patient, 1, scale=self.scale, timing="baseline", planned_date=date(2026, 9, 2),
+        )
+        assessment, _ = save_assessment_hamd_legacy(
+            patient=patient, course_number=1, timing="baseline", date=date(2026, 9, 2), scores={},
+        )
+        record, _ = save_assessment_record_legacy(
+            patient=patient, course_number=1, timing="baseline", scale=self.scale,
+            date=date(2026, 9, 2), scores={},
+        )
+        for obj in (mapping, mapping_schedule, assessment_schedule, assessment, record):
+            self.assertIsNone(obj.treatment_course_id)
+
+
+class TestTreatmentCourseDataMigration(TestCase):
+    migration = import_module("rtms_app.migrations.0045_populate_treatment_courses")
+
+    def create_patient(self, card_id, status="waiting"):
+        physician = get_user_model().objects.create_user(username=f"doctor-{card_id}")
+        return Patient.objects.create(
+            card_id=card_id,
+            name=f"Patient {card_id}",
+            birth_date=date(1980, 1, 1),
+            status=status,
+            diagnosis="F33",
+            chief_complaint="主訴",
+            present_illness="現病歴",
+            medication_history="薬剤治療歴",
+            weight_kg=62.5,
+            is_weight_unknown=False,
+            attending_physician=physician,
+            referral_source="紹介元",
+            referral_doctor="紹介医",
+            estimated_onset_year=2020,
+            estimated_onset_month=4,
+            is_all_case_survey=True,
+            first_visit_date=date(2026, 1, 2),
+            admission_date=date(2026, 1, 10),
+            admission_type="voluntary",
+            is_admission_procedure_done=True,
+            first_treatment_date=date(2026, 1, 12),
+            mapping_date=date(2026, 1, 11),
+            mapping_notes="位置決めメモ",
+            summary_text="サマリー",
+            discharge_prescription="退院時処方",
+            discharge_date=date(2026, 2, 20),
+            questionnaire_data={"q1": ["はい"], "nested": {"value": 1}},
+        )
+
+    def run_migration(self):
+        self.migration.populate_treatment_courses(django_apps, None)
+
+    def test_creates_one_course_per_patient_and_copies_fields(self):
+        patient = self.create_patient("54331")
+
+        self.run_migration()
+
+        course = TreatmentCourse.objects.get(patient=patient, course_number=1)
+        for field in self.migration.COPY_FIELDS:
+            self.assertEqual(getattr(course, field), getattr(patient, field))
+        self.assertEqual(course.course_status, "waiting_admission")
+        self.assertEqual(course.course_end_reason, "")
+
+    def test_patient_and_course_counts_match_for_course_one(self):
+        self.create_patient("54332")
+        self.create_patient("54333")
+
+        self.run_migration()
+
+        self.assertEqual(Patient.objects.count(), 2)
+        self.assertEqual(TreatmentCourse.objects.values("patient_id").distinct().count(), 2)
+        self.assertEqual(TreatmentCourse.objects.filter(course_number=1).count(), 2)
+
+    def test_questionnaire_is_an_independent_copy(self):
+        patient = self.create_patient("54334")
+        original = deepcopy(patient.questionnaire_data)
+
+        self.run_migration()
+
+        course = TreatmentCourse.objects.get(patient=patient, course_number=1)
+        self.assertEqual(course.questionnaire_data, original)
+        self.assertIsNot(course.questionnaire_data, patient.questionnaire_data)
+        course_data = course.questionnaire_data or {}
+        course_data["nested"]["value"] = 99
+        course.questionnaire_data = course_data
+        course.save(update_fields=["questionnaire_data", "updated_at"])
+        patient.refresh_from_db()
+        self.assertEqual(patient.questionnaire_data, original)
+
+    def test_status_mapping_is_explicit(self):
+        expected = {
+            "waiting": "waiting_admission",
+            "inpatient": "inpatient_waiting_treatment",
+            "discharged": "discharged",
+        }
+        patients = [
+            self.create_patient(f"5433{index}", status=status)
+            for index, status in enumerate(expected, start=5)
+        ]
+
+        self.run_migration()
+
+        self.assertEqual(
+            [TreatmentCourse.objects.get(patient=patient).course_status for patient in patients],
+            list(expected.values()),
+        )
+
+    def test_unknown_status_aborts_without_creating_courses(self):
+        self.create_patient("54337", status="unknown")
+
+        with self.assertRaisesRegex(RuntimeError, "unsupported Patient.status"):
+            self.run_migration()
+
+        self.assertEqual(TreatmentCourse.objects.count(), 0)
+
+    def test_is_idempotent_and_preserves_existing_course(self):
+        patient = self.create_patient("54338")
+        existing = TreatmentCourse.objects.create(
+            patient=patient,
+            course_number=1,
+            diagnosis="既存Course診断",
+            course_status="on_hold",
+            questionnaire_data={"preserved": True},
+        )
+
+        self.run_migration()
+        self.run_migration()
+
+        self.assertEqual(TreatmentCourse.objects.filter(patient=patient, course_number=1).count(), 1)
+        existing.refresh_from_db()
+        self.assertEqual(existing.diagnosis, "既存Course診断")
+        self.assertEqual(existing.course_status, "on_hold")
+        self.assertEqual(existing.questionnaire_data, {"preserved": True})
+
+    def test_existing_related_model_counts_do_not_change(self):
+        patient = self.create_patient("54339")
+        session = TreatmentSession.objects.create(patient=patient, course_number=1, session_date=date(2026, 1, 12))
+        scale = ScaleDefinition.objects.create(code="migration-test", name="Migration Test")
+        Assessment.objects.create(patient=patient, course_number=1, timing="baseline", type="HAM-D")
+        AssessmentRecord.objects.create(patient=patient, course_number=1, timing="baseline", scale=scale)
+        MappingSession.objects.create(patient=patient, course_number=1, date=date(2026, 1, 11), resting_mt=50)
+        MappingSchedule.objects.create(patient=patient, course_number=1, week_number=1, planned_date=date(2026, 1, 11))
+        AssessmentSchedule.objects.create(patient=patient, course_number=1, scale=scale, timing="baseline", planned_date=date(2026, 1, 2))
+        PatientSurveySession.objects.create(patient=patient, course_number=1, phase="pre")
+        SeriousAdverseEvent.objects.create(patient=patient, course_number=1, session=session, event_types=["other"])
+        AdverseEventReport.objects.create(session=session)
+        before = [
+            TreatmentSession.objects.count(), Assessment.objects.count(), AssessmentRecord.objects.count(),
+            MappingSession.objects.count(), MappingSchedule.objects.count(), AssessmentSchedule.objects.count(),
+            PatientSurveySession.objects.count(), SeriousAdverseEvent.objects.count(), AdverseEventReport.objects.count(),
+        ]
+
+        self.run_migration()
+
+        after = [
+            TreatmentSession.objects.count(), Assessment.objects.count(), AssessmentRecord.objects.count(),
+            MappingSession.objects.count(), MappingSchedule.objects.count(), AssessmentSchedule.objects.count(),
+            PatientSurveySession.objects.count(), SeriousAdverseEvent.objects.count(), AdverseEventReport.objects.count(),
+        ]
+        self.assertEqual(after, before)
+
+
+class TestTreatmentSessionCourseMigration(TestCase):
+    migration = import_module("rtms_app.migrations.0047_populate_treatment_session_courses")
+
+    def setUp(self):
+        self.patient = Patient.objects.create(
+            card_id="54341", name="Session Patient", birth_date=date(1980, 1, 1)
+        )
+        self.course_one = TreatmentCourse.objects.create(patient=self.patient, course_number=1)
+
+    def run_migration(self):
+        self.migration.populate_treatment_session_courses(django_apps, None)
+
+    def test_existing_sessions_are_linked_without_changing_legacy_fields(self):
+        sessions = [
+            TreatmentSession.objects.create(
+                patient=self.patient,
+                course_number=1,
+                session_date=date(2026, 1, day),
+            )
+            for day in (12, 13, 14)
+        ]
+
+        self.run_migration()
+
+        for session in sessions:
+            session.refresh_from_db()
+            self.assertEqual(session.treatment_course, self.course_one)
+            self.assertEqual(session.patient, session.treatment_course.patient)
+            self.assertEqual(session.course_number, session.treatment_course.course_number)
+        self.assertEqual(TreatmentSession.objects.count(), 3)
+
+    def test_missing_course_stops_without_assigning_a_course(self):
+        session = TreatmentSession.objects.create(
+            patient=self.patient,
+            course_number=2,
+            session_date=date(2026, 1, 15),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "no unique matching TreatmentCourse"):
+            self.run_migration()
+
+        session.refresh_from_db()
+        self.assertIsNone(session.treatment_course)
+
+    def test_sessions_are_separated_by_treatment_course(self):
+        course_two = TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+        first = TreatmentSession.objects.create(
+            patient=self.patient,
+            course_number=1,
+            treatment_course=self.course_one,
+            session_date=date(2026, 1, 16),
+        )
+        second = TreatmentSession.objects.create(
+            patient=self.patient,
+            course_number=2,
+            treatment_course=course_two,
+            session_date=date(2026, 1, 16),
+        )
+
+        self.assertEqual(schedule_service.get_treatment_sessions(self.patient, 1), [first])
+        self.assertEqual(schedule_service.get_treatment_sessions(self.patient, 2), [second])
+
+
+class TestTreatmentCourseScheduleIsolation(TestCase):
+    def setUp(self):
+        self.patient = Patient.objects.create(
+            card_id="54342", name="Two Course Patient", birth_date=date(1980, 1, 1)
+        )
+        self.course_one = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=1,
+            first_treatment_date=date(2026, 1, 5),
+            admission_date=date(2026, 1, 4),
+        )
+        self.course_two = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=2,
+            first_treatment_date=date(2026, 4, 1),
+            admission_date=date(2026, 3, 31),
+        )
+
+    def test_calendar_contains_only_the_selected_course_sessions(self):
+        from rtms_app.views import generate_calendar_weeks
+
+        first = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_one,
+            course_number=1,
+            session_date=date(2026, 1, 5),
+        )
+        second = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_two,
+            course_number=2,
+            session_date=date(2026, 4, 1),
+        )
+
+        first_weeks, _ = generate_calendar_weeks(self.patient, treatment_course=self.course_one)
+        second_weeks, _ = generate_calendar_weeks(self.patient, treatment_course=self.course_two)
+
+        def treatment_ids(weeks):
+            return {
+                event['session_id']
+                for week in weeks
+                for day in week
+                for event in day['events']
+                if event['type'] == 'treatment' and event['session_id'] is not None
+            }
+
+        self.assertEqual(treatment_ids(first_weeks), {first.pk})
+        self.assertEqual(treatment_ids(second_weeks), {second.pk})
+
+    def test_rescheduling_one_course_does_not_move_the_other_course(self):
+        first = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_one,
+            course_number=1,
+            session_date=date(2026, 1, 5),
+            status='planned',
+        )
+        second = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_two,
+            course_number=2,
+            session_date=date(2026, 1, 5),
+            status='planned',
+        )
+
+        schedule_service.reschedule_planned_session(
+            self.patient, first, date(2026, 1, 6),
+        )
+
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(first.session_date, date(2026, 1, 6))
+        self.assertEqual(second.session_date, date(2026, 1, 5))
+
+    def test_completed_map_does_not_include_another_course(self):
+        from rtms_app.views import generate_calendar_weeks
+
+        TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_one,
+            course_number=1,
+            session_date=date(2026, 4, 1),
+            status='done',
+        )
+        second = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_two,
+            course_number=2,
+            session_date=date(2026, 4, 1),
+            status='planned',
+        )
+
+        weeks, _ = generate_calendar_weeks(self.patient, treatment_course=self.course_two)
+        events = [
+            event
+            for week in weeks
+            for day in week
+            for event in day['events']
+            if event['type'] == 'treatment' and event['session_id'] == second.pk
+        ]
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]['status'], 'planned')
 
 
 class TestQuestionnaireEdit(TestCase):
@@ -967,6 +1630,130 @@ class TestSideEffectAndAdverseEventFlow(TestCase):
         response = self.client.get(reverse('rtms_app:treatment_add', args=[self.patient.pk]) + '?date=2026-08-03')
         self.assertContains(response, 'value="A.B."')
         self.assertContains(response, 'value="保存済み診断"')
+
+
+class TestAdverseEventCourseIsolation(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='course-adverse-user', password='pw')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='COURSE2', name='Two Course Patient', birth_date=date(1980, 1, 1), course_number=1,
+        )
+        self.course_one = TreatmentCourse.objects.create(patient=self.patient, course_number=1)
+        self.course_two = TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+        self.session_one = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=self.course_one, course_number=1,
+            session_date=date(2026, 8, 3),
+        )
+        self.session_two = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            session_date=date(2026, 8, 4),
+        )
+
+    def test_treatment_page_and_skip_list_are_course_scoped(self):
+        SideEffectCheck.objects.create(session=self.session_one, memo='course-one-side-effect')
+        SideEffectCheck.objects.create(session=self.session_two, memo='course-two-side-effect')
+        SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=1, session=self.session_one, event_types=['seizure'],
+        )
+        SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=2, session=self.session_two, event_types=['syncope'],
+        )
+        AdverseEventReport.objects.create(session=self.session_one, adverse_event_name='course-one-report')
+        AdverseEventReport.objects.create(session=self.session_two, adverse_event_name='course-two-report')
+        TreatmentSkip.objects.create(
+            treatment=self.session_one, action_type='postpone', reason='course-one-skip', performed_by=self.user,
+        )
+        TreatmentSkip.objects.create(
+            treatment=self.session_two, action_type='postpone', reason='course-two-skip', performed_by=self.user,
+        )
+
+        course_one_page = self.client.get(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk])
+            + '?date=2026-08-03&course_number=1'
+        )
+        course_two_page = self.client.get(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk])
+            + '?date=2026-08-04&course_number=2'
+        )
+        self.assertContains(course_one_page, 'course-one-side-effect')
+        self.assertNotContains(course_one_page, 'course-two-side-effect')
+        self.assertContains(course_two_page, 'course-two-side-effect')
+        self.assertNotContains(course_two_page, 'course-one-side-effect')
+        self.assertContains(course_one_page, 'course-one-report')
+        self.assertNotContains(course_one_page, 'course-two-report')
+        self.assertContains(course_two_page, 'course-two-report')
+        self.assertNotContains(course_two_page, 'course-one-report')
+
+        course_one_skips = self.client.get(
+            reverse('rtms_app:treatment_skip_list', args=[self.patient.pk]) + '?course_number=1'
+        )
+        course_two_skips = self.client.get(
+            reverse('rtms_app:treatment_skip_list', args=[self.patient.pk]) + '?course_number=2'
+        )
+        self.assertContains(course_one_skips, 'course-one-skip')
+        self.assertNotContains(course_one_skips, 'course-two-skip')
+        self.assertContains(course_two_skips, 'course-two-skip')
+        self.assertNotContains(course_two_skips, 'course-one-skip')
+
+    def test_course_two_post_creates_session_and_side_effect_on_course_two(self):
+        response = self.client.post(reverse('rtms_app:treatment_add', args=[self.patient.pk]), {
+            'course_number': '2', 'treatment_date': '2026-08-05', 'treatment_time': '09:00',
+            'mt_percent': '120', 'frequency_hz': '18.0', 'train_seconds': '2.0',
+            'intertrain_seconds': '20.0', 'train_count': '55', 'total_pulses': '1980',
+            'side_effect_rows_json': '[]', 'side_effect_memo': 'course-two-new-side-effect',
+        })
+        self.assertIn(response.status_code, (200, 302, 303))
+        created = TreatmentSession.objects.get(patient=self.patient, session_date=date(2026, 8, 5))
+        self.assertEqual(created.treatment_course_id, self.course_two.id)
+        self.assertEqual(created.course_number, 2)
+        self.assertEqual(SideEffectCheck.objects.get(session=created).memo, 'course-two-new-side-effect')
+
+    def test_research_adverse_event_export_is_course_scoped(self):
+        SideEffectCheck.objects.create(session=self.session_one, rows=[{'item': '頭痛', 'after': 1}])
+        SideEffectCheck.objects.create(session=self.session_two, rows=[{'item': 'めまい', 'after': 1}])
+        sae_one = SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=1, session=self.session_one, event_types=['seizure'],
+        )
+        sae_two = SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=2, session=self.session_two, event_types=['syncope'],
+        )
+        AdverseEventReport.objects.create(session=self.session_one, adverse_event_name='report-one')
+        AdverseEventReport.objects.create(session=self.session_two, adverse_event_name='report-two')
+
+        from rtms_app.services.export_research import (
+            generate_research_adverse_events_csv, generate_research_treatment_detail_csv,
+        )
+        adverse_csv = generate_research_adverse_events_csv()
+        detail_csv = generate_research_treatment_detail_csv()
+        self.assertIn('1,seizure', adverse_csv)
+        self.assertIn('COURSE2,2,1,syncope', adverse_csv)
+        self.assertIn('report-one', adverse_csv)
+        self.assertIn('report-two', adverse_csv)
+        self.assertIn('COURSE2,1,1', detail_csv)
+        self.assertIn('COURSE2,2,1', detail_csv)
+
+    def test_invalid_course_relationships_are_rejected(self):
+        with self.assertRaises(ValidationError):
+            TreatmentSession.objects.create(
+                patient=self.patient, treatment_course=self.course_two, course_number=1,
+                session_date=date(2026, 8, 6),
+            )
+        with self.assertRaises(ValidationError):
+            TreatmentSession.objects.create(
+                patient=Patient.objects.create(card_id='OTHER', name='Other', birth_date=date(1981, 1, 1)),
+                treatment_course=self.course_two, course_number=2, session_date=date(2026, 8, 6),
+            )
+        with self.assertRaises(ValidationError):
+            SeriousAdverseEvent.objects.create(
+                patient=self.patient, course_number=2, session=self.session_one, event_types=['seizure'],
+            )
+        with self.assertRaises(ValidationError):
+            SeriousAdverseEvent.objects.create(
+                patient=Patient.objects.create(card_id='OTHER2', name='Other 2', birth_date=date(1982, 1, 1)),
+                course_number=1, session=self.session_one, event_types=['seizure'],
+            )
 
 
 class TestSkipSessions(TestCase):
@@ -2100,6 +2887,96 @@ class TestScheduleTasks(TestCase):
         self.assertIn('mapping', todo_keys)
 
 
+class TestCourseAwarePhase2F4Workflows(TestCase):
+    def setUp(self):
+        self.patient = Patient.objects.create(
+            card_id='2F4-001', name='Course Isolation', birth_date=date(1980, 1, 1),
+            course_number=1, first_treatment_date=date(2026, 1, 5),
+        )
+        self.course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1, first_treatment_date=date(2026, 1, 5),
+        )
+        self.course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2, first_treatment_date=date(2026, 1, 5),
+        )
+
+    def test_session_shift_is_limited_to_the_selected_course(self):
+        from rtms_app.services.schedule import shift_future_sessions
+
+        first = date(2026, 1, 6)
+        second = date(2026, 1, 8)
+        one = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=self.course_one, course_number=1,
+            session_date=first,
+        )
+        one_future = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=self.course_one, course_number=1,
+            session_date=second,
+        )
+        two_future = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            session_date=second,
+        )
+
+        one.status = 'skipped'
+        one.save(update_fields=['status'])
+        shift_future_sessions(self.patient, first, 1)
+
+        one_future.refresh_from_db()
+        two_future.refresh_from_db()
+        self.assertNotEqual(one_future.session_date, second)
+        self.assertEqual(two_future.session_date, second)
+
+    def test_summary_and_dashboard_tasks_use_explicit_course(self):
+        from rtms_app.services.course_summary_service import build_treatment_session_display
+        from rtms_app.services.schedule_tasks import compute_dashboard_tasks
+
+        TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=self.course_one, course_number=1,
+            session_date=date(2026, 1, 5),
+        )
+        TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            session_date=date(2026, 1, 6),
+        )
+        Assessment.objects.create(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            timing='week3', date=date(2026, 1, 19), type='HAM-D', scores={'q1': 1},
+        )
+
+        one_display = build_treatment_session_display(self.patient, treatment_course=self.course_one)
+        two_display = build_treatment_session_display(self.patient, treatment_course=self.course_two)
+        self.assertEqual([item['date'] for item in one_display], [date(2026, 1, 5)])
+        self.assertEqual([item['date'] for item in two_display], [date(2026, 1, 6)])
+
+        one_tasks = {item['key'] for item in compute_dashboard_tasks(
+            self.patient, today=date(2026, 1, 19), holidays=set(), treatment_course=self.course_one,
+        )}
+        two_tasks = {item['key'] for item in compute_dashboard_tasks(
+            self.patient, today=date(2026, 1, 19), holidays=set(), treatment_course=self.course_two,
+        )}
+        self.assertIn('assessment_week3', one_tasks)
+        self.assertNotIn('assessment_week3', two_tasks)
+
+    def test_recommendation_uses_explicit_course_assessments(self):
+        from rtms_app.services.recommendation import get_patient_recommendation
+
+        for course, baseline_score, week3_score in (
+            (self.course_one, 20, 19), (self.course_two, 20, 7),
+        ):
+            Assessment.objects.create(
+                patient=self.patient, treatment_course=course, course_number=course.course_number,
+                timing='baseline', date=date(2026, 1, 5), type='HAM-D', scores={'q1': baseline_score},
+            )
+            Assessment.objects.create(
+                patient=self.patient, treatment_course=course, course_number=course.course_number,
+                timing='week3', date=date(2026, 1, 19), type='HAM-D', scores={'q1': week3_score},
+            )
+
+        self.assertEqual(get_patient_recommendation(self.patient, self.course_one).status, 'ineffective')
+        self.assertEqual(get_patient_recommendation(self.patient, self.course_two).status, 'remission')
+
+
 # ============================================================================
 # GROUP A: Print View Helpers Unit Tests
 # ============================================================================
@@ -3063,6 +3940,9 @@ class TestAssessmentWriteHelpers(TestCase):
             birth_date=date(1980, 1, 1),
             course_number=1,
         )
+        self.course = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+        )
 
         # Ensure HAM-D scale exists
         self.hamd_scale, _ = ScaleDefinition.objects.get_or_create(
@@ -3078,6 +3958,7 @@ class TestAssessmentWriteHelpers(TestCase):
         record, created = save_assessment_record(
             patient=self.patient,
             course_number=1,
+            treatment_course=self.course,
             timing='baseline',
             scale=self.hamd_scale,
             date=date.today(),
@@ -3101,6 +3982,7 @@ class TestAssessmentWriteHelpers(TestCase):
         record1, created1 = save_assessment_record(
             patient=self.patient,
             course_number=1,
+            treatment_course=self.course,
             timing='week3',
             scale=self.hamd_scale,
             date=date.today(),
@@ -3114,6 +3996,7 @@ class TestAssessmentWriteHelpers(TestCase):
         record2, created2 = save_assessment_record(
             patient=self.patient,
             course_number=1,
+            treatment_course=self.course,
             timing='week3',
             scale=self.hamd_scale,
             date=date.today(),
@@ -3134,6 +4017,7 @@ class TestAssessmentWriteHelpers(TestCase):
         record, _ = save_assessment_record(
             patient=self.patient,
             course_number=1,
+            treatment_course=self.course,
             timing='week6',
             scale=self.hamd_scale,
             date=date.today(),
@@ -3156,6 +4040,7 @@ class TestAssessmentWriteHelpers(TestCase):
         assessment, created = save_assessment_hamd(
             patient=self.patient,
             course_number=1,
+            treatment_course=self.course,
             timing='baseline',
             date=date.today(),
             scores=scores,
@@ -3177,6 +4062,7 @@ class TestAssessmentWriteHelpers(TestCase):
         a1, c1 = save_assessment_hamd(
             patient=self.patient,
             course_number=1,
+            treatment_course=self.course,
             timing='week3',
             date=date.today(),
             scores=scores1,
@@ -3189,6 +4075,7 @@ class TestAssessmentWriteHelpers(TestCase):
         a2, c2 = save_assessment_hamd(
             patient=self.patient,
             course_number=1,
+            treatment_course=self.course,
             timing='week3',
             date=date.today(),
             scores=scores2,
@@ -3208,6 +4095,7 @@ class TestAssessmentWriteHelpers(TestCase):
         assessment, _ = save_assessment_hamd(
             patient=self.patient,
             course_number=1,
+            treatment_course=self.course,
             timing='baseline',
             date=date.today(),
             scores=scores,
@@ -3227,6 +4115,7 @@ class TestAssessmentWriteHelpers(TestCase):
         record, _ = save_assessment_record(
             patient=self.patient,
             course_number=1,
+            treatment_course=self.course,
             timing='week3',
             scale=self.hamd_scale,
             date=date.today(),
@@ -3237,6 +4126,51 @@ class TestAssessmentWriteHelpers(TestCase):
         # Scores should be auto-calculated by model.save()
         self.assertEqual(record.total_score_21, 21)
         self.assertEqual(record.total_score_17, 17)
+
+    def test_normal_write_rejects_missing_or_mismatched_course(self):
+        from rtms_app.queries.assessment_queries import save_assessment_record
+
+        common = {
+            'patient': self.patient,
+            'course_number': 1,
+            'timing': 'baseline',
+            'scale': self.hamd_scale,
+            'date': date.today(),
+            'scores': {'q1': '1'},
+        }
+        with self.assertRaises(ValueError):
+            save_assessment_record(**common)
+
+        other_patient = Patient.objects.create(
+            card_id='WRITE_TEST_002', name='Other Patient', birth_date=date(1980, 1, 1),
+        )
+        other_course = TreatmentCourse.objects.create(
+            patient=other_patient, course_number=2,
+        )
+        with self.assertRaises(ValueError):
+            save_assessment_record(**common, treatment_course=other_course)
+        with self.assertRaises(ValueError):
+            save_assessment_record(**{**common, 'course_number': 2}, treatment_course=self.course)
+
+    def test_legacy_write_is_explicit_and_supports_course_less_patient(self):
+        from rtms_app.queries.assessment_queries import save_assessment_record_legacy
+
+        patient = Patient.objects.create(
+            card_id='WRITE_TEST_LEGACY', name='Legacy Patient', birth_date=date(1980, 1, 1),
+            course_number=1,
+        )
+        record, created = save_assessment_record_legacy(
+            patient=patient,
+            course_number=1,
+            timing='baseline',
+            scale=self.hamd_scale,
+            date=date.today(),
+            scores={'q1': '1'},
+        )
+
+        self.assertTrue(created)
+        self.assertIsNone(record.treatment_course)
+        self.assertEqual(record.course_number, 1)
 
 
 class TestResearchDataExport(TestCase):
