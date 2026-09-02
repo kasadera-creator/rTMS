@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 
 # Note: .env is already loaded in config/settings.py before this module is imported
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # ~/rTMS
@@ -14,14 +15,44 @@ def env(key: str, default=None):
 def env_bool(key: str, default="0"):
     return str(env(key, default)).lower() in ("1", "true", "yes", "on")
 
+def parse_comma_separated(value, fallback):
+    values = value.split(",") if value is not None else []
+    cleaned = []
+    for item in values:
+        item = item.strip()
+        if item and item not in cleaned:
+            cleaned.append(item)
+    return cleaned or list(fallback)
+
+def resolve_secret_key(default=None, required=False):
+    for key_name in ("DJANGO_SECRET_KEY", "SECRET_KEY"):
+        value = os.environ.get(key_name)
+        if value is not None and value.strip():
+            return value
+    if required:
+        raise ImproperlyConfigured(
+            "A non-empty DJANGO_SECRET_KEY or SECRET_KEY is required in production."
+        )
+    return default
+
 # --- Core ---
-SECRET_KEY = env("DJANGO_SECRET_KEY", env("SECRET_KEY", "dev-insecure-secret-key"))
+SECRET_KEY = resolve_secret_key("dev-insecure-secret-key")
 DEBUG = env_bool("DJANGO_DEBUG", "0")
 
-ALLOWED_HOSTS = os.environ.get(
-    "DJANGO_ALLOWED_HOSTS",
-    "localhost,127.0.0.1,rtms.local,seichiryo.jp"
-).split(",")
+DEFAULT_ALLOWED_HOSTS = (
+    "rtms.lan",
+    "seichiryo.jp",
+    "192.168.100.50",
+    "localhost",
+    "127.0.0.1",
+    "rtms.local",
+    "www.seichiryo.jp",
+)
+ALLOWED_HOSTS = parse_comma_separated(os.environ.get("DJANGO_ALLOWED_HOSTS"), DEFAULT_ALLOWED_HOSTS)
+CSRF_TRUSTED_ORIGINS = parse_comma_separated(
+    os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS"),
+    ("https://seichiryo.jp",),
+)
 
 INSTALLED_APPS = [
     "jazzmin",

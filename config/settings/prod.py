@@ -1,6 +1,8 @@
 from .base import *
 import os
 
+SECRET_KEY = resolve_secret_key(required=True)
+
 # Production specific settings can go here
 # But most are handled via environment variables in base.py
 
