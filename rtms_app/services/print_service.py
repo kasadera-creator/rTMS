@@ -72,7 +72,7 @@ def get_patient_for_print(patient_id: int) -> Patient:
     )
 
 
-def build_print_context(patient: Patient, docs: List[str]) -> Dict:
+def build_print_context(patient: Patient, docs: List[str], treatment_course=None) -> Dict:
     """
     印刷用のコンテキスト構築
     読み取り専用・副作用なし
@@ -86,19 +86,25 @@ def build_print_context(patient: Patient, docs: List[str]) -> Dict:
     # 各ドキュメントに必要なデータを取得
     if 'path' in docs:
         from rtms_app.services.calender import generate_calendar_weeks
-        context['calendar_data'] = generate_calendar_weeks(patient)
+        context['calendar_data'] = generate_calendar_weeks(
+            patient, treatment_course=treatment_course,
+        )
     
     if 'discharge' in docs or 'referral' in docs:
         # 尺度データ取得
+        assessment_scope = (
+            {'treatment_course': treatment_course}
+            if treatment_course is not None else {'patient': patient}
+        )
         assessments = Assessment.objects.filter(
-            patient=patient
+            **assessment_scope
         ).order_by('date', 'timing')
         context['assessments'] = assessments
     
     return context
 
 
-def get_clinical_path_context(patient: Patient) -> Dict:
+def get_clinical_path_context(patient: Patient, treatment_course=None) -> Dict:
     """
     クリニカルパス印刷用のコンテキスト
     """
@@ -106,6 +112,8 @@ def get_clinical_path_context(patient: Patient) -> Dict:
     
     return {
         'patient': patient,
-        'calendar_data': generate_calendar_weeks(patient),
+        'calendar_data': generate_calendar_weeks(
+            patient, treatment_course=treatment_course,
+        ),
         'today': None,  # Template側で設定
     }

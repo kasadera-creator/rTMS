@@ -6,7 +6,7 @@ from django.http import HttpResponseNotAllowed
 from django.db import transaction
 from urllib.parse import urlencode
 
-from .models import Patient, Assessment, ConsentDocument, TreatmentSession, SideEffectCheck, MappingSession
+from .models import Patient, TreatmentCourse, Assessment, ConsentDocument, TreatmentSession, SideEffectCheck, MappingSession
 from .views import generate_calendar_weeks, get_current_week_number, JP_HOLIDAYS
 from .services.rtms_schedule import generate_treatment_dates
 from .services.print_service import build_pdf_filename, CONTENT_LABELS
@@ -17,10 +17,10 @@ from django.http import HttpResponse
 
 
 # Helper to provide HAMD trend columns with graceful fallback
-def _hamd_cols_for_patient(patient):
+def _hamd_cols_for_patient(patient, treatment_course=None):
 	try:
 		from .services.course_summary_service import build_assessment_trend
-		cols = build_assessment_trend(patient)
+		cols = build_assessment_trend(patient, treatment_course=treatment_course)
 		if cols:
 			return cols
 	except Exception:
@@ -54,16 +54,25 @@ def _extract_back_url(request, patient, fallback_view='rtms_app:patient_home'):
 	return back_url
 
 
-def _get_latest_assessments_by_date(patient):
+def _get_latest_assessments_by_date(patient, treatment_course=None):
 	"""
 	Get assessments, collapse to latest per date.
 	Returns list of assessments sorted by date.
 	"""
-	assessments_qs = Assessment.objects.filter(patient=patient).order_by('date')
+	from .queries.assessment_queries import resolve_treatment_course
+	treatment_course = resolve_treatment_course(patient, treatment_course=treatment_course)
+	scope = {'treatment_course': treatment_course} if treatment_course else {
+		'patient': patient, 'course_number': patient.course_number or 1,
+	}
+	assessments_qs = Assessment.objects.filter(**scope).order_by('date')
 	latest_by_date = {}
 	for a in assessments_qs:
 		latest_by_date[a.date] = a
 	return [latest_by_date[d] for d in sorted(latest_by_date.keys())]
+
+
+def _print_course_number(patient, treatment_course=None):
+	return treatment_course.course_number if treatment_course is not None else getattr(patient, 'course_number', 1)
 
 
 def render_pdf_response(request, template, context, filename):
@@ -96,8 +105,9 @@ DOC_TEMPLATES = {
 @login_required
 def patient_print_bundle(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
+	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
 	questionnaire = patient.questionnaire_data or {}
-	assessments = get_baseline_assessments_ordered(patient)
+	assessments = get_baseline_assessments_ordered(patient, treatment_course=treatment_course)
 
 	# always use getlist to collect multiple docs from ?docs=...&docs=...
 	docs = request.GET.getlist("docs")
@@ -150,9 +160,9 @@ def patient_print_bundle(request, patient_id):
 	}
 	# build a default pdf filename for the bundle (uses first doc label if available)
 	first_label = docs_to_render[0]['label'] if docs_to_render else 'bundle'
-	context['pdf_filename'] = build_pdf_filename(patient, getattr(patient, 'course_number', 1), first_label, timezone.now().date())
+	context['pdf_filename'] = build_pdf_filename(patient, _print_course_number(patient, treatment_course), first_label, timezone.now().date())
 	# provide hamd_trend_cols to included print templates (e.g., discharge/referral)
-	context['hamd_trend_cols'] = _hamd_cols_for_patient(patient)
+	context['hamd_trend_cols'] = _hamd_cols_for_patient(patient, treatment_course)
 	return render(request, 'rtms_app/print/bundle.html', context)
 
 
@@ -160,8 +170,9 @@ def patient_print_bundle(request, patient_id):
 def patient_print_bundle_pdf(request, patient_id):
 	# Build same context as patient_print_bundle and render PDF
 	patient = get_object_or_404(Patient, pk=patient_id)
+	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
 	questionnaire = patient.questionnaire_data or {}
-	assessments = get_baseline_assessments_ordered(patient)
+	assessments = get_baseline_assessments_ordered(patient, treatment_course=treatment_course)
 
 	docs = request.GET.getlist("docs")
 	docs = [d for d in docs if d]
@@ -193,7 +204,7 @@ def patient_print_bundle_pdf(request, patient_id):
 			'bundle_error': '表示する文書がありません。チェックボックスを選択してください。',
 			'back_url': back_url,
 		}
-		return render_pdf_response(request, 'rtms_app/print/bundle.html', context, build_pdf_filename(patient, getattr(patient, 'course_number', 1), 'bundle', timezone.now().date()))
+		return render_pdf_response(request, 'rtms_app/print/bundle.html', context, build_pdf_filename(patient, _print_course_number(patient, treatment_course), 'bundle', timezone.now().date()))
 
 	context = {
 		'patient': patient,
@@ -205,16 +216,17 @@ def patient_print_bundle_pdf(request, patient_id):
 		'back_url': back_url,
 	}
 	first_label = docs_to_render[0]['label'] if docs_to_render else 'bundle'
-	context['pdf_filename'] = build_pdf_filename(patient, getattr(patient, 'course_number', 1), first_label, timezone.now().date())
+	context['pdf_filename'] = build_pdf_filename(patient, _print_course_number(patient, treatment_course), first_label, timezone.now().date())
 	# include hamd_trend_cols for PDF rendering as well
-	context['hamd_trend_cols'] = _hamd_cols_for_patient(patient)
+	context['hamd_trend_cols'] = _hamd_cols_for_patient(patient, treatment_course)
 	return render_pdf_response(request, 'rtms_app/print/bundle.html', context, context['pdf_filename'])
 
 
 @login_required
 def print_clinical_path(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
-	calendar_weeks, assessment_events = generate_calendar_weeks(patient)
+	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
+	calendar_weeks, assessment_events = generate_calendar_weeks(patient, treatment_course=treatment_course)
 	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
 	context = {
 		'patient': patient,
@@ -224,14 +236,15 @@ def print_clinical_path(request, patient_id):
 		'back_url': back_url,
 	}
 	# pdf filename
-	context['pdf_filename'] = build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('path','臨床経過表'), timezone.now().date())
+	context['pdf_filename'] = build_pdf_filename(patient, _print_course_number(patient, treatment_course), CONTENT_LABELS.get('path','臨床経過表'), timezone.now().date())
 	return render(request, 'rtms_app/print/path.html', context)
 
 
 @login_required
 def print_clinical_path_pdf(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
-	calendar_weeks, assessment_events = generate_calendar_weeks(patient)
+	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
+	calendar_weeks, assessment_events = generate_calendar_weeks(patient, treatment_course=treatment_course)
 	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
 	context = {
 		'patient': patient,
@@ -240,22 +253,35 @@ def print_clinical_path_pdf(request, patient_id):
 		'today': timezone.now().date(),
 		'back_url': back_url,
 	}
-	context['pdf_filename'] = build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('path','臨床経過表'), timezone.now().date())
+	context['pdf_filename'] = build_pdf_filename(patient, _print_course_number(patient, treatment_course), CONTENT_LABELS.get('path','臨床経過表'), timezone.now().date())
 	return render_pdf_response(request, 'rtms_app/print/path.html', context, context['pdf_filename'])
 
 
 def _build_discharge_context(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
+	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
 	back_url = _extract_back_url(request, patient)
-	test_scores = _get_latest_assessments_by_date(patient)
+	test_scores = _get_latest_assessments_by_date(patient, treatment_course)
+	admission_date = (
+		treatment_course.admission_date
+		if treatment_course and treatment_course.admission_date
+		else patient.admission_date
+	)
+	discharge_date = (
+		treatment_course.discharge_date
+		if treatment_course and treatment_course.discharge_date
+		else patient.discharge_date
+	)
 	
 	context = {
 		'patient': patient,
+		'admission_date': admission_date,
+		'discharge_date': discharge_date,
 		'today': timezone.now().date(),
 		'test_scores': test_scores,
 		'back_url': back_url,
-		'hamd_trend_cols': _hamd_cols_for_patient(patient),
-		'pdf_filename': build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('discharge','退院時サマリー'), timezone.now().date()),
+		'hamd_trend_cols': _hamd_cols_for_patient(patient, treatment_course),
+		'pdf_filename': build_pdf_filename(patient, _print_course_number(patient, treatment_course), CONTENT_LABELS.get('discharge','退院時サマリー'), timezone.now().date()),
 	}
 	return context
 
@@ -275,23 +301,42 @@ def patient_print_discharge_pdf(request, patient_id):
 def _build_admission_context(request, patient_id):
 	from datetime import timedelta
 	patient = get_object_or_404(Patient, pk=patient_id)
+	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
 	back_url = _extract_back_url(request, patient)
 	
 	# Get baseline assessments
-	assessments = get_baseline_assessments_ordered(patient)
+	assessments = get_baseline_assessments_ordered(patient, treatment_course=treatment_course)
 
 	# Calculate estimated end date (30 sessions from first treatment date)
+	admission_date = (
+		treatment_course.admission_date
+		if treatment_course and treatment_course.admission_date
+		else patient.admission_date
+	)
+	mapping_date = (
+		treatment_course.mapping_date
+		if treatment_course and treatment_course.mapping_date
+		else patient.mapping_date
+	)
+	first_treatment_date = (
+		treatment_course.first_treatment_date
+		if treatment_course and treatment_course.first_treatment_date
+		else patient.first_treatment_date
+	)
 	end_date_est = None
-	if patient.first_treatment_date:
-		end_date_est = patient.first_treatment_date + timedelta(days=42)  # ~30 weekdays
+	if first_treatment_date:
+		end_date_est = first_treatment_date + timedelta(days=42)  # ~30 weekdays
 	
 	context = {
 		'patient': patient,
+		'admission_date': admission_date,
+		'mapping_date': mapping_date,
+		'first_treatment_date': first_treatment_date,
 		'today': timezone.now().date(),
 		'assessments': assessments,
 		'end_date_est': end_date_est,
 		'back_url': back_url,
-		'pdf_filename': build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('admission','入院時サマリ'), timezone.now().date()),
+		'pdf_filename': build_pdf_filename(patient, _print_course_number(patient, treatment_course), CONTENT_LABELS.get('admission','入院時サマリ'), timezone.now().date()),
 	}
 	return context
 
@@ -310,15 +355,28 @@ def patient_print_admission_pdf(request, patient_id):
 
 def _build_referral_context(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
+	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
 	back_url = _extract_back_url(request, patient)
-	test_scores = _get_latest_assessments_by_date(patient)
+	test_scores = _get_latest_assessments_by_date(patient, treatment_course)
+	admission_date = (
+		treatment_course.admission_date
+		if treatment_course and treatment_course.admission_date
+		else patient.admission_date
+	)
+	discharge_date = (
+		treatment_course.discharge_date
+		if treatment_course and treatment_course.discharge_date
+		else patient.discharge_date
+	)
 	
 	context = {
 		'patient': patient,
+		'admission_date': admission_date,
+		'discharge_date': discharge_date,
 		'today': timezone.now().date(),
 		'test_scores': test_scores,
 		'back_url': back_url,
-		'pdf_filename': build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('referral','紹介状'), timezone.now().date()),
+		'pdf_filename': build_pdf_filename(patient, _print_course_number(patient, treatment_course), CONTENT_LABELS.get('referral','紹介状'), timezone.now().date()),
 	}
 	return context
 
@@ -338,8 +396,9 @@ def patient_print_referral_pdf(request, patient_id):
 @login_required
 def patient_print_suitability(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
+	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
 	questionnaire = patient.questionnaire_data or {}
-	assessments = get_baseline_assessments_ordered(patient)
+	assessments = get_baseline_assessments_ordered(patient, treatment_course=treatment_course)
 	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_first_visit', args=[patient.id])
 	context = {
 		'patient': patient,
@@ -348,15 +407,16 @@ def patient_print_suitability(request, patient_id):
 		'today': timezone.now().date(),
 		'back_url': back_url,
 	}
-	context['pdf_filename'] = build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('suitability','rTMS問診票'), timezone.now().date())
+	context['pdf_filename'] = build_pdf_filename(patient, _print_course_number(patient, treatment_course), CONTENT_LABELS.get('suitability','rTMS問診票'), timezone.now().date())
 	return render(request, 'rtms_app/print/suitability_questionnaire.html', context)
 
 
 @login_required
 def patient_print_suitability_pdf(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
+	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
 	questionnaire = patient.questionnaire_data or {}
-	assessments = get_baseline_assessments_ordered(patient)
+	assessments = get_baseline_assessments_ordered(patient, treatment_course=treatment_course)
 	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_first_visit', args=[patient.id])
 	context = {
 		'patient': patient,
@@ -365,7 +425,7 @@ def patient_print_suitability_pdf(request, patient_id):
 		'today': timezone.now().date(),
 		'back_url': back_url,
 	}
-	context['pdf_filename'] = build_pdf_filename(patient, getattr(patient, 'course_number', 1), CONTENT_LABELS.get('suitability','rTMS問診票'), timezone.now().date())
+	context['pdf_filename'] = build_pdf_filename(patient, _print_course_number(patient, treatment_course), CONTENT_LABELS.get('suitability','rTMS問診票'), timezone.now().date())
 	return render_pdf_response(request, 'rtms_app/print/suitability_questionnaire.html', context, context['pdf_filename'])
 
 
@@ -382,12 +442,16 @@ def _build_side_effect_context(request, patient_id, session_id):
 	# session's week, NOT from TreatmentSession.mt_percent (which is the %MT setting).
 	target_date = session.session_date if getattr(session, 'session_date', None) else (session.date.date() if getattr(session, 'date', None) else None)
 	course_number = getattr(session, 'course_number', None) or getattr(patient, 'course_number', None) or 1
+	treatment_course = getattr(session, 'treatment_course', None)
+	mapping_scope = {'treatment_course': treatment_course} if treatment_course else {
+		'patient': patient, 'course_number': course_number,
+	}
 	mapping_for_session = None
 	if target_date:
-		mapping_for_session = MappingSession.objects.filter(patient=patient, course_number=course_number, date=target_date).first()
+		mapping_for_session = MappingSession.objects.filter(**mapping_scope, date=target_date).first()
 		if not mapping_for_session and patient.first_treatment_date:
 			week_no = get_current_week_number(patient.first_treatment_date, target_date)
-			mapping_for_session = MappingSession.objects.filter(patient=patient, course_number=course_number, week_number=week_no).order_by('-date').first()
+			mapping_for_session = MappingSession.objects.filter(**mapping_scope, week_number=week_no).order_by('-date').first()
 	resting_mt = mapping_for_session.resting_mt if mapping_for_session else None
 
 	# Get side-effect check if exists

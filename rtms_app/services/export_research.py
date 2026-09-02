@@ -25,10 +25,10 @@ from rtms_app.models import (
     ScaleDefinition,
     SeriousAdverseEvent,
     SideEffectCheck,
+    TreatmentCourse,
     TimingScaleConfig,
     TreatmentSession,
 )
-from rtms_app.services.schedule import get_treatment_session_number_map
 from rtms_app.services.side_effect_schema import SIDE_EFFECT_ITEMS
 
 MAX_PLANNED_SESSIONS = 30
@@ -220,6 +220,17 @@ def _treatment_duration_days(patient, course_number, last_date_str=None):
     return delta if delta >= 0 else ''
 
 
+def _iter_export_scopes():
+    """Yield explicit Course scopes, with a legacy fallback for pre-backfill patients."""
+    courses = list(
+        TreatmentCourse.objects.select_related('patient').order_by('patient__card_id', 'course_number')
+    )
+    for treatment_course in courses:
+        yield treatment_course, treatment_course.patient, treatment_course.course_number
+    for patient in Patient.objects.filter(treatment_courses__isnull=True).order_by('card_id'):
+        yield None, patient, patient.course_number or 1
+
+
 def generate_research_summary_csv():
     """1 row = 1 (card_id, course_number). Missing assessments are left blank."""
     scale_metadata = _build_scale_metadata()
@@ -239,9 +250,14 @@ def generate_research_summary_csv():
     gender_labels = dict(Patient.GENDER_CHOICES)
     status_labels = dict(Patient.STATUS_CHOICES)
 
-    for patient in Patient.objects.all().order_by('card_id'):
-        course_number = patient.course_number or 1
-        last_treatment_date = _last_treatment_date(patient, course_number)
+    for treatment_course, patient, course_number in _iter_export_scopes():
+        sessions = TreatmentSession.objects.filter(
+            treatment_course=treatment_course,
+        ).order_by('session_date', 'id') if treatment_course else TreatmentSession.objects.filter(
+            patient=patient, course_number=course_number,
+        ).order_by('session_date', 'id')
+        last_session = sessions.last()
+        last_treatment_date = last_session.session_date.isoformat() if last_session and last_session.session_date else ''
         row = {
             'card_id': patient.card_id,
             'course_number': course_number,
@@ -249,14 +265,30 @@ def generate_research_summary_csv():
             'gender': gender_labels.get(patient.gender, ''),
             'diagnosis': patient.diagnosis,
             'first_visit_date': patient.first_visit_date.isoformat() if patient.first_visit_date else '',
-            'admission_date': patient.admission_date.isoformat() if patient.admission_date else '',
-            'first_treatment_date': patient.first_treatment_date.isoformat() if patient.first_treatment_date else '',
-            'discharge_date': patient.discharge_date.isoformat() if patient.discharge_date else '',
+            'admission_date': (
+                treatment_course.admission_date
+                if treatment_course and treatment_course.admission_date
+                else patient.admission_date
+            ).isoformat() if (
+                treatment_course and treatment_course.admission_date
+            ) or patient.admission_date else '',
+            'first_treatment_date': (
+                treatment_course.first_treatment_date
+                if treatment_course and treatment_course.first_treatment_date
+                else patient.first_treatment_date
+            ).isoformat() if (
+                treatment_course and treatment_course.first_treatment_date
+            ) or patient.first_treatment_date else '',
+            'discharge_date': (
+                treatment_course.discharge_date
+                if treatment_course and treatment_course.discharge_date
+                else patient.discharge_date
+            ).isoformat() if (
+                treatment_course and treatment_course.discharge_date
+            ) or patient.discharge_date else '',
             'status': status_labels.get(patient.status, ''),
             'weight_kg': str(patient.weight_kg) if patient.weight_kg is not None else '',
-            'treatment_sessions_count': TreatmentSession.objects.filter(
-                patient=patient, course_number=course_number
-            ).count(),
+            'treatment_sessions_count': sessions.count(),
             'planned_sessions': MAX_PLANNED_SESSIONS,
             'last_treatment_date': last_treatment_date,
             'treatment_duration_days': _treatment_duration_days(patient, course_number, last_treatment_date),
@@ -267,17 +299,25 @@ def generate_research_summary_csv():
             for col_key, extractor in columns:
                 row[col_key] = extractor(record)
 
-        sae_qs = SeriousAdverseEvent.objects.filter(patient=patient, course_number=course_number)
+        sae_qs = SeriousAdverseEvent.objects.filter(
+            session__treatment_course=treatment_course,
+        ) if treatment_course else SeriousAdverseEvent.objects.filter(
+            patient=patient, course_number=course_number,
+        )
         sae_event_types = set()
         for event_types in sae_qs.values_list('event_types', flat=True):
             sae_event_types.update(event_types or [])
         row.update({
-            'ae_report_exists': int(AdverseEventReport.objects.filter(
+            'ae_report_exists': int((AdverseEventReport.objects.filter(
+                session__treatment_course=treatment_course
+            ) if treatment_course else AdverseEventReport.objects.filter(
                 session__patient=patient, session__course_number=course_number
-            ).exists()),
-            'ae_count': AdverseEventReport.objects.filter(
+            )).exists()),
+            'ae_count': (AdverseEventReport.objects.filter(
+                session__treatment_course=treatment_course
+            ) if treatment_course else AdverseEventReport.objects.filter(
                 session__patient=patient, session__course_number=course_number
-            ).count(),
+            )).count(),
             'sae_count': sae_qs.count(),
             'sae_seizure': int('seizure' in sae_event_types),
             'sae_finger_muscle': int('finger_muscle' in sae_event_types),
@@ -313,13 +353,15 @@ def generate_research_treatment_detail_csv():
 
     status_labels = dict(TreatmentSession.STATUS_CHOICES)
 
-    for patient in Patient.objects.all().order_by('card_id'):
-        course_number = patient.course_number or 1
-        number_map = get_treatment_session_number_map(patient, course_number)
-        sessions = list(
-            TreatmentSession.objects.filter(patient=patient, course_number=course_number)
-            .order_by('session_date', 'id')
-        )
+    for treatment_course, patient, course_number in _iter_export_scopes():
+        sessions = list((TreatmentSession.objects.filter(
+            treatment_course=treatment_course,
+        ) if treatment_course else TreatmentSession.objects.filter(
+            patient=patient, course_number=course_number,
+        )).order_by('session_date', 'id'))
+        number_map = {session.id: number for number, session in enumerate(
+            sessions[:MAX_PLANNED_SESSIONS], start=1
+        )}
         side_effects_by_session = {
             se.session_id: se.rows or []
             for se in SideEffectCheck.objects.filter(session__in=sessions)
@@ -381,12 +423,20 @@ def generate_research_adverse_events_csv():
     diagnosis_labels = dict(AdverseEventReport.DIAGNOSIS_CHOICES)
     outcome_labels = dict(AdverseEventReport.OUTCOME_CHOICES)
 
-    for patient in Patient.objects.all().order_by('card_id'):
-        course_number = patient.course_number or 1
-        number_map = get_treatment_session_number_map(patient, course_number)
-        saes = SeriousAdverseEvent.objects.filter(
-            patient=patient, course_number=course_number
-        ).select_related('session').order_by('created_at')
+    for treatment_course, patient, course_number in _iter_export_scopes():
+        course_sessions = list((TreatmentSession.objects.filter(
+            treatment_course=treatment_course,
+        ) if treatment_course else TreatmentSession.objects.filter(
+            patient=patient, course_number=course_number,
+        )).order_by('session_date', 'id'))
+        number_map = {session.id: number for number, session in enumerate(
+            course_sessions[:MAX_PLANNED_SESSIONS], start=1
+        )}
+        saes = (SeriousAdverseEvent.objects.filter(
+            session__treatment_course=treatment_course,
+        ) if treatment_course else SeriousAdverseEvent.objects.filter(
+            patient=patient, course_number=course_number,
+        )).select_related('session').order_by('created_at')
 
         for sae in saes:
             report = getattr(sae.session, 'adverse_event_report', None)

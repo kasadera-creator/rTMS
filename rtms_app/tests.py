@@ -1,4 +1,4 @@
-from django.test import TestCase, Client
+from django.test import TestCase, Client, RequestFactory
 from django.apps import apps as django_apps
 from django.urls import reverse
 from django.contrib.auth import get_user_model
@@ -3585,6 +3585,7 @@ class TestPrintViewContextBuilding(TestCase):
         self.assertIn('back_url', context)
         self.assertIn('hamd_trend_cols', context)
         self.assertIn('pdf_filename', context)
+        self.assertIn('discharge_date', context)
 
         # Verify patient
         self.assertEqual(context['patient'].id, self.patient.id)
@@ -3610,6 +3611,78 @@ class TestPrintViewContextBuilding(TestCase):
             self.assertIn(response_pdf.status_code, [200, 500])
         except ImportError:
             pass  # weasyprint not installed, skip PDF test
+
+    def test_course_two_print_contexts_use_course_dates(self):
+        from rtms_app.print_views import (
+            _build_admission_context,
+            _build_discharge_context,
+            _build_referral_context,
+        )
+
+        old_dates = {
+            'admission_date': date(2026, 1, 2),
+            'mapping_date': date(2026, 1, 5),
+            'first_treatment_date': date(2026, 1, 6),
+            'discharge_date': date(2026, 2, 16),
+        }
+        new_dates = {
+            'admission_date': date(2026, 8, 3),
+            'mapping_date': date(2026, 8, 4),
+            'first_treatment_date': date(2026, 8, 5),
+            'discharge_date': date(2026, 9, 15),
+        }
+        for field, value in old_dates.items():
+            setattr(self.patient, field, value)
+        self.patient.save(update_fields=list(old_dates))
+        TreatmentCourse.objects.create(patient=self.patient, course_number=1, **old_dates)
+        TreatmentCourse.objects.create(patient=self.patient, course_number=2, **new_dates)
+
+        request = RequestFactory().get('/app/print/admission/?course_number=2')
+        admission = _build_admission_context(request, self.patient.id)
+        discharge = _build_discharge_context(request, self.patient.id)
+        referral = _build_referral_context(request, self.patient.id)
+
+        self.assertEqual(admission['admission_date'], new_dates['admission_date'])
+        self.assertEqual(admission['mapping_date'], new_dates['mapping_date'])
+        self.assertEqual(admission['first_treatment_date'], new_dates['first_treatment_date'])
+        self.assertEqual(admission['end_date_est'], date(2026, 9, 16))
+        self.assertEqual(discharge['admission_date'], new_dates['admission_date'])
+        self.assertEqual(discharge['discharge_date'], new_dates['discharge_date'])
+        self.assertEqual(referral['admission_date'], new_dates['admission_date'])
+        self.assertEqual(referral['discharge_date'], new_dates['discharge_date'])
+
+        html = self.client.get(
+            reverse('rtms_app:print:patient_print_admission', args=[self.patient.id]),
+            {'course_number': 2},
+        )
+        self.assertEqual(html.context['admission_date'], new_dates['admission_date'])
+        self.assertEqual(html.context['mapping_date'], new_dates['mapping_date'])
+        self.assertEqual(html.context['first_treatment_date'], new_dates['first_treatment_date'])
+
+    def test_print_course_one_and_null_course_dates_fallback_to_patient(self):
+        from rtms_app.print_views import _build_admission_context, _build_discharge_context
+
+        patient_dates = {
+            'admission_date': date(2026, 1, 2),
+            'mapping_date': date(2026, 1, 5),
+            'first_treatment_date': date(2026, 1, 6),
+            'discharge_date': date(2026, 2, 16),
+        }
+        for field, value in patient_dates.items():
+            setattr(self.patient, field, value)
+        self.patient.save(update_fields=list(patient_dates))
+        course_one = TreatmentCourse.objects.create(patient=self.patient, course_number=1, **patient_dates)
+        course_two = TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+
+        request_one = RequestFactory().get('/app/print/admission/?course_number=1')
+        course_one_context = _build_admission_context(request_one, self.patient.id)
+        self.assertEqual(course_one_context['admission_date'], course_one.admission_date)
+        self.assertEqual(course_one_context['first_treatment_date'], course_one.first_treatment_date)
+
+        request_two = RequestFactory().get('/app/print/discharge/?course_number=2')
+        course_two_context = _build_discharge_context(request_two, self.patient.id)
+        self.assertEqual(course_two_context['admission_date'], patient_dates['admission_date'])
+        self.assertEqual(course_two_context['discharge_date'], patient_dates['discharge_date'])
 
 
 # ============================================================================
@@ -4800,6 +4873,84 @@ class TestResearchDataExport(TestCase):
         # ...while an unassessed timing/scale must stay blank, not become 0.
         self.assertEqual(row['BACS_post_composite'], '')
         self.assertEqual(row['HAMD_baseline_total17'], '')
+
+    def test_summary_csv_course_dates_are_isolated_with_patient_fallback(self):
+        from rtms_app.services.export_research import generate_research_summary_csv
+
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            admission_date=date(2026, 1, 2),
+            first_treatment_date=date(2026, 1, 5),
+            discharge_date=date(2026, 1, 30),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            admission_date=date(2026, 3, 2),
+            first_treatment_date=date(2026, 3, 5),
+            discharge_date=date(2026, 3, 30),
+        )
+        self.patient.admission_date = date(2025, 12, 1)
+        self.patient.first_treatment_date = date(2025, 12, 5)
+        self.patient.discharge_date = date(2025, 12, 30)
+        self.patient.save(update_fields=['admission_date', 'first_treatment_date', 'discharge_date'])
+
+        before = {
+            'patient': (self.patient.admission_date, self.patient.first_treatment_date, self.patient.discharge_date),
+            'course_one': (course_one.admission_date, course_one.first_treatment_date, course_one.discharge_date),
+            'course_two': (course_two.admission_date, course_two.first_treatment_date, course_two.discharge_date),
+        }
+        content = generate_research_summary_csv()
+        rows = list(csv.DictReader(content.splitlines()))
+        patient_rows = [row for row in rows if row['card_id'] == self.patient.card_id]
+
+        self.assertEqual(len(patient_rows), 2)
+        by_course = {int(row['course_number']): row for row in patient_rows}
+        self.assertEqual(
+            (by_course[1]['admission_date'], by_course[1]['first_treatment_date'], by_course[1]['discharge_date']),
+            ('2026-01-02', '2026-01-05', '2026-01-30'),
+        )
+        self.assertEqual(
+            (by_course[2]['admission_date'], by_course[2]['first_treatment_date'], by_course[2]['discharge_date']),
+            ('2026-03-02', '2026-03-05', '2026-03-30'),
+        )
+        self.assertEqual(before['patient'], (
+            Patient.objects.get(pk=self.patient.pk).admission_date,
+            Patient.objects.get(pk=self.patient.pk).first_treatment_date,
+            Patient.objects.get(pk=self.patient.pk).discharge_date,
+        ))
+        self.assertEqual(before['course_one'], tuple(
+            getattr(TreatmentCourse.objects.get(pk=course_one.pk), field)
+            for field in ('admission_date', 'first_treatment_date', 'discharge_date')
+        ))
+        self.assertEqual(before['course_two'], tuple(
+            getattr(TreatmentCourse.objects.get(pk=course_two.pk), field)
+            for field in ('admission_date', 'first_treatment_date', 'discharge_date')
+        ))
+
+    def test_summary_csv_course_date_nulls_and_legacy_patient_fallback(self):
+        from rtms_app.services.export_research import generate_research_summary_csv
+
+        TreatmentCourse.objects.create(patient=self.patient, course_number=1)
+        self.patient.admission_date = date(2026, 4, 1)
+        self.patient.first_treatment_date = date(2026, 4, 5)
+        self.patient.discharge_date = date(2026, 4, 30)
+        self.patient.save(update_fields=['admission_date', 'first_treatment_date', 'discharge_date'])
+        legacy = Patient.objects.create(
+            card_id='RSRCH3', name='Legacy Research', birth_date=date(1975, 2, 2),
+            admission_date=date(2026, 5, 1), first_treatment_date=date(2026, 5, 5),
+            discharge_date=date(2026, 5, 30),
+        )
+
+        content = generate_research_summary_csv()
+        rows = {row['card_id']: row for row in csv.DictReader(content.splitlines())}
+        self.assertEqual(
+            (rows[self.patient.card_id]['admission_date'], rows[self.patient.card_id]['first_treatment_date'], rows[self.patient.card_id]['discharge_date']),
+            ('2026-04-01', '2026-04-05', '2026-04-30'),
+        )
+        self.assertEqual(
+            (rows[legacy.card_id]['admission_date'], rows[legacy.card_id]['first_treatment_date'], rows[legacy.card_id]['discharge_date']),
+            ('2026-05-01', '2026-05-05', '2026-05-30'),
+        )
 
     def test_summary_csv_adverse_event_flags_are_boolean(self):
         session = TreatmentSession.objects.create(
