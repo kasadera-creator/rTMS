@@ -24,6 +24,7 @@ urlpatterns = [
     path("dashboard/", views.dashboard_view, name="dashboard"),
     path("patients/", views.patient_list_view, name="patient_list"),
     path("patients/add/", views.patient_add_view, name="patient_add"),
+    path("patients/check-id/", views.patient_check_id, name="patient_check_id"),
     path("logout/", views.custom_logout, name="custom_logout"),
     
     path("app/consent/latest/", views.latest_consent, name="latest_consent"),

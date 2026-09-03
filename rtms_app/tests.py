@@ -327,6 +327,124 @@ class TestPatientRegistrationLifecycle(TestCase):
         self.assertEqual(TreatmentCourse.objects.filter(patient=patient).count(), 1)
 
 
+class TestPatientIdPrecheck(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='patient-id-check-user', password='pw')
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def test_existing_patient_id_returns_patient_and_all_courses(self):
+        patient = Patient.objects.create(
+            card_id='54340', name='Precheck Patient', birth_date=date(1980, 1, 2), gender='F', course_number=1,
+        )
+        TreatmentCourse.objects.create(patient=patient, course_number=1, course_status='discharged')
+        TreatmentCourse.objects.create(patient=patient, course_number=3, course_status='treatment_in_progress')
+
+        response = self.client.get(reverse('rtms_app:patient_check_id'), {'card_id': patient.card_id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {
+            'exists': True,
+            'patient': {
+                'name': 'Precheck Patient',
+                'birth_date': '1980-01-02',
+                'gender_code': 'F',
+                'gender': '女性',
+                'referral_source': '',
+                'referral_doctor': '',
+                'first_visit_date': '',
+            },
+            'courses': [
+                {'course_number': 1, 'status': '退院済'},
+                {'course_number': 3, 'status': 'rTMS中'},
+            ],
+            'next_course_number': 4,
+        })
+
+    def test_unknown_patient_id_returns_new_patient_result(self):
+        response = self.client.get(reverse('rtms_app:patient_check_id'), {'card_id': '54341'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'exists': False})
+
+    def test_invalid_or_empty_patient_id_returns_bad_request(self):
+        for card_id in ('', 'abc', '1234', '123456'):
+            with self.subTest(card_id=card_id):
+                response = self.client.get(reverse('rtms_app:patient_check_id'), {'card_id': card_id})
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('error', response.json())
+
+    def test_registration_page_requires_precheck_and_resets_when_id_changes(self):
+        response = self.client.get(reverse('rtms_app:patient_add'))
+        html = response.content.decode()
+
+        self.assertContains(response, 'id="checkPatientIdBtn"')
+        self.assertContains(response, 'id="patientRegisterBtn" disabled')
+        self.assertContains(response, 'id="patientRegisterFab" disabled')
+        self.assertIn("cardInput.addEventListener('input', resetCheck)", html)
+        self.assertIn("confirmedInput.value = 'false'", html)
+
+    def test_existing_patient_check_offers_new_treatment_cta_and_locks_identity_fields(self):
+        response = self.client.get(reverse('rtms_app:patient_add'))
+        html = response.content.decode()
+
+        self.assertIn('新しい治療（第${data.next_course_number}クール）を登録', html)
+        self.assertIn('field.readOnly = true', html)
+        self.assertIn("field.disabled = selector === '#id_gender'", html)
+        self.assertIn('patient.name', html)
+        self.assertIn('patient.birth_date', html)
+        self.assertIn('patient.gender_code', html)
+
+    def test_new_treatment_registration_adds_only_course_and_is_idempotent(self):
+        patient = Patient.objects.create(
+            card_id='54344', name='Existing Course Patient', birth_date=date(1980, 1, 1), course_number=2,
+        )
+        course_one = TreatmentCourse.objects.create(patient=patient, course_number=1, course_status='discharged')
+        TreatmentCourse.objects.create(patient=patient, course_number=2, course_status='discharged')
+        session = TreatmentSession.objects.create(
+            patient=patient, treatment_course=course_one, course_number=1, session_date=date(2026, 1, 1),
+        )
+        payload = {
+            'card_id': patient.card_id, 'confirm_create': 'true', 'course_number': '3',
+            'first_visit_date': '2026-09-03', 'referral_source': 'New Referral',
+        }
+
+        first_response = self.client.post(reverse('rtms_app:patient_add'), payload)
+        second_response = self.client.post(reverse('rtms_app:patient_add'), payload)
+
+        self.assertRedirects(first_response, reverse('rtms_app:dashboard'))
+        self.assertRedirects(second_response, reverse('rtms_app:dashboard'))
+        patient.refresh_from_db()
+        self.assertEqual(Patient.objects.filter(card_id=patient.card_id).count(), 1)
+        self.assertEqual(TreatmentCourse.objects.filter(patient=patient).count(), 3)
+        self.assertEqual(TreatmentCourse.objects.get(patient=patient, course_number=3).referral_source, 'New Referral')
+        self.assertEqual(TreatmentSession.objects.get(pk=session.pk).treatment_course_id, course_one.pk)
+        self.assertEqual(TreatmentSession.objects.filter(patient=patient, course_number=3).count(), 0)
+
+    def test_unconfirmed_new_patient_post_is_rejected(self):
+        payload = {
+            'card_id': '54342', 'name': 'Unconfirmed', 'birth_date': '1980-01-01',
+            'gender': 'M', 'first_visit_date': '2026-09-03',
+        }
+        response = self.client.post(reverse('rtms_app:patient_add'), payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '患者IDを確認してから登録してください')
+        self.assertFalse(Patient.objects.filter(card_id='54342').exists())
+
+    def test_confirmed_new_patient_post_uses_existing_registration_service(self):
+        payload = {
+            'card_id': '54343', 'name': 'Confirmed', 'birth_date': '1980-01-01',
+            'gender': 'M', 'first_visit_date': '2026-09-03',
+            'id_check_confirmed': 'true', 'id_check_card_id': '54343',
+        }
+        response = self.client.post(reverse('rtms_app:patient_add'), payload)
+
+        self.assertRedirects(response, reverse('rtms_app:dashboard'))
+        patient = Patient.objects.get(card_id='54343')
+        self.assertTrue(TreatmentCourse.objects.filter(patient=patient, course_number=1).exists())
+
+
 class TestMappingTreatmentCourseIsolation(TestCase):
     def setUp(self):
         self.patient = Patient.objects.create(

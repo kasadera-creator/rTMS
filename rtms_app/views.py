@@ -3467,6 +3467,42 @@ def patient_summary_view(request, patient_id):
     })
 
 @login_required
+def patient_check_id(request):
+    card_id = (request.GET.get('card_id') or '').strip()
+    import re
+    if not re.fullmatch(r'\d{5}', card_id):
+        return JsonResponse({'error': '患者IDは5桁の数字で入力してください'}, status=400)
+
+    patient = Patient.objects.filter(card_id=card_id).first()
+    if patient is None:
+        return JsonResponse({'exists': False})
+
+    courses = list(
+        TreatmentCourse.objects.filter(patient=patient)
+        .order_by('course_number')
+        .values('course_number', 'course_status')
+    )
+    status_labels = dict(TreatmentCourse.COURSE_STATUS_CHOICES)
+    for course in courses:
+        course['status'] = status_labels.get(course.pop('course_status'), '')
+    next_course_number = max((course['course_number'] for course in courses), default=0) + 1
+    return JsonResponse({
+        'exists': True,
+        'patient': {
+            'name': patient.name,
+            'birth_date': patient.birth_date.isoformat(),
+            'gender_code': patient.gender,
+            'gender': patient.get_gender_display(),
+            'referral_source': patient.referral_source,
+            'referral_doctor': patient.referral_doctor,
+            'first_visit_date': patient.first_visit_date.isoformat() if patient.first_visit_date else '',
+        },
+        'courses': courses,
+        'next_course_number': next_course_number,
+    })
+
+
+@login_required
 def patient_add_view(request):
     referral_options = Patient.objects.values_list('referral_source', flat=True).distinct()
     referral_options = [r for r in referral_options if r]
@@ -3477,7 +3513,10 @@ def patient_add_view(request):
         if 'confirm_create' in request.POST and existing_patients.exists():
             latest = existing_patients.first()
             requested_course_number = request.POST.get('course_number')
-            requested_course_number = int(requested_course_number) if requested_course_number else None
+            try:
+                requested_course_number = int(requested_course_number) if requested_course_number else None
+            except (TypeError, ValueError):
+                requested_course_number = None
             first_visit_date = request.POST.get('first_visit_date')
             register_additional_treatment_course(
                 latest,
@@ -3491,7 +3530,18 @@ def patient_add_view(request):
             return redirect('rtms_app:dashboard')
         if existing_patients.exists():
             latest = existing_patients.first()
-            return render(request, 'rtms_app/patient_add.html', {'form': form, 'referral_options': referral_options, 'existing_patient': latest, 'next_course_num': latest.course_number + 1})
+            courses = TreatmentCourse.objects.filter(patient=latest).order_by('course_number')
+            next_course_num = (courses.last().course_number if courses.exists() else 0) + 1
+            return render(request, 'rtms_app/patient_add.html', {
+                'form': form,
+                'referral_options': referral_options,
+                'existing_patient': latest,
+                'existing_courses': courses,
+                'next_course_num': next_course_num,
+            })
+        if request.POST.get('id_check_confirmed') != 'true' or request.POST.get('id_check_card_id') != card_id:
+            form.add_error('card_id', '患者IDを確認してから登録してください')
+            return render(request, 'rtms_app/patient_add.html', {'form': form, 'referral_options': referral_options})
         if form.is_valid():
             register_patient_with_initial_course(form.save(commit=False))
             return redirect('rtms_app:dashboard')

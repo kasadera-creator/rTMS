@@ -19,11 +19,21 @@
                     
                     {% if existing_patient %}
                     <div class="alert alert-warning border-warning shadow-sm">
-                        <h5 class="alert-heading fw-bold"><i class="fas fa-exclamation-triangle"></i> 登録済みの患者が見つかりました</h5>
-                        <p class="mb-1">カルテID <strong>{{ existing_patient.card_id }}</strong> は既に登録されています。</p>
-                        <p class="mb-3">氏名: <strong>{{ existing_patient.name }}</strong> 様 ({{ existing_patient.course_number }}クール目登録済)</p>
+                        <h5 class="alert-heading fw-bold"><i class="fas fa-check-circle"></i> 登録済み患者</h5>
+                        <dl class="row mb-3">
+                            <dt class="col-sm-3">患者ID</dt><dd class="col-sm-9">{{ existing_patient.card_id }}</dd>
+                            <dt class="col-sm-3">氏名</dt><dd class="col-sm-9">{{ existing_patient.name }}</dd>
+                            <dt class="col-sm-3">生年月日</dt><dd class="col-sm-9">{{ existing_patient.birth_date|date:'Y/m/d' }}</dd>
+                            <dt class="col-sm-3">性別</dt><dd class="col-sm-9">{{ existing_patient.get_gender_display }}</dd>
+                        </dl>
+                        <p class="mb-2 fw-bold">登録済み治療コース</p>
+                        <ul class="mb-3">
+                            {% for course in existing_courses %}
+                            <li>第{{ course.course_number }}クール　{{ course.get_course_status_display }}</li>
+                            {% endfor %}
+                        </ul>
                         <hr>
-                        <p class="mb-2 fw-bold">どうしますか？</p>
+                        <p class="mb-2">この患者に新しい治療クールを登録できます。</p>
                         <form method="post" id="patientAddForm">
                             {% csrf_token %}
                             <input type="hidden" name="card_id" value="{{ form.card_id.value }}">
@@ -38,7 +48,7 @@
                             
                             <div class="d-flex gap-3">
                                 <button type="submit" class="btn btn-success fw-bold">
-                                    <i class="fas fa-plus-circle"></i> {{ next_course_num }}クール目として新規登録する
+                                    <i class="fas fa-plus-circle"></i> 第{{ next_course_num }}クールとして登録
                                 </button>
                                 <a href="{% url 'rtms_app:patient_add' %}" class="btn btn-outline-secondary">
                                     <i class="fas fa-undo"></i> IDを入力し直す
@@ -50,6 +60,10 @@
 
                     <form method="post" id="patientAddForm">
                         {% csrf_token %}
+                        <input type="hidden" name="id_check_confirmed" id="idCheckConfirmed" value="false">
+                        <input type="hidden" name="id_check_card_id" id="idCheckCardId" value="">
+                        <input type="hidden" name="confirm_create" id="confirmCreate" value="">
+                        <input type="hidden" name="course_number" id="selectedCourseNumber" value="">
                         {% if form.errors %}
                         <div class="alert alert-danger"><strong>入力エラーがあります:</strong> {{ form.errors }}</div>
                         {% endif %}
@@ -57,7 +71,11 @@
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">カルテID <span class="badge bg-danger">必須</span></label>
-                                {{ form.card_id }}
+                                <div class="input-group">
+                                    {{ form.card_id }}
+                                    <button type="button" class="btn btn-outline-primary" id="checkPatientIdBtn">患者IDを確認</button>
+                                </div>
+                                <div id="patientIdCheckResult" class="mt-2" hidden></div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">氏名 <span class="badge bg-danger">必須</span></label>
@@ -91,7 +109,7 @@
                         <div class="d-grid gap-2 mt-5 d-md-flex justify-content-md-end">
                             <a href="{% url 'rtms_app:dashboard' %}" class="btn btn-secondary me-md-2 px-4">キャンセル</a>
                             <!-- ★修正: 登録完了 -->
-                            <button type="submit" class="btn btn-primary px-5 fw-bold">
+                            <button type="submit" class="btn btn-primary px-5 fw-bold" id="patientRegisterBtn" disabled>
                                 <i class="fas fa-check me-1"></i> 登録完了
                             </button>
                         </div>
@@ -110,11 +128,148 @@
 
 {% url 'rtms_app:dashboard' as dashboard_url %}
 <div class="fab-stack no-print">
-    <button type="submit" form="patientAddForm" class="btn btn-primary fab">
+    <button type="submit" form="patientAddForm" class="btn btn-primary fab" id="patientRegisterFab"{% if not existing_patient %} disabled{% endif %}>
         <i class="fas fa-check me-1"></i> 登録完了
     </button>
     <a class="btn btn-secondary fab" href="{{ dashboard_url }}">
         <i class="fas fa-undo"></i> 戻る
     </a>
 </div>
+<script>
+(() => {
+    const cardInput = document.getElementById('id_card_id');
+    const checkButton = document.getElementById('checkPatientIdBtn');
+    const result = document.getElementById('patientIdCheckResult');
+    const form = document.getElementById('patientAddForm');
+    const registerButton = document.getElementById('patientRegisterBtn');
+    const registerFab = document.getElementById('patientRegisterFab');
+    const confirmedInput = document.getElementById('idCheckConfirmed');
+    const confirmedCardInput = document.getElementById('idCheckCardId');
+    const confirmCreateInput = document.getElementById('confirmCreate');
+    const courseNumberInput = document.getElementById('selectedCourseNumber');
+    if (!cardInput || !checkButton || !result || !form) return;
+
+    const fields = Array.from(form.querySelectorAll('input, select')).filter(field => field !== cardInput);
+    fields.forEach(field => {
+        field.dataset.originalRequired = field.required ? 'true' : 'false';
+        field.dataset.originalReadonly = field.readOnly ? 'true' : 'false';
+        field.dataset.originalDisabled = field.disabled ? 'true' : 'false';
+    });
+
+    function setRegistrationEnabled(enabled) {
+        if (registerButton) registerButton.disabled = !enabled;
+        if (registerFab) registerFab.disabled = !enabled;
+    }
+
+    function resetCheck() {
+        result.hidden = true;
+        result.replaceChildren();
+        confirmedInput.value = 'false';
+        confirmedCardInput.value = '';
+        confirmCreateInput.value = '';
+        courseNumberInput.value = '';
+        setRegistrationEnabled(false);
+        fields.forEach(field => {
+            field.required = field.dataset.originalRequired === 'true';
+            field.readOnly = field.dataset.originalReadonly === 'true';
+            field.disabled = field.dataset.originalDisabled === 'true';
+        });
+    }
+
+    function addText(parent, tag, text, className) {
+        const element = document.createElement(tag);
+        element.textContent = text;
+        if (className) element.className = className;
+        parent.appendChild(element);
+        return element;
+    }
+
+    function renderCheck(data, cardId) {
+        result.replaceChildren();
+        result.hidden = false;
+        if (!data.exists) {
+            result.className = 'alert alert-success mb-0';
+            addText(result, 'strong', '✓ 未登録の患者IDです');
+            addText(result, 'p', '新規患者として登録できます。', 'mb-0');
+            confirmedInput.value = 'true';
+            confirmedCardInput.value = cardId;
+            setRegistrationEnabled(true);
+            return;
+        }
+
+        result.className = 'alert alert-warning mb-0';
+        addText(result, 'strong', '✓ 登録済み患者');
+        const patient = data.patient;
+        const details = document.createElement('dl');
+        details.className = 'row mt-2 mb-3';
+        [['患者ID', cardId], ['氏名', patient.name], ['生年月日', patient.birth_date.replaceAll('-', '/')], ['性別', patient.gender]].forEach(([label, value]) => {
+            addText(details, 'dt', label, 'col-sm-3');
+            addText(details, 'dd', value, 'col-sm-9');
+        });
+        result.appendChild(details);
+        addText(result, 'p', '登録済み治療コース', 'fw-bold mb-1');
+        const courses = document.createElement('ul');
+        courses.className = 'mb-2';
+        data.courses.forEach(course => addText(courses, 'li', `第${course.course_number}クール　${course.status}`));
+        result.appendChild(courses);
+        addText(result, 'p', `次のクール：第${data.next_course_number}クール`, 'mb-0 fw-bold');
+        const newTreatmentButton = document.createElement('button');
+        newTreatmentButton.type = 'button';
+        newTreatmentButton.className = 'btn btn-success fw-bold mt-3';
+        newTreatmentButton.textContent = `新しい治療（第${data.next_course_number}クール）を登録`;
+        newTreatmentButton.addEventListener('click', () => {
+            cardInput.focus();
+            form.querySelector('#id_name').value = patient.name;
+            form.querySelector('#id_birth_date').value = patient.birth_date;
+            form.querySelector('#id_gender').value = patient.gender_code;
+            form.querySelector('#id_referral_source').value = patient.referral_source || '';
+            form.querySelector('#id_referral_doctor').value = patient.referral_doctor || '';
+            form.querySelector('#id_first_visit_date').value = patient.first_visit_date || '';
+            ['#id_name', '#id_birth_date', '#id_gender'].forEach(selector => {
+                const field = form.querySelector(selector);
+                field.readOnly = true;
+                field.disabled = selector === '#id_gender';
+            });
+            confirmCreateInput.value = 'true';
+            courseNumberInput.value = data.next_course_number;
+            fields.forEach(field => { field.required = false; });
+            newTreatmentButton.disabled = true;
+            newTreatmentButton.textContent = `第${data.next_course_number}クールの登録フォーム`;
+            addText(result, 'p', '本人情報を引き継いだ新しい治療Courseを登録できます。', 'mt-2 mb-0');
+            setRegistrationEnabled(true);
+        });
+        result.appendChild(newTreatmentButton);
+        confirmedInput.value = 'true';
+        confirmedCardInput.value = cardId;
+        setRegistrationEnabled(false);
+    }
+
+    cardInput.addEventListener('input', resetCheck);
+    checkButton.addEventListener('click', async () => {
+        const cardId = cardInput.value.trim();
+        resetCheck();
+        if (!/^\d{5}$/.test(cardId)) {
+            result.hidden = false;
+            result.className = 'alert alert-danger mb-0';
+            addText(result, 'span', '患者IDは5桁の数字で入力してください');
+            return;
+        }
+        checkButton.disabled = true;
+        checkButton.textContent = '確認中...';
+        try {
+            const response = await fetch(`{% url 'rtms_app:patient_check_id' %}?card_id=${encodeURIComponent(cardId)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || '確認できませんでした');
+            renderCheck(data, cardId);
+        } catch (error) {
+            result.hidden = false;
+            result.className = 'alert alert-danger mb-0';
+            addText(result, 'span', error.message || '患者IDを確認できませんでした');
+        } finally {
+            checkButton.disabled = false;
+            checkButton.textContent = '患者IDを確認';
+        }
+    });
+})();
+</script>
 {% endblock %}
