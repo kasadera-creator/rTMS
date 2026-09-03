@@ -33,6 +33,7 @@
                             <input type="hidden" name="referral_source" value="{{ form.referral_source.value }}">
                             <input type="hidden" name="referral_doctor" value="{{ form.referral_doctor.value }}">
                             <input type="hidden" name="first_visit_date" value="{{ form.first_visit_date.value|date:'Y-m-d' }}">
+                            <input type="hidden" name="course_number" value="{{ next_course_num }}">
                             <input type="hidden" name="confirm_create" value="true">
                             
                             <div class="d-flex gap-3">

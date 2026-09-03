@@ -118,7 +118,10 @@ from .services.strict_writes import (
     update_or_create_mapping_schedule_strict,
     update_or_create_treatment_session_strict,
 )
-from .services.patient_registration import register_patient_with_initial_course
+from .services.patient_registration import (
+    register_additional_treatment_course,
+    register_patient_with_initial_course,
+)
 
 # ==========================================
 # 祝日定義 (2024-2030) + 年末年始 (12/29-1/3)
@@ -3421,9 +3424,18 @@ def patient_add_view(request):
         existing_patients = Patient.objects.filter(card_id=card_id).order_by('-course_number')
         if 'confirm_create' in request.POST and existing_patients.exists():
             latest = existing_patients.first()
-            new_course_num = latest.course_number + 1
-            new_patient = Patient(card_id=latest.card_id, name=latest.name, birth_date=latest.birth_date, gender=latest.gender, referral_source=request.POST.get('referral_source') or latest.referral_source, referral_doctor=request.POST.get('referral_doctor') or latest.referral_doctor, life_history=latest.life_history, past_history=latest.past_history, diagnosis=latest.diagnosis, first_visit_date=parse_date(request.POST.get('first_visit_date')) or timezone.localdate(), course_number=new_course_num)
-            new_patient.save()
+            requested_course_number = request.POST.get('course_number')
+            requested_course_number = int(requested_course_number) if requested_course_number else None
+            first_visit_date = request.POST.get('first_visit_date')
+            register_additional_treatment_course(
+                latest,
+                course_number=requested_course_number,
+                overrides={
+                    'referral_source': request.POST.get('referral_source'),
+                    'referral_doctor': request.POST.get('referral_doctor'),
+                    'first_visit_date': parse_date(first_visit_date) if first_visit_date else None,
+                },
+            )
             return redirect('rtms_app:dashboard')
         if existing_patients.exists():
             latest = existing_patients.first()

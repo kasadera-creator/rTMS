@@ -198,6 +198,134 @@ class TestPatientRegistrationLifecycle(TestCase):
         self.assertFalse(Patient.objects.filter(card_id="54331").exists())
         self.assertFalse(TreatmentCourse.objects.filter(patient__card_id="54331").exists())
 
+    def test_existing_patient_confirmation_adds_course_without_recreating_patient(self):
+        patient = Patient.objects.create(
+            card_id="54332", name="Existing Patient", birth_date=date(1980, 1, 1),
+            gender="F", course_number=1,
+        )
+        course_one = TreatmentCourse.objects.create(
+            patient=patient,
+            course_number=1,
+            course_status="discharged",
+            first_treatment_date=date(2026, 1, 5),
+            discharge_date=date(2026, 2, 13),
+            summary_text="Course one summary",
+        )
+        session = TreatmentSession.objects.create(
+            patient=patient, treatment_course=course_one, course_number=1,
+            session_date=date(2026, 1, 5),
+        )
+        assessment = Assessment.objects.create(
+            patient=patient, treatment_course=course_one, course_number=1,
+            timing="baseline", type="HAM-D",
+        )
+        MappingSchedule.objects.create(
+            patient=patient, treatment_course=course_one, course_number=1,
+            week_number=1, planned_date=date(2026, 1, 5),
+        )
+        user = get_user_model().objects.create_user(username="registration-user", password="pw")
+        client = Client()
+        client.force_login(user)
+
+        response = client.post(reverse("rtms_app:patient_add"), {
+            "card_id": patient.card_id,
+            "referral_source": "New Referral",
+            "referral_doctor": "New Doctor",
+            "first_visit_date": "2026-08-01",
+            "course_number": "2",
+            "confirm_create": "true",
+        })
+
+        self.assertRedirects(response, reverse("rtms_app:dashboard"))
+        patient.refresh_from_db()
+        course_two = TreatmentCourse.objects.get(patient=patient, course_number=2)
+        self.assertEqual(Patient.objects.filter(card_id="54332").count(), 1)
+        self.assertEqual(patient.name, "Existing Patient")
+        self.assertEqual(patient.birth_date, date(1980, 1, 1))
+        self.assertEqual(patient.gender, "F")
+        self.assertEqual(patient.course_number, 2)
+        self.assertEqual(course_one.refresh_from_db(), None)
+        self.assertEqual(course_one.course_status, "discharged")
+        self.assertEqual(course_one.first_treatment_date, date(2026, 1, 5))
+        self.assertEqual(course_one.discharge_date, date(2026, 2, 13))
+        self.assertEqual(course_one.summary_text, "Course one summary")
+        self.assertEqual(TreatmentSession.objects.get(pk=session.pk).treatment_course_id, course_one.pk)
+        self.assertEqual(Assessment.objects.get(pk=assessment.pk).treatment_course_id, course_one.pk)
+        self.assertEqual(MappingSchedule.objects.get(treatment_course=course_one).course_number, 1)
+        self.assertEqual(course_two.course_status, "waiting_admission")
+        self.assertEqual(course_two.course_end_reason, "")
+        self.assertIsNone(course_two.first_treatment_date)
+        self.assertIsNone(course_two.discharge_date)
+        self.assertEqual(course_two.referral_source, "New Referral")
+        self.assertEqual(course_two.referral_doctor, "New Doctor")
+
+    def test_existing_patient_id_shows_additional_course_confirmation(self):
+        patient = Patient.objects.create(card_id="54335", name="Confirmation", birth_date=date(1980, 1, 1))
+        TreatmentCourse.objects.create(patient=patient, course_number=1)
+        user = get_user_model().objects.create_user(username="confirmation-user", password="pw")
+        client = Client()
+        client.force_login(user)
+
+        response = client.post(reverse("rtms_app:patient_add"), {"card_id": patient.card_id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["existing_patient"].pk, patient.pk)
+        self.assertEqual(response.context["next_course_num"], 2)
+
+    def test_new_course_can_be_selected_explicitly_in_dashboard(self):
+        patient = Patient.objects.create(card_id="54336", name="Dashboard Courses", birth_date=date(1980, 1, 1))
+        TreatmentCourse.objects.create(patient=patient, course_number=1)
+        TreatmentCourse.objects.create(patient=patient, course_number=2)
+        user = get_user_model().objects.create_user(username="dashboard-course-registration-user", password="pw")
+        client = Client()
+        client.force_login(user)
+
+        course_two_response = client.get(
+            reverse("rtms_app:dashboard"), {"date": "2026-08-01", "course_number": 2}
+        )
+        course_one_response = client.get(
+            reverse("rtms_app:dashboard"), {"date": "2026-08-01", "course_number": 1}
+        )
+
+        self.assertEqual(course_two_response.status_code, 200)
+        self.assertEqual(course_one_response.status_code, 200)
+
+    def test_existing_patient_confirmation_is_idempotent_for_requested_course(self):
+        patient = Patient.objects.create(card_id="54333", name="Repeat", birth_date=date(1980, 1, 1))
+        TreatmentCourse.objects.create(patient=patient, course_number=1)
+        user = get_user_model().objects.create_user(username="repeat-registration-user", password="pw")
+        client = Client()
+        client.force_login(user)
+        payload = {
+            "card_id": patient.card_id,
+            "course_number": "2",
+            "confirm_create": "true",
+        }
+
+        first_response = client.post(reverse("rtms_app:patient_add"), payload)
+        second_response = client.post(reverse("rtms_app:patient_add"), payload)
+
+        self.assertEqual(first_response.status_code, 302)
+        self.assertEqual(second_response.status_code, 302)
+        self.assertEqual(TreatmentCourse.objects.filter(patient=patient, course_number=2).count(), 1)
+        self.assertEqual(TreatmentCourse.objects.filter(patient=patient).count(), 2)
+
+    def test_additional_course_rolls_back_pointer_when_creation_fails(self):
+        from rtms_app.services.patient_registration import register_additional_treatment_course
+
+        patient = Patient.objects.create(card_id="54334", name="Rollback Course", birth_date=date(1980, 1, 1))
+        TreatmentCourse.objects.create(patient=patient, course_number=1)
+        with patch(
+            "rtms_app.services.patient_registration.TreatmentCourse.objects.get_or_create",
+            side_effect=RuntimeError("additional course creation failed"),
+        ):
+            with self.assertRaises(RuntimeError):
+                register_additional_treatment_course(patient, course_number=2)
+
+        patient.refresh_from_db()
+        self.assertEqual(patient.course_number, 1)
+        self.assertEqual(TreatmentCourse.objects.filter(patient=patient).count(), 1)
+
 
 class TestMappingTreatmentCourseIsolation(TestCase):
     def setUp(self):
