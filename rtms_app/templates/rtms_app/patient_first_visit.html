@@ -292,13 +292,13 @@
               <i class="fas fa-save"></i> 保存
             </button>
             <a class="btn btn-primary"
-               href="{% url 'rtms_app:print:patient_print_admission' patient.id %}"
+               href="{% url 'rtms_app:print:patient_print_admission' patient.id %}?course_number={{ course_number }}"
                target="_blank"
                rel="noopener">
               <i class="fas fa-print"></i> 入院時サマリーを印刷
             </a>
             <a class="btn btn-primary"
-               href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}"
+               href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}?course_number={{ course_number }}"
                target="_blank"
                rel="noopener">
               <i class="fas fa-print"></i> rTMS適正質問票を印刷
@@ -318,13 +318,13 @@
             <i class="fas fa-save"></i> 保存
           </button>
           <a class="btn btn-primary"
-             href="{% url 'rtms_app:print:patient_print_admission' patient.id %}"
+             href="{% url 'rtms_app:print:patient_print_admission' patient.id %}?course_number={{ course_number }}"
              target="_blank"
              rel="noopener">
             <i class="fas fa-print"></i> 入院時サマリーを印刷
           </a>
           <a class="btn btn-primary"
-             href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}"
+             href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}?course_number={{ course_number }}"
              target="_blank"
              rel="noopener">
             <i class="fas fa-print"></i> rTMS適正質問票を印刷

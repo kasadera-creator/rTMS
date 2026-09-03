@@ -82,7 +82,9 @@
                 </div>
             </div>
             <div class="table-responsive">
-                <table class="calendar-table" data-reschedule-url="{% url 'rtms_app:clinical_path_reschedule' patient.id %}" data-course-number="{{ course_number }}">
+                <table class="calendar-table"
+                       data-reschedule-url="{% url 'rtms_app:clinical_path_reschedule' patient.id %}"
+                       data-course-number="{{ course_number }}">
                     <thead>
                         <tr>
                             <th class="text-primary">月</th>
@@ -115,12 +117,15 @@
                                             {% elif event.type == 'mapping' %}
                                                 <a href="{{ event.url }}"
                                                    class="event-item evt-mapping"
-                                                   {% if event.draggable and event.status != 'done' %}draggable="true" data-draggable="true" data-event-type="{{ event.type }}" data-source-date="{{ day.date|date:'Y-m-d' }}" data-status="{{ event.status|default:'' }}" data-week-number="{{ event.week_number|default:'' }}"{% if event.session_id %} data-session-id="{{ event.session_id }}"{% endif %}{% endif %}
+                                                   {% if event.draggable and event.status != 'done' %}draggable="true" data-draggable="true" data-event-type="{{ event.type }}" data-source-date="{{ day.date|date:'Y-m-d' }}" data-status="{{ event.status|default:'' }}" data-week-number="{{ event.week_number|default:'' }}"{% if event.session_id %} data-session-id="{{ event.session_id }}"{% endif %}
+                                                   {% endif %}
                                                    onclick="event.stopPropagation();"><i class="fas fa-crosshairs"></i> {{ event.label }}</a>
                                             {% elif event.type == 'treatment' %}
                                                 <a href="{{ event.url }}"
                                                    class="event-item evt-treatment"
-                                                   {% if event.draggable and event.status != 'done' %}draggable="true" data-draggable="true" data-event-type="{{ event.type }}" data-source-date="{{ day.date|date:'Y-m-d' }}" data-status="{{ event.status|default:'' }}"{% if event.first_treatment %} data-first-treatment="true"{% endif %}{% if event.session_id %} data-session-id="{{ event.session_id }}"{% endif %}{% endif %}
+                                                   {% if event.draggable and event.status != 'done' %}draggable="true" data-draggable="true" data-event-type="{{ event.type }}" data-source-date="{{ day.date|date:'Y-m-d' }}" data-status="{{ event.status|default:'' }}"{% if event.first_treatment %} data-first-treatment="true"{% endif %}
+                                                   {% if event.session_id %}data-session-id="{{ event.session_id }}"{% endif %}
+                                                   {% endif %}
                                                    onclick="event.stopPropagation();"><i class="fas fa-bolt"></i> {{ event.label }}</a>
                                             {% elif event.type == 'assessment' %}
                                                 <a href="{{ event.url }}"

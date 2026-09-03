@@ -1496,7 +1496,10 @@ class TestPatientListNavigation(TestCase):
 
         response = self.client.get(reverse('rtms_app:patient_list'))
 
-        self.assertEqual(response.context['patients'][0].list_status, 'waiting')
+        rows = response.context['patients']
+        self.assertEqual(len(rows), 2)
+        course_two_row = next(row for row in rows if row.list_course_number == 2)
+        self.assertEqual(course_two_row.list_status, 'waiting')
         self.assertContains(response, '<span class="badge bg-warning text-dark">入院待ち</span>')
 
     def test_patient_list_derives_all_treatment_lifecycle_states(self):
@@ -1533,9 +1536,10 @@ class TestPatientListNavigation(TestCase):
         self.assertContains(response, '入院中（治療後）')
         self.assertContains(response, '退院済')
 
-        inpatient_response = self.client.get(
-            reverse('rtms_app:patient_list'), {'status': 'inpatient'},
-        )
+        with patch('rtms_app.views.timezone.localdate', return_value=as_of):
+            inpatient_response = self.client.get(
+                reverse('rtms_app:patient_list'), {'status': 'inpatient'},
+            )
         inpatient_cards = {
             patient.card_id for patient in inpatient_response.context['patients']
         }
@@ -1600,13 +1604,17 @@ class TestPatientListNavigation(TestCase):
             'inpatient_waiting_treatment',
         )
         response = self.client.get(reverse('rtms_app:patient_list'))
-        self.assertEqual(response.context['patients'][0].list_status, 'inpatient_waiting_treatment')
+        course_two_row = next(
+            row for row in response.context['patients'] if row.list_course_number == 2
+        )
+        self.assertEqual(course_two_row.list_status, 'inpatient_waiting_treatment')
 
     def test_patient_list_includes_course_aware_scale_link(self):
         patient = Patient.objects.create(
             card_id='S6011', name='Scale Link', birth_date=date(1980, 1, 1),
             course_number=2,
         )
+        TreatmentCourse.objects.create(patient=patient, course_number=2)
 
         response = self.client.get(reverse('rtms_app:patient_list'))
 
@@ -1619,6 +1627,74 @@ class TestPatientListNavigation(TestCase):
         self.assertContains(response, '>退院</a>')
         self.assertNotContains(response, '初診・基本情報')
         self.assertNotContains(response, '治療経過・退院準備')
+
+    def test_patient_list_renders_each_treatment_course_with_explicit_links(self):
+        patient = Patient.objects.create(
+            card_id='S6020', name='Two Courses', birth_date=date(1980, 1, 1),
+            course_number=2,
+        )
+        TreatmentCourse.objects.create(
+            patient=patient, course_number=1, course_status='discharged',
+        )
+        TreatmentCourse.objects.create(
+            patient=patient, course_number=2, course_status='treatment_in_progress',
+        )
+
+        response = self.client.get(reverse('rtms_app:patient_list'))
+
+        rows = [row for row in response.context['patients'] if row.card_id == 'S6020']
+        self.assertEqual(len(rows), 2)
+        self.assertContains(response, '第1クール')
+        self.assertContains(response, '第2クール')
+        self.assertEqual(response.content.decode().count('badge bg-secondary rounded-pill'), 2)
+        for course_number in (1, 2):
+            self.assertContains(
+                response,
+                f'{reverse("rtms_app:patient_clinical_path", args=[patient.pk])}?course_number={course_number}',
+            )
+            self.assertContains(
+                response,
+                f'{reverse("rtms_app:assessment_add", args=[patient.pk, "baseline"])}?course_number={course_number}',
+            )
+
+    def test_explicit_course_is_retained_across_major_detail_views(self):
+        patient = Patient.objects.create(
+            card_id='S6021', name='Course Navigation', birth_date=date(1980, 1, 1),
+            course_number=2,
+        )
+        TreatmentCourse.objects.create(patient=patient, course_number=1)
+        TreatmentCourse.objects.create(patient=patient, course_number=2)
+
+        urls = (
+            reverse('rtms_app:patient_first_visit', args=[patient.pk]),
+            reverse('rtms_app:mapping_add', args=[patient.pk]),
+            reverse('rtms_app:treatment_add', args=[patient.pk]),
+            reverse('rtms_app:patient_clinical_path', args=[patient.pk]),
+            reverse('rtms_app:assessment_add', args=[patient.pk, 'baseline']),
+            reverse('rtms_app:patient_home', args=[patient.pk]),
+        )
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.get(url, {'course_number': 1})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['course_number'], 1)
+
+    def test_missing_explicit_course_does_not_fall_back_to_current_course(self):
+        patient = Patient.objects.create(
+            card_id='S6022', name='Missing Course', birth_date=date(1980, 1, 1),
+            course_number=2,
+        )
+        TreatmentCourse.objects.create(patient=patient, course_number=2)
+
+        for url in (
+            reverse('rtms_app:mapping_add', args=[patient.pk]),
+            reverse('rtms_app:treatment_add', args=[patient.pk]),
+            reverse('rtms_app:patient_clinical_path', args=[patient.pk]),
+            reverse('rtms_app:patient_home', args=[patient.pk]),
+        ):
+            with self.subTest(url=url):
+                response = self.client.get(url, {'course_number': 1})
+                self.assertEqual(response.status_code, 400)
 
     def test_monthly_calendar_includes_dashboard_return_link(self):
         response = self.client.get(reverse('rtms_app:calendar_month'), {'year': 2026, 'month': 8})

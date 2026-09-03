@@ -2,7 +2,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
-from django.http import HttpResponseNotAllowed
+from django.http import Http404, HttpResponse, HttpResponseNotAllowed
 from django.db import transaction
 from urllib.parse import urlencode
 
@@ -79,6 +79,14 @@ def _print_course_number(patient, treatment_course=None):
 	return treatment_course.course_number if treatment_course is not None else getattr(patient, 'course_number', 1)
 
 
+def _resolve_print_course(request, patient):
+	raw_course_number = request.GET.get('course_number')
+	treatment_course = resolve_treatment_course(patient, course_number=raw_course_number)
+	if raw_course_number and treatment_course is None:
+		raise Http404('対象の治療クールが見つかりません')
+	return treatment_course
+
+
 def render_pdf_response(request, template, context, filename):
 	# Render template fragment (use include_mode to avoid toolbar/wrappers)
 	context = dict(context)
@@ -109,7 +117,7 @@ DOC_TEMPLATES = {
 @login_required
 def patient_print_bundle(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
-	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
+	treatment_course = _resolve_print_course(request, patient)
 	questionnaire = patient.questionnaire_data or {}
 	assessments = get_baseline_assessments_ordered(patient, treatment_course=treatment_course)
 
@@ -174,7 +182,7 @@ def patient_print_bundle(request, patient_id):
 def patient_print_bundle_pdf(request, patient_id):
 	# Build same context as patient_print_bundle and render PDF
 	patient = get_object_or_404(Patient, pk=patient_id)
-	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
+	treatment_course = _resolve_print_course(request, patient)
 	questionnaire = patient.questionnaire_data or {}
 	assessments = get_baseline_assessments_ordered(patient, treatment_course=treatment_course)
 
@@ -229,7 +237,7 @@ def patient_print_bundle_pdf(request, patient_id):
 @login_required
 def print_clinical_path(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
-	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
+	treatment_course = _resolve_print_course(request, patient)
 	calendar_weeks, assessment_events = generate_calendar_weeks(patient, treatment_course=treatment_course)
 	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
 	context = {
@@ -247,7 +255,7 @@ def print_clinical_path(request, patient_id):
 @login_required
 def print_clinical_path_pdf(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
-	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
+	treatment_course = _resolve_print_course(request, patient)
 	calendar_weeks, assessment_events = generate_calendar_weeks(patient, treatment_course=treatment_course)
 	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
 	context = {
@@ -263,7 +271,7 @@ def print_clinical_path_pdf(request, patient_id):
 
 def _build_discharge_context(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
-	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
+	treatment_course = _resolve_print_course(request, patient)
 	back_url = _extract_back_url(request, patient)
 	test_scores = _get_latest_assessments_by_date(patient, treatment_course)
 	admission_date = (
@@ -305,7 +313,7 @@ def patient_print_discharge_pdf(request, patient_id):
 def _build_admission_context(request, patient_id):
 	from datetime import timedelta
 	patient = get_object_or_404(Patient, pk=patient_id)
-	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
+	treatment_course = _resolve_print_course(request, patient)
 	back_url = _extract_back_url(request, patient)
 	
 	# Get baseline assessments

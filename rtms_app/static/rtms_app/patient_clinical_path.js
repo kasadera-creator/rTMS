@@ -26,6 +26,7 @@
     const payload = {
       event_type: link.dataset.eventType,
       target_date: targetDate,
+      course_number: table.dataset.courseNumber,
     };
 
     if (link.dataset.eventType === 'admission' || link.dataset.eventType === 'discharge') {

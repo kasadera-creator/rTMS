@@ -9,27 +9,27 @@
 <div id="patient-nav-fab" class="no-print">
   <div class="d-flex align-items-center">
     <a class="btn btn-first-visit btn-sm btn-nav"
-       href="{% url 'rtms_app:patient_first_visit' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+       href="{% url 'rtms_app:patient_first_visit' patient.id %}?course_number={{ course_number }}{% if dashboard_date %}&dashboard_date={{ dashboard_date }}{% endif %}">
       <i class="fas fa-user-plus me-1"></i> 初診
     </a>
     <a class="btn btn-admission btn-sm btn-nav"
-       href="{% url 'rtms_app:patient_clinical_path' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+       href="{% url 'rtms_app:patient_clinical_path' patient.id %}?course_number={{ course_number }}{% if dashboard_date %}&dashboard_date={{ dashboard_date }}{% endif %}">
       <i class="fas fa-route me-1"></i> スケジュール
     </a>
     <a class="btn btn-mapping btn-sm btn-nav"
-       href="{% url 'rtms_app:mapping_add' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+       href="{% url 'rtms_app:mapping_add' patient.id %}?course_number={{ course_number }}{% if dashboard_date %}&dashboard_date={{ dashboard_date }}{% endif %}">
       <i class="fas fa-crosshairs me-1"></i> MT測定
     </a>
     <a class="btn btn-treatment btn-sm btn-nav"
-       href="{% url 'rtms_app:treatment_add' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+       href="{% url 'rtms_app:treatment_add' patient.id %}?course_number={{ course_number }}{% if dashboard_date %}&dashboard_date={{ dashboard_date }}{% endif %}">
       <i class="fas fa-bolt me-1"></i> 治療
     </a>
     <a class="btn btn-assessment btn-sm btn-nav"
-       href="{% url 'rtms_app:assessment_add' patient.id 'baseline' %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+       href="{% url 'rtms_app:assessment_add' patient.id 'baseline' %}?course_number={{ course_number }}{% if dashboard_date %}&dashboard_date={{ dashboard_date }}{% endif %}">
       <i class="fas fa-clipboard-check me-1"></i> 尺度
     </a>
     <a class="btn btn-discharge btn-sm btn-nav"
-       href="{% url 'rtms_app:patient_home' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+       href="{% url 'rtms_app:patient_home' patient.id %}?course_number={{ course_number }}{% if dashboard_date %}&dashboard_date={{ dashboard_date }}{% endif %}">
       <i class="fas fa-notes-medical me-1"></i> 退院
     </a>
   </div>

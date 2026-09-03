@@ -1001,15 +1001,15 @@ def patient_list_view(request):
     direction = 'desc' if dir_param == 'desc' else 'asc'
 
     sort_fields = {
-        'card_id': ['card_id'],
-        'name': ['name'],
-        'birth_date': ['birth_date'],
-        'gender': ['gender'],
-        'attending': ['attending_physician__last_name', 'attending_physician__first_name'],
+        'card_id': ['patient__card_id'],
+        'name': ['patient__name'],
+        'birth_date': ['patient__birth_date'],
+        'gender': ['patient__gender'],
+        'attending': ['patient__attending_physician__last_name', 'patient__attending_physician__first_name'],
         'course': ['course_number'],
-        'age': ['birth_date'],
+        'age': ['patient__birth_date'],
         # 追加してよければ：状態でもソート可能
-        'status': ['status'],
+        'status': ['patient__status'],
     }
 
     if sort_param not in sort_fields:
@@ -1029,29 +1029,28 @@ def patient_list_view(request):
 
     ordering = build_ordering(sort_param, direction)
 
-    # ===== QuerySet（ここがポイント） =====
-    qs = Patient.objects.select_related('attending_physician').all()
+    # ===== QuerySet: one row per TreatmentCourse =====
+    qs = TreatmentCourse.objects.select_related(
+        'patient', 'patient__attending_physician',
+    )
 
     if q:
-        qs = qs.filter(name__icontains=q)
+        qs = qs.filter(patient__name__icontains=q)
 
     if card:
-        qs = qs.filter(card_id__icontains=card)
+        qs = qs.filter(patient__card_id__icontains=card)
 
-    patients = list(qs.order_by(*ordering))
-    course_numbers = {patient.course_number or 1 for patient in patients}
-    courses = {
-        course.patient_id: course
-        for course in TreatmentCourse.objects.filter(
-            patient_id__in=[patient.pk for patient in patients],
-            course_number__in=course_numbers,
-        )
-    }
-    for patient in patients:
+    courses = list(qs.order_by(*ordering, 'patient_id', 'course_number', 'id'))
+    patients = []
+    for course in courses:
+        patient = course.patient
+        patient.list_course = course
+        patient.list_course_number = course.course_number
         patient.list_status = get_patient_admission_status(
             patient,
-            treatment_course=courses.get(patient.pk),
+            treatment_course=course,
         )
+        patients.append(patient)
     status_groups = {
         'waiting': {'waiting'},
         'inpatient': {
@@ -1105,8 +1104,14 @@ def admission_procedure(request, patient_id):
 def mapping_add(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     dashboard_date = request.GET.get('dashboard_date')
-    course_number = int(request.GET.get('course_number') or request.POST.get('course_number') or patient.course_number or 1)
+    requested_course_number = request.GET.get('course_number') or request.POST.get('course_number')
+    try:
+        course_number = int(requested_course_number or patient.course_number or 1)
+    except (TypeError, ValueError):
+        return HttpResponseBadRequest('クール番号が不正です')
     treatment_course = resolve_treatment_course(patient, course_number=course_number)
+    if requested_course_number and treatment_course is None:
+        return HttpResponseBadRequest('対象の治療クールが見つかりません')
     mapping_scope = {'treatment_course': treatment_course} if treatment_course else {
         'patient': patient, 'course_number': course_number,
     }
@@ -1149,7 +1154,10 @@ def mapping_add(request, patient_id):
             key_date = inst.date
             action = request.POST.get('action', '')
             if action == 'to_treatment':
-                query_params = {'date': key_date.strftime('%Y-%m-%d')}
+                query_params = {
+                    'date': key_date.strftime('%Y-%m-%d'),
+                    'course_number': course_number,
+                }
                 if dashboard_date:
                     query_params['dashboard_date'] = dashboard_date
                 return redirect(build_url('treatment_add', args=[patient.id], query=query_params))
@@ -1164,6 +1172,7 @@ def mapping_add(request, patient_id):
 
     return render(request, 'rtms_app/mapping_add.html', {
         'patient': patient,
+        'course_number': course_number,
         'form': form,
         'history': history,
         'dashboard_date': dashboard_date,
@@ -1179,6 +1188,8 @@ def patient_first_visit(request, patient_id):
         patient,
         course_number=request.GET.get('course_number') or request.POST.get('course_number'),
     )
+    if (request.GET.get('course_number') or request.POST.get('course_number')) and treatment_course is None:
+        return HttpResponseBadRequest('対象の治療クールが見つかりません')
     course_number = treatment_course.course_number if treatment_course else patient.course_number or 1
     course_discharge_date = (
         treatment_course.discharge_date
@@ -1278,7 +1289,10 @@ def patient_first_visit(request, patient_id):
                     return JsonResponse({'status': 'success', 'redirect_url': redirect_url})
 
                 if action == 'print_bundle':
-                    query = {'docs': ['admission', 'suitability', 'consent_pdf']}
+                    query = {
+                        'docs': ['admission', 'suitability', 'consent_pdf'],
+                        'course_number': course_number,
+                    }
                     if dashboard_date:
                         query['dashboard_date'] = dashboard_date
                     return redirect(build_url('patient_print_bundle', args=[patient.id], query=query))
@@ -1298,6 +1312,7 @@ def patient_first_visit(request, patient_id):
     }]
     return render(request, 'rtms_app/patient_first_visit.html', {
         'patient': patient,
+        'course_number': course_number,
         'form': form,
         'referral_options': referral_options,
         'referral_map_json': json.dumps(referral_map_json, ensure_ascii=False),
@@ -1987,7 +2002,6 @@ def treatment_add(request, patient_id):
     existing_session = None
 
     # Find a treatment session for this patient on the initial_date using session_date field
-    course_number = patient.course_number or 1
     existing_session = TreatmentSession.objects.filter(
         **session_scope, session_date=initial_date,
     ).order_by('-date').first()
@@ -2328,6 +2342,8 @@ def assessment_add_legacy(request, patient_id, timing):
         patient,
         course_number=request.GET.get('course_number') or request.POST.get('course_number'),
     )
+    if (request.GET.get('course_number') or request.POST.get('course_number')) and treatment_course is None:
+        return HttpResponseBadRequest('対象の治療クールが見つかりません')
     course_number = treatment_course.course_number if treatment_course else patient.course_number or 1
     dashboard_date = request.GET.get('dashboard_date')
     from_page = request.GET.get('from')  # 'clinical_path' などを想定
@@ -2443,7 +2459,13 @@ def assessment_add_legacy(request, patient_id, timing):
             # Ajax / modal 保存時は JSON を返す
             if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.GET.get('modal') == '1':
                 # total_17 を返す（first_visitのサマリー更新で使う想定）
-                redirect_url = f"{reverse('rtms_app:patient_first_visit', args=[patient.id])}?dashboard_date={dashboard_date}" if dashboard_date else reverse('rtms_app:patient_first_visit', args=[patient.id])
+                redirect_url = build_url(
+                    'patient_first_visit', args=[patient.id],
+                    query={k: v for k, v in {
+                        'course_number': course_number,
+                        'dashboard_date': dashboard_date,
+                    }.items() if v},
+                )
                 return JsonResponse({
                     'status': 'success',
                     'id': assessment.id,
@@ -2453,7 +2475,10 @@ def assessment_add_legacy(request, patient_id, timing):
 
             # ---- 戻りURLは build_url に統一（/path/&focus=... を絶対に作らない） ----
             if from_page == 'clinical_path':
-                q = {'focus': assessment.date.strftime('%Y-%m-%d')}
+                q = {
+                    'focus': assessment.date.strftime('%Y-%m-%d'),
+                    'course_number': course_number,
+                }
                 if dashboard_date:
                     q['dashboard_date'] = dashboard_date
                 return redirect(build_url('patient_clinical_path', args=[patient.id], query=q))
@@ -2476,6 +2501,7 @@ def assessment_add_legacy(request, patient_id, timing):
 
     ctx = {
         'patient': patient,
+        'course_number': course_number,
         'default_date': default_date,
         'dashboard_date': dashboard_date,
         'initial_timing': timing,
@@ -2719,6 +2745,8 @@ def assessment_hub(request, patient_id, timing):
         patient,
         course_number=request.GET.get('course_number') or request.POST.get('course_number'),
     )
+    if (request.GET.get('course_number') or request.POST.get('course_number')) and treatment_course is None:
+        return HttpResponseBadRequest('対象の治療クールが見つかりません')
     course_number = treatment_course.course_number if treatment_course else patient.course_number or 1
     assessment_scope = {'treatment_course': treatment_course} if treatment_course else {
         'patient': patient, 'course_number': course_number,
@@ -2901,6 +2929,7 @@ def assessment_hub(request, patient_id, timing):
 
     ctx = {
         'patient': patient,
+        'course_number': course_number,
         'dashboard_date': dashboard_date,
         'initial_timing': timing,
         'initial_timing_display': timing_labels.get(timing, timing),
@@ -2965,6 +2994,8 @@ def assessment_scale_form(request, patient_id, timing, scale_code):
         patient,
         course_number=request.GET.get('course_number') or request.POST.get('course_number'),
     )
+    if (request.GET.get('course_number') or request.POST.get('course_number')) and treatment_course is None:
+        return HttpResponseBadRequest('対象の治療クールが見つかりません')
     course_number = treatment_course.course_number if treatment_course else patient.course_number or 1
     assessment_scope = {'treatment_course': treatment_course} if treatment_course else {
         'patient': patient, 'course_number': course_number,
@@ -3237,11 +3268,19 @@ def assessment_scale_form(request, patient_id, timing, scale_code):
 def patient_summary_view(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     dashboard_date = request.GET.get('dashboard_date')
+    requested_course_number = request.GET.get('course_number') or request.POST.get('course_number')
     treatment_course = resolve_treatment_course(
         patient,
-        course_number=request.GET.get('course_number') or request.POST.get('course_number'),
+        course_number=requested_course_number,
     )
+    if requested_course_number and treatment_course is None:
+        return HttpResponseBadRequest('対象の治療クールが見つかりません')
     course_number = treatment_course.course_number if treatment_course else patient.course_number or 1
+    course_discharge_date = (
+        treatment_course.discharge_date
+        if treatment_course and treatment_course.discharge_date
+        else patient.discharge_date
+    )
 
     if request.method == 'POST':
         patient.summary_text = request.POST.get('summary_text', '')
@@ -3267,12 +3306,18 @@ def patient_summary_view(request, patient_id):
             if action == 'print_discharge':
                 return JsonResponse({
                     'status': 'success',
-                    'redirect_url': reverse("rtms_app:patient_print_discharge", args=[patient.id]),
+                    'redirect_url': build_url(
+                        'patient_print_discharge', args=[patient.id],
+                        query={'course_number': course_number},
+                    ),
                 })
             if action == 'print_referral':
                 return JsonResponse({
                     'status': 'success',
-                    'redirect_url': reverse("rtms_app:patient_print_referral", args=[patient.id]),
+                    'redirect_url': build_url(
+                        'patient_print_referral', args=[patient.id],
+                        query={'course_number': course_number},
+                    ),
                 })
             else:
                 redirect_url = f"{reverse('rtms_app:dashboard')}?date={dashboard_date}" if dashboard_date else reverse('rtms_app:dashboard')
@@ -3284,13 +3329,19 @@ def patient_summary_view(request, patient_id):
                 build_url(
                     'patient_print_bundle',
                     args=[patient.id],
-                    query={'docs': ['discharge', 'referral']},
+                    query={'docs': ['discharge', 'referral'], 'course_number': course_number},
                 )
             )
         if action == 'print_discharge':
-            return redirect(reverse("rtms_app:patient_print_discharge", args=[patient.id]))
+            return redirect(build_url(
+                'patient_print_discharge', args=[patient.id],
+                query={'course_number': course_number},
+            ))
         if action == 'print_referral':
-            return redirect(reverse("rtms_app:patient_print_referral", args=[patient.id]))
+            return redirect(build_url(
+                'patient_print_referral', args=[patient.id],
+                query={'course_number': course_number},
+            ))
 
         return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
 
@@ -3400,6 +3451,7 @@ def patient_summary_view(request, patient_id):
     ]
     return render(request, 'rtms_app/patient_summary.html', {
         'patient': patient,
+        'course_number': course_number,
         'summary_text': summary_text,
         'course_discharge_date': course_discharge_date,
         'history_list': history_list,
@@ -3623,6 +3675,7 @@ def patient_print_bundle(request, patient_id):
 def patient_clinical_path(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     dashboard_date = request.GET.get('dashboard_date')
+    requested_course_number = request.GET.get('course_number')
     try:
         course_number = int(request.GET.get('course_number', patient.course_number or 1))
     except (TypeError, ValueError):
@@ -3630,6 +3683,8 @@ def patient_clinical_path(request, patient_id):
     treatment_course = TreatmentCourse.objects.filter(
         patient=patient, course_number=course_number,
     ).first()
+    if requested_course_number and treatment_course is None:
+        return HttpResponseBadRequest('対象の治療クールが見つかりません')
     course_admission_date = (
         treatment_course.admission_date
         if treatment_course and treatment_course.admission_date

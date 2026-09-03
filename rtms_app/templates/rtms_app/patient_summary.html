@@ -61,7 +61,7 @@
                        name="discharge_date"
                        id="dischargeDateInput"
                        class="form-control fw-bold"
-                       value="{{ patient.discharge_date|date:'Y-m-d' }}">
+                       value="{{ course_discharge_date|date:'Y-m-d' }}">
               </div>
               <div class="flex-fill">
                 <span class="text-muted small">※退院日が決まったら設定してください。入力すると下のサマリー本文に自動反映されます。</span>
@@ -338,13 +338,13 @@
             <i class="fas fa-save"></i> 保存
           </button>
           <a class="btn btn-primary"
-             href="{% url 'rtms_app:print:patient_print_discharge' patient.id %}"
+             href="{% url 'rtms_app:print:patient_print_discharge' patient.id %}?course_number={{ course_number }}"
              target="_blank"
              rel="noopener">
             <i class="fas fa-print"></i> 退院時サマリーを印刷
           </a>
           <a class="btn btn-primary"
-             href="{% url 'rtms_app:print:patient_print_referral' patient.id %}"
+             href="{% url 'rtms_app:print:patient_print_referral' patient.id %}?course_number={{ course_number }}"
              target="_blank"
              rel="noopener">
             <i class="fas fa-print"></i> 紹介状を印刷
@@ -360,13 +360,13 @@
           <i class="fas fa-save"></i> 保存
         </button>
         <a class="btn btn-primary"
-           href="{% url 'rtms_app:print:patient_print_discharge' patient.id %}"
+           href="{% url 'rtms_app:print:patient_print_discharge' patient.id %}?course_number={{ course_number }}"
            target="_blank"
            rel="noopener">
           <i class="fas fa-print"></i> 退院時サマリーを印刷
         </a>
         <a class="btn btn-primary"
-           href="{% url 'rtms_app:print:patient_print_referral' patient.id %}"
+           href="{% url 'rtms_app:print:patient_print_referral' patient.id %}?course_number={{ course_number }}"
            target="_blank"
            rel="noopener">
           <i class="fas fa-print"></i> 紹介状を印刷
