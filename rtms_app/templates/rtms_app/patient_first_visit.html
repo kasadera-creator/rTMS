@@ -52,7 +52,7 @@
 {% block content %}
   <div class="stack-md">
     {% include "rtms_app/partials/patient_inline_bar.html" with page_title="初診・基本情報入力" title_icon="fa-file-medical" patient=patient %}
-    <form method="post" id="mainForm" class="form-rtms" data-original-first-treatment-date="{{ patient.first_treatment_date|date:'Y-m-d' }}">
+    <form method="post" id="mainForm" class="form-rtms" data-original-first-treatment-date="{{ course_first_treatment_date|date:'Y-m-d' }}">
       {% csrf_token %}
       {# Hidden backing fields moved here after removing reference card #}
       <input type="hidden" name="card_id" value="{{ patient.card_id }}">

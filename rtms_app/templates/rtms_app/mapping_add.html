@@ -222,7 +222,7 @@
     <script>
 // Auto-update week number when date changes (day1-based, week = floor(diff/7)+1)
 (function(){
-    const startDateStr = '{{ patient.first_treatment_date|default:""|date:"Y-m-d" }}';
+    const startDateStr = '{{ course_first_treatment_date|default:""|date:"Y-m-d" }}';
     if (!startDateStr) return; // no start date available
 
     const start = new Date(startDateStr + 'T00:00:00');

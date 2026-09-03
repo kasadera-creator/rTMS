@@ -497,10 +497,16 @@ def generate_calendar_weeks(patient, treatment_course=None, course_number=None):
         if treatment_course is not None
         else course_number or patient.course_number or 1
     )
-    course_admission_date = getattr(treatment_course, 'admission_date', None) or patient.admission_date
-    course_first_treatment_date = getattr(treatment_course, 'first_treatment_date', None) or patient.first_treatment_date
-    course_discharge_date = getattr(treatment_course, 'discharge_date', None) or patient.discharge_date
-    course_mapping_date = getattr(treatment_course, 'mapping_date', None) or patient.mapping_date
+    if treatment_course is not None:
+        course_admission_date = treatment_course.admission_date
+        course_first_treatment_date = treatment_course.first_treatment_date
+        course_discharge_date = treatment_course.discharge_date
+        course_mapping_date = treatment_course.mapping_date
+    else:
+        course_admission_date = patient.admission_date
+        course_first_treatment_date = patient.first_treatment_date
+        course_discharge_date = patient.discharge_date
+        course_mapping_date = patient.mapping_date
     # 基準となる開始日
     base_start = course_admission_date or course_first_treatment_date or timezone.now().date()
     treatment_start = course_first_treatment_date
@@ -1173,6 +1179,7 @@ def mapping_add(request, patient_id):
     return render(request, 'rtms_app/mapping_add.html', {
         'patient': patient,
         'course_number': course_number,
+        'course_first_treatment_date': first_treatment_date,
         'form': form,
         'history': history,
         'dashboard_date': dashboard_date,
@@ -1193,7 +1200,7 @@ def patient_first_visit(request, patient_id):
     course_number = treatment_course.course_number if treatment_course else patient.course_number or 1
     course_discharge_date = (
         treatment_course.discharge_date
-        if treatment_course and treatment_course.discharge_date
+        if treatment_course is not None
         else patient.discharge_date
     )
 
@@ -1206,7 +1213,7 @@ def patient_first_visit(request, patient_id):
     referral_map_json = {k: sorted(list(v)) for k, v in referral_map.items()}; referral_options = sorted(list(referral_sources_set))
     course_first_treatment_date = (
         treatment_course.first_treatment_date
-        if treatment_course and treatment_course.first_treatment_date
+        if treatment_course is not None
         else patient.first_treatment_date
     )
     end_date_est = get_completion_date(course_first_treatment_date)
@@ -1228,10 +1235,21 @@ def patient_first_visit(request, patient_id):
                     v = v.isoformat()
                 post[f] = str(v)
 
-        old_first_treatment_date = patient.first_treatment_date
-        old_admission_date = patient.admission_date
+        old_first_treatment_date = (
+            treatment_course.first_treatment_date
+            if treatment_course is not None
+            else patient.first_treatment_date
+        )
+        old_admission_date = (
+            treatment_course.admission_date
+            if treatment_course is not None
+            else patient.admission_date
+        )
         old_mapping_date = patient.mapping_date
-        form = PatientFirstVisitForm(post, instance=patient)
+        old_patient_first_visit_date = patient.first_visit_date
+        old_patient_first_treatment_date = patient.first_treatment_date
+        old_patient_admission_date = patient.admission_date
+        form = PatientFirstVisitForm(post, instance=patient, treatment_course=treatment_course)
         if form.is_valid():
             p = form.save(commit=False)
             treatment_start_changed = p.first_treatment_date != old_first_treatment_date
@@ -1266,21 +1284,22 @@ def patient_first_visit(request, patient_id):
                     p = None
 
             if p is not None:
-                if treatment_course is not None and treatment_course.course_number != 1:
-                    p.first_treatment_date = old_first_treatment_date
-                    if admission_date_changed:
-                        treatment_course.admission_date = p.admission_date
-                    if mapping_date_changed or treatment_start_changed:
+                if treatment_course is not None:
+                    treatment_course.first_visit_date = p.first_visit_date
+                    treatment_course.admission_date = p.admission_date
+                    course_update_fields = ['first_visit_date', 'admission_date']
+                    if treatment_start_changed:
+                        treatment_course.first_treatment_date = p.first_treatment_date
+                        course_update_fields.append('first_treatment_date')
+                    if mapping_date_changed and not treatment_start_changed:
                         treatment_course.mapping_date = p.mapping_date
-                    course_update_fields = []
-                    if admission_date_changed:
-                        course_update_fields.append('admission_date')
-                    if mapping_date_changed or treatment_start_changed:
                         course_update_fields.append('mapping_date')
-                    if course_update_fields:
-                        treatment_course.save(update_fields=course_update_fields)
-                    p.admission_date = old_admission_date
-                    p.mapping_date = old_mapping_date
+                    treatment_course.save(update_fields=course_update_fields)
+                    if treatment_course.course_number != 1:
+                        p.first_visit_date = old_patient_first_visit_date
+                        p.first_treatment_date = old_patient_first_treatment_date
+                        p.admission_date = old_patient_admission_date
+                        p.mapping_date = old_mapping_date
                 p.save()
                 action = request.POST.get('action')
 
@@ -1301,7 +1320,7 @@ def patient_first_visit(request, patient_id):
                     return redirect(f"{reverse('rtms_app:dashboard')}?date={dashboard_date}")
                 return redirect('rtms_app:dashboard')
     else:
-        form = PatientFirstVisitForm(instance=patient)
+        form = PatientFirstVisitForm(instance=patient, treatment_course=treatment_course)
     floating_print_options = [{
         'label': '印刷プレビュー',
         'value': 'print_bundle',
@@ -3453,6 +3472,7 @@ def patient_summary_view(request, patient_id):
         'patient': patient,
         'course_number': course_number,
         'summary_text': summary_text,
+        'discharge_prescription': treatment_course.discharge_prescription if treatment_course else patient.discharge_prescription,
         'course_discharge_date': course_discharge_date,
         'history_list': history_list,
         'today': timezone.now().date(),
@@ -3737,7 +3757,7 @@ def patient_clinical_path(request, patient_id):
         return HttpResponseBadRequest('対象の治療クールが見つかりません')
     course_admission_date = (
         treatment_course.admission_date
-        if treatment_course and treatment_course.admission_date
+        if treatment_course is not None
         else patient.admission_date
     )
     course_discharge_date = (
@@ -3852,8 +3872,12 @@ def clinical_path_reschedule(request, patient_id):
         session_scope = {'treatment_course': treatment_course} if treatment_course else {
             'patient': patient, 'course_number': course_number,
         }
-        course_first_treatment_date = getattr(treatment_course, 'first_treatment_date', None) or patient.first_treatment_date
-        course_discharge_date = getattr(treatment_course, 'discharge_date', None) or patient.discharge_date
+        if treatment_course is not None:
+            course_first_treatment_date = treatment_course.first_treatment_date
+            course_discharge_date = treatment_course.discharge_date
+        else:
+            course_first_treatment_date = patient.first_treatment_date
+            course_discharge_date = patient.discharge_date
 
         if status == 'done':
             session = TreatmentSession.objects.filter(
@@ -4070,7 +4094,7 @@ def clinical_path_reschedule(request, patient_id):
             course_mapping_date
             or (patient.mapping_date if treatment_course is None else None)
             or course_first_treatment_date
-            or patient.first_treatment_date
+            or (patient.first_treatment_date if treatment_course is None else None)
         )
         if mapping_base is None:
             return JsonResponse({'error': 'MT測定の基準日が未設定です'}, status=400)

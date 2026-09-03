@@ -3296,6 +3296,12 @@ class TestClinicalPathReschedule(TestCase):
         self.assertEqual(course_one.first_treatment_date, date(2026, 8, 24))
         self.assertEqual(course_two.first_treatment_date, date(2026, 9, 2))
         self.assertEqual(self.patient.first_treatment_date, date(2026, 8, 24))
+        self.assertEqual(course_two.first_visit_date, date(2026, 8, 20))
+        self.assertEqual(course_two.admission_date, date(2026, 8, 20))
+        self.assertIsNone(course_one.first_visit_date)
+        self.assertIsNone(course_one.admission_date)
+        self.assertEqual(self.patient.first_visit_date, date(2026, 8, 20))
+        self.assertEqual(self.patient.admission_date, date(2026, 8, 20))
 
     def test_calendar_limits_planned_mapping_to_treatment_course(self):
         from rtms_app.views import generate_calendar_weeks
@@ -3933,7 +3939,7 @@ class TestClinicalPathReschedule(TestCase):
         self.assertEqual(course_one.discharge_date, date(2026, 10, 1))
         self.assertEqual(self.patient.discharge_date, date(2026, 10, 1))
 
-    def test_course_discharge_null_uses_patient_fallback_in_calendar(self):
+    def test_course_discharge_null_does_not_use_patient_fallback_in_calendar(self):
         from rtms_app.views import generate_calendar_weeks
 
         course_two = TreatmentCourse.objects.create(
@@ -3953,7 +3959,7 @@ class TestClinicalPathReschedule(TestCase):
             if any(event['type'] == 'discharge' for event in day['events'])
         }
 
-        self.assertIn(date(2026, 9, 10), discharge_dates)
+        self.assertNotIn(date(2026, 9, 10), discharge_dates)
 
     def test_course_two_admission_change_isolated_from_patient_and_course_one(self):
         course_one = TreatmentCourse.objects.create(

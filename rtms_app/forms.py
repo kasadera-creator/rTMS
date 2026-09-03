@@ -161,8 +161,12 @@ class PatientFirstVisitForm(forms.ModelForm):
     is_weight_unknown = forms.BooleanField(label='体重不明', required=False, widget=forms.CheckboxInput(attrs={'class':'form-check-input','id':'id_is_weight_unknown'}))
 
     def __init__(self, *args, **kwargs):
+        treatment_course = kwargs.pop('treatment_course', None)
         super().__init__(*args, **kwargs)
-        if not self.initial.get('first_visit_date'):
+        if treatment_course is not None:
+            for field_name in ('first_visit_date', 'admission_date', 'first_treatment_date'):
+                self.initial[field_name] = getattr(treatment_course, field_name)
+        if treatment_course is None and not self.initial.get('first_visit_date'):
             created_at = getattr(self.instance, 'created_at', None)
             self.initial['first_visit_date'] = (
                 self.instance.first_visit_date
