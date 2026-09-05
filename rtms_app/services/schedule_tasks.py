@@ -103,8 +103,16 @@ def _resolve_task_context(patient: Patient, treatment_course=None) -> Dict:
     """Resolve the Course and dates shared by task generators."""
     treatment_course = resolve_treatment_course(patient, treatment_course=treatment_course)
     course_number = getattr(treatment_course, 'course_number', None) or patient.course_number or 1
-    day1 = getattr(treatment_course, 'first_treatment_date', None) or get_treatment_day1(patient)
-    mapping_base = getattr(treatment_course, 'mapping_date', None) or day1
+    day1 = (
+        treatment_course.first_treatment_date
+        if treatment_course is not None
+        else get_treatment_day1(patient)
+    )
+    mapping_base = (
+        treatment_course.mapping_date
+        if treatment_course is not None
+        else getattr(patient, 'mapping_date', None) or day1
+    )
     scope = {'treatment_course': treatment_course} if treatment_course else {
         'patient': patient, 'course_number': course_number,
     }
@@ -183,10 +191,17 @@ def _compute_assessment_tasks(patient: Patient, context: Dict, holidays: Optiona
 
     # Assessments: baseline / week3 / week4 (all-case only) / week6
     # Baseline: default to patient.created_at date if available, else today
-    baseline_planned = getattr(patient, 'first_visit_date', None)
-    if not baseline_planned:
-        created_at = getattr(patient, 'created_at', None)
-        baseline_planned = created_at.date() if created_at else today
+    if treatment_course is not None:
+        baseline_planned = (
+            treatment_course.first_visit_date
+            or treatment_course.first_treatment_date
+            or today
+        )
+    else:
+        baseline_planned = getattr(patient, 'first_visit_date', None)
+        if not baseline_planned:
+            created_at = getattr(patient, 'created_at', None)
+            baseline_planned = created_at.date() if created_at else today
     if day1 and baseline_planned > day1:
         baseline_planned = day1
     baseline_perf = _assessment_performed_date(patient, 'baseline', treatment_course)

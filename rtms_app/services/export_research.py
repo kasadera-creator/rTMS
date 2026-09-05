@@ -201,22 +201,32 @@ def _build_scale_metadata():
     return metadata
 
 
-def _last_treatment_date(patient, course_number):
+def _last_treatment_date(patient, course_number, treatment_course=None):
+    session_scope = {'treatment_course': treatment_course} if treatment_course else {
+        'patient': patient, 'course_number': course_number,
+    }
     last_session = TreatmentSession.objects.filter(
-        patient=patient, course_number=course_number
+        **session_scope
     ).order_by('-session_date', '-id').first()
     return last_session.session_date.isoformat() if last_session and last_session.session_date else ''
 
 
-def _treatment_duration_days(patient, course_number, last_date_str=None):
-    if not patient.first_treatment_date:
+def _treatment_duration_days(patient, course_number, last_date_str=None, treatment_course=None):
+    first_treatment_date = (
+        treatment_course.first_treatment_date
+        if treatment_course is not None
+        else patient.first_treatment_date
+    )
+    if not first_treatment_date:
         return ''
-    last_date_str = last_date_str if last_date_str is not None else _last_treatment_date(patient, course_number)
+    last_date_str = last_date_str if last_date_str is not None else _last_treatment_date(
+        patient, course_number, treatment_course=treatment_course,
+    )
     if not last_date_str:
         return ''
     from datetime import date as _date
     last = _date.fromisoformat(last_date_str)
-    delta = (last - patient.first_treatment_date).days
+    delta = (last - first_treatment_date).days
     return delta if delta >= 0 else ''
 
 
@@ -264,34 +274,51 @@ def generate_research_summary_csv():
             'age': patient.age,
             'gender': gender_labels.get(patient.gender, ''),
             'diagnosis': patient.diagnosis,
-            'first_visit_date': patient.first_visit_date.isoformat() if patient.first_visit_date else '',
+            'first_visit_date': (
+                treatment_course.first_visit_date
+                if treatment_course is not None
+                else patient.first_visit_date
+            ).isoformat() if (
+                treatment_course.first_visit_date
+                if treatment_course is not None
+                else patient.first_visit_date
+            ) else '',
             'admission_date': (
                 treatment_course.admission_date
-                if treatment_course and treatment_course.admission_date
+                if treatment_course is not None
                 else patient.admission_date
             ).isoformat() if (
-                treatment_course and treatment_course.admission_date
-            ) or patient.admission_date else '',
+                treatment_course.admission_date
+                if treatment_course is not None
+                else patient.admission_date
+            ) else '',
             'first_treatment_date': (
                 treatment_course.first_treatment_date
-                if treatment_course and treatment_course.first_treatment_date
+                if treatment_course is not None
                 else patient.first_treatment_date
             ).isoformat() if (
-                treatment_course and treatment_course.first_treatment_date
-            ) or patient.first_treatment_date else '',
+                treatment_course.first_treatment_date
+                if treatment_course is not None
+                else patient.first_treatment_date
+            ) else '',
             'discharge_date': (
                 treatment_course.discharge_date
-                if treatment_course and treatment_course.discharge_date
+                if treatment_course is not None
                 else patient.discharge_date
             ).isoformat() if (
-                treatment_course and treatment_course.discharge_date
-            ) or patient.discharge_date else '',
+                treatment_course.discharge_date
+                if treatment_course is not None
+                else patient.discharge_date
+            ) else '',
             'status': status_labels.get(patient.status, ''),
             'weight_kg': str(patient.weight_kg) if patient.weight_kg is not None else '',
             'treatment_sessions_count': sessions.count(),
             'planned_sessions': MAX_PLANNED_SESSIONS,
             'last_treatment_date': last_treatment_date,
-            'treatment_duration_days': _treatment_duration_days(patient, course_number, last_treatment_date),
+            'treatment_duration_days': _treatment_duration_days(
+                patient, course_number, last_treatment_date,
+                treatment_course=treatment_course,
+            ),
         }
 
         for scale, timing, columns in scale_metadata:

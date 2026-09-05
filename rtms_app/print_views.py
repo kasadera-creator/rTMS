@@ -276,19 +276,23 @@ def _build_discharge_context(request, patient_id):
 	test_scores = _get_latest_assessments_by_date(patient, treatment_course)
 	admission_date = (
 		treatment_course.admission_date
-		if treatment_course and treatment_course.admission_date
+		if treatment_course
 		else patient.admission_date
 	)
 	discharge_date = (
 		treatment_course.discharge_date
-		if treatment_course and treatment_course.discharge_date
+		if treatment_course
 		else patient.discharge_date
 	)
+	summary_text = treatment_course.summary_text if treatment_course else patient.summary_text
+	discharge_prescription = treatment_course.discharge_prescription if treatment_course else patient.discharge_prescription
 	
 	context = {
 		'patient': patient,
 		'admission_date': admission_date,
 		'discharge_date': discharge_date,
+		'summary_text': summary_text,
+		'discharge_prescription': discharge_prescription,
 		'today': timezone.now().date(),
 		'test_scores': test_scores,
 		'back_url': back_url,
@@ -322,17 +326,17 @@ def _build_admission_context(request, patient_id):
 	# Calculate estimated end date (30 sessions from first treatment date)
 	admission_date = (
 		treatment_course.admission_date
-		if treatment_course and treatment_course.admission_date
+		if treatment_course is not None
 		else patient.admission_date
 	)
 	mapping_date = (
 		treatment_course.mapping_date
-		if treatment_course and treatment_course.mapping_date
+		if treatment_course is not None
 		else patient.mapping_date
 	)
 	first_treatment_date = (
 		treatment_course.first_treatment_date
-		if treatment_course and treatment_course.first_treatment_date
+		if treatment_course is not None
 		else patient.first_treatment_date
 	)
 	end_date_est = None
@@ -367,24 +371,26 @@ def patient_print_admission_pdf(request, patient_id):
 
 def _build_referral_context(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
-	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
+	treatment_course = _resolve_print_course(request, patient)
 	back_url = _extract_back_url(request, patient)
 	test_scores = _get_latest_assessments_by_date(patient, treatment_course)
 	admission_date = (
 		treatment_course.admission_date
-		if treatment_course and treatment_course.admission_date
+		if treatment_course is not None
 		else patient.admission_date
 	)
 	discharge_date = (
 		treatment_course.discharge_date
-		if treatment_course and treatment_course.discharge_date
+		if treatment_course
 		else patient.discharge_date
 	)
+	summary_text = treatment_course.summary_text if treatment_course else patient.summary_text
 	
 	context = {
 		'patient': patient,
 		'admission_date': admission_date,
 		'discharge_date': discharge_date,
+		'summary_text': summary_text,
 		'today': timezone.now().date(),
 		'test_scores': test_scores,
 		'back_url': back_url,
@@ -463,7 +469,7 @@ def _build_side_effect_context(request, patient_id, session_id):
 		mapping_for_session = MappingSession.objects.filter(**mapping_scope, date=target_date).first()
 		first_treatment_date = (
 			treatment_course.first_treatment_date
-			if treatment_course and treatment_course.first_treatment_date
+			if treatment_course is not None
 			else patient.first_treatment_date
 		)
 		if not mapping_for_session and first_treatment_date:
@@ -608,7 +614,7 @@ def api_get_or_create_session(request, patient_id):
 		).first()
 		course_first_treatment_date = (
 			treatment_course.first_treatment_date
-			if treatment_course and treatment_course.first_treatment_date
+			if treatment_course is not None
 			else patient.first_treatment_date
 		)
 		if existing_session is None and course_first_treatment_date:

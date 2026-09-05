@@ -185,13 +185,13 @@ def get_assessment_window(patient, timing, treatment_course=None):
     """
     first_treatment_date = (
         treatment_course.first_treatment_date
-        if treatment_course and treatment_course.first_treatment_date
+        if treatment_course is not None
         else patient.first_treatment_date
     )
 
     # baseline
     if timing == "baseline":
-        ws = patient.first_visit_date or (patient.created_at.date() if patient.created_at else timezone.localdate())
+        ws = get_hamd_baseline_default_date(patient, treatment_course=treatment_course)
         we = first_treatment_date or ws
         # Existing baseline design ends at the first treatment date. If legacy
         # registration data is later than that deadline, use the deadline as
@@ -448,16 +448,26 @@ def get_hamd_effective_deadline(base_date, today=None):
     return effective
 
 
-def get_hamd_baseline_default_date(patient):
+def get_hamd_baseline_default_date(patient, treatment_course=None):
     """HAM-D 治療前評価のデフォルト予定日（初診日、未設定時は登録日）"""
+    if treatment_course is not None:
+        return (
+            treatment_course.first_visit_date
+            or treatment_course.first_treatment_date
+            or timezone.localdate()
+        )
     first_visit = patient.first_visit_date or (patient.created_at.date() if patient.created_at else timezone.localdate())
     if patient.first_treatment_date and first_visit > patient.first_treatment_date:
         return patient.first_treatment_date
     return first_visit
 
 
-def get_scale_baseline_default_date(patient):
+def get_scale_baseline_default_date(patient, treatment_course=None):
     """HAM-D以外の尺度の治療前評価デフォルト予定日（入院日）"""
+    if treatment_course is not None:
+        return treatment_course.admission_date or get_hamd_baseline_default_date(
+            patient, treatment_course=treatment_course,
+        )
     return patient.admission_date or get_hamd_baseline_default_date(patient)
 
 
@@ -465,19 +475,24 @@ def get_scale_baseline_default_date(patient):
 OTHER_SCALES_SCHEDULE_CODE = '__other_scales__'
 
 
-def get_assessment_schedule_default_date(patient, scale, timing, treatment_end_est=None):
+def get_assessment_schedule_default_date(
+    patient, scale, timing, treatment_end_est=None, treatment_course=None,
+):
     """
     scale/timing に対応するデフォルト予定日（AssessmentSchedule に上書きが無い場合の値）。
     """
     is_hamd = scale.code == 'hamd'
     if timing == 'baseline':
-        return get_hamd_baseline_default_date(patient) if is_hamd else get_scale_baseline_default_date(patient)
+        return (
+            get_hamd_baseline_default_date(patient, treatment_course=treatment_course)
+            if is_hamd else get_scale_baseline_default_date(patient, treatment_course=treatment_course)
+        )
     if is_hamd and timing in ('week3', 'week6'):
-        ws, _ = get_assessment_window(patient, timing)
+        ws, _ = get_assessment_window(patient, timing, treatment_course=treatment_course)
         return ws
     if is_hamd and timing == 'week4':
         # 4週経過後HAM-D評価は「4週目の最終セッション(予定)日」を基準日とする（週3/週6とは異なる）
-        _, we = get_assessment_window(patient, timing)
+        _, we = get_assessment_window(patient, timing, treatment_course=treatment_course)
         return we
     if timing == 'post':
         return treatment_end_est
@@ -741,8 +756,10 @@ def generate_calendar_weeks(patient, treatment_course=None, course_number=None):
         if patient.is_all_case_survey:
             hamd_timings.insert(2, 'week4')
         for timing in hamd_timings:
-            base_date = schedule_overrides.get((hamd_scale.id, timing)) or get_assessment_schedule_default_date(patient, hamd_scale, timing, treatment_end_est)
-            _, window_end = get_assessment_window(patient, timing)
+            base_date = schedule_overrides.get((hamd_scale.id, timing)) or get_assessment_schedule_default_date(
+                patient, hamd_scale, timing, treatment_end_est, treatment_course=treatment_course,
+            )
+            _, window_end = get_assessment_window(patient, timing, treatment_course=treatment_course)
             deadline = window_end + timedelta(days=7) if timing == 'week4' else window_end
             is_done = (
                 Assessment.objects.filter(**assessment_scope, timing=timing, type='HAM-D').exists()
@@ -766,7 +783,10 @@ def generate_calendar_weeks(patient, treatment_course=None, course_number=None):
                 if v is not None:
                     override_date = v
                     break
-            base_date = override_date or get_assessment_schedule_default_date(patient, other_scales_cal[0], timing, treatment_end_est)
+            base_date = override_date or get_assessment_schedule_default_date(
+                patient, other_scales_cal[0], timing, treatment_end_est,
+                treatment_course=treatment_course,
+            )
             is_done = all(
                 AssessmentRecord.objects.filter(**assessment_scope, timing=timing, scale=scale).exists()
                 for scale in other_scales_cal
@@ -1336,6 +1356,9 @@ def patient_first_visit(request, patient_id):
         'referral_options': referral_options,
         'referral_map_json': json.dumps(referral_map_json, ensure_ascii=False),
         'end_date_est': end_date_est,
+        'course_first_visit_date': treatment_course.first_visit_date if treatment_course is not None else patient.first_visit_date,
+        'course_admission_date': treatment_course.admission_date if treatment_course is not None else patient.admission_date,
+        'course_first_treatment_date': course_first_treatment_date,
         'dashboard_date': dashboard_date,
         'baseline_assessment': baseline_assessment,
         'questionnaire_done': questionnaire_done,
@@ -2404,7 +2427,9 @@ def assessment_add_legacy(request, patient_id, timing):
     hamd_items_right = hamd_items[11:]
 
     # Calculate assessment window
-    window_start, window_end = get_assessment_window(patient, timing)
+    window_start, window_end = get_assessment_window(
+        patient, timing, treatment_course=treatment_course,
+    )
 
 
     existing_assessment = get_latest_assessment(
@@ -3001,14 +3026,6 @@ def assessment_scale_form(request, patient_id, timing, scale_code):
     else:
         scale = get_object_or_404(ScaleDefinition, code=scale_code)
 
-    timing_display = {
-        **dict(Assessment.TIMING_CHOICES),
-        **{
-            f'tinkertory_{i}': f'{i}回目' for i in range(1, 8)
-        },
-    }.get(timing, timing)
-    window_start, window_end = get_assessment_window(patient, timing)
-
     treatment_course = resolve_treatment_course(
         patient,
         course_number=request.GET.get('course_number') or request.POST.get('course_number'),
@@ -3016,6 +3033,16 @@ def assessment_scale_form(request, patient_id, timing, scale_code):
     if (request.GET.get('course_number') or request.POST.get('course_number')) and treatment_course is None:
         return HttpResponseBadRequest('対象の治療クールが見つかりません')
     course_number = treatment_course.course_number if treatment_course else patient.course_number or 1
+
+    timing_display = {
+        **dict(Assessment.TIMING_CHOICES),
+        **{
+            f'tinkertory_{i}': f'{i}回目' for i in range(1, 8)
+        },
+    }.get(timing, timing)
+    window_start, window_end = get_assessment_window(
+        patient, timing, treatment_course=treatment_course,
+    )
     assessment_scope = {'treatment_course': treatment_course} if treatment_course else {
         'patient': patient, 'course_number': course_number,
     }
@@ -3297,24 +3324,29 @@ def patient_summary_view(request, patient_id):
     course_number = treatment_course.course_number if treatment_course else patient.course_number or 1
     course_discharge_date = (
         treatment_course.discharge_date
-        if treatment_course and treatment_course.discharge_date
+        if treatment_course
         else patient.discharge_date
     )
 
     if request.method == 'POST':
-        patient.summary_text = request.POST.get('summary_text', '')
-        patient.discharge_prescription = request.POST.get('discharge_prescription', '')
+        summary_text_post = request.POST.get('summary_text', '')
+        discharge_prescription_post = request.POST.get('discharge_prescription', '')
 
         d_date = request.POST.get('discharge_date')
         discharge_date = parse_date(d_date) if d_date else None
         if treatment_course is not None:
+            treatment_course.summary_text = summary_text_post
+            treatment_course.discharge_prescription = discharge_prescription_post
             treatment_course.discharge_date = discharge_date
-            treatment_course.save(update_fields=['discharge_date'])
+            treatment_course.save(update_fields=['summary_text', 'discharge_prescription', 'discharge_date'])
             if treatment_course.course_number == 1:
                 patient.discharge_date = discharge_date
         else:
+            patient.summary_text = summary_text_post
+            patient.discharge_prescription = discharge_prescription_post
             patient.discharge_date = discharge_date
-        patient.save()
+        if treatment_course is None or treatment_course.course_number == 1:
+            patient.save(update_fields=['summary_text', 'discharge_prescription', 'discharge_date'])
 
         action = request.POST.get('action')
 
@@ -3412,11 +3444,13 @@ def patient_summary_view(request, patient_id):
         side_effects_summary = "特になし"
     def fmt_score(obj): return f"HAMD17 {obj.total_score_17}点 HAMD21 {obj.total_score_21}点" if obj else "未評価"
     # Prefer using the service-built history_list so counts match the displayed table
+    course_first_date = treatment_course.first_treatment_date if treatment_course else None
     if history_list and len(history_list) > 0:
         first_date = history_list[0].get('date')
         last_date = history_list[-1].get('date')
         try:
-            start_date_str = first_date.strftime('%Y年%m月%d日') if first_date else "未開始"
+            start_date = course_first_date or first_date
+            start_date_str = start_date.strftime('%Y年%m月%d日') if start_date else "未開始"
         except Exception:
             start_date_str = str(first_date) if first_date else "未開始"
         try:
@@ -3425,12 +3459,14 @@ def patient_summary_view(request, patient_id):
             end_date_str = str(last_date) if last_date else (course_discharge_date.strftime('%Y年%m月%d日') if course_discharge_date else "未定")
         total_count = len(history_list)
     else:
-        start_date_str = "未開始"
+        start_date_str = course_first_date.strftime('%Y年%m月%d日') if course_first_date else "未開始"
         end_date_str = course_discharge_date.strftime('%Y年%m月%d日') if course_discharge_date else "未定"
         total_count = 0
-    admission_date_str = patient.admission_date.strftime('%Y年%m月%d日') if patient.admission_date else "不明"
+    admission_date = treatment_course.admission_date if treatment_course else patient.admission_date
+    admission_date_str = admission_date.strftime('%Y年%m月%d日') if admission_date else "不明"
     created_at_str = patient.created_at.strftime('%Y年%m月%d日')
-    if patient.summary_text: summary_text = patient.summary_text
+    saved_summary_text = treatment_course.summary_text if treatment_course else patient.summary_text
+    if saved_summary_text: summary_text = saved_summary_text
     else: summary_text = (f"{created_at_str}初診、{admission_date_str}任意入院。\n" f"入院時{fmt_score(score_admin)}、{start_date_str}から全{total_count}回のrTMS治療を実施した。\n" f"3週時、{fmt_score(score_w3)}、6週時、{fmt_score(score_w6)}となった。\n" f"治療中の合併症：{side_effects_summary}。\n" f"{end_date_str}退院。紹介元へ逆紹介、抗うつ薬の治療継続を依頼した。")
     floating_print_options = [
         {

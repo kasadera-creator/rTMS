@@ -1576,6 +1576,148 @@ class TestStage6PatientAndCalendar(TestCase):
 
 
 
+class TestAssessmentCourseDateIsolation(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username='assessment-course-date-user', password='pw',
+        )
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='ASSESS-COURSE', name='Assessment Course', birth_date=date(1980, 1, 1),
+            first_visit_date=date(2026, 1, 2), admission_date=date(2026, 1, 3),
+            first_treatment_date=date(2026, 1, 5), course_number=1,
+        )
+        self.course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            first_visit_date=date(2026, 1, 2), admission_date=date(2026, 1, 3),
+            first_treatment_date=date(2026, 1, 5),
+        )
+        self.course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            first_visit_date=date(2026, 4, 1), admission_date=date(2026, 4, 2),
+            first_treatment_date=date(2026, 4, 6),
+        )
+        self.hamd = ScaleDefinition.objects.get_or_create(
+            code='hamd', defaults={'name': 'HAM-D', 'is_active': True},
+        )[0]
+        self.phq9 = ScaleDefinition.objects.get_or_create(
+            code='phq9', defaults={'name': 'PHQ-9', 'is_active': True},
+        )[0]
+
+    def test_course_two_baseline_defaults_use_course_dates(self):
+        from rtms_app.views import (
+            get_hamd_baseline_default_date, get_scale_baseline_default_date,
+            get_assessment_schedule_default_date,
+        )
+        self.assertEqual(
+            get_hamd_baseline_default_date(self.patient, self.course_two),
+            self.course_two.first_visit_date,
+        )
+        self.assertEqual(
+            get_scale_baseline_default_date(self.patient, self.course_two),
+            self.course_two.admission_date,
+        )
+        self.assertEqual(
+            get_assessment_schedule_default_date(
+                self.patient, self.hamd, 'baseline', treatment_course=self.course_two,
+            ),
+            self.course_two.first_visit_date,
+        )
+        self.assertEqual(
+            get_assessment_schedule_default_date(
+                self.patient, self.phq9, 'baseline', treatment_course=self.course_two,
+            ),
+            self.course_two.admission_date,
+        )
+
+    def test_course_two_window_uses_course_first_treatment_date(self):
+        from rtms_app.views import get_assessment_window
+        start, end = get_assessment_window(
+            self.patient, 'week3', treatment_course=self.course_two,
+        )
+        self.assertEqual(start, date(2026, 4, 20))
+        self.assertEqual(end, date(2026, 4, 24))
+
+    def test_assessment_add_legacy_uses_course_two_window(self):
+        from rtms_app.views import assessment_add_legacy
+        request = RequestFactory().get(
+            '/assessment/week3/', {'course_number': self.course_two.course_number},
+        )
+        request.user = self.user
+        with patch('rtms_app.views.render') as render:
+            assessment_add_legacy(request, self.patient.pk, 'week3')
+        context = render.call_args.args[2]
+        self.assertEqual(context['window_start'], date(2026, 4, 20))
+        self.assertEqual(context['window_end'], date(2026, 4, 24))
+
+    def test_assessment_scale_form_uses_course_two_window(self):
+        response = self.client.get(
+            reverse('rtms_app:assessment_scale', args=[self.patient.pk, 'week3', 'hamd']),
+            {'course_number': self.course_two.course_number},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['window_start'], date(2026, 4, 20))
+        self.assertEqual(response.context['window_end'], date(2026, 4, 24))
+
+    def test_course_two_assessment_calendar_does_not_use_course_one_date(self):
+        from rtms_app.views import generate_calendar_weeks
+        Assessment.objects.create(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            timing='baseline', date=self.course_two.first_visit_date, type='HAM-D',
+            scores={'q1': 0},
+        )
+        _weeks, assessment_events = generate_calendar_weeks(
+            self.patient, treatment_course=self.course_two,
+        )
+        baseline_dates = {
+            event['date'] for event in assessment_events if event['timing'] == 'baseline'
+        }
+        self.assertIn(self.course_two.first_visit_date, baseline_dates)
+        self.assertNotIn(self.course_one.first_visit_date, baseline_dates)
+
+    def test_course_two_null_dates_do_not_fallback_to_patient_or_course_one(self):
+        from rtms_app.views import (
+            get_hamd_baseline_default_date, get_scale_baseline_default_date,
+            get_assessment_window, get_assessment_schedule_default_date,
+        )
+        self.course_two.first_visit_date = None
+        self.course_two.admission_date = None
+        self.course_two.first_treatment_date = None
+        self.course_two.save(update_fields=['first_visit_date', 'admission_date', 'first_treatment_date'])
+        today = timezone.localdate()
+        self.assertEqual(get_hamd_baseline_default_date(self.patient, self.course_two), today)
+        self.assertEqual(get_scale_baseline_default_date(self.patient, self.course_two), today)
+        self.assertEqual(
+            get_assessment_schedule_default_date(
+                self.patient, self.hamd, 'baseline', treatment_course=self.course_two,
+            ),
+            today,
+        )
+        self.assertEqual(
+            get_assessment_window(self.patient, 'baseline', treatment_course=self.course_two),
+            (today, today),
+        )
+
+    def test_legacy_assessment_defaults_keep_patient_fallback(self):
+        from types import SimpleNamespace
+        from rtms_app.views import (
+            get_hamd_baseline_default_date, get_scale_baseline_default_date,
+            get_assessment_window,
+        )
+        legacy = SimpleNamespace(
+            first_visit_date=None, admission_date=None,
+            first_treatment_date=date(2026, 1, 5),
+            created_at=timezone.make_aware(datetime.datetime(2026, 1, 2, 9, 0)),
+        )
+        self.assertEqual(get_hamd_baseline_default_date(legacy), date(2026, 1, 2))
+        self.assertEqual(get_scale_baseline_default_date(legacy), date(2026, 1, 2))
+        self.assertEqual(
+            get_assessment_window(legacy, 'baseline'),
+            (date(2026, 1, 2), date(2026, 1, 5)),
+        )
+
+
 class TestPatientListNavigation(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='patient-list-viewer')
@@ -2452,6 +2594,25 @@ class TestAdverseEventCourseIsolation(TestCase):
 
         self.assertEqual(context['resting_mt'], 63)
 
+    def test_side_effect_course_two_null_start_does_not_use_patient_start(self):
+        from rtms_app.print_views import _build_side_effect_context
+
+        self.patient.first_treatment_date = date(2026, 1, 10)
+        self.patient.save(update_fields=['first_treatment_date'])
+        self.course_two.first_treatment_date = None
+        self.course_two.save(update_fields=['first_treatment_date'])
+        self.session_two.session_date = date(2026, 4, 8)
+        self.session_two.save(update_fields=['session_date'])
+
+        with patch('rtms_app.print_views.get_current_week_number') as get_week:
+            _build_side_effect_context(
+                RequestFactory().get('/app/patient/1/print/side_effect/1/'),
+                self.patient.pk,
+                self.session_two.pk,
+            )
+
+        get_week.assert_not_called()
+
     def test_treatment_page_and_skip_list_are_course_scoped(self):
         SideEffectCheck.objects.create(session=self.session_one, memo='course-one-side-effect')
         SideEffectCheck.objects.create(session=self.session_two, memo='course-two-side-effect')
@@ -2778,6 +2939,20 @@ class TestClinicalPathReschedule(TestCase):
             ).count(),
             1,
         )
+
+    def test_print_session_api_course_two_null_start_does_not_use_patient_start(self):
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2, first_treatment_date=None,
+        )
+        response = self.client.post(
+            f'/app/patient/{self.patient.pk}/print/api/get-session/',
+            {'course_number': course_two.course_number, 'session_date': '2026-10-05'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        session = TreatmentSession.objects.get(pk=response.json()['session_id'])
+        self.assertEqual(session.treatment_course_id, course_two.id)
+        self.assertEqual(session.session_date, date(2026, 10, 5))
 
     def test_treatment_start_rebuilds_planned_sessions_from_new_business_day(self):
         from rtms_app.services.rtms_schedule import generate_treatment_dates
@@ -4136,6 +4311,71 @@ class TestScheduleTasks(TestCase):
         todo_keys = {t['key'] for t in todo}
         self.assertIn('mapping', todo_keys)
 
+    def test_explicit_course_dates_drive_schedule_tasks(self):
+        from rtms_app.services.schedule_tasks import compute_task_definitions
+
+        patient = Patient.objects.create(
+            card_id='SCH-COURSE', name='Course Schedule', birth_date=date(1990, 1, 1),
+            first_visit_date=date(2026, 1, 1), first_treatment_date=date(2026, 1, 10),
+            mapping_date=date(2026, 1, 9), course_number=1,
+        )
+        course_one = TreatmentCourse.objects.create(
+            patient=patient, course_number=1,
+            first_treatment_date=date(2026, 1, 10), mapping_date=date(2026, 1, 9),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=patient, course_number=2,
+            first_visit_date=date(2026, 2, 1),
+            first_treatment_date=date(2026, 2, 10), mapping_date=date(2026, 2, 9),
+        )
+
+        definitions = compute_task_definitions(patient, holidays=set(), treatment_course=course_two)
+        mapping = next(item for item in definitions if item['key'] == 'mapping')
+        baseline = next(item for item in definitions if item['key'] == 'assessment_baseline')
+        week3 = next(item for item in definitions if item['key'] == 'assessment_week3')
+
+        self.assertEqual(mapping['planned_date'], date(2026, 2, 16))
+        self.assertEqual(baseline['planned_date'], course_two.first_visit_date)
+        self.assertNotEqual(mapping['planned_date'], course_one.mapping_date)
+        self.assertNotEqual(week3['planned_date'], course_one.first_treatment_date)
+
+    def test_explicit_course_null_dates_do_not_use_patient_dates_for_tasks(self):
+        from rtms_app.services.schedule_tasks import compute_task_definitions
+
+        patient = Patient.objects.create(
+            card_id='SCH-NULL', name='Course Null Schedule', birth_date=date(1990, 1, 1),
+            first_visit_date=date(2026, 1, 1), first_treatment_date=date(2026, 1, 10),
+            mapping_date=date(2026, 1, 9), course_number=1,
+        )
+        TreatmentCourse.objects.create(
+            patient=patient, course_number=1,
+            first_treatment_date=date(2026, 1, 10), mapping_date=date(2026, 1, 9),
+        )
+        course_two = TreatmentCourse.objects.create(patient=patient, course_number=2)
+
+        definitions = compute_task_definitions(patient, holidays=set(), treatment_course=course_two)
+        keys = {item['key'] for item in definitions}
+        baseline = next(item for item in definitions if item['key'] == 'assessment_baseline')
+
+        self.assertNotIn('mapping', keys)
+        self.assertNotIn('assessment_week3', keys)
+        self.assertEqual(baseline['planned_date'], timezone.localdate())
+
+    def test_legacy_schedule_tasks_keep_patient_date_fallback(self):
+        from rtms_app.services.schedule_tasks import compute_task_definitions
+
+        patient = Patient.objects.create(
+            card_id='SCH-LEGACY', name='Legacy Schedule', birth_date=date(1990, 1, 1),
+            first_visit_date=date(2026, 1, 1), first_treatment_date=date(2026, 1, 10),
+            mapping_date=date(2026, 1, 9), course_number=1,
+        )
+        definitions = compute_task_definitions(patient, holidays=set())
+        mapping = next(item for item in definitions if item['key'] == 'mapping')
+        baseline = next(item for item in definitions if item['key'] == 'assessment_baseline')
+
+        self.assertEqual(mapping['planned_date'], date(2026, 1, 16))
+        self.assertEqual(baseline['planned_date'], patient.first_visit_date)
+
 
 class TestCourseAwarePhase2F4Workflows(TestCase):
     def setUp(self):
@@ -4471,7 +4711,7 @@ class TestPrintViewContextBuilding(TestCase):
         self.assertEqual(html.context['mapping_date'], new_dates['mapping_date'])
         self.assertEqual(html.context['first_treatment_date'], new_dates['first_treatment_date'])
 
-    def test_print_course_one_and_null_course_dates_fallback_to_patient(self):
+    def test_print_course_two_with_null_dates_does_not_fallback_to_patient(self):
         from rtms_app.print_views import _build_admission_context, _build_discharge_context
 
         patient_dates = {
@@ -4493,8 +4733,150 @@ class TestPrintViewContextBuilding(TestCase):
 
         request_two = RequestFactory().get('/app/print/discharge/?course_number=2')
         course_two_context = _build_discharge_context(request_two, self.patient.id)
-        self.assertEqual(course_two_context['admission_date'], patient_dates['admission_date'])
-        self.assertEqual(course_two_context['discharge_date'], patient_dates['discharge_date'])
+        self.assertIsNone(course_two_context['admission_date'])
+        self.assertIsNone(course_two_context['discharge_date'])
+
+    def test_print_legacy_context_keeps_patient_date_fallback(self):
+        from rtms_app.print_views import _build_admission_context, _build_referral_context
+
+        self.patient.admission_date = date(2026, 1, 1)
+        self.patient.mapping_date = date(2026, 1, 5)
+        self.patient.first_treatment_date = date(2026, 1, 10)
+        self.patient.save(update_fields=['admission_date', 'mapping_date', 'first_treatment_date'])
+        request = RequestFactory().get('/app/print/admission/')
+
+        admission = _build_admission_context(request, self.patient.id)
+        referral = _build_referral_context(request, self.patient.id)
+
+        self.assertEqual(admission['admission_date'], self.patient.admission_date)
+        self.assertEqual(admission['mapping_date'], self.patient.mapping_date)
+        self.assertEqual(admission['first_treatment_date'], self.patient.first_treatment_date)
+        self.assertEqual(referral['admission_date'], self.patient.admission_date)
+
+    def test_course_two_null_admission_and_treatment_dates_never_use_patient_values(self):
+        from rtms_app.print_views import _build_admission_context, _build_referral_context
+
+        self.patient.admission_date = date(2026, 1, 1)
+        self.patient.mapping_date = date(2026, 1, 5)
+        self.patient.first_treatment_date = date(2026, 1, 10)
+        self.patient.save(update_fields=['admission_date', 'mapping_date', 'first_treatment_date'])
+        TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            admission_date=self.patient.admission_date,
+            mapping_date=self.patient.mapping_date,
+            first_treatment_date=self.patient.first_treatment_date,
+        )
+        TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+        request = RequestFactory().get('/app/print/admission/?course_number=2')
+
+        admission = _build_admission_context(request, self.patient.id)
+        referral = _build_referral_context(request, self.patient.id)
+
+        self.assertIsNone(admission['admission_date'])
+        self.assertIsNone(admission['mapping_date'])
+        self.assertIsNone(admission['first_treatment_date'])
+        self.assertIsNone(admission['end_date_est'])
+        self.assertIsNone(referral['admission_date'])
+
+
+class TestTreatmentCourseDischargeSummaryIsolation(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='summary-course-user', password='pw')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='SUMMARY001', name='Summary Course Patient', birth_date=date(1980, 1, 1),
+            course_number=1, admission_date=date(2025, 1, 1),
+            first_treatment_date=date(2025, 1, 2), summary_text='PATIENT LEGACY SUMMARY',
+            discharge_prescription='PATIENT LEGACY PRESCRIPTION', discharge_date=date(2025, 1, 3),
+        )
+        self.course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            admission_date=date(2026, 1, 1), first_treatment_date=date(2026, 1, 5),
+            discharge_date=date(2026, 1, 31), summary_text='COURSE ONE SUMMARY',
+            discharge_prescription='COURSE ONE PRESCRIPTION',
+        )
+        self.course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            admission_date=date(2026, 7, 1), first_treatment_date=date(2026, 7, 5),
+            discharge_date=date(2026, 7, 31), summary_text='COURSE TWO SUMMARY',
+            discharge_prescription='COURSE TWO PRESCRIPTION',
+        )
+
+    def _summary_url(self, course_number):
+        return reverse('rtms_app:patient_home', args=[self.patient.id]) + f'?course_number={course_number}'
+
+    def test_summary_get_uses_requested_course_content_and_dates(self):
+        response_one = self.client.get(self._summary_url(1))
+        response_two = self.client.get(self._summary_url(2))
+
+        self.assertEqual(response_one.context['summary_text'], 'COURSE ONE SUMMARY')
+        self.assertEqual(response_one.context['discharge_prescription'], 'COURSE ONE PRESCRIPTION')
+        self.assertEqual(response_one.context['course_discharge_date'], date(2026, 1, 31))
+        self.assertNotContains(response_one, 'COURSE TWO SUMMARY')
+        self.assertNotContains(response_one, 'COURSE TWO PRESCRIPTION')
+
+        self.assertEqual(response_two.context['summary_text'], 'COURSE TWO SUMMARY')
+        self.assertEqual(response_two.context['discharge_prescription'], 'COURSE TWO PRESCRIPTION')
+        self.assertEqual(response_two.context['course_discharge_date'], date(2026, 7, 31))
+        self.assertNotContains(response_two, 'COURSE ONE SUMMARY')
+        self.assertNotContains(response_two, 'COURSE ONE PRESCRIPTION')
+
+        self.course_one.summary_text = ''
+        self.course_two.summary_text = ''
+        TreatmentCourse.objects.bulk_update([self.course_one, self.course_two], ['summary_text'])
+        generated_one = self.client.get(self._summary_url(1))
+        generated_two = self.client.get(self._summary_url(2))
+        self.assertIn('2026年01月01日任意入院', generated_one.context['summary_text'])
+        self.assertIn('2026年01月05日から全0回', generated_one.context['summary_text'])
+        self.assertIn('2026年07月01日任意入院', generated_two.context['summary_text'])
+        self.assertIn('2026年07月05日から全0回', generated_two.context['summary_text'])
+
+    def test_summary_post_writes_only_requested_course(self):
+        url = self._summary_url(2)
+        response = self.client.post(url, {
+            'summary_text': 'UPDATED COURSE TWO SUMMARY',
+            'discharge_prescription': 'UPDATED COURSE TWO PRESCRIPTION',
+            'discharge_date': '2026-08-01',
+            'course_number': '2',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.course_one.refresh_from_db()
+        self.course_two.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(self.course_one.summary_text, 'COURSE ONE SUMMARY')
+        self.assertEqual(self.course_one.discharge_prescription, 'COURSE ONE PRESCRIPTION')
+        self.assertEqual(self.course_two.summary_text, 'UPDATED COURSE TWO SUMMARY')
+        self.assertEqual(self.course_two.discharge_prescription, 'UPDATED COURSE TWO PRESCRIPTION')
+        self.assertEqual(self.course_two.discharge_date, date(2026, 8, 1))
+        self.assertEqual(self.patient.summary_text, 'PATIENT LEGACY SUMMARY')
+        self.assertEqual(self.patient.discharge_prescription, 'PATIENT LEGACY PRESCRIPTION')
+
+    def test_print_views_use_requested_course_content(self):
+        for course_number, summary, prescription in (
+            (1, 'COURSE ONE SUMMARY', 'COURSE ONE PRESCRIPTION'),
+            (2, 'COURSE TWO SUMMARY', 'COURSE TWO PRESCRIPTION'),
+        ):
+            with self.subTest(course_number=course_number):
+                query = {'course_number': course_number}
+                discharge = self.client.get(
+                    reverse('rtms_app:print:patient_print_discharge', args=[self.patient.id]), query,
+                )
+                referral = self.client.get(
+                    reverse('rtms_app:print:patient_print_referral', args=[self.patient.id]), query,
+                )
+                self.assertContains(discharge, summary)
+                self.assertContains(discharge, prescription)
+                self.assertContains(referral, summary)
+                self.assertNotContains(discharge, 'PATIENT LEGACY SUMMARY')
+                self.assertNotContains(referral, 'PATIENT LEGACY SUMMARY')
+
+    def test_explicit_missing_course_is_rejected_without_fallback(self):
+        self.assertEqual(self.client.get(self._summary_url(3)).status_code, 400)
+        for view_name in ('patient_print_discharge', 'patient_print_referral'):
+            url = reverse(f'rtms_app:print:{view_name}', args=[self.patient.id])
+            with self.subTest(view_name=view_name):
+                self.assertEqual(self.client.get(url, {'course_number': 3}).status_code, 404)
 
 
 # ============================================================================
@@ -5757,11 +6139,77 @@ class TestResearchDataExport(TestCase):
         rows = {row['card_id']: row for row in csv.DictReader(content.splitlines())}
         self.assertEqual(
             (rows[self.patient.card_id]['admission_date'], rows[self.patient.card_id]['first_treatment_date'], rows[self.patient.card_id]['discharge_date']),
-            ('2026-04-01', '2026-04-05', '2026-04-30'),
+            ('', '', ''),
         )
         self.assertEqual(
             (rows[legacy.card_id]['admission_date'], rows[legacy.card_id]['first_treatment_date'], rows[legacy.card_id]['discharge_date']),
             ('2026-05-01', '2026-05-05', '2026-05-30'),
+        )
+
+    def test_summary_csv_course_two_dates_and_duration_are_course_scoped(self):
+        from rtms_app.services.export_research import generate_research_summary_csv
+
+        self.patient.first_visit_date = date(2026, 1, 1)
+        self.patient.admission_date = date(2026, 1, 2)
+        self.patient.first_treatment_date = date(2026, 1, 10)
+        self.patient.discharge_date = date(2026, 1, 31)
+        self.patient.save(update_fields=[
+            'first_visit_date', 'admission_date', 'first_treatment_date', 'discharge_date',
+        ])
+        TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            first_visit_date=date(2026, 1, 1), admission_date=date(2026, 1, 2),
+            first_treatment_date=date(2026, 1, 10), discharge_date=date(2026, 1, 31),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            first_visit_date=date(2026, 2, 1), admission_date=date(2026, 2, 2),
+            first_treatment_date=date(2026, 2, 10), discharge_date=date(2026, 2, 28),
+        )
+        TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=course_two, course_number=2,
+            session_date=date(2026, 2, 20),
+        )
+
+        rows = {
+            row['course_number']: row
+            for row in csv.DictReader(generate_research_summary_csv().splitlines())
+            if row['card_id'] == self.patient.card_id
+        }
+
+        self.assertEqual(rows['2']['first_visit_date'], '2026-02-01')
+        self.assertEqual(rows['2']['admission_date'], '2026-02-02')
+        self.assertEqual(rows['2']['first_treatment_date'], '2026-02-10')
+        self.assertEqual(rows['2']['discharge_date'], '2026-02-28')
+        self.assertEqual(rows['2']['treatment_duration_days'], '10')
+
+    def test_summary_csv_course_two_null_dates_do_not_use_patient_values(self):
+        from rtms_app.services.export_research import generate_research_summary_csv
+
+        self.patient.first_visit_date = date(2026, 1, 1)
+        self.patient.admission_date = date(2026, 1, 2)
+        self.patient.first_treatment_date = date(2026, 1, 10)
+        self.patient.discharge_date = date(2026, 1, 31)
+        self.patient.save(update_fields=[
+            'first_visit_date', 'admission_date', 'first_treatment_date', 'discharge_date',
+        ])
+        TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            first_treatment_date=date(2026, 1, 10),
+        )
+        TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+
+        rows = {
+            row['course_number']: row
+            for row in csv.DictReader(generate_research_summary_csv().splitlines())
+            if row['card_id'] == self.patient.card_id
+        }
+
+        self.assertEqual(
+            (rows['2']['first_visit_date'], rows['2']['admission_date'],
+             rows['2']['first_treatment_date'], rows['2']['discharge_date'],
+             rows['2']['treatment_duration_days']),
+            ('', '', '', '', ''),
         )
 
     def test_summary_csv_adverse_event_flags_are_boolean(self):
