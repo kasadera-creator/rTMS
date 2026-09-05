@@ -6239,6 +6239,80 @@ class TestResearchDataExport(TestCase):
         self.assertEqual(row['BACS_post_composite'], '')
         self.assertEqual(row['HAMD_baseline_total17'], '')
 
+    def test_summary_csv_uses_course_two_assessment_record(self):
+        from rtms_app.services.export_research import generate_research_summary_csv
+
+        TreatmentCourse.objects.create(patient=self.patient, course_number=1)
+        course_two = TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+        AssessmentRecord.objects.create(
+            patient=self.patient, treatment_course=course_two, course_number=2,
+            timing='baseline', scale=self.bacs_scale, scores={'composite': 22},
+        )
+
+        rows = list(csv.DictReader(generate_research_summary_csv().splitlines()))
+        row = next(r for r in rows if r['card_id'] == self.patient.card_id and r['course_number'] == '2')
+        self.assertEqual(row['BACS_baseline_composite'], '22')
+
+    def test_summary_csv_excludes_course_one_fk_with_course_two_number(self):
+        from rtms_app.services.export_research import generate_research_summary_csv
+
+        course_one = TreatmentCourse.objects.create(patient=self.patient, course_number=1)
+        TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+        AssessmentRecord.objects.create(
+            patient=self.patient, treatment_course=course_one, course_number=2,
+            timing='baseline', scale=self.bacs_scale, scores={'composite': 12},
+        )
+
+        rows = list(csv.DictReader(generate_research_summary_csv().splitlines()))
+        row = next(r for r in rows if r['card_id'] == self.patient.card_id and r['course_number'] == '2')
+        self.assertEqual(row['BACS_baseline_composite'], '')
+
+    def test_summary_csv_excludes_legacy_record_from_explicit_course_two(self):
+        from rtms_app.services.export_research import generate_research_summary_csv
+
+        TreatmentCourse.objects.create(patient=self.patient, course_number=1)
+        TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+        AssessmentRecord.objects.create(
+            patient=self.patient, course_number=2,
+            timing='baseline', scale=self.bacs_scale, scores={'composite': 13},
+        )
+
+        rows = list(csv.DictReader(generate_research_summary_csv().splitlines()))
+        row = next(r for r in rows if r['card_id'] == self.patient.card_id and r['course_number'] == '2')
+        self.assertEqual(row['BACS_baseline_composite'], '')
+
+    def test_summary_csv_uses_course_two_fk_even_with_mismatched_number(self):
+        from rtms_app.services.export_research import generate_research_summary_csv
+
+        TreatmentCourse.objects.create(patient=self.patient, course_number=1)
+        course_two = TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+        AssessmentRecord.objects.create(
+            patient=self.patient, treatment_course=course_two, course_number=1,
+            timing='baseline', scale=self.bacs_scale, scores={'composite': 14},
+        )
+
+        rows = list(csv.DictReader(generate_research_summary_csv().splitlines()))
+        row = next(r for r in rows if r['card_id'] == self.patient.card_id and r['course_number'] == '2')
+        self.assertEqual(row['BACS_baseline_composite'], '14')
+
+    def test_summary_csv_course_two_excludes_course_one_assessment(self):
+        from rtms_app.services.export_research import generate_research_summary_csv
+
+        course_one = TreatmentCourse.objects.create(patient=self.patient, course_number=1)
+        course_two = TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+        AssessmentRecord.objects.create(
+            patient=self.patient, treatment_course=course_one, course_number=1,
+            timing='baseline', scale=self.bacs_scale, scores={'composite': 11},
+        )
+        AssessmentRecord.objects.create(
+            patient=self.patient, treatment_course=course_two, course_number=2,
+            timing='baseline', scale=self.bacs_scale, scores={'composite': 22},
+        )
+
+        rows = list(csv.DictReader(generate_research_summary_csv().splitlines()))
+        row = next(r for r in rows if r['card_id'] == self.patient.card_id and r['course_number'] == '2')
+        self.assertEqual(row['BACS_baseline_composite'], '22')
+
     def test_summary_csv_course_dates_are_isolated_with_patient_fallback(self):
         from rtms_app.services.export_research import generate_research_summary_csv
 

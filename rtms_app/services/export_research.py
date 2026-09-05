@@ -105,9 +105,12 @@ def _timings_for_scale(scale):
     return ['baseline', 'post']
 
 
-def _get_record(patient, course_number, scale, timing):
+def _get_record(patient, course_number, scale, timing, treatment_course=None):
+    scope = {'treatment_course': treatment_course} if treatment_course else {
+        'patient': patient, 'course_number': course_number,
+    }
     return AssessmentRecord.objects.filter(
-        patient=patient, course_number=course_number, timing=timing, scale=scale,
+        **scope, timing=timing, scale=scale,
     ).order_by('-date').first()
 
 
@@ -322,7 +325,10 @@ def generate_research_summary_csv():
         }
 
         for scale, timing, columns in scale_metadata:
-            record = _get_record(patient, course_number, scale, timing)
+            record = _get_record(
+                patient, course_number, scale, timing,
+                treatment_course=treatment_course,
+            )
             for col_key, extractor in columns:
                 row[col_key] = extractor(record)
 
