@@ -987,8 +987,9 @@ def get_patient_admission_status(patient, *, as_of=None, treatment_course=None):
     course_number = course.course_number if course else patient.course_number or 1
 
     def course_date(field_name):
-        course_value = getattr(course, field_name, None) if course else None
-        return course_value if course_value is not None else getattr(patient, field_name, None)
+        if treatment_course is not None:
+            return getattr(treatment_course, field_name, None)
+        return getattr(patient, field_name, None)
 
     admission_date = course_date('admission_date')
     discharge_date = course_date('discharge_date')

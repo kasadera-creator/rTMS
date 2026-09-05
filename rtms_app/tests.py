@@ -1828,6 +1828,7 @@ class TestPatientListNavigation(TestCase):
         )
         TreatmentCourse.objects.create(
             patient=patient, course_number=2, course_status='waiting_admission',
+            admission_date=date(2026, 9, 1),
         )
 
         response = self.client.get(reverse('rtms_app:patient_list'))
@@ -1858,6 +1859,79 @@ class TestPatientListNavigation(TestCase):
         course_two_row = next(row for row in rows if row.list_course_number == 2)
         self.assertEqual(course_two_row.list_status, 'waiting')
         self.assertContains(response, '<span class="badge bg-warning text-dark">入院待ち</span>')
+
+    def test_course_status_does_not_fallback_to_patient_admission_date(self):
+        patient = Patient.objects.create(
+            card_id='S6020', name='Course Admission Null', birth_date=date(1980, 1, 1),
+            admission_date=date(2026, 1, 1), course_number=2,
+        )
+        TreatmentCourse.objects.create(
+            patient=patient, course_number=1, admission_date=date(2026, 1, 1),
+        )
+        course_two = TreatmentCourse.objects.create(patient=patient, course_number=2)
+
+        self.assertEqual(
+            get_patient_admission_status(
+                patient, as_of=date(2026, 9, 5), treatment_course=course_two,
+            ),
+            'waiting',
+        )
+
+    def test_course_status_does_not_fallback_to_patient_discharge_date(self):
+        patient = Patient.objects.create(
+            card_id='S6021', name='Course Discharge Null', birth_date=date(1980, 1, 1),
+            admission_date=date(2026, 1, 1), first_treatment_date=date(2026, 1, 5),
+            discharge_date=date(2026, 2, 1), course_number=2,
+        )
+        TreatmentCourse.objects.create(
+            patient=patient, course_number=1,
+            admission_date=date(2026, 1, 1), first_treatment_date=date(2026, 1, 5),
+            discharge_date=date(2026, 2, 1),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=patient, course_number=2,
+            admission_date=date(2026, 9, 1), first_treatment_date=date(2026, 9, 5),
+        )
+
+        self.assertEqual(
+            get_patient_admission_status(
+                patient, as_of=date(2026, 9, 5), treatment_course=course_two,
+            ),
+            'treatment_in_progress',
+        )
+
+    def test_course_status_does_not_fallback_to_patient_first_treatment_date(self):
+        patient = Patient.objects.create(
+            card_id='S6022', name='Course Treatment Null', birth_date=date(1980, 1, 1),
+            admission_date=date(2026, 9, 1), first_treatment_date=date(2026, 9, 2),
+            course_number=2,
+        )
+        TreatmentCourse.objects.create(
+            patient=patient, course_number=1,
+            admission_date=date(2026, 1, 1), first_treatment_date=date(2026, 1, 5),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=patient, course_number=2, admission_date=date(2026, 9, 1),
+        )
+
+        self.assertEqual(
+            get_patient_admission_status(
+                patient, as_of=date(2026, 9, 5), treatment_course=course_two,
+            ),
+            'inpatient_waiting_treatment',
+        )
+
+    def test_course_less_status_keeps_patient_date_fallback(self):
+        patient = Patient.objects.create(
+            card_id='S6023', name='Legacy Status', birth_date=date(1980, 1, 1),
+            admission_date=date(2026, 1, 1), first_treatment_date=date(2026, 1, 5),
+            discharge_date=date(2026, 2, 1), course_number=2,
+        )
+
+        self.assertEqual(
+            get_patient_admission_status(patient, as_of=date(2026, 9, 5)),
+            'discharged',
+        )
 
     def test_patient_list_derives_all_treatment_lifecycle_states(self):
         as_of = date(2026, 9, 2)
