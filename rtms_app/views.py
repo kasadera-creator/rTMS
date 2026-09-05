@@ -353,11 +353,10 @@ def get_session_count(patient, target_date=None):
 def get_weekly_session_count(patient, target_date, course_number=None):
     course_number = course_number or patient.course_number or 1
     treatment_course = resolve_treatment_course(patient, course_number=course_number)
-    start_date = (
-        treatment_course.first_treatment_date
-        if treatment_course and treatment_course.first_treatment_date
-        else patient.first_treatment_date
-    )
+    if treatment_course is not None:
+        start_date = treatment_course.first_treatment_date
+    else:
+        start_date = patient.first_treatment_date
     if not start_date: return 0
     days_diff = (target_date - start_date).days
     week_start_offset = (days_diff // 7) * 7
@@ -1157,7 +1156,7 @@ def mapping_add(request, patient_id):
     week_no_default = 1
     first_treatment_date = (
         treatment_course.first_treatment_date
-        if treatment_course and treatment_course.first_treatment_date
+        if treatment_course is not None
         else patient.first_treatment_date
     )
     if first_treatment_date:
@@ -1554,7 +1553,7 @@ def treatment_add(request, patient_id):
     )
     course_first_treatment_date = (
         treatment_course.first_treatment_date
-        if treatment_course and treatment_course.first_treatment_date
+        if treatment_course is not None
         else patient.first_treatment_date
     )
     if course_first_treatment_date:
@@ -3798,7 +3797,7 @@ def patient_clinical_path(request, patient_id):
     )
     course_discharge_date = (
         treatment_course.discharge_date
-        if treatment_course and treatment_course.discharge_date
+        if treatment_course is not None
         else patient.discharge_date
     )
     # ★修正: generate_calendar_weeks を使用

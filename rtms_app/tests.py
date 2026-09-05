@@ -517,6 +517,26 @@ class TestMappingTreatmentCourseIsolation(TestCase):
         self.assertEqual(response.context['week_no_default'], 2)
         self.assertEqual(response.context['form'].initial['week_number'], 2)
 
+    def test_mapping_add_course_two_does_not_fallback_to_patient_date_when_course_date_is_null(self):
+        user = get_user_model().objects.create_user(username='mapping-null-user', password='pw')
+        self.client = Client()
+        self.client.force_login(user)
+        self.patient.first_treatment_date = date(2026, 1, 5)
+        self.patient.mapping_date = date(2026, 1, 6)
+        self.patient.save(update_fields=['first_treatment_date', 'mapping_date'])
+        self.course_two.first_treatment_date = None
+        self.course_two.mapping_date = None
+        self.course_two.save(update_fields=['first_treatment_date', 'mapping_date'])
+
+        response = self.client.get(
+            reverse('rtms_app:mapping_add', args=[self.patient.pk]),
+            {'course_number': 2, 'date': '2026-04-08'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context['course_first_treatment_date'])
+        self.assertEqual(response.context['week_no_default'], 1)
+
 
 class TestTreatmentCourseWriteIsolation(TestCase):
     def setUp(self):
@@ -1014,6 +1034,23 @@ class TestTreatmentCourseScheduleIsolation(TestCase):
         self.assertEqual(printed_ids, {second.pk})
         self.assertNotIn(first.pk, printed_ids)
 
+    def test_clinical_path_course_two_does_not_fallback_to_patient_discharge_date(self):
+        user = get_user_model().objects.create_user(username='path-null-user', password='pw')
+        client = Client()
+        client.force_login(user)
+        self.patient.discharge_date = date(2026, 1, 31)
+        self.patient.save(update_fields=['discharge_date'])
+        self.course_two.discharge_date = None
+        self.course_two.save(update_fields=['discharge_date'])
+
+        response = client.get(
+            reverse('rtms_app:patient_clinical_path', args=[self.patient.pk]),
+            {'course_number': 2},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context['course_discharge_date'])
+
     def test_calendar_uses_patient_mapping_date_when_course_date_is_null(self):
         from rtms_app.views import generate_calendar_weeks
 
@@ -1205,6 +1242,28 @@ class TestTreatmentAddWeek3Hamd17(TestCase):
             response.context['start_date'], course_one.first_treatment_date,
         )
 
+    def test_course_two_treatment_add_does_not_fallback_to_patient_date_when_course_date_is_null(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            first_treatment_date=date(2026, 1, 5),
+        )
+        TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            first_treatment_date=None,
+        )
+        self.patient.first_treatment_date = course_one.first_treatment_date
+        self.patient.save(update_fields=['first_treatment_date'])
+
+        response = self.client.get(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+            {'date': '2026-03-02', 'course_number': 2},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context['start_date'])
+        self.assertEqual(response.context['week_num'], 1)
+        self.assertNotEqual(response.context['start_date'], course_one.first_treatment_date)
+
     def test_course_two_weekly_count_excludes_course_one_sessions(self):
         course_one = TreatmentCourse.objects.create(
             patient=self.patient, course_number=1,
@@ -1228,6 +1287,44 @@ class TestTreatmentAddWeek3Hamd17(TestCase):
 
         self.assertEqual(
             get_weekly_session_count(self.patient, date(2026, 3, 5), course_number=2),
+            1,
+        )
+
+    def test_course_two_weekly_count_does_not_use_patient_date_when_course_date_is_null(self):
+        from rtms_app.views import get_weekly_session_count
+
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            first_treatment_date=date(2026, 1, 5),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            first_treatment_date=None,
+        )
+        self.patient.first_treatment_date = course_one.first_treatment_date
+        self.patient.save(update_fields=['first_treatment_date'])
+        TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=course_two,
+            course_number=2, session_date=date(2026, 3, 5),
+        )
+
+        self.assertEqual(
+            get_weekly_session_count(self.patient, date(2026, 3, 5), course_number=2),
+            0,
+        )
+
+    def test_legacy_weekly_count_keeps_patient_date_fallback(self):
+        from rtms_app.views import get_weekly_session_count
+
+        self.patient.first_treatment_date = date(2026, 3, 2)
+        self.patient.save(update_fields=['first_treatment_date'])
+        TreatmentSession.objects.create(
+            patient=self.patient, course_number=1,
+            session_date=date(2026, 3, 5),
+        )
+
+        self.assertEqual(
+            get_weekly_session_count(self.patient, date(2026, 3, 5)),
             1,
         )
 
