@@ -3114,6 +3114,179 @@ class TestSkipSessions(TestCase):
         self.assertEqual(course_two_session.session_date, date(2026, 1, 12))
 
 
+class TestCourseAwareInitialVisit(TestCase):
+    def setUp(self):
+        doctor_group, _ = Group.objects.get_or_create(name='医師')
+        self.doctor = get_user_model().objects.create_user(username='course-first-visit-doctor')
+        self.doctor.groups.add(doctor_group)
+        self.client = Client()
+        self.client.force_login(self.doctor)
+        self.patient = Patient.objects.create(
+            card_id='56101', name='Course First Visit', birth_date=date(1980, 1, 1),
+            diagnosis='Diagnosis A', chief_complaint='Complaint A',
+            life_history='Life A', past_history='Past A', present_illness='Present A',
+            medication_history='Medication A', weight_kg=60.0,
+            has_other_psychiatric_history='no', psychiatric_history=[],
+            psychiatric_history_other_text='', estimated_onset_year=2010,
+            estimated_onset_month=1, attending_physician=self.doctor,
+            referral_source='Referral A', referral_doctor='Doctor A',
+            is_all_case_survey=False, questionnaire_data={'patient': 'unchanged'},
+            first_visit_date=date(2026, 1, 1), admission_date=date(2026, 1, 2),
+            first_treatment_date=date(2026, 1, 5), mapping_date=date(2026, 1, 5),
+        )
+        self.course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            diagnosis='Diagnosis A', chief_complaint='Complaint A',
+            life_history='Life A', past_history='Past A', present_illness='Present A',
+            medication_history='Medication A', weight_kg=60.0,
+            has_other_psychiatric_history='no', psychiatric_history=[],
+            psychiatric_history_other_text='', estimated_onset_year=2010,
+            estimated_onset_month=1, attending_physician=self.doctor,
+            referral_source='Referral A', referral_doctor='Doctor A',
+            first_visit_date=date(2026, 1, 1), admission_date=date(2026, 1, 2),
+            first_treatment_date=date(2026, 1, 5), mapping_date=date(2026, 1, 5),
+        )
+        self.course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            diagnosis='Diagnosis B', chief_complaint='Complaint B',
+            life_history='Life B', past_history='Past B', present_illness='Present B',
+            medication_history='Medication B', weight_kg=61.0,
+            first_visit_date=date(2026, 2, 1), admission_date=date(2026, 2, 2),
+            first_treatment_date=date(2026, 2, 5), mapping_date=date(2026, 2, 5),
+        )
+
+    def _post_course(self, course_number=2, **overrides):
+        data = {
+            'course_number': str(course_number),
+            'attending_physician': str(self.doctor.pk),
+            'referral_source': 'Referral C',
+            'referral_doctor': 'Doctor C',
+            'chief_complaint': 'Complaint C',
+            'diagnosis': 'Diagnosis B',
+            'diag_list': 'Diagnosis C',
+            'life_history': 'Life C',
+            'past_history': 'Past C',
+            'present_illness': 'Present C',
+            'medication_history': 'Medication C',
+            'weight_kg': '72.5',
+            'has_other_psychiatric_history': 'yes',
+            'psychiatric_history': ['F31'],
+            'psychiatric_history_other_text': 'Other C',
+            'estimated_onset_year': '2020',
+            'estimated_onset_month': '3',
+            'is_all_case_survey': 'on',
+            'first_visit_date': '2026-02-1',
+            'admission_date': '2026-02-02',
+            'first_treatment_date': '2026-02-05',
+        }
+        data.update(overrides)
+        return self.client.post(
+            f'{reverse("rtms_app:patient_first_visit", args=[self.patient.pk])}?course_number={course_number}',
+            data,
+        )
+
+    def _post_course_two(self, **overrides):
+        return self._post_course(2, **overrides)
+
+    def test_course_two_initial_visit_isolated_clinical_attributes(self):
+        response = self._post_course_two(
+            has_other_psychiatric_history='no',
+            psychiatric_history=[],
+            psychiatric_history_other_text='',
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.patient.refresh_from_db()
+        self.course_one.refresh_from_db()
+        self.course_two.refresh_from_db()
+        for field in (
+            'diagnosis', 'chief_complaint', 'life_history', 'past_history',
+            'present_illness', 'medication_history', 'weight_kg',
+        ):
+            with self.subTest(field=field):
+                self.assertEqual(getattr(self.course_two, field), {
+                    'diagnosis': 'Diagnosis C', 'chief_complaint': 'Complaint C',
+                    'life_history': 'Life C', 'past_history': 'Past C',
+                    'present_illness': 'Present C', 'medication_history': 'Medication C',
+                    'weight_kg': 72.5,
+                }[field])
+                self.assertEqual(getattr(self.course_one, field), getattr(self.patient, field))
+                self.assertNotEqual(getattr(self.course_two, field), getattr(self.course_one, field))
+            self.assertEqual(self.patient.first_visit_date, date(2026, 1, 1))
+            self.assertEqual(self.patient.admission_date, date(2026, 1, 2))
+            self.assertEqual(self.patient.first_treatment_date, date(2026, 1, 5))
+            self.assertEqual(self.course_two.first_visit_date, date(2026, 2, 1))
+            self.assertEqual(self.course_two.admission_date, date(2026, 2, 2))
+            self.assertEqual(self.course_two.first_treatment_date, date(2026, 2, 5))
+
+    def test_course_two_initial_visit_isolated_psychiatric_and_metadata(self):
+        response = self._post_course_two()
+
+        self.assertEqual(response.status_code, 302)
+        self.patient.refresh_from_db()
+        self.course_one.refresh_from_db()
+        self.course_two.refresh_from_db()
+        for field in (
+            'has_other_psychiatric_history', 'psychiatric_history',
+            'psychiatric_history_other_text', 'estimated_onset_year',
+            'estimated_onset_month', 'attending_physician_id', 'referral_source',
+            'referral_doctor', 'is_all_case_survey',
+        ):
+            with self.subTest(field=field):
+                self.assertEqual(getattr(self.course_two, field), {
+                    'has_other_psychiatric_history': 'yes',
+                    'psychiatric_history': ['F31'],
+                    'psychiatric_history_other_text': 'Other C',
+                    'estimated_onset_year': 2020, 'estimated_onset_month': 3,
+                    'attending_physician_id': self.doctor.pk,
+                    'referral_source': 'Referral C', 'referral_doctor': 'Doctor C',
+                    'is_all_case_survey': True,
+                }[field])
+                self.assertEqual(getattr(self.course_one, field), getattr(self.patient, field))
+
+        self.assertEqual(self.patient.questionnaire_data, {'patient': 'unchanged'})
+
+    def test_course_one_initial_visit_does_not_update_patient_or_course_two(self):
+        response = self._post_course(
+            1,
+            first_visit_date='2026-01-01',
+            admission_date='2026-01-02',
+            first_treatment_date='2026-01-05',
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.patient.refresh_from_db()
+        self.course_one.refresh_from_db()
+        self.course_two.refresh_from_db()
+        self.assertEqual(self.course_one.diagnosis, 'Diagnosis C, 双極性感情障害（F31）, その他(Other C)')
+        self.assertEqual(self.course_two.diagnosis, 'Diagnosis B')
+        self.assertEqual(self.patient.diagnosis, 'Diagnosis A')
+        self.assertEqual(self.patient.chief_complaint, 'Complaint A')
+
+    def test_legacy_initial_visit_still_updates_patient(self):
+        legacy = Patient.objects.create(
+            card_id='56102', name='Legacy First Visit', birth_date=date(1980, 1, 1),
+            attending_physician=self.doctor, first_treatment_date=date(2026, 3, 5),
+        )
+        response = self.client.post(
+            reverse('rtms_app:patient_first_visit', args=[legacy.pk]),
+            {
+                'card_id': legacy.card_id, 'name': legacy.name,
+                'birth_date': legacy.birth_date.isoformat(), 'gender': legacy.gender,
+                'attending_physician': str(self.doctor.pk),
+                'chief_complaint': 'Legacy complaint', 'diag_list': 'Legacy diagnosis',
+                'admission_date': '2026-03-02', 'first_visit_date': '2026-03-01',
+                'first_treatment_date': '2026-03-05',
+                'has_other_psychiatric_history': 'no', 'psychiatric_history': [],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        legacy.refresh_from_db()
+        self.assertEqual(legacy.diagnosis, 'Legacy diagnosis')
+        self.assertEqual(legacy.chief_complaint, 'Legacy complaint')
+
+
 class TestClinicalPathReschedule(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='path-rescheduler')

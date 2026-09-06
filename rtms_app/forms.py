@@ -245,6 +245,21 @@ class PatientFirstVisitForm(forms.ModelForm):
             instance.save()
         return instance
 
+
+class TreatmentCourseFirstVisitForm(PatientFirstVisitForm):
+    class Meta:
+        model = TreatmentCourse
+        fields = [
+            'attending_physician', 'referral_source', 'referral_doctor',
+            'chief_complaint', 'diagnosis',
+            'life_history', 'past_history', 'present_illness', 'medication_history',
+            'is_all_case_survey', 'estimated_onset_year', 'estimated_onset_month',
+            'weight_kg', 'is_weight_unknown',
+            'has_other_psychiatric_history', 'psychiatric_history',
+            'psychiatric_history_other_text',
+            'first_visit_date', 'admission_date', 'first_treatment_date', 'mapping_date',
+        ]
+
 # --- 3. 位置決めフォーム ---
 class MappingForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):

@@ -33,7 +33,7 @@ from .models import (
     SeriousAdverseEvent,
 )
 from .forms import (
-    PatientFirstVisitForm, MappingForm, TreatmentForm,
+    PatientFirstVisitForm, TreatmentCourseFirstVisitForm, MappingForm, TreatmentForm,
     PatientRegistrationForm, PatientBasicEditForm, AdmissionProcedureForm,
     TreatmentCourseAdmissionProcedureForm,
 )
@@ -1287,21 +1287,12 @@ def patient_first_visit(request, patient_id):
             if treatment_course is not None
             else patient.first_treatment_date
         )
-        old_admission_date = (
-            treatment_course.admission_date
-            if treatment_course is not None
-            else patient.admission_date
-        )
-        old_mapping_date = patient.mapping_date
-        old_patient_first_visit_date = patient.first_visit_date
-        old_patient_first_treatment_date = patient.first_treatment_date
-        old_patient_admission_date = patient.admission_date
-        form = PatientFirstVisitForm(post, instance=patient, treatment_course=treatment_course)
+        form_class = TreatmentCourseFirstVisitForm if treatment_course is not None else PatientFirstVisitForm
+        form_instance = treatment_course if treatment_course is not None else patient
+        form = form_class(post, instance=form_instance, treatment_course=treatment_course)
         if form.is_valid():
             p = form.save(commit=False)
             treatment_start_changed = p.first_treatment_date != old_first_treatment_date
-            admission_date_changed = p.admission_date != old_admission_date
-            mapping_date_changed = p.mapping_date != old_mapping_date
             diag_list = request.POST.getlist('diag_list')
             history_codes = [code for code in request.POST.getlist('psychiatric_history') if code != 'F32']
             history_labels = dict(PatientFirstVisitForm.PSY_HISTORY_CHOICES)
@@ -1332,21 +1323,8 @@ def patient_first_visit(request, patient_id):
 
             if p is not None:
                 if treatment_course is not None:
-                    treatment_course.first_visit_date = p.first_visit_date
-                    treatment_course.admission_date = p.admission_date
-                    course_update_fields = ['first_visit_date', 'admission_date']
                     if treatment_start_changed:
-                        treatment_course.first_treatment_date = p.first_treatment_date
-                        course_update_fields.append('first_treatment_date')
-                    if mapping_date_changed and not treatment_start_changed:
-                        treatment_course.mapping_date = p.mapping_date
-                        course_update_fields.append('mapping_date')
-                    treatment_course.save(update_fields=course_update_fields)
-                    if treatment_course.course_number != 1:
-                        p.first_visit_date = old_patient_first_visit_date
-                        p.first_treatment_date = old_patient_first_treatment_date
-                        p.admission_date = old_patient_admission_date
-                        p.mapping_date = old_mapping_date
+                        p.mapping_date = p.first_treatment_date
                 p.save()
                 action = request.POST.get('action')
 
@@ -1367,7 +1345,9 @@ def patient_first_visit(request, patient_id):
                     return redirect(f"{reverse('rtms_app:dashboard')}?date={dashboard_date}")
                 return redirect('rtms_app:dashboard')
     else:
-        form = PatientFirstVisitForm(instance=patient, treatment_course=treatment_course)
+        form_class = TreatmentCourseFirstVisitForm if treatment_course is not None else PatientFirstVisitForm
+        form_instance = treatment_course if treatment_course is not None else patient
+        form = form_class(instance=form_instance, treatment_course=treatment_course)
     floating_print_options = [{
         'label': '印刷プレビュー',
         'value': 'print_bundle',
