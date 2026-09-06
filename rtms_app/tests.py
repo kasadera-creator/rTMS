@@ -67,6 +67,38 @@ class TestDashboardCourseIsolation(TestCase):
         self.assertEqual(self.course_one.admission_date, date(2026, 1, 1))
         self.assertEqual(self.course_one.mapping_date, date(2026, 1, 2))
 
+    def test_course_two_admission_updates_only_selected_course(self):
+        response = self.client.post(
+            reverse('rtms_app:admission_procedure', args=[self.patient.pk]),
+            {'course_number': 2, 'admission_type': 'voluntary'},
+        )
+
+        self.assertRedirects(response, f"{reverse('rtms_app:dashboard')}?course_number=2")
+        self.patient.refresh_from_db()
+        self.course_one.refresh_from_db()
+        self.course_two.refresh_from_db()
+        self.assertFalse(self.patient.is_admission_procedure_done)
+        self.assertFalse(self.course_one.is_admission_procedure_done)
+        self.assertTrue(self.course_two.is_admission_procedure_done)
+
+    def test_course_two_base_navigation_preserves_course_number(self):
+        response = self.client.get(
+            reverse('rtms_app:patient_clinical_path', args=[self.patient.pk]),
+            {'course_number': 2},
+        )
+
+        expected_links = [
+            reverse('rtms_app:patient_first_visit', args=[self.patient.pk]),
+            reverse('rtms_app:patient_clinical_path', args=[self.patient.pk]),
+            reverse('rtms_app:admission_procedure', args=[self.patient.pk]),
+            reverse('rtms_app:mapping_add', args=[self.patient.pk]),
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+            reverse('rtms_app:assessment_add', args=[self.patient.pk, 'baseline']),
+            reverse('rtms_app:patient_home', args=[self.patient.pk]),
+        ]
+        for link in expected_links:
+            self.assertContains(response, f'{link}?course_number=2')
+
     def test_default_dashboard_keeps_course_one_compatibility(self):
         response = self.client.get('/app/dashboard/?date=2026-01-02')
 
@@ -993,6 +1025,29 @@ class TestTreatmentCourseScheduleIsolation(TestCase):
 
         self.assertEqual(treatment_ids(first_weeks), {first.pk})
         self.assertEqual(treatment_ids(second_weeks), {second.pk})
+
+    def test_course_two_admission_and_discharge_events_preserve_course_number(self):
+        from rtms_app.views import generate_calendar_weeks
+
+        self.course_two.discharge_date = date(2026, 4, 10)
+        self.course_two.save(update_fields=['discharge_date'])
+        weeks, _ = generate_calendar_weeks(self.patient, treatment_course=self.course_two)
+        events = {
+            event['type']: event['url']
+            for week in weeks
+            for day in week
+            for event in day['events']
+            if event['type'] in {'admission', 'discharge'}
+        }
+
+        self.assertEqual(
+            events['admission'],
+            f"{reverse('rtms_app:admission_procedure', args=[self.patient.pk])}?course_number=2",
+        )
+        self.assertEqual(
+            events['discharge'],
+            f"{reverse('rtms_app:patient_home', args=[self.patient.pk])}?course_number=2",
+        )
 
     def test_clinical_path_print_link_preserves_selected_course(self):
         user = get_user_model().objects.create_user(username='path-print-user', password='pw')

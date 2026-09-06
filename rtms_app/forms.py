@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib.auth.models import User
-from .models import Patient, MappingSession, TreatmentSession, Assessment
+from .models import Patient, TreatmentCourse, MappingSession, TreatmentSession, Assessment
 import datetime
 
 class DateInput(forms.DateInput):
@@ -333,5 +333,12 @@ class TreatmentForm(forms.ModelForm):
 class AdmissionProcedureForm(forms.ModelForm):
     class Meta:
         model = Patient
+        fields = ['admission_type', 'is_admission_procedure_done']
+        widgets = {'admission_type': forms.RadioSelect(attrs={'class': 'form-check-input'})}
+
+
+class TreatmentCourseAdmissionProcedureForm(forms.ModelForm):
+    class Meta:
+        model = TreatmentCourse
         fields = ['admission_type', 'is_admission_procedure_done']
         widgets = {'admission_type': forms.RadioSelect(attrs={'class': 'form-check-input'})}

@@ -258,7 +258,7 @@
                             {% if patient %}
                                 <li>
                                     <a class="dropdown-item"
-                                       href="{% url 'rtms_app:patient_first_visit' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+                                         href="{% url 'rtms_app:patient_first_visit' patient.id %}{% if course_number %}?course_number={{ course_number }}{% if dashboard_date %}&dashboard_date={{ dashboard_date }}{% endif %}{% elif dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
                                         <i class="fas fa-user-plus me-2"></i> 初診・基本情報
                                     </a>
                                 </li>
@@ -270,37 +270,37 @@
                                 </li>
                                 <li>
                                     <a class="dropdown-item"
-                                       href="{% url 'rtms_app:patient_clinical_path' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+                                         href="{% url 'rtms_app:patient_clinical_path' patient.id %}{% if course_number %}?course_number={{ course_number }}{% if dashboard_date %}&dashboard_date={{ dashboard_date }}{% endif %}{% elif dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
                                         <i class="fas fa-route me-2"></i> スケジュール
                                     </a>
                                 </li>
                                 <li>
                                     <a class="dropdown-item"
-                                       href="{% url 'rtms_app:admission_procedure' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+                                         href="{% url 'rtms_app:admission_procedure' patient.id %}{% if course_number %}?course_number={{ course_number }}{% if dashboard_date %}&dashboard_date={{ dashboard_date }}{% endif %}{% elif dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
                                         <i class="fas fa-procedures me-2"></i> 入院手続き
                                     </a>
                                 </li>
                                 <li>
                                     <a class="dropdown-item"
-                                       href="{% url 'rtms_app:mapping_add' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+                                         href="{% url 'rtms_app:mapping_add' patient.id %}{% if course_number %}?course_number={{ course_number }}{% if dashboard_date %}&dashboard_date={{ dashboard_date }}{% endif %}{% elif dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
                                         <i class="fas fa-crosshairs me-2"></i> MT測定
                                     </a>
                                 </li>
                                 <li>
                                     <a class="dropdown-item"
-                                       href="{% url 'rtms_app:treatment_add' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+                                         href="{% url 'rtms_app:treatment_add' patient.id %}{% if course_number %}?course_number={{ course_number }}{% if dashboard_date %}&dashboard_date={{ dashboard_date }}{% endif %}{% elif dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
                                         <i class="fas fa-bolt me-2"></i> 治療実施
                                     </a>
                                 </li>
                                 <li>
                                     <a class="dropdown-item"
-                                       href="{% url 'rtms_app:assessment_add' patient.id 'baseline' %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+                                       href="{% url 'rtms_app:assessment_add' patient.id 'baseline' %}{% if course_number %}?course_number={{ course_number }}{% if dashboard_date %}&dashboard_date={{ dashboard_date }}{% endif %}{% elif dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
                                         <i class="fas fa-clipboard-check me-2"></i> 評価尺度
                                     </a>
                                 </li>
                                 <li>
                                     <a class="dropdown-item"
-                                       href="{% url 'rtms_app:patient_home' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+                                         href="{% url 'rtms_app:patient_home' patient.id %}{% if course_number %}?course_number={{ course_number }}{% if dashboard_date %}&dashboard_date={{ dashboard_date }}{% endif %}{% elif dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
                                         <i class="fas fa-notes-medical me-2"></i> 治療経過・退院準備
                                     </a>
                                 </li>

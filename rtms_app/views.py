@@ -34,7 +34,8 @@ from .models import (
 )
 from .forms import (
     PatientFirstVisitForm, MappingForm, TreatmentForm,
-    PatientRegistrationForm, PatientBasicEditForm, AdmissionProcedureForm
+    PatientRegistrationForm, PatientBasicEditForm, AdmissionProcedureForm,
+    TreatmentCourseAdmissionProcedureForm,
 )
 from .utils.request_context import get_current_request, get_client_ip, get_user_agent, can_view_audit
 from .services.rtms_schedule import (
@@ -641,7 +642,7 @@ def generate_calendar_weeks(patient, treatment_course=None, course_number=None):
         }
 
         if current == course_admission_date:
-            day_info['events'].append({'type': 'admission', 'label': '入院', 'url': build_url('admission_procedure', [patient.id]), 'draggable': True})
+            day_info['events'].append({'type': 'admission', 'label': '入院', 'url': build_url('admission_procedure', [patient.id], {'course_number': course_number}), 'draggable': True})
 
         # 2. MT測定（実績があれば実績、なければ週次予定を表示。週ごとに個別ドラッグ調整可・他週への連動なし）
         mapping_actual = actual_mapping_by_date.get(current)
@@ -680,12 +681,12 @@ def generate_calendar_weeks(patient, treatment_course=None, course_number=None):
 
         # 5. 退院
         if current == course_discharge_date:
-            day_info['events'].append({'type': 'discharge', 'label': '退院準備', 'url': build_url('patient_home', [patient.id]), 'draggable': True})
+            day_info['events'].append({'type': 'discharge', 'label': '退院準備', 'url': build_url('patient_home', [patient.id], {'course_number': course_number}), 'draggable': True})
 
         elif not course_discharge_date and treatment_start:
             # Show discharge prep on the 30th treatment date (not next day)
             if treatment_end_est and current == treatment_end_est:
-                day_info['events'].append({'type': 'discharge', 'label': '退院準備', 'url': build_url('patient_home', [patient.id]), 'draggable': True})
+                day_info['events'].append({'type': 'discharge', 'label': '退院準備', 'url': build_url('patient_home', [patient.id], {'course_number': course_number}), 'draggable': True})
 
         current_week.append(day_info)
 
@@ -872,7 +873,8 @@ def dashboard_view(request):
     for p, course in dashboard_rows:
         if date_for(p, course, 'admission_date') != target_date:
             continue
-        status = "手続済" if p.is_admission_procedure_done else "要手続"; color = "success" if p.is_admission_procedure_done else "warning"
+        admission_done = course.is_admission_procedure_done if course else p.is_admission_procedure_done
+        status = "手続済" if admission_done else "要手続"; color = "success" if admission_done else "warning"
         task_admission.append(task_for(p, course, status=status, color=color, todo="入院手続き"))
     for p, course in dashboard_rows:
         if date_for(p, course, 'mapping_date') != target_date:
@@ -1118,13 +1120,38 @@ def patient_list_view(request):
 
 @login_required
 def admission_procedure(request, patient_id):
-    patient = get_object_or_404(Patient, pk=patient_id); dashboard_date = request.GET.get('dashboard_date')
+    patient = get_object_or_404(Patient, pk=patient_id)
+    dashboard_date = request.GET.get('dashboard_date')
+    requested_course_number = request.GET.get('course_number') or request.POST.get('course_number')
+    treatment_course = resolve_treatment_course(patient, course_number=requested_course_number)
+    if requested_course_number and treatment_course is None:
+        return HttpResponseBadRequest('対象の治療クールが見つかりません')
+    form_class = TreatmentCourseAdmissionProcedureForm if treatment_course else AdmissionProcedureForm
+    instance = treatment_course or patient
 
     if request.method == 'POST':
-        form = AdmissionProcedureForm(request.POST, instance=patient)
-        if form.is_valid(): proc = form.save(commit=False); proc.is_admission_procedure_done = True; proc.save(); return redirect(f"/app/dashboard/?date={dashboard_date}" if dashboard_date else 'rtms_app:dashboard')
-    else: form = AdmissionProcedureForm(instance=patient)
-    return render(request, 'rtms_app/admission_procedure.html', {'patient': patient, 'form': form, 'dashboard_date': dashboard_date})
+        form = form_class(request.POST, instance=instance)
+        if form.is_valid():
+            procedure = form.save(commit=False)
+            procedure.is_admission_procedure_done = True
+            procedure.save()
+            dashboard_query = {}
+            if dashboard_date:
+                dashboard_query['date'] = dashboard_date
+            if treatment_course:
+                dashboard_query['course_number'] = treatment_course.course_number
+            dashboard_url = reverse('rtms_app:dashboard')
+            if dashboard_query:
+                dashboard_url = f'{dashboard_url}?{urlencode(dashboard_query)}'
+            return redirect(dashboard_url)
+    else:
+        form = form_class(instance=instance)
+    return render(request, 'rtms_app/admission_procedure.html', {
+        'patient': patient,
+        'course_number': treatment_course.course_number if treatment_course else None,
+        'form': form,
+        'dashboard_date': dashboard_date,
+    })
 
 @login_required
 def mapping_add(request, patient_id):
