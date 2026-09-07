@@ -415,7 +415,7 @@
         {% url 'rtms_app:patient_first_visit' patient.id as back_url %}
         <div class="fab-stack no-print">
           <a class="btn btn-primary fab"
-             href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}"
+             href="{% url 'rtms_app:print:patient_print_suitability' patient.id %}{% if course_number %}?course_number={{ course_number }}{% endif %}"
              target="_blank"
              rel="noopener">
             <i class="fas fa-print"></i> 印刷プレビュー
@@ -426,7 +426,7 @@
             <i class="fas fa-save"></i> 保存
           </button>
           <a class="btn btn-secondary fab"
-             href="{{ back_url }}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+             href="{{ back_url }}{% if course_number %}?course_number={{ course_number }}{% if dashboard_date %}&dashboard_date={{ dashboard_date }}{% endif %}{% elif dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
             <i class="fas fa-undo"></i> 戻る
           </a>
         </div>

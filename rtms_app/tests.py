@@ -1241,6 +1241,89 @@ class TestQuestionnaireEdit(TestCase):
         self.assertContains(response, expected_data['q_details'])
 
 
+class TestCourseAwareQuestionnaireEdit(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='course-questionnaire-user')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='QCOUR', name='Course Questionnaire', birth_date=date(1980, 1, 1),
+            questionnaire_data={'q_past_rtms': 'いいえ', 'q_details': 'patient'},
+        )
+        self.course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            questionnaire_data={'q_past_rtms': 'はい', 'q_details': 'course one'},
+        )
+        self.course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            questionnaire_data={'q_past_rtms': 'いいえ', 'q_details': 'course two'},
+        )
+
+    def _post_questionnaire(self, course_number=None, details='changed'):
+        data = {
+            'q_past_rtms': 'はい',
+            'q_details': details,
+        }
+        query = ''
+        if course_number is not None:
+            query = f'?course_number={course_number}'
+            data['course_number'] = str(course_number)
+        return self.client.post(
+            reverse('rtms_app:questionnaire_edit', args=[self.patient.pk]) + query,
+            data,
+        )
+
+    def test_course_two_update_isolated_from_course_one_and_patient(self):
+        response = self._post_questionnaire(2, 'updated course two')
+
+        self.assertEqual(response.status_code, 302)
+        self.patient.refresh_from_db()
+        self.course_one.refresh_from_db()
+        self.course_two.refresh_from_db()
+        self.assertEqual(self.course_two.questionnaire_data['q_details'], 'updated course two')
+        self.assertEqual(self.course_one.questionnaire_data['q_details'], 'course one')
+        self.assertEqual(self.patient.questionnaire_data['q_details'], 'patient')
+        self.assertIn('course_number=2', response.url)
+
+    def test_course_one_update_isolated_from_course_two_and_patient(self):
+        response = self._post_questionnaire(1, 'updated course one')
+
+        self.assertEqual(response.status_code, 302)
+        self.patient.refresh_from_db()
+        self.course_one.refresh_from_db()
+        self.course_two.refresh_from_db()
+        self.assertEqual(self.course_one.questionnaire_data['q_details'], 'updated course one')
+        self.assertEqual(self.course_two.questionnaire_data['q_details'], 'course two')
+        self.assertEqual(self.patient.questionnaire_data['q_details'], 'patient')
+
+    def test_legacy_update_still_writes_patient(self):
+        response = self._post_questionnaire(details='updated patient')
+
+        self.assertEqual(response.status_code, 302)
+        self.patient.refresh_from_db()
+        self.course_one.refresh_from_db()
+        self.course_two.refresh_from_db()
+        self.assertEqual(self.patient.questionnaire_data['q_details'], 'updated patient')
+        self.assertEqual(self.course_one.questionnaire_data['q_details'], 'course one')
+        self.assertEqual(self.course_two.questionnaire_data['q_details'], 'course two')
+
+    def test_course_get_uses_selected_course_questionnaire(self):
+        response = self.client.get(
+            reverse('rtms_app:questionnaire_edit', args=[self.patient.pk]) + '?course_number=2&modal=1',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['questionnaire'], self.course_two.questionnaire_data)
+        self.assertContains(response, 'course two')
+        self.assertNotContains(response, 'course one')
+
+    def test_invalid_course_does_not_fallback_or_write(self):
+        response = self._post_questionnaire(99, 'must not save')
+
+        self.assertEqual(response.status_code, 400)
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.questionnaire_data['q_details'], 'patient')
+
+
 class TestQuestionnaireBundleCourseIsolation(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='questionnaire-bundle-user')

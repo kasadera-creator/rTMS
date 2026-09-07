@@ -1268,7 +1268,11 @@ def patient_first_visit(request, patient_id):
         'patient': patient, 'course_number': course_number,
     }
     baseline_assessment = Assessment.objects.filter(**assessment_scope, timing='baseline').first()
-    questionnaire = patient.questionnaire_data or {}
+    questionnaire = (
+        treatment_course.questionnaire_data
+        if treatment_course is not None
+        else patient.questionnaire_data
+    ) or {}
     questionnaire_done = bool(questionnaire)
 
     if request.method == 'POST':
@@ -1404,9 +1408,17 @@ def questionnaire_edit(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     dashboard_date = request.GET.get('dashboard_date')
     modal_mode = request.GET.get('modal') == '1'
+    raw_course_number = request.GET.get('course_number') or request.POST.get('course_number')
+    treatment_course = (
+        resolve_treatment_course(patient, course_number=raw_course_number)
+        if raw_course_number else None
+    )
+    if raw_course_number and treatment_course is None:
+        return HttpResponseBadRequest('対象の治療クールが見つかりません')
 
     questions_past, questions_current, keys = _questionnaire_questions()
-    questionnaire = patient.questionnaire_data or {}
+    questionnaire_owner = treatment_course if treatment_course is not None else patient
+    questionnaire = questionnaire_owner.questionnaire_data or {}
 
     if request.method == 'POST':
         data = {}
@@ -1416,22 +1428,36 @@ def questionnaire_edit(request, patient_id):
             v = (request.POST.get(k) or '').strip()
             data[k] = v if v in ('はい', 'いいえ') else 'いいえ'
         data['q_details'] = (request.POST.get('q_details') or '').strip()
-        patient.questionnaire_data = data
-        patient.save(update_fields=['questionnaire_data'])
+        questionnaire_owner.questionnaire_data = data
+        questionnaire_owner.save(update_fields=['questionnaire_data'])
 
         # Ajax / modal 保存時は JSON を返す
         if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.GET.get('modal') == '1':
             return JsonResponse({
                 'status': 'success',
-                'redirect_url': f"{reverse('rtms_app:patient_first_visit', args=[patient.id])}?dashboard_date={dashboard_date}" if dashboard_date else reverse('rtms_app:patient_first_visit', args=[patient.id]),
+                'redirect_url': (
+                    f"{reverse('rtms_app:patient_first_visit', args=[patient.id])}?"
+                    f"course_number={treatment_course.course_number}&dashboard_date={dashboard_date}"
+                    if treatment_course is not None and dashboard_date else
+                    f"{reverse('rtms_app:patient_first_visit', args=[patient.id])}?course_number={treatment_course.course_number}"
+                    if treatment_course is not None else
+                    f"{reverse('rtms_app:patient_first_visit', args=[patient.id])}?dashboard_date={dashboard_date}"
+                    if dashboard_date else reverse('rtms_app:patient_first_visit', args=[patient.id])
+                ),
             })
 
+        if treatment_course is not None:
+            query = f'course_number={treatment_course.course_number}'
+            if dashboard_date:
+                query += f'&dashboard_date={dashboard_date}'
+            return redirect(f"{reverse('rtms_app:patient_first_visit', args=[patient.id])}?{query}")
         if dashboard_date:
             return redirect(f"{reverse('rtms_app:patient_first_visit', args=[patient.id])}?dashboard_date={dashboard_date}")
         return redirect('rtms_app:patient_first_visit', patient_id=patient.id)
 
     return render(request, 'rtms_app/questionnaire_edit.html', {
         'patient': patient,
+        'course_number': treatment_course.course_number if treatment_course is not None else None,
         'dashboard_date': dashboard_date,
         'questionnaire': questionnaire,
         'questions_past': questions_past,

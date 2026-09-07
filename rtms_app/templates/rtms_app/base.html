@@ -264,7 +264,7 @@
                                 </li>
                                 <li>
                                     <a class="dropdown-item"
-                                       href="{% url 'rtms_app:questionnaire_edit' patient.id %}{% if dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
+                                       href="{% url 'rtms_app:questionnaire_edit' patient.id %}{% if course_number %}?course_number={{ course_number }}{% if dashboard_date %}&dashboard_date={{ dashboard_date }}{% endif %}{% elif dashboard_date %}?dashboard_date={{ dashboard_date }}{% endif %}">
                                         <i class="fas fa-clipboard-list me-2"></i> 適正問診票
                                     </a>
                                 </li>

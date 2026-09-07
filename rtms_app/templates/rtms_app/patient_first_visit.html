@@ -643,7 +643,7 @@ function loadAssessmentModal(timing) {
 }
 
 function loadQuestionnaireModal() {
-  let url = `{% url 'rtms_app:questionnaire_edit' patient.id %}?modal=1`;
+  let url = `{% url 'rtms_app:questionnaire_edit' patient.id %}?modal=1{% if course_number %}&course_number={{ course_number }}{% endif %}`;
   const dashboardDate = '{{ dashboard_date }}';
   if (dashboardDate) {
     url += `&dashboard_date=${dashboardDate}`;
