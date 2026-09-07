@@ -1105,6 +1105,32 @@ class TestTreatmentCourseScheduleIsolation(TestCase):
         self.assertContains(response, 'Course 1')
         self.assertContains(response, 'Course 2')
 
+    def test_print_month_calendar_treatment_events_render_each_course_number(self):
+        TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_one,
+            course_number=1,
+            session_date=date(2026, 1, 5),
+        )
+        TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_two,
+            course_number=2,
+            session_date=date(2026, 1, 6),
+        )
+
+        user = get_user_model().objects.create_user(username='month-calendar-print-user')
+        client = Client()
+        client.force_login(user)
+        response = client.get(
+            reverse('rtms_app:calendar_month_print'),
+            {'year': 2026, 'month': 1},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Course 1')
+        self.assertContains(response, 'Course 2')
+
     def test_course_two_month_calendar_event_opens_treatment_view_in_course_two(self):
         from rtms_app.views import _build_month_calendar
 
