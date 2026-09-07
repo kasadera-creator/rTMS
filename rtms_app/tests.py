@@ -27,6 +27,7 @@ from rtms_app.services import schedule as schedule_service
 from rtms_app.surveys import INSTRUMENT_ORDER, get_instrument
 from rtms_app.services.patient_accounts import ensure_patient_group
 from rtms_app.views import get_patient_admission_status
+from rtms_app.forms import TreatmentCourseFirstVisitForm
 
 
 class TestDashboardCourseIsolation(TestCase):
@@ -3187,6 +3188,16 @@ class TestCourseAwareInitialVisit(TestCase):
 
     def _post_course_two(self, **overrides):
         return self._post_course(2, **overrides)
+
+    def test_course_initial_visit_preserves_patient_form_widgets(self):
+        form = TreatmentCourseFirstVisitForm(instance=self.course_two, treatment_course=self.course_two)
+
+        self.assertEqual(form.fields['referral_source'].widget.attrs['class'], 'form-control')
+        self.assertEqual(form.fields['referral_doctor'].widget.attrs['class'], 'form-control')
+        self.assertEqual(form.fields['chief_complaint'].widget.attrs['class'], 'form-control')
+        for field_name in ('first_visit_date', 'admission_date', 'first_treatment_date'):
+            self.assertEqual(form.fields[field_name].widget.input_type, 'date')
+            self.assertEqual(form.fields[field_name].widget.attrs['class'], 'form-control')
 
     def test_course_two_initial_visit_isolated_clinical_attributes(self):
         response = self._post_course_two(

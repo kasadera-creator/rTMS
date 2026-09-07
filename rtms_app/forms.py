@@ -259,6 +259,14 @@ class TreatmentCourseFirstVisitForm(PatientFirstVisitForm):
             'psychiatric_history_other_text',
             'first_visit_date', 'admission_date', 'first_treatment_date', 'mapping_date',
         ]
+        widgets = {
+            'referral_source': forms.TextInput(attrs={'class': 'form-control', 'list': 'referral-options', 'placeholder': '医療機関名'}),
+            'referral_doctor': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '医師名 (姓のみ、またはフルネーム)'}),
+            'chief_complaint': forms.TextInput(attrs={'class': 'form-control'}),
+            'first_visit_date': DateInput(attrs={'class': 'form-control'}),
+            'admission_date': DateInput(attrs={'class': 'form-control'}),
+            'first_treatment_date': DateInput(attrs={'class': 'form-control'}),
+        }
 
 # --- 3. 位置決めフォーム ---
 class MappingForm(forms.ModelForm):
