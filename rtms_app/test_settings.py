@@ -1,4 +1,5 @@
 import os
+import importlib
 from unittest.mock import patch
 
 from django.conf import settings
@@ -6,7 +7,12 @@ from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
 
 from config.settings import is_production_environment
-from config.settings.base import parse_comma_separated, resolve_secret_key
+from config.settings.base import (
+    parse_comma_separated,
+    parse_csrf_trusted_origins,
+    resolve_secret_key,
+    validate_production_allowed_hosts,
+)
 
 
 class SettingsConfigurationTests(SimpleTestCase):
@@ -37,6 +43,10 @@ class SettingsConfigurationTests(SimpleTestCase):
             ["custom.example", "localhost"],
         )
 
+    def test_production_allowed_hosts_reject_wildcard(self):
+        with self.assertRaises(ImproperlyConfigured):
+            validate_production_allowed_hosts(["*"])
+
     def test_development_secret_accepts_normal_value_and_falls_back_for_empty_values(self):
         with patch.dict(os.environ, {"DJANGO_SECRET_KEY": "development-value"}, clear=True):
             self.assertEqual(resolve_secret_key("fallback"), "development-value")
@@ -64,9 +74,28 @@ class SettingsConfigurationTests(SimpleTestCase):
 
     def test_explicit_csrf_origins_preserve_only_configured_schemes(self):
         self.assertEqual(
-            parse_comma_separated(
+            parse_csrf_trusted_origins(
                 "http://rtms.lan, https://192.168.100.50",
                 ("https://seichiryo.jp",),
             ),
             ["http://rtms.lan", "https://192.168.100.50"],
         )
+
+    def test_csrf_origins_reject_missing_or_invalid_schemes(self):
+        for origin in ("example.com", "ftp://example.com"):
+            with self.subTest(origin=origin):
+                with self.assertRaises(ImproperlyConfigured):
+                    parse_csrf_trusted_origins(origin, ("https://seichiryo.jp",))
+
+    def test_csrf_origins_reject_empty_elements(self):
+        with self.assertRaises(ImproperlyConfigured):
+            parse_csrf_trusted_origins(
+                "https://example.com,,http://localhost:8000",
+                ("https://seichiryo.jp",),
+            )
+
+    def test_production_settings_disable_debug(self):
+        with patch.dict(os.environ, {"DJANGO_SECRET_KEY": "test-production-secret"}):
+            prod = importlib.import_module("config.settings.prod")
+
+        self.assertFalse(prod.DEBUG)

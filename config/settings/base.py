@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+from urllib.parse import urlsplit
 import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
 
@@ -23,6 +24,55 @@ def parse_comma_separated(value, fallback):
         if item and item not in cleaned:
             cleaned.append(item)
     return cleaned or list(fallback)
+
+def parse_csrf_trusted_origins(value, fallback):
+    if value is None or not value.strip():
+        return list(fallback)
+
+    raw_values = value.split(",")
+    if any(not item.strip() for item in raw_values):
+        raise ImproperlyConfigured(
+            "DJANGO_CSRF_TRUSTED_ORIGINS must not contain empty origins."
+        )
+
+    origins = parse_comma_separated(value, ())
+    for origin in origins:
+        if any(character.isspace() for character in origin):
+            raise ImproperlyConfigured(
+                "CSRF trusted origins must not contain whitespace."
+            )
+        try:
+            parsed = urlsplit(origin)
+            hostname = parsed.hostname
+            parsed.port
+        except ValueError as exc:
+            raise ImproperlyConfigured(
+                f"Invalid CSRF trusted origin: {origin!r}."
+            ) from exc
+        wildcard_hostname = hostname and hostname.startswith("*.")
+        if (
+            parsed.scheme not in ("http", "https")
+            or not parsed.netloc
+            or not hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+            or ("*" in hostname and not wildcard_hostname)
+            or (wildcard_hostname and "*" in hostname[2:])
+        ):
+            raise ImproperlyConfigured(
+                f"Invalid CSRF trusted origin: {origin!r}."
+            )
+    return origins
+
+def validate_production_allowed_hosts(hosts):
+    if "*" in hosts:
+        raise ImproperlyConfigured(
+            "ALLOWED_HOSTS='*' is not permitted in production."
+        )
+    return hosts
 
 def resolve_secret_key(default=None, required=False):
     for key_name in ("DJANGO_SECRET_KEY", "SECRET_KEY"):
@@ -50,7 +100,7 @@ DEFAULT_ALLOWED_HOSTS = (
     "www.seichiryo.jp",
 )
 ALLOWED_HOSTS = parse_comma_separated(os.environ.get("DJANGO_ALLOWED_HOSTS"), DEFAULT_ALLOWED_HOSTS)
-CSRF_TRUSTED_ORIGINS = parse_comma_separated(
+CSRF_TRUSTED_ORIGINS = parse_csrf_trusted_origins(
     os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS"),
     ("https://seichiryo.jp",),
 )

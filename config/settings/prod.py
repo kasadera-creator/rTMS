@@ -1,6 +1,7 @@
 from .base import *
 import os
 
+DEBUG = False
 SECRET_KEY = resolve_secret_key(required=True)
 
 # Production specific settings can go here
@@ -11,3 +12,5 @@ RENDER_EXTERNAL_HOSTNAME = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
 if RENDER_EXTERNAL_HOSTNAME:
     if RENDER_EXTERNAL_HOSTNAME not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
+
+ALLOWED_HOSTS = validate_production_allowed_hosts(ALLOWED_HOSTS)
