@@ -96,7 +96,7 @@
                     {% if ev.kind == 'discharge' %}<i class="fas fa-home me-1"></i>{% endif %}
                     {% if ev.kind == 'treatment' %}<i class="fas fa-bolt me-1"></i>{% endif %}
                     {% if ev.kind == 'first-visit' %}<i class="fas fa-user-plus me-1"></i>{% endif %}
-                    {{ ev.label }}
+                    {{ ev.label }}{% if ev.kind == 'treatment' %} <span class="event-course">Course {{ ev.course_number }}</span>{% endif %}
                   </a>
                 {% endfor %}
 

@@ -1061,6 +1061,50 @@ class TestTreatmentCourseScheduleIsolation(TestCase):
         self.assertIn('course_number=2', treatment_urls[second.session_date])
         self.assertNotEqual(treatment_urls[first.session_date], treatment_urls[second.session_date])
 
+    def test_month_calendar_treatment_events_expose_and_render_each_course_number(self):
+        from rtms_app.views import _build_month_calendar
+
+        first = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_one,
+            course_number=1,
+            session_date=date(2026, 1, 5),
+        )
+        second = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_two,
+            course_number=2,
+            session_date=date(2026, 1, 6),
+        )
+
+        calendar = _build_month_calendar(2026, 1)
+        treatment_events = {
+            day['date']: event
+            for week in calendar['weeks']
+            for day in week
+            for event in day['events_visible']
+            if event['kind'] == 'treatment'
+        }
+
+        self.assertEqual(treatment_events[first.session_date]['course_number'], 1)
+        self.assertEqual(treatment_events[second.session_date]['course_number'], 2)
+        self.assertNotEqual(
+            treatment_events[first.session_date]['course_number'],
+            treatment_events[second.session_date]['course_number'],
+        )
+
+        user = get_user_model().objects.create_user(username='month-calendar-label-user')
+        client = Client()
+        client.force_login(user)
+        response = client.get(
+            reverse('rtms_app:calendar_month'),
+            {'year': 2026, 'month': 1},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Course 1')
+        self.assertContains(response, 'Course 2')
+
     def test_course_two_month_calendar_event_opens_treatment_view_in_course_two(self):
         from rtms_app.views import _build_month_calendar
 
