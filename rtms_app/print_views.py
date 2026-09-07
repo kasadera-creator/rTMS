@@ -422,8 +422,9 @@ def patient_print_referral_pdf(request, patient_id):
 @login_required
 def patient_print_suitability(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
-	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
-	questionnaire = patient.questionnaire_data or {}
+	raw_course_number = request.GET.get('course_number')
+	treatment_course = _resolve_print_course(request, patient) if raw_course_number else None
+	questionnaire = (treatment_course.questionnaire_data if treatment_course is not None else patient.questionnaire_data) or {}
 	assessments = get_baseline_assessments_ordered(patient, treatment_course=treatment_course)
 	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_first_visit', args=[patient.id])
 	context = {
@@ -440,8 +441,9 @@ def patient_print_suitability(request, patient_id):
 @login_required
 def patient_print_suitability_pdf(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
-	treatment_course = resolve_treatment_course(patient, course_number=request.GET.get('course_number'))
-	questionnaire = patient.questionnaire_data or {}
+	raw_course_number = request.GET.get('course_number')
+	treatment_course = _resolve_print_course(request, patient) if raw_course_number else None
+	questionnaire = (treatment_course.questionnaire_data if treatment_course is not None else patient.questionnaire_data) or {}
 	assessments = get_baseline_assessments_ordered(patient, treatment_course=treatment_course)
 	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_first_visit', args=[patient.id])
 	context = {

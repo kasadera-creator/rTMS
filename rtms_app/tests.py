@@ -1324,6 +1324,98 @@ class TestCourseAwareQuestionnaireEdit(TestCase):
         self.assertEqual(self.patient.questionnaire_data['q_details'], 'patient')
 
 
+class TestCourseAwareSuitabilityPrint(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='course-suitability-user')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='QSUIT', name='Course Suitability', birth_date=date(1980, 1, 1),
+            questionnaire_data={'q_details': 'patient'},
+        )
+        self.course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            questionnaire_data={'q_details': 'course one'},
+        )
+        self.course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            questionnaire_data={'q_details': 'course two'},
+        )
+
+    def test_suitability_print_uses_selected_course_questionnaire(self):
+        for course, expected, unexpected in (
+            (self.course_one, 'course one', 'course two'),
+            (self.course_two, 'course two', 'course one'),
+        ):
+            response = self.client.get(
+                reverse('rtms_app:print:patient_print_suitability', args=[self.patient.pk]),
+                {'course_number': course.course_number},
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, expected)
+            self.assertNotContains(response, unexpected)
+
+    def test_suitability_print_pdf_uses_selected_course_questionnaire(self):
+        with patch('rtms_app.print_views.render_pdf_response', return_value=HttpResponse('pdf')) as render_pdf:
+            for course, expected, unexpected in (
+                (self.course_one, 'course one', 'course two'),
+                (self.course_two, 'course two', 'course one'),
+            ):
+                response = self.client.get(
+                    reverse('rtms_app:print:patient_print_suitability_pdf', args=[self.patient.pk]),
+                    {'course_number': course.course_number},
+                )
+                self.assertEqual(response.status_code, 200)
+                questionnaire = render_pdf.call_args.args[2]['questionnaire']
+                self.assertEqual(questionnaire['q_details'], expected)
+                self.assertNotEqual(questionnaire['q_details'], unexpected)
+
+    def test_suitability_print_without_course_uses_patient_questionnaire(self):
+        self.patient.questionnaire_data = {'q_details': 'legacy patient'}
+        self.patient.save(update_fields=['questionnaire_data'])
+
+        response = self.client.get(
+            reverse('rtms_app:print:patient_print_suitability', args=[self.patient.pk]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'legacy patient')
+        self.assertNotContains(response, 'course one')
+        self.assertNotContains(response, 'course two')
+
+    def test_suitability_print_empty_course_questionnaire_does_not_fallback_to_patient(self):
+        self.patient.questionnaire_data = {'q_details': 'PATIENT_SHOULD_NOT_APPEAR'}
+        self.patient.save(update_fields=['questionnaire_data'])
+
+        for value in (None, {}):
+            with self.subTest(value=value):
+                self.course_one.questionnaire_data = value
+                self.course_one.save(update_fields=['questionnaire_data'])
+
+                html_response = self.client.get(
+                    reverse('rtms_app:print:patient_print_suitability', args=[self.patient.pk]),
+                    {'course_number': self.course_one.course_number},
+                )
+                self.assertEqual(html_response.status_code, 200)
+                self.assertNotContains(html_response, 'PATIENT_SHOULD_NOT_APPEAR')
+
+                with patch('rtms_app.print_views.render_pdf_response', return_value=HttpResponse('pdf')) as render_pdf:
+                    pdf_response = self.client.get(
+                        reverse('rtms_app:print:patient_print_suitability_pdf', args=[self.patient.pk]),
+                        {'course_number': self.course_one.course_number},
+                    )
+                    self.assertEqual(pdf_response.status_code, 200)
+                    questionnaire = render_pdf.call_args.args[2]['questionnaire']
+                    self.assertNotIn('q_details', questionnaire)
+
+    def test_invalid_course_is_rejected(self):
+        response = self.client.get(
+            reverse('rtms_app:print:patient_print_suitability', args=[self.patient.pk]),
+            {'course_number': 99},
+        )
+
+        self.assertEqual(response.status_code, 404)
+
 class TestQuestionnaireBundleCourseIsolation(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='questionnaire-bundle-user')
