@@ -3643,6 +3643,46 @@ class TestCourseAwareInitialVisit(TestCase):
             self.assertEqual(self.course_two.admission_date, date(2026, 2, 2))
             self.assertEqual(self.course_two.first_treatment_date, date(2026, 2, 5))
 
+    def test_course_two_initial_visit_reschedules_only_course_two_sessions(self):
+        course_one_session = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_one,
+            course_number=1,
+            session_date=date(2026, 1, 5),
+            status='planned',
+        )
+        course_two_first_session = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_two,
+            course_number=2,
+            session_date=date(2026, 2, 5),
+            status='planned',
+        )
+        course_two_second_session = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_two,
+            course_number=2,
+            session_date=date(2026, 2, 6),
+            status='planned',
+        )
+
+        response = self._post_course_two(first_treatment_date='2026-02-09')
+
+        self.assertEqual(response.status_code, 302)
+        self.patient.refresh_from_db()
+        self.course_one.refresh_from_db()
+        self.course_two.refresh_from_db()
+        course_one_session.refresh_from_db()
+        course_two_first_session.refresh_from_db()
+        course_two_second_session.refresh_from_db()
+
+        self.assertEqual(self.course_two.first_treatment_date, date(2026, 2, 9))
+        self.assertEqual(self.course_one.first_treatment_date, date(2026, 1, 5))
+        self.assertEqual(self.patient.first_treatment_date, date(2026, 1, 5))
+        self.assertEqual(course_two_first_session.session_date, date(2026, 2, 9))
+        self.assertEqual(course_two_second_session.session_date, date(2026, 2, 10))
+        self.assertEqual(course_one_session.session_date, date(2026, 1, 5))
+
     def test_course_two_initial_visit_isolated_psychiatric_and_metadata(self):
         response = self._post_course_two()
 
@@ -5674,6 +5714,25 @@ class TestTreatmentCourseDischargeSummaryIsolation(TestCase):
         self.assertEqual(self.course_two.discharge_date, date(2026, 8, 1))
         self.assertEqual(self.patient.summary_text, 'PATIENT LEGACY SUMMARY')
         self.assertEqual(self.patient.discharge_prescription, 'PATIENT LEGACY PRESCRIPTION')
+        self.assertEqual(self.patient.discharge_date, date(2025, 1, 3))
+
+    def test_summary_post_course_one_mirrors_patient_discharge_date(self):
+        response = self.client.post(self._summary_url(1), {
+            'summary_text': 'UPDATED COURSE ONE SUMMARY',
+            'discharge_prescription': 'UPDATED COURSE ONE PRESCRIPTION',
+            'discharge_date': '2026-02-01',
+            'course_number': '1',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.course_one.refresh_from_db()
+        self.course_two.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(self.course_one.discharge_date, date(2026, 2, 1))
+        self.assertEqual(self.patient.discharge_date, date(2026, 2, 1))
+        self.assertEqual(self.course_two.discharge_date, date(2026, 7, 31))
+        self.assertEqual(self.course_two.summary_text, 'COURSE TWO SUMMARY')
+        self.assertEqual(self.course_two.discharge_prescription, 'COURSE TWO PRESCRIPTION')
 
     def test_print_views_use_requested_course_content(self):
         for course_number, summary, prescription in (
