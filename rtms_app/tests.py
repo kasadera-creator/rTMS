@@ -1028,6 +1028,67 @@ class TestTreatmentCourseScheduleIsolation(TestCase):
         self.assertEqual(treatment_ids(first_weeks), {first.pk})
         self.assertEqual(treatment_ids(second_weeks), {second.pk})
 
+    def test_month_calendar_treatment_urls_preserve_each_course_number(self):
+        from rtms_app.views import _build_month_calendar
+
+        first = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_one,
+            course_number=1,
+            session_date=date(2026, 1, 5),
+        )
+        second = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_two,
+            course_number=2,
+            session_date=date(2026, 1, 6),
+        )
+
+        calendar = _build_month_calendar(2026, 1)
+        treatment_urls = {
+            session_date: next(
+                event['url']
+                for week in calendar['weeks']
+                for day in week
+                if day['date'] == session_date
+                for event in day['events_visible']
+                if event['kind'] == 'treatment'
+            )
+            for session_date in (first.session_date, second.session_date)
+        }
+
+        self.assertIn('course_number=1', treatment_urls[first.session_date])
+        self.assertIn('course_number=2', treatment_urls[second.session_date])
+        self.assertNotEqual(treatment_urls[first.session_date], treatment_urls[second.session_date])
+
+    def test_course_two_month_calendar_event_opens_treatment_view_in_course_two(self):
+        from rtms_app.views import _build_month_calendar
+
+        TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_two,
+            course_number=2,
+            session_date=date(2026, 1, 6),
+        )
+        calendar = _build_month_calendar(2026, 1)
+        treatment_url = next(
+            event['url']
+            for week in calendar['weeks']
+            for day in week
+            if day['date'] == date(2026, 1, 6)
+            for event in day['events_visible']
+            if event['kind'] == 'treatment'
+        )
+
+        user = get_user_model().objects.create_user(username='month-calendar-course-user')
+        client = Client()
+        client.force_login(user)
+        response = client.get(treatment_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['course_number'], 2)
+        self.assertEqual(response.context['start_date'], self.course_two.first_treatment_date)
+
     def test_course_two_admission_and_discharge_events_preserve_course_number(self):
         from rtms_app.views import generate_calendar_weeks
 

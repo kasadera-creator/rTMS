@@ -2695,7 +2695,7 @@ def _build_month_calendar(year, month, is_print=False):
             events.append({
                 'kind': 'treatment',
                 'label': f'rTMS治療（{surname(session.patient)}＃{treatment_number_by_id[session.id]}回）',
-                'url': build_url('treatment_add', [session.patient_id], query={'date': day_date.isoformat()}),
+                'url': build_url('treatment_add', [session.patient_id], query={'date': day_date.isoformat(), 'course_number': session.course_number}),
                 'is_planned': session.status == 'planned',
             })
         for p in estimated_discharge_by_date.get(day_date, []):
