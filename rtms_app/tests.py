@@ -1152,6 +1152,44 @@ class TestTreatmentCourseScheduleIsolation(TestCase):
         self.assertEqual(printed_ids, {second.pk})
         self.assertNotIn(first.pk, printed_ids)
 
+    def test_clinical_path_print_label_uses_selected_course(self):
+        user = get_user_model().objects.create_user(username='path-label-user', password='pw')
+        client = Client()
+        client.force_login(user)
+
+        print_response = client.get(
+            reverse('rtms_app:print:print_clinical_path', args=[self.patient.pk]),
+            {'course_number': 2},
+        )
+        self.assertEqual(print_response.status_code, 200)
+        self.assertEqual(print_response.context['course_number'], 2)
+        self.assertContains(print_response, '2クール目')
+        self.assertNotContains(print_response, '1クール目')
+
+        course_one_response = client.get(
+            reverse('rtms_app:print:print_clinical_path', args=[self.patient.pk]),
+            {'course_number': 1},
+        )
+        self.assertEqual(course_one_response.status_code, 200)
+        self.assertEqual(course_one_response.context['course_number'], 1)
+        self.assertNotContains(course_one_response, '2クール目')
+
+        legacy_response = client.get(
+            reverse('rtms_app:print:print_clinical_path', args=[self.patient.pk]),
+        )
+        self.assertEqual(legacy_response.status_code, 200)
+        self.assertEqual(legacy_response.context['course_number'], self.patient.course_number)
+        self.assertNotContains(legacy_response, '2クール目')
+
+        with patch('rtms_app.print_views.render_pdf_response', return_value=HttpResponse('pdf')) as render_pdf:
+            pdf_response = client.get(
+                reverse('rtms_app:print:print_clinical_path_pdf', args=[self.patient.pk]),
+                {'course_number': 2},
+            )
+
+        self.assertEqual(pdf_response.status_code, 200)
+        self.assertEqual(render_pdf.call_args.args[2]['course_number'], 2)
+
     def test_clinical_path_course_two_does_not_fallback_to_patient_discharge_date(self):
         user = get_user_model().objects.create_user(username='path-null-user', password='pw')
         client = Client()

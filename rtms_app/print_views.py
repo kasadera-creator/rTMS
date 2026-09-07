@@ -250,6 +250,7 @@ def print_clinical_path(request, patient_id):
 	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
 	context = {
 		'patient': patient,
+		'course_number': _print_course_number(patient, treatment_course),
 		'calendar_weeks': calendar_weeks,
 		'assessment_events': assessment_events,
 		'today': timezone.now().date(),
@@ -268,6 +269,7 @@ def print_clinical_path_pdf(request, patient_id):
 	back_url = request.GET.get('back_url') or request.META.get('HTTP_REFERER') or reverse('rtms_app:patient_home', args=[patient.id])
 	context = {
 		'patient': patient,
+		'course_number': _print_course_number(patient, treatment_course),
 		'calendar_weeks': calendar_weeks,
 		'assessment_events': assessment_events,
 		'today': timezone.now().date(),
