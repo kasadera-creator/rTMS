@@ -118,7 +118,11 @@ DOC_TEMPLATES = {
 def patient_print_bundle(request, patient_id):
 	patient = get_object_or_404(Patient, pk=patient_id)
 	treatment_course = _resolve_print_course(request, patient)
-	questionnaire = patient.questionnaire_data or {}
+	questionnaire = (
+		treatment_course.questionnaire_data
+		if treatment_course is not None
+		else patient.questionnaire_data
+	) or {}
 	assessments = get_baseline_assessments_ordered(patient, treatment_course=treatment_course)
 
 	# always use getlist to collect multiple docs from ?docs=...&docs=...
@@ -183,7 +187,11 @@ def patient_print_bundle_pdf(request, patient_id):
 	# Build same context as patient_print_bundle and render PDF
 	patient = get_object_or_404(Patient, pk=patient_id)
 	treatment_course = _resolve_print_course(request, patient)
-	questionnaire = patient.questionnaire_data or {}
+	questionnaire = (
+		treatment_course.questionnaire_data
+		if treatment_course is not None
+		else patient.questionnaire_data
+	) or {}
 	assessments = get_baseline_assessments_ordered(patient, treatment_course=treatment_course)
 
 	docs = request.GET.getlist("docs")

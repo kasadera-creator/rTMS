@@ -3,6 +3,7 @@ from django.apps import apps as django_apps
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.http import HttpResponse
 from django.utils import timezone
 from django.db import transaction
 from django.db import IntegrityError
@@ -1238,6 +1239,100 @@ class TestQuestionnaireEdit(TestCase):
         for key, answer in answers.items():
             self.assertContains(response, f'name="{key}"\n                               value="{answer}"\n                               checked')
         self.assertContains(response, expected_data['q_details'])
+
+
+class TestQuestionnaireBundleCourseIsolation(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='questionnaire-bundle-user')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='QBUND', name='Questionnaire Bundle', birth_date=date(1980, 1, 1),
+            questionnaire_data={'q_details': 'PATIENT_VALUE'},
+        )
+        self.course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            questionnaire_data={'q_details': 'COURSE1_VALUE'},
+        )
+        self.course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            questionnaire_data={'q_details': 'COURSE2_VALUE'},
+        )
+
+    def _bundle_url(self, pdf=False, course_number=None):
+        name = 'rtms_app:print:patient_print_bundle_pdf' if pdf else 'rtms_app:print:patient_print_bundle'
+        query = {'docs': 'suitability'}
+        if course_number is not None:
+            query['course_number'] = course_number
+        return reverse(name, args=[self.patient.pk]), query
+
+    def test_bundle_html_uses_selected_course_questionnaire(self):
+        for course, expected in ((1, 'COURSE1_VALUE'), (2, 'COURSE2_VALUE')):
+            url, query = self._bundle_url(course_number=course)
+            response = self.client.get(url, query)
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.context['questionnaire']['q_details'], expected)
+
+    def test_bundle_pdf_uses_selected_course_questionnaire(self):
+        with patch('rtms_app.print_views.render_pdf_response', return_value=HttpResponse('pdf')) as render_pdf:
+            for course, expected in ((1, 'COURSE1_VALUE'), (2, 'COURSE2_VALUE')):
+                url, query = self._bundle_url(pdf=True, course_number=course)
+                response = self.client.get(url, query)
+
+                self.assertEqual(response.status_code, 200)
+                context = render_pdf.call_args.args[2]
+                self.assertEqual(context['questionnaire']['q_details'], expected)
+
+    def test_course_null_or_empty_questionnaire_does_not_fallback_to_patient(self):
+        for value in (None, {}):
+            with self.subTest(value=value):
+                self.course_two.questionnaire_data = value
+                self.course_two.save(update_fields=['questionnaire_data'])
+                response = self.client.get(
+                    reverse('rtms_app:questionnaire_edit', args=[self.patient.pk]),
+                    {'modal': '1', 'course_number': 2},
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['questionnaire'], {})
+
+    def test_legacy_bundle_without_course_uses_patient_questionnaire(self):
+        legacy = Patient.objects.create(
+            card_id='QBLEG', name='Legacy Questionnaire', birth_date=date(1980, 1, 1),
+            questionnaire_data={'q_details': 'LEGACY_VALUE'},
+        )
+        response = self.client.get(
+            reverse('rtms_app:print:patient_print_bundle', args=[legacy.pk]),
+            {'docs': 'suitability'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['questionnaire']['q_details'], 'LEGACY_VALUE')
+
+    def test_invalid_bundle_course_does_not_fallback_to_patient(self):
+        response = self.client.get(
+            reverse('rtms_app:print:patient_print_bundle', args=[self.patient.pk]),
+            {'docs': 'suitability', 'course_number': 99},
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_modal_course_two_post_updates_only_course_two(self):
+        url = reverse('rtms_app:questionnaire_edit', args=[self.patient.pk])
+        response = self.client.post(
+            f'{url}?modal=1&course_number=2',
+            {'q_details': 'UPDATED_COURSE2'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.course_one.refresh_from_db()
+        self.course_two.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(self.course_two.questionnaire_data['q_details'], 'UPDATED_COURSE2')
+        self.assertEqual(self.course_one.questionnaire_data['q_details'], 'COURSE1_VALUE')
+        self.assertEqual(self.patient.questionnaire_data['q_details'], 'PATIENT_VALUE')
 
 
 class TestTreatmentAddWeek3Hamd17(TestCase):
