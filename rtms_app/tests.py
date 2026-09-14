@@ -107,6 +107,36 @@ class TestDashboardCourseIsolation(TestCase):
         self.assertEqual(len(mapping_tasks), 1)
         self.assertEqual(mapping_tasks[0]['course_number'], 1)
 
+    def test_dashboard_uses_selected_course_first_visit_date(self):
+        self.patient.first_visit_date = date(2026, 1, 1)
+        self.patient.save(update_fields=['first_visit_date'])
+        self.course_two.first_visit_date = date(2026, 8, 2)
+        self.course_two.save(update_fields=['first_visit_date'])
+
+        response = self.client.get('/app/dashboard/?date=2026-08-02&course_number=2')
+
+        first_visit_tasks = self._tasks_for(response, '① 初診')
+        self.assertEqual([(item['course_number'], item['obj'].pk) for item in first_visit_tasks], [(2, self.patient.pk)])
+
+    def test_dashboard_uses_rescheduled_course_session_date(self):
+        session = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_two,
+            course_number=2,
+            session_date=date(2026, 8, 4),
+            status='planned',
+        )
+        schedule_service.reschedule_planned_session(
+            self.patient, session, date(2026, 8, 5),
+        )
+
+        response = self.client.get('/app/dashboard/?date=2026-08-05&course_number=2')
+
+        treatment_tasks = self._tasks_for(response, '④ 治療実施')
+        self.assertEqual(len(treatment_tasks), 1)
+        self.assertEqual(treatment_tasks[0]['course_number'], 2)
+        self.assertEqual(treatment_tasks[0]['session_num'], 1)
+
     def test_patients_without_course_use_patient_date_fallback(self):
         legacy = Patient.objects.create(
             card_id='DASHLEGACY', name='Dashboard Legacy Patient', birth_date=date(1980, 1, 1),
@@ -1448,9 +1478,9 @@ class TestTreatmentAddWeek3Hamd17(TestCase):
         }
         for treatment_date, session_number, week_number in checks:
             response = self._response_for(treatment_date)
-            label = f'{session_number}回目（第{week_number}週）'
-            self.assertContains(response, label)
-            self.assertIn(label, labels[treatment_date])
+            self.assertContains(response, f'Course内 第{session_number}回')
+            self.assertContains(response, f'第{week_number}週')
+            self.assertIn(f'{session_number}回目（第{week_number}週）', labels[treatment_date])
 
     def test_rescheduled_exceptional_dates_match_calendar_and_hamd_week(self):
         from rtms_app.views import generate_calendar_weeks
@@ -1479,7 +1509,8 @@ class TestTreatmentAddWeek3Hamd17(TestCase):
             response = self.client.get(
                 reverse('rtms_app:treatment_add', args=[patient.pk]), {'date': target_date.isoformat()}
             )
-            self.assertContains(response, calendar_label.removeprefix('rTMS治療 '))
+            self.assertContains(response, 'Course内 第1回')
+            self.assertContains(response, '第2週 1日目')
             self.assertContains(response, '評価期間前')
 
     def test_rescheduled_third_week_uses_hamd_instruction(self):
@@ -1491,7 +1522,8 @@ class TestTreatmentAddWeek3Hamd17(TestCase):
         )
 
         response = self._response_for(date(2026, 1, 19))
-        self.assertContains(response, '1回目（第3週）')
+        self.assertContains(response, 'Course内 第1回')
+        self.assertContains(response, '第3週 1日目')
         self.assertContains(response, 'HAM-Dを実施してください')
 
     def test_week3_hamd17_instruction_priorities_and_thresholds(self):
@@ -2566,6 +2598,21 @@ class TestSideEffectAndAdverseEventFlow(TestCase):
         self.assertContains(response, '副作用入力')
         self.assertContains(response, '有害事象候補')
 
+    def test_treatment_page_shows_week_mapping_date_and_separate_course_count(self):
+        self.patient.first_treatment_date = date(2026, 8, 3)
+        self.patient.save(update_fields=['first_treatment_date'])
+        MappingSession.objects.create(
+            patient=self.patient, course_number=1, date=date(2026, 8, 3),
+            week_number=1, resting_mt=52,
+        )
+        response = self.client.get(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]) + '?date=2026-08-04'
+        )
+
+        self.assertContains(response, '2026/08/03 実施')
+        self.assertContains(response, 'Course内 第2回')
+        self.assertContains(response, '第1週 2日目')
+
     def test_new_side_effect_modal_starts_without_adverse_report_selection(self):
         response = self.client.get(reverse('rtms_app:treatment_add', args=[self.patient.pk]))
         html = response.content.decode()
@@ -2624,6 +2671,19 @@ class TestSideEffectAndAdverseEventFlow(TestCase):
         self.assertEqual(report.adverse_event_name, 'けいれん発作')
         self.assertEqual(report.event_types, ['seizure'])
         self.assertTrue(SeriousAdverseEvent.objects.get(session=session).event_types == ['seizure'])
+
+    def test_side_effects_are_saved(self):
+        response = self.treatment_post(
+            action='save',
+            side_effect_rows_json=json.dumps([{'item': '頭痛', 'after': 1}]),
+            side_effect_memo='頭痛あり',
+        )
+
+        self.assertEqual(response.status_code, 302)
+        session = TreatmentSession.objects.get(patient=self.patient, session_date=date(2026, 8, 3))
+        check = SideEffectCheck.objects.get(session=session)
+        self.assertEqual(check.rows, [{'item': '頭痛', 'after': 1}])
+        self.assertEqual(check.memo, '頭痛あり')
 
     def test_report_save_does_not_resave_treatment_side_effect_or_sae(self):
         session = TreatmentSession.objects.create(
@@ -2761,6 +2821,45 @@ class TestAdverseEventCourseIsolation(TestCase):
             patient=self.patient, treatment_course=self.course_two, course_number=2,
             session_date=date(2026, 8, 4),
         )
+
+    def test_clear_side_effects_uses_selected_course_session(self):
+        response = self.client.post(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+            {
+                'action': 'clear_side_effects',
+                'course_number': '2',
+                'treatment_date': '2026-08-04',
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        check = SideEffectCheck.objects.get(session=self.session_two)
+        self.assertEqual(check.memo, '副作用なし')
+        self.assertFalse(SideEffectCheck.objects.filter(session=self.session_one).exists())
+
+    def test_treatment_page_uses_selected_course_week_mapping(self):
+        self.course_one.first_treatment_date = date(2026, 1, 5)
+        self.course_one.save(update_fields=['first_treatment_date'])
+        self.course_two.first_treatment_date = date(2026, 4, 1)
+        self.course_two.save(update_fields=['first_treatment_date'])
+        MappingSession.objects.create(
+            patient=self.patient, treatment_course=self.course_one, course_number=1,
+            date=date(2026, 1, 6), week_number=1, resting_mt=11,
+        )
+        MappingSession.objects.create(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            date=date(2026, 4, 2), week_number=1, resting_mt=72,
+        )
+
+        response = self.client.get(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+            {'course_number': 2, 'date': '2026-04-03'},
+        )
+
+        self.assertContains(response, '2026/04/02 実施')
+        self.assertContains(response, '>72<')
+        self.assertNotContains(response, '2026/01/06 実施')
 
     def test_side_effect_mt_fallback_uses_selected_course_start_date(self):
         from rtms_app.print_views import _build_side_effect_context

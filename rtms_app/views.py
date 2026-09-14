@@ -867,7 +867,11 @@ def dashboard_view(request):
     def task_for(patient, course, **values):
         return {'obj': patient, 'course_number': course.course_number if course else patient.course_number or 1, **values}
 
-    task_first_visit = [task_for(p, course, status="診察済", todo="初診") for p, course in dashboard_rows if p.created_at.date() == target_date]
+    task_first_visit = [
+        task_for(p, course, status="診察済", todo="初診")
+        for p, course in dashboard_rows
+        if date_for(p, course, 'first_visit_date') == target_date
+    ]
     task_admission = []; task_mapping = []; task_treatment = []; task_assessment = []; task_discharge = []
 
     for p, course in dashboard_rows:
@@ -905,12 +909,25 @@ def dashboard_view(request):
         activity_scope = {'treatment_course': current_course} if current_course else {
             'patient': p, 'course_number': p.course_number or 1,
         }
-        # Use canonical treat_dates for session/week labels
+        # Prefer persisted sessions because skip/reschedule changes their dates.
         info = None
         first_treatment_date = date_for(p, current_course, 'first_treatment_date')
         if first_treatment_date:
             tdates = generate_treatment_dates(first_treatment_date, total=30, holidays=JP_HOLIDAYS)
-            if target_date in tdates:
+            saved_session = TreatmentSession.objects.filter(
+                **activity_scope, session_date=target_date,
+            ).first()
+            if saved_session is not None and saved_session.status == 'skipped':
+                continue
+            if saved_session is not None:
+                number_map = get_treatment_session_number_map(
+                    p, course_number=current_course.course_number if current_course else p.course_number,
+                )
+                info = {
+                    'session_no': number_map.get(saved_session.id),
+                    'week_no': get_current_week_number(first_treatment_date, target_date),
+                }
+            elif target_date in tdates:
                 idx = tdates.index(target_date)
                 info = {
                     'session_no': idx + 1,
@@ -921,7 +938,10 @@ def dashboard_view(request):
         if info:
             n = info['session_no']
             week = info['week_no']
-            today_session = TreatmentSession.objects.filter(**activity_scope, date__date=target_date).first(); is_done = today_session is not None
+            today_session = TreatmentSession.objects.filter(
+                **activity_scope, session_date=target_date,
+            ).first()
+            is_done = today_session is not None and today_session.status == 'done'
             todo_label = format_rtms_label(n, week)
             task_treatment.append(task_for(p, current_course, note='', status="実施済" if is_done else "実施未", color="success" if is_done else "danger", session_num=n, todo=todo_label))
 
@@ -1524,7 +1544,7 @@ def treatment_add(request, patient_id):
     if request.method == 'POST' and request.POST.get('action') == 'clear_side_effects':
         session_date = parse_date(request.POST.get('treatment_date') or '') or initial_date
         session = TreatmentSession.objects.filter(
-            patient=patient, course_number=course_number, session_date=session_date, slot=''
+            **session_scope, session_date=session_date, slot=''
         ).first()
         if session is None:
             return JsonResponse({'error': '対象の治療セッションが見つかりません。'}, status=404)
@@ -1579,6 +1599,9 @@ def treatment_add(request, patient_id):
             session_num = virtual_number_map.get(initial_date)
         week_num = get_current_week_number(course_first_treatment_date, initial_date)
 
+    session_week_num = week_num if session_num else None
+    session_day_num = ((session_num - 1) % 5) + 1 if session_num else None
+
     # Fetch current week mapping: same date first, then same week
     same_date_mapping = MappingSession.objects.filter(**mapping_scope, date=initial_date).first()
     if same_date_mapping:
@@ -1587,7 +1610,7 @@ def treatment_add(request, patient_id):
         # Try to get mapping for current week_number
         current_week_mapping = MappingSession.objects.filter(
             **mapping_scope, week_number=week_num,
-        ).order_by('-date').first()
+        ).order_by('date', 'id').first()
 
     end_date_est = get_completion_date(course_first_treatment_date)
     hamd_eval = get_week3_hamd17_evaluation(patient, course_number, week_num)
@@ -2186,6 +2209,8 @@ def treatment_add(request, patient_id):
         'mode_switch_html': mode_switch_html,
         'initial_date': initial_date,
         'session_num': session_num,
+        'session_week_num': session_week_num,
+        'session_day_num': session_day_num,
         'week_num': week_num,
         'end_date_est': end_date_est,
         'start_date': course_first_treatment_date,

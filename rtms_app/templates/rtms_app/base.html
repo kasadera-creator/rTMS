@@ -223,6 +223,12 @@
                 </div>
                 <div class="d-none d-md-flex flex-grow-1 justify-content-center rtms-topnav-center"></div>
                 <div class="d-flex align-items-center gap-2">
+                    {% if patient %}
+                        <a class="btn btn-outline-light btn-menu"
+                           href="{% url 'rtms_app:dashboard' %}{% if course_number or dashboard_date %}?{% if course_number %}course_number={{ course_number }}{% endif %}{% if course_number and dashboard_date %}&{% endif %}{% if dashboard_date %}date={{ dashboard_date }}{% endif %}{% endif %}">
+                            <i class="fas fa-th-large me-1"></i> ダッシュボード
+                        </a>
+                    {% endif %}
                     <style>
                 /* Larger textual menu button */
                 .rtms-topnav .btn-menu { font-size: 1rem; padding: 6px 10px; font-weight: 700; border-radius: 6px; }
