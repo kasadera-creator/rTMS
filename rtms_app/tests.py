@@ -101,11 +101,103 @@ class TestDashboardCourseIsolation(TestCase):
             self.assertContains(response, f'{link}?course_number=2')
 
     def test_default_dashboard_keeps_course_one_compatibility(self):
-        response = self.client.get('/app/dashboard/?date=2026-01-02')
+        response = self.client.get('/app/dashboard/?date=2026-01-05')
 
         mapping_tasks = self._tasks_for(response, '③ MT測定')
         self.assertEqual(len(mapping_tasks), 1)
         self.assertEqual(mapping_tasks[0]['course_number'], 1)
+
+    def test_dashboard_mapping_dates_match_personal_calendar_for_four_weeks(self):
+        self.course_two.mapping_date = date(2026, 10, 12)
+        self.course_two.first_treatment_date = date(2026, 10, 5)
+        self.course_two.discharge_date = date(2026, 11, 20)
+        self.course_two.save(update_fields=['mapping_date', 'first_treatment_date', 'discharge_date'])
+
+        personal_calendar = self.client.get(
+            reverse('rtms_app:patient_clinical_path', args=[self.patient.pk]),
+            {'course_number': 2},
+        )
+        self.assertEqual(personal_calendar.status_code, 200)
+        calendar_mapping_dates = {
+            day['date']
+            for week in personal_calendar.context['calendar_weeks']
+            for day in week
+            for event in day['events']
+            if event['type'] == 'mapping'
+        }
+        expected_dates = {
+            date(2026, 10, 13), date(2026, 10, 19),
+            date(2026, 10, 26), date(2026, 11, 2),
+        }
+        self.assertTrue(expected_dates.issubset(calendar_mapping_dates))
+
+        dashboard_mapping_dates = {
+            target_date
+            for target_date in expected_dates
+            if self._tasks_for(
+                self.client.get(
+                    reverse('rtms_app:dashboard'),
+                    {'date': target_date.isoformat(), 'course_number': 2},
+                ),
+                '③ MT測定',
+            )
+        }
+        self.assertEqual(dashboard_mapping_dates, expected_dates)
+
+    def test_dashboard_assessment_dates_match_personal_calendar_and_reschedule(self):
+        self.course_two.admission_date = date(2026, 10, 1)
+        self.course_two.first_treatment_date = date(2026, 10, 15)
+        self.course_two.discharge_date = date(2026, 11, 20)
+        self.course_two.save(update_fields=['admission_date', 'first_treatment_date', 'discharge_date'])
+        hamd, _ = ScaleDefinition.objects.get_or_create(code='hamd', defaults={'name': 'HAM-D'})
+        if not hamd.is_active:
+            hamd.is_active = True
+            hamd.save(update_fields=['is_active'])
+        baseline_schedule = AssessmentSchedule.objects.create(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            scale=hamd, timing='baseline', planned_date=date(2026, 10, 13),
+        )
+
+        def assessment_dates():
+            response = self.client.get(
+                reverse('rtms_app:patient_clinical_path', args=[self.patient.pk]),
+                {'course_number': 2},
+            )
+            return [
+                event['date']
+                for week in response.context['calendar_weeks']
+                for day in week
+                for event in day['events']
+                if event['type'] == 'assessment'
+                and event['timing'] == 'baseline'
+                and event['scale_code'] == 'hamd'
+            ]
+
+        def dashboard_assessment_tasks(target_date):
+            response = self.client.get(
+                reverse('rtms_app:dashboard'),
+                {'date': target_date.isoformat(), 'course_number': 2},
+            )
+            return self._tasks_for(response, '⑤ 尺度評価')
+
+        self.assertEqual(assessment_dates(), [date(2026, 10, 13)])
+        self.assertEqual(len(dashboard_assessment_tasks(date(2026, 10, 13))), 1)
+        baseline_schedule.planned_date = date(2026, 10, 15)
+        baseline_schedule.save(update_fields=['planned_date'])
+        self.assertEqual(assessment_dates(), [date(2026, 10, 15)])
+        self.assertEqual(len(dashboard_assessment_tasks(date(2026, 10, 15))), 1)
+
+        Assessment.objects.create(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            date=date(2026, 10, 17), performed_date=date(2026, 10, 17),
+            timing='baseline', type='HAM-D',
+        )
+        self.assertEqual(assessment_dates(), [date(2026, 10, 17)])
+
+        assessment_tasks = dashboard_assessment_tasks(date(2026, 10, 17))
+        self.assertEqual(len(assessment_tasks), 1)
+        self.assertEqual(assessment_tasks[0]['status'], '実施済')
+        self.assertEqual(assessment_tasks[0]['course_number'], 2)
 
     def test_dashboard_uses_selected_course_first_visit_date(self):
         self.patient.first_visit_date = date(2026, 1, 1)
@@ -117,6 +209,61 @@ class TestDashboardCourseIsolation(TestCase):
 
         first_visit_tasks = self._tasks_for(response, '① 初診')
         self.assertEqual([(item['course_number'], item['obj'].pk) for item in first_visit_tasks], [(2, self.patient.pk)])
+
+    def test_holiday_mapping_rolls_to_next_open_day_and_continues_weekly(self):
+        self.course_two.mapping_date = date(2026, 10, 12)
+        self.course_two.first_treatment_date = date(2026, 10, 5)
+        self.course_two.discharge_date = date(2026, 11, 13)
+        self.course_two.save(update_fields=['mapping_date', 'first_treatment_date', 'discharge_date'])
+
+        self.client.get('/app/dashboard/', {'date': '2026-10-13', 'course_number': 2})
+        from rtms_app.views import generate_calendar_weeks
+        calendar_weeks, _ = generate_calendar_weeks(
+            self.patient, treatment_course=self.course_two, course_number=2,
+        )
+        mapping_dates = {
+            day['date']: next(
+                (event for event in day['events'] if event['type'] == 'mapping'), None,
+            )
+            for week in calendar_weeks
+            for day in week
+        }
+        self.assertEqual(mapping_dates[date(2026, 10, 13)]['week_number'], 1)
+        self.assertEqual(mapping_dates[date(2026, 10, 19)]['week_number'], 2)
+        self.assertEqual(mapping_dates[date(2026, 10, 26)]['week_number'], 3)
+        self.assertIsNone(mapping_dates.get(date(2026, 10, 12)))
+
+    def test_saved_mapping_session_is_preferred_and_course_scoped(self):
+        self.course_two.mapping_date = date(2026, 8, 4)
+        self.course_two.save(update_fields=['mapping_date'])
+        MappingSession.objects.create(
+            patient=self.patient, treatment_course=self.course_one, course_number=1,
+            date=date(2026, 8, 3), week_number=1, resting_mt=60,
+        )
+        MappingSession.objects.create(
+            patient=self.patient, treatment_course=self.course_two, course_number=2,
+            date=date(2026, 8, 4), week_number=1, resting_mt=61,
+        )
+        self.client.get('/app/dashboard/', {'date': '2026-08-04', 'course_number': 2})
+        from rtms_app.views import generate_calendar_weeks
+        calendar_weeks, _ = generate_calendar_weeks(
+            self.patient, treatment_course=self.course_two, course_number=2,
+        )
+        mapping_events = [
+            event for week in calendar_weeks for day in week
+            for event in day['events'] if event['type'] == 'mapping'
+        ]
+        saved_event = next(
+            event for week in calendar_weeks for day in week
+            if day['date'] == date(2026, 8, 4)
+            for event in day['events'] if event['type'] == 'mapping'
+        )
+        self.assertEqual((saved_event['week_number'], saved_event['status']), (1, 'done'))
+        self.assertFalse(any(
+            day['date'] == date(2026, 8, 3) and event['type'] == 'mapping'
+            for week in calendar_weeks for day in week for event in day['events']
+        ))
+
 
     def test_dashboard_uses_rescheduled_course_session_date(self):
         session = TreatmentSession.objects.create(
@@ -147,6 +294,68 @@ class TestDashboardCourseIsolation(TestCase):
 
         admission_tasks = self._tasks_for(response, '② 入院')
         self.assertEqual([item['obj'].id for item in admission_tasks], [legacy.id])
+
+
+class TestTreatmentIntensityAndSafety(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='intensity-user', password='pw')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='INTENSITY', name='Intensity Patient', birth_date=date(1980, 1, 1),
+            first_treatment_date=date(2026, 1, 5), mapping_date=date(2026, 1, 5), course_number=1,
+        )
+        self.course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+            first_treatment_date=date(2026, 1, 5), mapping_date=date(2026, 1, 5),
+        )
+
+    def test_previous_mt_is_scaled_with_clinical_rounding(self):
+        expected = {60: 72, 61: 73, 62: 74}
+        for index, (mt_value, intensity) in enumerate(expected.items(), start=1):
+            MappingSession.objects.create(
+                patient=self.patient, treatment_course=self.course_one, course_number=1,
+                date=date(2026, index, 5), week_number=index, resting_mt=mt_value,
+            )
+            response = self.client.get(
+                reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+                {'date': date(2026, index, 6).isoformat(), 'course_number': 1},
+            )
+            self.assertEqual(response.context['form'].initial['intensity_percent'], intensity)
+
+    def test_previous_mt_does_not_cross_courses_and_safety_checks_save(self):
+        TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+            first_treatment_date=date(2026, 3, 2), mapping_date=date(2026, 3, 2),
+        )
+        MappingSession.objects.create(
+            patient=self.patient, treatment_course=self.course_one, course_number=1,
+            date=date(2026, 1, 5), week_number=1, resting_mt=61,
+        )
+        response = self.client.get(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+            {'date': '2026-03-03', 'course_number': 2},
+        )
+        self.assertEqual(response.context['form'].initial['intensity_percent'], 60)
+        self.assertContains(response, 'name="safety_sleep"')
+        self.assertContains(response, 'name="safety_alcohol"')
+        self.assertContains(response, 'name="safety_meds"')
+
+    def test_intensity_percent_accepts_one_percent_steps(self):
+        from rtms_app.forms import TreatmentForm
+
+        for value in (71, 73, 119, 120, 121):
+            form = TreatmentForm(data={
+                'treatment_date': '2026-01-05', 'treatment_time': '09:00',
+                'safety_sleep': 'on', 'safety_alcohol': 'on', 'safety_meds': 'on',
+                'coil_type': 'Brainsway H1', 'target_site': '左DLPFC',
+                'intensity_percent': str(value), 'mt_percent': '100',
+                'train_seconds': '2', 'frequency_hz': '18',
+                'intertrain_seconds': '20', 'train_count': '55',
+                'total_pulses': '1980', 'treatment_notes': '',
+            })
+            self.assertTrue(form.is_valid(), form.errors)
+            self.assertEqual(form.cleaned_data['intensity_percent'], value)
 
 
 class TestAssessmentRules(TestCase):
@@ -2220,7 +2429,31 @@ class TestPatientListNavigation(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, f'href="{reverse("rtms_app:dashboard")}"')
-        self.assertContains(response, '>ダッシュボードに戻る</a>')
+        self.assertContains(response, 'fa-th-large')
+        self.assertNotContains(response, 'ダッシュボードに戻る')
+
+    def test_patient_list_uses_shared_dashboard_navigation(self):
+        response = self.client.get(reverse('rtms_app:patient_list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'href="{reverse("rtms_app:dashboard")}"')
+        self.assertContains(response, 'fa-th-large')
+        self.assertNotContains(response, 'ダッシュボードへ戻る')
+
+
+class TestAdminNavigation(TestCase):
+    def test_admin_index_has_dashboard_link_in_global_navigation(self):
+        user = get_user_model().objects.create_superuser(
+            username='admin-navigation-user', password='pw', email='admin@example.com',
+        )
+        client = Client()
+        client.force_login(user)
+
+        response = client.get(reverse('admin:index'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'href="{reverse("rtms_app:dashboard")}"')
+        self.assertContains(response, 'Dashboard')
 
 
 class TestAssessmentHubOtResearchSection(TestCase):
@@ -3355,6 +3588,26 @@ class TestCourseAwareInitialVisit(TestCase):
                 self.assertEqual(getattr(self.course_one, field), getattr(self.patient, field))
 
         self.assertEqual(self.patient.questionnaire_data, {'patient': 'unchanged'})
+        hamd = ScaleDefinition.objects.get(code='hamd')
+        self.assertTrue(AssessmentSchedule.objects.filter(
+            treatment_course=self.course_two, scale=hamd, timing='week4',
+        ).exists())
+
+    def test_existing_course_survey_off_to_on_creates_week4_once(self):
+        response = self._post_course_two(is_all_case_survey='')
+        self.assertEqual(response.status_code, 302)
+        self.course_two.refresh_from_db()
+        self.assertFalse(self.course_two.is_all_case_survey)
+
+        response = self._post_course_two()
+        self.assertEqual(response.status_code, 302)
+        hamd = ScaleDefinition.objects.get(code='hamd')
+        self.assertEqual(
+            AssessmentSchedule.objects.filter(
+                treatment_course=self.course_two, scale=hamd, timing='week4',
+            ).count(),
+            1,
+        )
 
     def test_course_one_initial_visit_does_not_update_patient_or_course_two(self):
         response = self._post_course(
@@ -3415,6 +3668,154 @@ class TestClinicalPathReschedule(TestCase):
             data=json.dumps(payload),
             content_type='application/json',
         )
+
+    def test_treatment_reschedule_moves_unfinished_mt_to_current_week_start(self):
+        self.patient.first_treatment_date = date(2026, 9, 28)
+        self.patient.mapping_date = date(2026, 9, 28)
+        self.patient.save(update_fields=['first_treatment_date', 'mapping_date'])
+        treatment_dates = [
+            date(2026, 9, 28), date(2026, 9, 29), date(2026, 9, 30),
+            date(2026, 10, 1), date(2026, 10, 2), date(2026, 10, 5),
+            date(2026, 10, 6), date(2026, 10, 8),
+            date(2026, 10, 9), date(2026, 10, 13), date(2026, 10, 14),
+            date(2026, 10, 15), date(2026, 10, 16), date(2026, 10, 19),
+        ]
+        sessions = [TreatmentSession.objects.create(
+            patient=self.patient, course_number=1, session_date=session_date,
+            status='planned',
+        ) for session_date in treatment_dates]
+        MappingSchedule.objects.create(
+            patient=self.patient, course_number=1, week_number=3,
+            planned_date=date(2026, 10, 13),
+        )
+
+        schedule_service.reschedule_planned_session(
+            self.patient, sessions[9], date(2026, 10, 15),
+        )
+
+        self.assertEqual(
+            MappingSchedule.objects.get(
+                patient=self.patient, course_number=1, week_number=3,
+            ).planned_date,
+            date(2026, 10, 15),
+        )
+
+        moved_session = TreatmentSession.objects.get(pk=sessions[9].pk)
+        schedule_service.reschedule_planned_session(
+            self.patient, moved_session, date(2026, 10, 16),
+        )
+        self.assertEqual(
+            MappingSchedule.objects.get(
+                patient=self.patient, course_number=1, week_number=3,
+            ).planned_date,
+            date(2026, 10, 16),
+        )
+
+    def test_assessment_reschedule_does_not_move_mt_slot(self):
+        hamd, _ = ScaleDefinition.objects.get_or_create(
+            code='hamd', defaults={'name': 'HAM-D'},
+        )
+        self.patient.mapping_date = date(2026, 10, 13)
+        self.patient.first_treatment_date = date(2026, 10, 13)
+        self.patient.save(update_fields=['mapping_date', 'first_treatment_date'])
+        AssessmentSchedule.objects.create(
+            patient=self.patient, course_number=1, scale=hamd,
+            timing='baseline', planned_date=date(2026, 10, 13),
+        )
+        MappingSchedule.objects.create(
+            patient=self.patient, course_number=1, week_number=1,
+            planned_date=date(2026, 10, 13),
+        )
+
+        response = self._post({
+            'event_type': 'assessment',
+            'source_date': '2026-10-13',
+            'target_date': '2026-10-15',
+            'timing': 'baseline',
+            'scale_code': 'hamd',
+            'course_number': 1,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            AssessmentSchedule.objects.get(
+                patient=self.patient, course_number=1, timing='baseline', scale=hamd,
+            ).planned_date,
+            date(2026, 10, 15),
+        )
+        self.assertEqual(
+            MappingSchedule.objects.get(
+                patient=self.patient, course_number=1, week_number=1,
+            ).planned_date,
+            date(2026, 10, 13),
+        )
+
+        from rtms_app.views import generate_calendar_weeks
+        calendar_weeks, _ = generate_calendar_weeks(self.patient)
+        events_by_date = {
+            day['date']: [
+                event for event in day['events']
+                if event.get('scale_code') == 'hamd'
+                or event['type'] == 'mapping'
+            ]
+            for week in calendar_weeks for day in week
+            if day['date'] in {date(2026, 10, 13), date(2026, 10, 15)}
+        }
+        old_event_types = {event['type'] for event in events_by_date[date(2026, 10, 13)]}
+        new_event_types = {event['type'] for event in events_by_date[date(2026, 10, 15)]}
+        self.assertNotIn('assessment', old_event_types, events_by_date)
+        self.assertIn('mapping', old_event_types)
+        self.assertIn('assessment', new_event_types)
+        self.assertNotIn('mapping', new_event_types)
+
+    def test_assessment_reschedule_does_not_move_completed_mt_slot(self):
+        hamd, _ = ScaleDefinition.objects.get_or_create(
+            code='hamd', defaults={'name': 'HAM-D'},
+        )
+        self.patient.mapping_date = date(2026, 10, 13)
+        self.patient.first_treatment_date = date(2026, 10, 13)
+        self.patient.save(update_fields=['mapping_date', 'first_treatment_date'])
+        AssessmentSchedule.objects.create(
+            patient=self.patient, course_number=1, scale=hamd,
+            timing='baseline', planned_date=date(2026, 10, 13),
+        )
+        MappingSchedule.objects.create(
+            patient=self.patient, course_number=1, week_number=1,
+            planned_date=date(2026, 10, 13),
+        )
+        MappingSession.objects.create(
+            patient=self.patient, course_number=1, week_number=1,
+            date=date(2026, 10, 15), resting_mt=50,
+        )
+
+        response = self._post({
+            'event_type': 'assessment',
+            'source_date': '2026-10-13',
+            'target_date': '2026-10-15',
+            'timing': 'baseline',
+            'scale_code': 'hamd',
+            'course_number': 1,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            MappingSchedule.objects.get(patient=self.patient).planned_date,
+            date(2026, 10, 13),
+        )
+        self.assertEqual(
+            MappingSession.objects.get(patient=self.patient).date,
+            date(2026, 10, 15),
+        )
+
+        from rtms_app.views import generate_calendar_weeks
+        calendar_weeks, _ = generate_calendar_weeks(self.patient)
+        mapping_events = [
+            (day['date'], event['status'])
+            for week in calendar_weeks for day in week
+            for event in day['events']
+            if event['type'] == 'mapping' and event['week_number'] == 1
+        ]
+        self.assertEqual(mapping_events, [(date(2026, 10, 15), 'done')])
 
     def test_print_session_api_uses_selected_course_first_treatment_date(self):
         course_one = TreatmentCourse.objects.create(
@@ -3499,7 +3900,7 @@ class TestClinicalPathReschedule(TestCase):
         )
         self.assertEqual(
             MappingSchedule.objects.get(patient=self.patient, week_number=2).planned_date,
-            date(2026, 8, 28),
+            date(2026, 8, 24),
         )
         self.assertEqual([s.pk for s in sessions], list(TreatmentSession.objects.filter(patient=self.patient).values_list('pk', flat=True)))
 
@@ -3627,7 +4028,7 @@ class TestClinicalPathReschedule(TestCase):
         self.assertEqual(course_one.mapping_date, date(2026, 8, 24))
         self.assertEqual(course_two.mapping_date, date(2026, 10, 5))
         self.assertEqual(first_schedule.planned_date, date(2026, 8, 24))
-        self.assertEqual(second_schedule.planned_date, date(2026, 10, 5))
+        self.assertEqual(second_schedule.planned_date, date(2026, 10, 1))
         self.assertEqual(self.patient.mapping_date, date(2026, 8, 24))
 
     def test_course_two_planned_mapping_drag_uses_course_mapping_date(self):

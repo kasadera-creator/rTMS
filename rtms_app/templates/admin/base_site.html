@@ -9,3 +9,9 @@
     <a href="/app/" style="text-decoration:none;">← アプリに戻る</a>
   </span>
 {% endblock %}
+
+{% block nav-global %}
+  <a href="{% url 'rtms_app:dashboard' %}" class="button" style="margin-left: 12px;">
+    Dashboard
+  </a>
+{% endblock %}

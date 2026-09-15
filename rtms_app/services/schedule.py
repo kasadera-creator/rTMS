@@ -2,7 +2,9 @@ from datetime import timedelta, date
 
 from django.db import transaction
 
-from rtms_app.models import TreatmentSession, TreatmentCourse, Patient, MappingSchedule
+from rtms_app.models import (
+    TreatmentSession, TreatmentCourse, Patient, MappingSchedule, MappingSession,
+)
 from rtms_app.services.rtms_schedule import generate_treatment_dates, generate_mapping_dates
 from rtms_app.services.strict_writes import (
     save_treatment_session_legacy,
@@ -10,8 +12,6 @@ from rtms_app.services.strict_writes import (
     update_or_create_mapping_schedule_legacy,
     update_or_create_mapping_schedule_strict,
 )
-
-
 MAX_TREATMENT_SESSIONS = 30
 
 try:
@@ -63,6 +63,59 @@ def _shift_discharge_date(patient, treatment_course, source_date, delta):
         return
     patient.discharge_date = new_discharge_date
     patient.save(update_fields=['discharge_date'])
+
+
+def _sync_mapping_schedules_to_treatment_weeks(patient, course_number, *, from_date):
+    """Align unfinished weekly MT slots with current treatment week starts."""
+    treatment_course = TreatmentCourse.objects.filter(
+        patient=patient, course_number=course_number,
+    ).first()
+    treatment_start = (
+        treatment_course.first_treatment_date
+        if treatment_course is not None
+        else patient.first_treatment_date
+    )
+    if treatment_start is None:
+        return
+    calendar_start = treatment_start - timedelta(days=treatment_start.weekday())
+    scope = _session_scope(patient, course_number)
+    sessions = list(
+        TreatmentSession.objects.filter(**scope)
+        .order_by('session_date', 'id')[:MAX_TREATMENT_SESSIONS]
+    )
+    completed_weeks = set(
+        MappingSession.objects.filter(**scope).values_list('week_number', flat=True)
+    )
+    sessions_by_week = {}
+    for session in sessions:
+        week_number = ((session.session_date - calendar_start).days // 7) + 1
+        sessions_by_week.setdefault(week_number, []).append(session)
+
+    for week_number, week_sessions in sessions_by_week.items():
+        if week_number in completed_weeks:
+            continue
+        week_start = week_sessions[0].session_date
+        if week_start < from_date:
+            continue
+        schedule = MappingSchedule.objects.filter(
+            **scope, week_number=week_number,
+        ).first()
+        if schedule is not None and schedule.planned_date == week_start:
+            continue
+        if MappingSchedule.objects.filter(
+            **scope, planned_date=week_start,
+        ).exclude(week_number=week_number).exists():
+            continue
+        if treatment_course is not None:
+            update_or_create_mapping_schedule_strict(
+                patient, treatment_course, week_number=week_number,
+                planned_date=week_start, course_number=course_number,
+            )
+        else:
+            update_or_create_mapping_schedule_legacy(
+                patient, course_number, week_number=week_number,
+                planned_date=week_start,
+            )
 
 
 def get_treatment_sessions(patient, course_number=None):
@@ -273,6 +326,9 @@ def shift_future_sessions(patient: Patient, from_date: date, course_number: int)
         return
     with transaction.atomic():
         _reflow_sessions(patient, course_number, from_date, target_date=None, moved_session=None)
+    _sync_mapping_schedules_to_treatment_weeks(
+        patient, course_number, from_date=from_date,
+    )
 
 
 def reschedule_planned_session(
@@ -313,6 +369,9 @@ def reschedule_planned_session(
 
     with transaction.atomic():
         result = _reflow_sessions(patient, session.course_number, source_date, target_date, moved_session=session)
+    _sync_mapping_schedules_to_treatment_weeks(
+        patient, session.course_number, from_date=min(source_date, target_date),
+    )
 
     return {'moved_session_id': session.id, **result}
 
@@ -430,43 +489,13 @@ def reschedule_treatment_start_date(
             patient_update_fields.append('mapping_date')
         if patient_update_fields:
             locked_patient.save(update_fields=patient_update_fields)
-
-        generated_mapping = {
-            item['week_no']: item['actual']
-            for item in generate_mapping_dates(
-                new_start_date, weeks=mapping_weeks, holidays=holidays,
-            )
-        }
-        treatment_course = TreatmentCourse.objects.filter(
-            patient=locked_patient, course_number=course_number,
-        ).first()
-        mapping_scope = {'treatment_course': treatment_course} if treatment_course else {
-            'patient': locked_patient, 'course_number': course_number,
-        }
-        for schedule in MappingSchedule.objects.select_for_update().filter(
-            **mapping_scope,
-        ):
-            if schedule.week_number in generated_mapping:
-                planned_date = generated_mapping[schedule.week_number]
-                if treatment_course is not None:
-                    update_or_create_mapping_schedule_strict(
-                        locked_patient,
-                        treatment_course,
-                        week_number=schedule.week_number,
-                        planned_date=planned_date,
-                        course_number=course_number,
-                    )
-                else:
-                    update_or_create_mapping_schedule_legacy(
-                        locked_patient,
-                        course_number,
-                        week_number=schedule.week_number,
-                        planned_date=planned_date,
-                    )
+        _sync_mapping_schedules_to_treatment_weeks(
+            locked_patient, course_number, from_date=new_start_date,
+        )
 
     return {
         'old_start_date': old_start_date,
         'new_start_date': new_start_date,
         'moved_count': len(assignments),
-        'mapping_rebuilt': bool(generated_mapping),
+        'mapping_rebuilt': True,
     }

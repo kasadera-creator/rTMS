@@ -18,6 +18,7 @@ import json
 import logging
 import calendar as pycalendar
 from urllib.parse import urlencode
+from decimal import Decimal, ROUND_HALF_UP
 
 from rtms_app.surveys import INSTRUMENT_ORDER, instrument_label
 
@@ -43,6 +44,7 @@ from .services.rtms_schedule import (
     generate_mapping_dates,
     session_info_for_date,
     format_rtms_label,
+    next_open_day,
 )
 
 
@@ -71,7 +73,6 @@ def _questionnaire_questions():
     keys = [question['key'] for question in (questions_past + questions_current)] + ['q_details']
     return questions_past, questions_current, keys
 
-from .services.schedule_tasks import compute_dashboard_tasks
 from .services.schedule import (
     MAX_TREATMENT_SESSIONS,
     can_create_treatment_session,
@@ -594,7 +595,9 @@ def generate_calendar_weeks(patient, treatment_course=None, course_number=None):
                 if treatment_end_est and m['actual'] > treatment_end_est:
                     continue
                 if wk == 1 and course_mapping_date and wk not in mapping_overrides:
-                    d = course_mapping_date  # 明示的な初回MT測定日を優先（既存挙動を維持）
+                    # The configured first MT date is nominal; holidays use the
+                    # same rolled-forward date as the canonical schedule.
+                    d = next_open_day(course_mapping_date, JP_HOLIDAYS)
                 else:
                     d = mapping_overrides.get(wk, m['actual'])
                 # Apply the same limit after an explicit MT date override;
@@ -628,6 +631,15 @@ def generate_calendar_weeks(patient, treatment_course=None, course_number=None):
     actual_mapping_by_date = {}
     for ms_row in MappingSession.objects.filter(**mapping_scope):
         actual_mapping_by_date[ms_row.date] = ms_row
+    completed_mapping_weeks = {
+        ms_row.week_number
+        for ms_row in actual_mapping_by_date.values()
+    }
+    scheduled_mapping_by_date = {
+        planned_date: week_number
+        for planned_date, week_number in scheduled_mapping_by_date.items()
+        if week_number not in completed_mapping_weeks
+    }
 
     while current <= end_date:
         is_hol = is_holiday(current)
@@ -677,6 +689,8 @@ def generate_calendar_weeks(patient, treatment_course=None, course_number=None):
                 'status': 'done' if is_done else 'planned',
                 'session_id': ts.id if ts is not None else None,
                 'first_treatment': session_no == 1,
+                'session_num': session_no,
+                'week_num': week_no,
             })
 
         # 5. 退院
@@ -717,15 +731,38 @@ def generate_calendar_weeks(patient, treatment_course=None, course_number=None):
     }
     other_scales_labels = {'baseline': '治療前尺度評価', 'post': '治療後尺度評価'}
 
-    def place_assessment_event(timing, label, base_date, is_done, allow_auto_postpone, url_builder, scale_code, deadline=None):
+    def assessment_performed_date(timing, scale=None):
+        performed_dates = []
+        if scale is None or scale.code == 'hamd':
+            for assessment in Assessment.objects.filter(
+                **assessment_scope, timing=timing, type='HAM-D',
+            ):
+                performed_dates.append(assessment.performed_date or assessment.date)
+            hamd_records = AssessmentRecord.objects.filter(
+                **assessment_scope, timing=timing, scale=hamd_scale,
+            )
+            performed_dates.extend(record.date for record in hamd_records)
+        elif scale is not None:
+            records = AssessmentRecord.objects.filter(
+                **assessment_scope, timing=timing, scale=scale,
+            )
+            performed_dates.extend(record.date for record in records)
+        return max(performed_dates, default=None)
+
+    def place_assessment_event(
+        timing, label, base_date, is_done, allow_auto_postpone,
+        url_builder, scale_code, deadline=None, performed_date=None,
+    ):
         if base_date is None:
             return
         if not is_done and deadline is not None and timezone.localdate() > deadline:
             return
-        effective_date = base_date if is_done else (
+        effective_date = performed_date if is_done and performed_date else (
+            base_date if is_done else (
             get_hamd_effective_deadline(base_date) if allow_auto_postpone else base_date
+            )
         )
-        if deadline is not None and effective_date > deadline:
+        if not is_done and deadline is not None and effective_date > deadline:
             effective_date = deadline
         if not (start_date <= effective_date <= end_date):
             return
@@ -753,23 +790,30 @@ def generate_calendar_weeks(patient, treatment_course=None, course_number=None):
     }
     if hamd_scale:
         hamd_timings = ['baseline', 'week3', 'week6']
-        if patient.is_all_case_survey:
+        is_all_case_survey = (
+            treatment_course.is_all_case_survey
+            if treatment_course is not None
+            else patient.is_all_case_survey
+        )
+        if is_all_case_survey:
             hamd_timings.insert(2, 'week4')
         for timing in hamd_timings:
-            base_date = schedule_overrides.get((hamd_scale.id, timing)) or get_assessment_schedule_default_date(
+            override_date = schedule_overrides.get((hamd_scale.id, timing))
+            base_date = override_date or get_assessment_schedule_default_date(
                 patient, hamd_scale, timing, treatment_end_est, treatment_course=treatment_course,
             )
             _, window_end = get_assessment_window(patient, timing, treatment_course=treatment_course)
-            deadline = window_end + timedelta(days=7) if timing == 'week4' else window_end
-            is_done = (
-                Assessment.objects.filter(**assessment_scope, timing=timing, type='HAM-D').exists()
-                or AssessmentRecord.objects.filter(**assessment_scope, timing=timing, scale=hamd_scale).exists()
+            deadline = None if override_date is not None else (
+                window_end + timedelta(days=7) if timing == 'week4' else window_end
             )
+            hamd_performed_date = assessment_performed_date(timing, hamd_scale)
+            is_done = hamd_performed_date is not None
             place_assessment_event(
                 timing, hamd_labels[timing], base_date, is_done, allow_auto_postpone=True,
                 url_builder=lambda d, t=timing: build_url('assessment_scale', [patient.id, t, hamd_scale.code], query={'from': 'clinical_path', 'date': d.strftime('%Y-%m-%d'), 'course_number': course_number}),
                 scale_code=hamd_scale.code,
                 deadline=deadline,
+                performed_date=hamd_performed_date,
             )
 
     # HAM-D以外の尺度は一度にまとめて実施するため、baseline/post それぞれ1件の
@@ -791,10 +835,15 @@ def generate_calendar_weeks(patient, treatment_course=None, course_number=None):
                 AssessmentRecord.objects.filter(**assessment_scope, timing=timing, scale=scale).exists()
                 for scale in other_scales_cal
             )
+            other_performed_dates = [
+                assessment_performed_date(timing, scale)
+                for scale in other_scales_cal
+            ]
             place_assessment_event(
                 timing, label, base_date, is_done, allow_auto_postpone=False,
                 url_builder=lambda d, t=timing: build_url('assessment_add', [patient.id, t], query={'from': 'clinical_path', 'date': d.strftime('%Y-%m-%d'), 'course_number': course_number}),
                 scale_code=OTHER_SCALES_SCHEDULE_CODE,
+                performed_date=max(other_performed_dates, default=None) if is_done else None,
             )
 
     return calendar_weeks, assessment_events
@@ -881,118 +930,41 @@ def dashboard_view(request):
         status = "手続済" if admission_done else "要手続"; color = "success" if admission_done else "warning"
         task_admission.append(task_for(p, course, status=status, color=color, todo="入院手続き"))
     for p, course in dashboard_rows:
-        if date_for(p, course, 'mapping_date') != target_date:
-            continue
-        mapping_scope = {'treatment_course': course} if course else {
-            'patient': p, 'course_number': p.course_number or 1,
-        }
-        is_done = MappingSession.objects.filter(**mapping_scope, date=target_date).exists()
-        task_mapping.append(task_for(p, course, status="実施済" if is_done else "実施未", color="success" if is_done else "danger", todo="MT測定"))
-
-    for p, current_course in dashboard_rows:
-        admission_date = date_for(p, current_course, 'admission_date')
-        first_treatment_date = date_for(p, current_course, 'first_treatment_date')
-        if not (admission_date and admission_date <= target_date and (first_treatment_date is None or first_treatment_date >= target_date)):
-            continue
-        assessment_scope = {'treatment_course': current_course} if current_course else {
-            'patient': p, 'course_number': p.course_number or 1,
-        }
-        ws, we = get_assessment_window(p, 'baseline', treatment_course=current_course)
-        if ws <= target_date <= we:
-            done = Assessment.objects.filter(**assessment_scope, timing='baseline').exists()
-            if not done: task_assessment.append(task_for(p, current_course, status="実施未", color="danger", timing_code='baseline', todo=f"治療前評価 ({we.strftime('%m/%d')})"))
-            elif Assessment.objects.filter(**assessment_scope, timing='baseline', date=target_date).exists(): task_assessment.append(task_for(p, current_course, status="実施済", color="success", timing_code='baseline', todo="治療前評価 (完了)"))
-
-    active_candidates = [(p, course) for p, course in dashboard_rows if date_for(p, course, 'first_treatment_date') and date_for(p, course, 'first_treatment_date') <= target_date]
-    active_candidates.sort(key=lambda row: row[0].card_id)
-    for p, current_course in active_candidates:
-        activity_scope = {'treatment_course': current_course} if current_course else {
-            'patient': p, 'course_number': p.course_number or 1,
-        }
-        # Prefer persisted sessions because skip/reschedule changes their dates.
-        info = None
-        first_treatment_date = date_for(p, current_course, 'first_treatment_date')
-        if first_treatment_date:
-            tdates = generate_treatment_dates(first_treatment_date, total=30, holidays=JP_HOLIDAYS)
-            saved_session = TreatmentSession.objects.filter(
-                **activity_scope, session_date=target_date,
-            ).first()
-            if saved_session is not None and saved_session.status == 'skipped':
-                continue
-            if saved_session is not None:
-                number_map = get_treatment_session_number_map(
-                    p, course_number=current_course.course_number if current_course else p.course_number,
-                )
-                info = {
-                    'session_no': number_map.get(saved_session.id),
-                    'week_no': get_current_week_number(first_treatment_date, target_date),
-                }
-            elif target_date in tdates:
-                idx = tdates.index(target_date)
-                info = {
-                    'session_no': idx + 1,
-                    # Week number rolls over on the same weekday anchored to first treatment date
-                    'week_no': get_current_week_number(first_treatment_date, target_date)
-                }
-
-        if info:
-            n = info['session_no']
-            week = info['week_no']
-            today_session = TreatmentSession.objects.filter(
-                **activity_scope, session_date=target_date,
-            ).first()
-            is_done = today_session is not None and today_session.status == 'done'
-            todo_label = format_rtms_label(n, week)
-            task_treatment.append(task_for(p, current_course, note='', status="実施済" if is_done else "実施未", color="success" if is_done else "danger", session_num=n, todo=todo_label))
-
-        # Use get_assessment_window() for week3/week4/week6 to match clinical path windows
-        for timing_code, label_name in [('week3', '第3週目評価'), ('week4', '4週経過後HAM-D評価'), ('week6', '第6週目評価')]:
-            ws, we = get_assessment_window(p, timing_code, treatment_course=current_course)
-            if ws and we and target_date == we:
-                assessment = Assessment.objects.filter(**activity_scope, timing=timing_code, date__range=[ws, we]).first()
-                if assessment:
-                    # mark as done
-                    task_assessment.append(task_for(p, current_course, status="実施済", color="success", timing_code=timing_code, todo=f"{label_name} (完了)"))
-                else:
-                    task_assessment.append(task_for(p, current_course, status="実施未", color="danger", timing_code=timing_code, todo=f"{label_name} ({we.strftime('%m/%d')})"))
-        # Discharge readiness is handled below via confirmed/estimated dates; avoid DB-count based labels
-
-    # 退院準備: 退院日が確定している患者
-    for p, course in dashboard_rows:
-        if date_for(p, course, 'discharge_date') == target_date:
-            task_discharge.append(task_for(p, course, status="退院準備", color="info", todo="サマリー・紹介状作成"))
-
-    # 退院準備: 退院日未設定だが30回目治療日の患者（同日に表示）
-    for p, current_course in active_candidates:
-        if date_for(p, current_course, 'discharge_date'): continue  # 既に上記で追加済み
-        first_treatment_date = date_for(p, current_course, 'first_treatment_date')
-        if first_treatment_date:
-            tdates = generate_treatment_dates(first_treatment_date, total=30, holidays=JP_HOLIDAYS)
-            treatment_end_est = tdates[-1] if tdates else None
-        else:
-            treatment_end_est = None
-        if treatment_end_est and target_date == treatment_end_est:
-            task_discharge.append(task_for(p, current_course, status="退院準備（予定）", color="info", todo="サマリー・紹介状作成"))
+        calendar_weeks, _ = generate_calendar_weeks(
+            p,
+            treatment_course=course,
+            course_number=course.course_number if course else p.course_number,
+        )
+        for week in calendar_weeks:
+            for day in week:
+                if day['date'] != target_date:
+                    continue
+                for event in day['events']:
+                    if event['type'] not in {'mapping', 'treatment', 'assessment', 'discharge'}:
+                        continue
+                    is_done = event['status'] == 'done'
+                    event_task = task_for(
+                        p,
+                        course,
+                        status="実施済" if is_done else "実施未",
+                        color="success" if is_done else "danger",
+                        todo=event['label'],
+                    )
+                    if event['type'] == 'mapping':
+                        task_mapping.append(event_task)
+                    elif event['type'] == 'treatment':
+                        event_task['session_num'] = event.get('session_num')
+                        task_treatment.append(event_task)
+                    elif event['type'] == 'assessment':
+                        event_task['timing_code'] = event['timing']
+                        task_assessment.append(event_task)
+                    elif event['type'] == 'discharge':
+                        event_task['color'] = 'info'
+                        event_task['status'] = '退院準備'
+                        task_discharge.append(event_task)
 
     # サービス化したスケジュールタスクをダッシュボードに反映
-    # compute_dashboard_tasks は planned_date <= today の未実施タスクを返す
-    for p, current_course in dashboard_rows:
-        try:
-            svc_tasks = compute_dashboard_tasks(
-                p, today=target_date, holidays=JP_HOLIDAYS,
-                treatment_course=current_course,
-            )
-        except Exception:
-            svc_tasks = []
-        for tt in svc_tasks:
-            key = tt.get('key', '')
-            label = tt.get('label') or '未実施タスク'
-            perf = tt.get('performed_date')
-            if key == 'mapping':
-                task_mapping.append(task_for(p, current_course, status="実施済" if perf else "実施未", color="success" if perf else "danger", todo=label))
-            elif key.startswith('assessment'):
-                timing = key.replace('assessment_', '')
-                task_assessment.append(task_for(p, current_course, status="実施済" if perf else "実施未", color="success" if perf else "danger", timing_code=timing, todo=label))
+
 
     dashboard_tasks = [{'list': task_first_visit, 'title': "① 初診", 'color_class': "bg-g-first-visit", 'icon': "fa-user-plus"}, {'list': task_admission, 'title': "② 入院", 'color_class': "bg-g-admission", 'icon': "fa-procedures"}, {'list': task_mapping, 'title': "③ MT測定", 'color_class': "bg-g-mapping", 'icon': "fa-crosshairs"}, {'list': task_treatment, 'title': "④ 治療実施", 'color_class': "bg-g-treatment", 'icon': "fa-bolt"}, {'list': task_assessment, 'title': "⑤ 尺度評価", 'color_class': "bg-g-assessment", 'icon': "fa-clipboard-check"}, {'list': task_discharge, 'title': "⑥ 退院準備", 'color_class': "bg-g-discharge", 'icon': "fa-file-export"}]
     return render(request, 'rtms_app/dashboard.html', {'today': target_date, 'target_date_display': target_date_display, 'prev_day': prev_day, 'next_day': next_day, 'today_raw': jst_now.date(), 'dashboard_tasks': dashboard_tasks})
@@ -1307,6 +1279,11 @@ def patient_first_visit(request, patient_id):
             if treatment_course is not None
             else patient.first_treatment_date
         )
+        old_is_all_case_survey = (
+            treatment_course.is_all_case_survey
+            if treatment_course is not None
+            else patient.is_all_case_survey
+        )
         form_class = TreatmentCourseFirstVisitForm if treatment_course is not None else PatientFirstVisitForm
         form_instance = treatment_course if treatment_course is not None else patient
         form = form_class(post, instance=form_instance, treatment_course=treatment_course)
@@ -1346,6 +1323,50 @@ def patient_first_visit(request, patient_id):
                     if treatment_start_changed:
                         p.mapping_date = p.first_treatment_date
                 p.save()
+                if not old_is_all_case_survey and p.is_all_case_survey:
+                    hamd_scale = ScaleDefinition.objects.filter(code='hamd').first()
+                    if hamd_scale is not None:
+                        if treatment_course is not None:
+                            week4_exists = AssessmentSchedule.objects.filter(
+                                treatment_course=treatment_course,
+                                scale=hamd_scale,
+                                timing='week4',
+                            ).exists()
+                            if not week4_exists:
+                                update_or_create_assessment_schedule_strict(
+                                    patient,
+                                    treatment_course,
+                                    scale=hamd_scale,
+                                    timing='week4',
+                                    planned_date=get_assessment_schedule_default_date(
+                                        patient,
+                                        hamd_scale,
+                                        'week4',
+                                        get_completion_date(p.first_treatment_date),
+                                        treatment_course=treatment_course,
+                                    ),
+                                    course_number=course_number,
+                                )
+                        else:
+                            week4_exists = AssessmentSchedule.objects.filter(
+                                patient=patient,
+                                course_number=course_number,
+                                scale=hamd_scale,
+                                timing='week4',
+                            ).exists()
+                            if not week4_exists:
+                                update_or_create_assessment_schedule_legacy(
+                                    patient,
+                                    course_number,
+                                    scale=hamd_scale,
+                                    timing='week4',
+                                    planned_date=get_assessment_schedule_default_date(
+                                        patient,
+                                        hamd_scale,
+                                        'week4',
+                                        get_completion_date(p.first_treatment_date),
+                                    ),
+                                )
                 action = request.POST.get('action')
 
                 if request.headers.get('x-requested-with') == 'XMLHttpRequest':
@@ -2043,25 +2064,17 @@ def treatment_add(request, patient_id):
             'total_pulses': 1980,
         }
 
-        previous_session = TreatmentSession.objects.filter(
-            **session_scope,
-            session_date__lt=initial_date,
-        ).filter(
-            Q(intensity_percent__isnull=False) | Q(intensity__isnull=False),
-        ).order_by('-session_date', '-date').first()
-
-        if previous_session:
-            previous_intensity = (
-                previous_session.intensity_percent
-                if previous_session.intensity_percent is not None
-                else previous_session.intensity
+        previous_mt = MappingSession.objects.filter(
+            **mapping_scope,
+            date__lt=initial_date,
+            resting_mt__isnull=False,
+        ).order_by('-date', '-id').first()
+        if previous_mt is not None:
+            initial_data['intensity_percent'] = int(
+                (Decimal(previous_mt.resting_mt) * Decimal('1.20')).quantize(
+                    Decimal('1'), rounding=ROUND_HALF_UP,
+                )
             )
-            if previous_intensity is not None:
-                initial_data['intensity_percent'] = previous_intensity
-            if previous_session.mt_percent is not None:
-                initial_data['mt_percent'] = previous_session.mt_percent
-        elif current_week_mapping and current_week_mapping.resting_mt is not None:
-            initial_data['intensity_percent'] = current_week_mapping.resting_mt
             initial_data['mt_percent'] = 100
 
         form = TreatmentForm(initial=initial_data)
@@ -3925,8 +3938,6 @@ def clinical_path_reschedule(request, patient_id):
 
     if event_type == 'treatment':
         source_date = parse_date(payload.get('source_date') or '')
-        if not source_date:
-            return JsonResponse({'error': '移動元の日付が不正です'}, status=400)
 
         status = payload.get('status')
         session_id = payload.get('session_id')
@@ -4213,6 +4224,7 @@ def clinical_path_reschedule(request, patient_id):
         if not is_treatment_day(target_date):
             return JsonResponse({'error': '土日祝日には評価を予定できません'}, status=400)
 
+        source_date = parse_date(payload.get('source_date') or '')
         scale_code = payload.get('scale_code')
         timing = payload.get('timing')
         if not scale_code or not timing:
