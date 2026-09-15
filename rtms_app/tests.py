@@ -107,6 +107,17 @@ class TestDashboardCourseIsolation(TestCase):
         self.assertEqual(len(mapping_tasks), 1)
         self.assertEqual(mapping_tasks[0]['course_number'], 1)
 
+    def test_dashboard_discharge_event_does_not_require_status(self):
+        response = self.client.get(
+            '/app/dashboard/?date=2026-09-11&course_number=2'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        discharge_tasks = self._tasks_for(response, '⑥ 退院準備')
+        self.assertEqual(len(discharge_tasks), 1)
+        self.assertEqual(discharge_tasks[0]['course_number'], 2)
+        self.assertEqual(discharge_tasks[0]['status'], '退院準備')
+
     def test_dashboard_mapping_dates_match_personal_calendar_for_four_weeks(self):
         self.course_two.mapping_date = date(2026, 10, 12)
         self.course_two.first_treatment_date = date(2026, 10, 5)
@@ -3414,7 +3425,7 @@ class TestSkipSessions(TestCase):
             patient=self.patient, course_number=1, discharge_date=date(2026, 1, 31),
         )
         course_two = TreatmentCourse.objects.create(
-            patient=self.patient, course_number=2, discharge_date=date(2026, 1, 31),
+            patient=self.patient, course_number=2, discharge_date=date(2026, 3, 31),
         )
         self.patient.discharge_date = date(2026, 1, 31)
         self.patient.save(update_fields=['discharge_date'])
@@ -3424,11 +3435,11 @@ class TestSkipSessions(TestCase):
         )
         skipped = TreatmentSession.objects.create(
             patient=self.patient, treatment_course=course_two, course_number=2,
-            session_date=date(2026, 1, 9),
+            session_date=date(2026, 2, 6),
         )
         course_two_session = TreatmentSession.objects.create(
             patient=self.patient, treatment_course=course_two, course_number=2,
-            session_date=date(2026, 1, 10),
+            session_date=date(2026, 2, 7),
         )
 
         schedule_service.shift_future_sessions(
@@ -3441,10 +3452,13 @@ class TestSkipSessions(TestCase):
         course_one_session.refresh_from_db()
         course_two_session.refresh_from_db()
         self.assertEqual(course_one.discharge_date, date(2026, 1, 31))
-        self.assertEqual(course_two.discharge_date, date(2026, 2, 2))
+        self.assertEqual(course_two.discharge_date, date(2026, 4, 2))
         self.assertEqual(self.patient.discharge_date, date(2026, 1, 31))
         self.assertEqual(course_one_session.session_date, date(2026, 1, 5))
-        self.assertEqual(course_two_session.session_date, date(2026, 1, 12))
+        self.assertEqual(
+            course_two_session.session_date,
+            schedule_service.next_treatment_day(skipped.session_date + datetime.timedelta(days=1)),
+        )
 
 
 class TestCourseAwareInitialVisit(TestCase):

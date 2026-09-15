@@ -7,16 +7,16 @@
 <div class="page-sheet">
         <div class="referral-header">
             <div class="referral-to">
-                {{ patient.referral_source|default:"紹介元医療機関" }} <br>
+                {{ referral_source|default:"紹介元医療機関" }} <br>
                 <span style="margin-left: 1em;">
-                    {% if patient.referral_doctor %}{{ patient.referral_doctor }} 先生{% else %}担当医 先生{% endif %} 御机下
+                    {% if referral_doctor %}{{ referral_doctor }} 先生{% else %}担当医 先生{% endif %} 御机下
                 </span>
             </div>
             <div class="referral-from">
                 <div style="font-weight: bold; font-size: 11pt; margin: 3px 0;">笠寺精治寮病院</div>
                 <div>〒457-0051 愛知県名古屋市南区笠寺町柚ノ木３</div>
                 <div>TEL: 052-821-9221</div>
-                <div style="margin-top: 8px;">担当医: {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}</div>
+                <div style="margin-top: 8px;">担当医: {{ attending_physician.last_name }} {{ attending_physician.first_name }}</div>
             </div>
         </div>
         <h1 class="doc-title">診療情報提供書</h1>
@@ -38,9 +38,9 @@
             <tr>
                 <th>入院期間</th>
                 <td colspan="3">
-                    {{ patient.admission_date|date:"Y/n/j" }} 〜
-                    {% if patient.discharge_date %}
-                        {{ patient.discharge_date|date:"Y/n/j" }} (退院)
+                    {{ admission_date|date:"Y/n/j" }} 〜
+                    {% if discharge_date %}
+                        {{ discharge_date|date:"Y/n/j" }} (退院)
                     {% else %}
                         {{ today|date:"Y/n/j" }} (入院中)
                     {% endif %}
@@ -51,12 +51,12 @@
         <div class="content-section">
             <div class="section-label">診断名</div>
             <div class="text-content mb-3">
-				診断名：{{ patient.diagnosis }}<br>
+                診断名：{{ diagnosis }}<br>
             </div>
 
             <div class="section-label">入院経過・治療結果</div>
             <div class="text-content" style="min-height: 200px; margin-bottom: 12px;">
-                {{ patient.summary_text|linebreaksbr }}
+                {{ summary_text|linebreaksbr }}
             </div>
 
             {% include 'rtms_app/print/_hamd_trend_print_compact.html' %}

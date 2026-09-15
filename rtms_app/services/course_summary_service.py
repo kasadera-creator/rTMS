@@ -122,7 +122,7 @@ def build_assessment_trend(
     from django.utils.dateformat import format as dateformat
     for t in timings:
         a = latest_by_timing.get(t)
-        date_str = a.date.strftime('%Y/%-m/%-d') if a and getattr(a, 'date', None) else '-'
+        date_str = dateformat(a.date, 'Y/n/j') if a and getattr(a, 'date', None) else '-'
         hamd17 = getattr(a, 'total_score_17', None)
         hamd21 = getattr(a, 'total_score_21', None)
         improvement_pct_17 = None

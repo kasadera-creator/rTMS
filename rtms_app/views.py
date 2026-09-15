@@ -940,27 +940,35 @@ def dashboard_view(request):
                 if day['date'] != target_date:
                     continue
                 for event in day['events']:
-                    if event['type'] not in {'mapping', 'treatment', 'assessment', 'discharge'}:
+                    event_type = event['type']
+                    if event_type in {'mapping', 'treatment', 'assessment'}:
+                        is_done = event['status'] == 'done'
+                        event_task = task_for(
+                            p,
+                            course,
+                            status="実施済" if is_done else "実施未",
+                            color="success" if is_done else "danger",
+                            todo=event['label'],
+                        )
+                    elif event_type == 'discharge':
+                        event_task = task_for(
+                            p,
+                            course,
+                            status='退院準備',
+                            color='info',
+                            todo=event['label'],
+                        )
+                    else:
                         continue
-                    is_done = event['status'] == 'done'
-                    event_task = task_for(
-                        p,
-                        course,
-                        status="実施済" if is_done else "実施未",
-                        color="success" if is_done else "danger",
-                        todo=event['label'],
-                    )
-                    if event['type'] == 'mapping':
+                    if event_type == 'mapping':
                         task_mapping.append(event_task)
-                    elif event['type'] == 'treatment':
+                    elif event_type == 'treatment':
                         event_task['session_num'] = event.get('session_num')
                         task_treatment.append(event_task)
-                    elif event['type'] == 'assessment':
+                    elif event_type == 'assessment':
                         event_task['timing_code'] = event['timing']
                         task_assessment.append(event_task)
-                    elif event['type'] == 'discharge':
-                        event_task['color'] = 'info'
-                        event_task['status'] = '退院準備'
+                    elif event_type == 'discharge':
                         task_discharge.append(event_task)
 
     # サービス化したスケジュールタスクをダッシュボードに反映

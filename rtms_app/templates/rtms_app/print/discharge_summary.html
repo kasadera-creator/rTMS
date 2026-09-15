@@ -24,9 +24,9 @@
             <tr>
                 <th>入院期間</th>
                 <td colspan="3">
-                    {{ patient.admission_date|date:"Y/n/j" }} 〜
-                    {% if patient.discharge_date %}
-                        {{ patient.discharge_date|date:"Y/n/j" }} (退院)
+                    {{ admission_date|date:"Y/n/j" }} 〜
+                    {% if discharge_date %}
+                        {{ discharge_date|date:"Y/n/j" }} (退院)
                     {% else %}
                         {{ today|date:"Y/n/j" }} (入院中)
                     {% endif %}
@@ -37,12 +37,12 @@
         <div class="content-section">
             <div class="section-label">診断名</div>
             <div class="text-content mb-3">
-				{{ patient.diagnosis|default:"うつ病" }}
+                {{ diagnosis|default:"うつ病" }}
             </div>
 
             <div class="section-label">入院経過・治療結果</div>
             <div class="text-content" style="min-height: 200px; margin-bottom: 12px;">
-                {{ patient.summary_text|linebreaksbr }}
+                {{ summary_text|linebreaksbr }}
             </div>
 
             {% include 'rtms_app/print/_hamd_trend_print_compact.html' %}
@@ -51,14 +51,14 @@
         <div class="content-section">
             <div class="section-label">退院時処方</div>
             <div class="text-content">
-                {{ patient.discharge_prescription|linebreaksbr|default:"（記載なし）" }}
+                {{ discharge_prescription|linebreaksbr|default:"（記載なし）" }}
             </div>
         </div>
 
         <div class="page-footer">
             <div>作成日: {{ today|date:"Y年n月j日" }}</div>
             <div>笠寺精治寮病院</div>
-            <div>担当医: {{ patient.attending_physician.last_name }} {{ patient.attending_physician.first_name }}</div>
+            <div>担当医: {{ attending_physician.last_name }} {{ attending_physician.first_name }}</div>
         </div>
 </div>
 {% endblock %}
