@@ -216,6 +216,275 @@ class TreatmentCourse(models.Model):
         return f"{self.patient} - {self.course_number}クール"
 
 
+class ResourcePool(models.Model):
+    RESOURCE_TYPE_CHOICES = [
+        ("rTMS_private", "rTMS個室"),
+        ("general_ward", "一般病棟"),
+        ("other_inpatient", "その他の入院資源"),
+    ]
+
+    code = models.SlugField("資源コード", max_length=64, unique=True)
+    name = models.CharField("資源名", max_length=128)
+    resource_type = models.CharField(
+        "資源種別", max_length=32, choices=RESOURCE_TYPE_CHOICES,
+    )
+    physical_capacity = models.PositiveIntegerField("物理容量")
+    operational_target = models.PositiveIntegerField("通常運用枠")
+    is_active = models.BooleanField("有効", default=True, db_index=True)
+    valid_from = models.DateField("有効開始日", null=True, blank=True)
+    valid_to = models.DateField("有効終了日", null=True, blank=True)
+    created_at = models.DateTimeField("作成日時", auto_now_add=True)
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "資源プール"
+        verbose_name_plural = "資源プール"
+        indexes = [
+            models.Index(fields=["resource_type", "is_active"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(operational_target__lte=models.F("physical_capacity")),
+                name="resource_pool_operational_target_lte_capacity",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(valid_to__isnull=True)
+                    | models.Q(valid_from__isnull=True)
+                    | models.Q(valid_to__gte=models.F("valid_from"))
+                ),
+                name="resource_pool_valid_to_gte_valid_from",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
+class InpatientPlan(models.Model):
+    STATUS_CHOICES = [
+        ("draft", "下書き"),
+        ("provisional", "仮予定"),
+        ("scheduled", "確定予定"),
+        ("admitted", "入院中"),
+        ("discharged", "退院済"),
+        ("cancelled", "キャンセル"),
+    ]
+    UNCERTAINTY_CHOICES = [
+        ("confirmed", "確定"),
+        ("provisional", "仮"),
+        ("unknown", "不明"),
+    ]
+
+    treatment_course = models.OneToOneField(
+        TreatmentCourse,
+        on_delete=models.PROTECT,
+        related_name="inpatient_plan",
+        verbose_name="治療クール",
+    )
+    status = models.CharField(
+        "状態", max_length=16, choices=STATUS_CHOICES, default="draft", db_index=True,
+    )
+    planned_admission_date = models.DateField("入院予定日", null=True, blank=True)
+    actual_admission_at = models.DateTimeField("実入院日時", null=True, blank=True)
+    estimated_discharge_date = models.DateField("内部推定退院日", null=True, blank=True)
+    planned_discharge_date = models.DateField("臨床的退院予定日", null=True, blank=True)
+    actual_discharge_at = models.DateTimeField("実退院日時", null=True, blank=True)
+    admission_type = models.CharField(
+        "入院形態",
+        max_length=20,
+        choices=Patient.ADMISSION_TYPES,
+        default="voluntary",
+    )
+    uncertainty = models.CharField(
+        "不確実性", max_length=16, choices=UNCERTAINTY_CHOICES, default="confirmed",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_inpatient_plans",
+        verbose_name="作成者",
+    )
+    updated_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="updated_inpatient_plans",
+        verbose_name="更新者",
+    )
+    notes = models.TextField("備考", blank=True, default="")
+    created_at = models.DateTimeField("作成日時", auto_now_add=True)
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "入院計画"
+        verbose_name_plural = "入院計画"
+        indexes = [
+            models.Index(fields=["status", "planned_admission_date"]),
+            models.Index(fields=["planned_discharge_date"]),
+        ]
+
+    def __str__(self):
+        return f"入院計画: {self.treatment_course}"
+
+
+class ResourceAssignment(models.Model):
+    STATUS_CHOICES = [
+        ("planned", "予定"),
+        ("active", "使用中"),
+        ("completed", "終了"),
+        ("cancelled", "キャンセル"),
+    ]
+    CERTAINTY_CHOICES = [
+        ("confirmed", "確定"),
+        ("provisional", "仮"),
+        ("estimated", "推定"),
+        ("unknown", "不明"),
+    ]
+
+    treatment_course = models.ForeignKey(
+        TreatmentCourse,
+        on_delete=models.PROTECT,
+        related_name="resource_assignments",
+        verbose_name="治療クール",
+    )
+    resource_pool = models.ForeignKey(
+        ResourcePool,
+        on_delete=models.PROTECT,
+        related_name="assignments",
+        verbose_name="資源プール",
+    )
+    planned_start_date = models.DateField("予定開始日")
+    planned_end_date = models.DateField("予定終了日", null=True, blank=True)
+    actual_start_at = models.DateTimeField("実使用開始日時", null=True, blank=True)
+    actual_end_at = models.DateTimeField("実使用終了日時", null=True, blank=True)
+    status = models.CharField(
+        "状態", max_length=16, choices=STATUS_CHOICES, default="planned", db_index=True,
+    )
+    certainty = models.CharField(
+        "確度", max_length=16, choices=CERTAINTY_CHOICES, default="confirmed",
+    )
+    reason = models.TextField("理由", blank=True, default="")
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_resource_assignments",
+        verbose_name="作成者",
+    )
+    updated_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="updated_resource_assignments",
+        verbose_name="更新者",
+    )
+    created_at = models.DateTimeField("作成日時", auto_now_add=True)
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "資源割当"
+        verbose_name_plural = "資源割当"
+        indexes = [
+            models.Index(fields=["resource_pool", "planned_start_date"]),
+            models.Index(fields=["treatment_course", "status"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(planned_end_date__isnull=True)
+                    | models.Q(planned_end_date__gte=models.F("planned_start_date"))
+                ),
+                name="resource_assignment_planned_end_gte_start",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(actual_start_at__isnull=True)
+                    | models.Q(actual_end_at__isnull=True)
+                    | models.Q(actual_end_at__gte=models.F("actual_start_at"))
+                ),
+                name="resource_assignment_actual_end_gte_start",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.treatment_course} - {self.resource_pool}"
+
+
+class RtmSWaitlistEntry(models.Model):
+    STATUS_CHOICES = [
+        ("requested", "希望受付"),
+        ("waiting", "日程調整待ち"),
+        ("provisional", "仮予定"),
+        ("scheduled", "確定予定"),
+        ("cancelled", "キャンセル"),
+        ("withdrawn", "撤回"),
+    ]
+
+    treatment_course = models.ForeignKey(
+        TreatmentCourse,
+        on_delete=models.PROTECT,
+        related_name="rtms_waitlist_entries",
+        verbose_name="治療クール",
+    )
+    status = models.CharField(
+        "状態", max_length=16, choices=STATUS_CHOICES, default="requested", db_index=True,
+    )
+    priority = models.PositiveIntegerField("優先度", default=0, db_index=True)
+    registered_at = models.DateTimeField("待機登録日時", default=timezone.now)
+    registered_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="registered_rtms_waitlist_entries",
+        verbose_name="登録者",
+    )
+    preferred_start_from = models.DateField("希望開始日（早い方）", null=True, blank=True)
+    preferred_start_to = models.DateField("希望開始日（遅い方）", null=True, blank=True)
+    estimated_inpatient_days = models.PositiveIntegerField("入院見込み日数", null=True, blank=True)
+    preferred_treatment_start = models.DateField("治療開始希望日", null=True, blank=True)
+    comment = models.TextField("コメント", blank=True, default="")
+    scheduled_at = models.DateTimeField("予定化日時", null=True, blank=True)
+    closed_at = models.DateTimeField("終了日時", null=True, blank=True)
+    inpatient_plan = models.ForeignKey(
+        InpatientPlan,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="waitlist_entries",
+        verbose_name="入院計画",
+    )
+    created_at = models.DateTimeField("作成日時", auto_now_add=True)
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "rTMS待機リスト"
+        verbose_name_plural = "rTMS待機リスト"
+        indexes = [
+            models.Index(fields=["status", "priority", "registered_at"]),
+            models.Index(fields=["treatment_course", "status"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(preferred_start_to__isnull=True)
+                    | models.Q(preferred_start_from__isnull=True)
+                    | models.Q(preferred_start_to__gte=models.F("preferred_start_from"))
+                ),
+                name="waitlist_preferred_start_to_gte_from",
+            ),
+        ]
+
+    def __str__(self):
+        return f"rTMS待機: {self.treatment_course} ({self.status})"
+
+
 def consent_upload_to(instance, filename):
     # 拡張子を維持（.pdf想定）
     ext = os.path.splitext(filename)[1].lower() or ".pdf"

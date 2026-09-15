@@ -16,6 +16,10 @@ from .models import (
     ScaleDefinition,
     TimingScaleConfig,
     AssessmentRecord,
+    ResourcePool,
+    InpatientPlan,
+    ResourceAssignment,
+    RtmSWaitlistEntry,
 )
 
 # --- 1. 適正に関する質問票 (初診時) ---
@@ -190,6 +194,46 @@ class AuditLogAdmin(admin.ModelAdmin):
     search_fields = ('user__username', 'patient__name', 'summary')
 
 
+@admin.register(ResourcePool)
+class ResourcePoolAdmin(admin.ModelAdmin):
+    list_display = (
+        'code', 'name', 'resource_type', 'physical_capacity',
+        'operational_target', 'is_active',
+    )
+    list_filter = ('resource_type', 'is_active')
+    search_fields = ('code', 'name')
+
+
+@admin.register(InpatientPlan)
+class InpatientPlanAdmin(admin.ModelAdmin):
+    list_display = (
+        'treatment_course', 'status', 'planned_admission_date',
+        'planned_discharge_date', 'actual_admission_at', 'actual_discharge_at',
+    )
+    list_filter = ('status', 'uncertainty', 'admission_type')
+    search_fields = ('treatment_course__patient__name', 'treatment_course__patient__card_id')
+
+
+@admin.register(ResourceAssignment)
+class ResourceAssignmentAdmin(admin.ModelAdmin):
+    list_display = (
+        'treatment_course', 'resource_pool', 'status', 'certainty',
+        'planned_start_date', 'planned_end_date', 'actual_start_at', 'actual_end_at',
+    )
+    list_filter = ('resource_pool', 'status', 'certainty')
+    search_fields = ('treatment_course__patient__name', 'treatment_course__patient__card_id')
+
+
+@admin.register(RtmSWaitlistEntry)
+class RtmSWaitlistEntryAdmin(admin.ModelAdmin):
+    list_display = (
+        'treatment_course', 'status', 'priority', 'registered_at',
+        'preferred_start_from', 'preferred_start_to', 'scheduled_at', 'closed_at',
+    )
+    list_filter = ('status', 'priority')
+    search_fields = ('treatment_course__patient__name', 'treatment_course__patient__card_id')
+
+
 # ========================
 # カスタム AdminSite
 # ========================
@@ -255,6 +299,10 @@ rtms_admin_site.register(AuditLog, AuditLogAdmin)
 rtms_admin_site.register(ScaleDefinition, ScaleDefinitionAdmin)
 rtms_admin_site.register(TimingScaleConfig, TimingScaleConfigAdmin)
 rtms_admin_site.register(AssessmentRecord, AssessmentRecordAdmin)
+rtms_admin_site.register(ResourcePool, ResourcePoolAdmin)
+rtms_admin_site.register(InpatientPlan, InpatientPlanAdmin)
+rtms_admin_site.register(ResourceAssignment, ResourceAssignmentAdmin)
+rtms_admin_site.register(RtmSWaitlistEntry, RtmSWaitlistEntryAdmin)
 
 
 @admin.register(TreatmentSkip)
