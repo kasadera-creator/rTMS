@@ -261,6 +261,65 @@ class ResourcePool(models.Model):
         return f"{self.name} ({self.code})"
 
 
+class RtmSAdmissionCapacity(models.Model):
+    capacity = models.PositiveIntegerField("rTMS新規入院受入枠")
+    valid_from = models.DateField("有効開始日")
+    valid_to = models.DateField("有効終了日", null=True, blank=True)
+    is_active = models.BooleanField("有効", default=True, db_index=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_rtms_admission_capacities",
+        verbose_name="作成者",
+    )
+    updated_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="updated_rtms_admission_capacities",
+        verbose_name="更新者",
+    )
+    notes = models.TextField("備考", blank=True, default="")
+    created_at = models.DateTimeField("作成日時", auto_now_add=True)
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "rTMS新規入院受入枠"
+        verbose_name_plural = "rTMS新規入院受入枠"
+        indexes = [
+            models.Index(fields=["valid_from", "valid_to", "is_active"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(valid_to__isnull=True)
+                    | models.Q(valid_to__gte=models.F("valid_from"))
+                ),
+                name="rtms_admission_capacity_valid_to_gte_from",
+            ),
+        ]
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        if self.valid_to and self.valid_to < self.valid_from:
+            raise ValidationError({"valid_to": "有効終了日は開始日以降にしてください。"})
+        overlapping = type(self).objects.filter(is_active=True).exclude(pk=self.pk)
+        if self.is_active and overlapping.filter(
+            valid_from__lte=self.valid_to or date.max,
+        ).filter(
+            models.Q(valid_to__isnull=True) | models.Q(valid_to__gte=self.valid_from),
+        ).exists():
+            raise ValidationError("同じ期間に有効な受入枠設定が既に存在します。")
+
+    def __str__(self):
+        end = self.valid_to.isoformat() if self.valid_to else "継続"
+        return f"rTMS新規入院受入枠 {self.capacity} ({self.valid_from}〜{end})"
+
+
 class InpatientPlan(models.Model):
     STATUS_CHOICES = [
         ("draft", "下書き"),

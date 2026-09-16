@@ -1,0 +1,42 @@
+{% extends "rtms_app/base.html" %}
+{% block body_class %}page-inpatient-calendar{% endblock %}
+{% block header_breadcrumb %}<span class="text-white-50 ms-2">/ 入院・個室カレンダー</span>{% endblock %}
+{% block content %}
+<div class="container py-3">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div>
+      <h1 class="h4 mb-1">入院・個室カレンダー</h1>
+      <div class="text-muted">{{ year }}年{{ month }}月 / Course単位</div>
+    </div>
+    {% if treatment_course %}
+      <div class="d-flex gap-2">
+        <a class="btn btn-primary" href="{% url 'rtms_app:inpatient_schedule' treatment_course.patient_id %}?course_number={{ treatment_course.course_number }}">日程を確定</a>
+        <a class="btn btn-outline-secondary" href="{% url 'rtms_app:rtms_waitlist' treatment_course.patient_id %}?course_number={{ treatment_course.course_number }}">待機リスト</a>
+      </div>
+    {% endif %}
+  </div>
+  <div class="row g-2 mb-3">
+    <div class="col-6 col-md-3"><div class="card h-100"><div class="card-body"><div class="small text-muted">入院ピーク</div><strong>{{ summary.peak_inpatients }}人</strong></div></div></div>
+    <div class="col-6 col-md-3"><div class="card h-100"><div class="card-body"><div class="small text-muted">rTMS患者ピーク</div><strong>{{ summary.peak_rtms }}人</strong></div></div></div>
+    <div class="col-6 col-md-3"><div class="card h-100"><div class="card-body"><div class="small text-muted">個室ピーク</div><strong>{{ summary.peak_private_rooms }}{% if resource_pool %}/{{ resource_pool.physical_capacity }}{% endif %}</strong><div class="small text-muted">通常枠 {{ resource_pool.operational_target|default:'-' }}</div></div></div></div>
+    <div class="col-6 col-md-3"><div class="card h-100"><div class="card-body"><div class="small text-muted">受入可能見込み</div><strong>{{ forecast.label }}</strong>{% if forecast.uncertainty_count %}<div class="small text-warning">退院未確定 {{ forecast.uncertainty_count }}人</div>{% endif %}</div></div></div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-bordered align-middle">
+      <thead class="table-light"><tr><th>日付</th><th>入院</th><th>rTMS</th><th>個室</th><th>容量</th><th>注記</th></tr></thead>
+      <tbody>
+      {% for day in days %}
+        <tr{% if day.operational_warning %} class="table-warning"{% endif %}>
+          <th>{% if treatment_course %}<a href="{% url 'rtms_app:inpatient_schedule' treatment_course.patient_id %}?course_number={{ treatment_course.course_number }}&selected_date={{ day.date|date:'Y-m-d' }}">{{ day.date|date:"n/j (D)" }}</a>{% else %}{{ day.date|date:"n/j (D)" }}{% endif %}</th>
+          <td>{{ day.inpatient_count }}人{% if day.unknown_end_count %}<span class="badge text-bg-warning ms-1">退院日不明 {{ day.unknown_end_count }}</span>{% endif %}</td>
+          <td>{{ day.rtms_count }}人</td>
+          <td>{{ day.private_room_count }}{% if day.physical_capacity is not None %}/{{ day.physical_capacity }}{% endif %}</td>
+          <td>{% if day.admission_capacity_configured %}新規 {{ day.admission_capacity }}人{% else %}<span class="text-danger">未設定</span>{% endif %}</td>
+          <td>{% if day.operational_warning %}通常運用枠超過{% endif %}{% if day.overdue_count %} 予定退院超過・実退院未登録{% endif %}</td>
+        </tr>
+      {% empty %}<tr><td colspan="6" class="text-center text-muted">表示できる日程がありません。</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

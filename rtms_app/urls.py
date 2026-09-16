@@ -5,6 +5,7 @@ from django.views.generic.base import RedirectView
 from . import views_health
 from . import views_survey_export
 from . import views_research_export
+from . import views_inpatient
 
 from django.conf import settings
 from django.conf.urls.static import static
@@ -38,6 +39,16 @@ urlpatterns = [
         "patient/<int:patient_id>/",
         views.patient_first_visit,
         name="patient_first_visit",
+    ),
+    path(
+        "patient/<int:patient_id>/inpatient/schedule/",
+        views_inpatient.inpatient_schedule_view,
+        name="inpatient_schedule",
+    ),
+    path(
+        "patient/<int:patient_id>/inpatient/waitlist/",
+        views_inpatient.rtms_waitlist_view,
+        name="rtms_waitlist",
     ),
 
     # ★ 基本情報編集（権限制限）
@@ -157,6 +168,11 @@ urlpatterns = [
         "calendar/month/",
         views.calendar_month_view,
         name="calendar_month",
+    ),
+    path(
+        "inpatient/calendar/",
+        views_inpatient.inpatient_calendar_view,
+        name="inpatient_calendar",
     ),
     path(
         "calendar/month/print/",

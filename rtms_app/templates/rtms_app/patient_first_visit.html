@@ -291,6 +291,12 @@
             <button type="submit" form="mainForm" class="btn btn-first-visit">
               <i class="fas fa-save"></i> 保存
             </button>
+            <a class="btn btn-success" href="{% url 'rtms_app:inpatient_calendar' %}?patient_id={{ patient.id }}&course_number={{ course_number }}">
+              <i class="fas fa-calendar-check"></i> rTMS日程を相談
+            </a>
+            <a class="btn btn-outline-success" href="{% url 'rtms_app:rtms_waitlist' patient.id %}?course_number={{ course_number }}">
+              <i class="fas fa-list"></i> rTMS待機リストへ
+            </a>
             <a class="btn btn-primary"
                href="{% url 'rtms_app:print:patient_print_admission' patient.id %}?course_number={{ course_number }}"
                target="_blank"
@@ -317,6 +323,12 @@
           <button type="submit" form="mainForm" class="btn btn-first-visit">
             <i class="fas fa-save"></i> 保存
           </button>
+          <a class="btn btn-success" href="{% url 'rtms_app:inpatient_calendar' %}?patient_id={{ patient.id }}&course_number={{ course_number }}">
+            <i class="fas fa-calendar-check"></i> rTMS日程を相談
+          </a>
+          <a class="btn btn-outline-success" href="{% url 'rtms_app:rtms_waitlist' patient.id %}?course_number={{ course_number }}">
+            <i class="fas fa-list"></i> rTMS待機リストへ
+          </a>
           <a class="btn btn-primary"
              href="{% url 'rtms_app:print:patient_print_admission' patient.id %}?course_number={{ course_number }}"
              target="_blank"

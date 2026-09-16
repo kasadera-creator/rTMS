@@ -17,6 +17,7 @@ from .models import (
     TimingScaleConfig,
     AssessmentRecord,
     ResourcePool,
+    RtmSAdmissionCapacity,
     InpatientPlan,
     ResourceAssignment,
     RtmSWaitlistEntry,
@@ -204,6 +205,14 @@ class ResourcePoolAdmin(admin.ModelAdmin):
     search_fields = ('code', 'name')
 
 
+@admin.register(RtmSAdmissionCapacity)
+class RtmSAdmissionCapacityAdmin(admin.ModelAdmin):
+    list_display = ('capacity', 'valid_from', 'valid_to', 'is_active', 'updated_at')
+    list_filter = ('is_active',)
+    search_fields = ('notes',)
+    ordering = ('-valid_from',)
+
+
 @admin.register(InpatientPlan)
 class InpatientPlanAdmin(admin.ModelAdmin):
     list_display = (
@@ -300,6 +309,7 @@ rtms_admin_site.register(ScaleDefinition, ScaleDefinitionAdmin)
 rtms_admin_site.register(TimingScaleConfig, TimingScaleConfigAdmin)
 rtms_admin_site.register(AssessmentRecord, AssessmentRecordAdmin)
 rtms_admin_site.register(ResourcePool, ResourcePoolAdmin)
+rtms_admin_site.register(RtmSAdmissionCapacity, RtmSAdmissionCapacityAdmin)
 rtms_admin_site.register(InpatientPlan, InpatientPlanAdmin)
 rtms_admin_site.register(ResourceAssignment, ResourceAssignmentAdmin)
 rtms_admin_site.register(RtmSWaitlistEntry, RtmSWaitlistEntryAdmin)
