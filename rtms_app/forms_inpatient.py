@@ -1,6 +1,53 @@
 from django import forms
 
-from rtms_app.models import ResourcePool
+from rtms_app.models import ResourcePool, TreatmentCourse
+
+
+class CalendarCourseAdjustmentForm(forms.ModelForm):
+    planned_treatment_sessions = forms.IntegerField(
+        label="予定治療回数（回）", required=False, min_value=1,
+        widget=forms.NumberInput(attrs={"class": "form-control form-control-sm", "min": 1}),
+    )
+    preferred_start_from = forms.DateField(
+        label="希望開始日", required=False,
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control form-control-sm"}),
+    )
+    preferred_start_to = forms.DateField(
+        label="希望終了日", required=False,
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control form-control-sm"}),
+    )
+
+    class Meta:
+        model = TreatmentCourse
+        fields = (
+            "admission_date",
+            "first_treatment_date",
+            "private_room_planned",
+            "is_all_case_survey",
+            "planned_treatment_sessions",
+        )
+        widgets = {
+            "admission_date": forms.DateInput(attrs={"type": "date", "class": "form-control form-control-sm"}),
+            "first_treatment_date": forms.DateInput(attrs={"type": "date", "class": "form-control form-control-sm"}),
+            "private_room_planned": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "is_all_case_survey": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+    def clean(self):
+        cleaned = super().clean()
+        admission_date = cleaned.get("admission_date")
+        treatment_date = cleaned.get("first_treatment_date")
+        if admission_date and treatment_date and treatment_date < admission_date:
+            self.add_error("first_treatment_date", "rTMS治療開始日は入院日以降にしてください。")
+        start = cleaned.get("preferred_start_from")
+        end = cleaned.get("preferred_start_to")
+        if start and end and end < start:
+            self.add_error("preferred_start_to", "希望終了日は希望開始日以降にしてください。")
+        if cleaned.get("planned_treatment_sessions") is None:
+            cleaned["planned_treatment_sessions"] = (
+                self.instance.planned_treatment_sessions or 30
+            )
+        return cleaned
 
 
 class InpatientScheduleForm(forms.Form):
@@ -46,8 +93,8 @@ class InpatientScheduleForm(forms.Form):
 class RtmSWaitlistEntryForm(forms.Form):
     preferred_start_from = forms.DateField(label="希望開始時期（早い方）", required=False, widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
     preferred_start_to = forms.DateField(label="希望開始時期（遅い方）", required=False, widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
-    estimated_inpatient_days = forms.IntegerField(label="希望治療期間（日）", required=False, min_value=1, widget=forms.NumberInput(attrs={"class": "form-control"}))
-    priority = forms.IntegerField(label="priority", min_value=0, initial=0, widget=forms.NumberInput(attrs={"class": "form-control"}))
+    estimated_inpatient_days = forms.IntegerField(label="希望入院日数（日）", required=False, min_value=1, widget=forms.NumberInput(attrs={"class": "form-control"}))
+    planned_treatment_sessions = forms.IntegerField(label="予定治療回数（回）", required=False, min_value=1, initial=30, widget=forms.NumberInput(attrs={"class": "form-control"}))
     comment = forms.CharField(label="コメント", required=False, widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}))
 
     def clean(self):

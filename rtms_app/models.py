@@ -176,6 +176,8 @@ class TreatmentCourse(models.Model):
 
     first_visit_date = models.DateField("初診日", null=True, blank=True)
     admission_date = models.DateField("入院予定日", null=True, blank=True)
+    private_room_planned = models.BooleanField("個室利用予定", default=False)
+    planned_treatment_sessions = models.PositiveIntegerField("予定治療回数（回）", default=30)
     admission_type = models.CharField(
         "入院形態",
         max_length=20,
@@ -537,6 +539,13 @@ class RtmSWaitlistEntry(models.Model):
                     | models.Q(preferred_start_to__gte=models.F("preferred_start_from"))
                 ),
                 name="waitlist_preferred_start_to_gte_from",
+            ),
+            models.UniqueConstraint(
+                fields=["treatment_course"],
+                condition=models.Q(
+                    status__in=("requested", "waiting", "provisional", "scheduled")
+                ),
+                name="unique_active_waitlist_per_treatment_course",
             ),
         ]
 

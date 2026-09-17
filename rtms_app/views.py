@@ -46,6 +46,7 @@ from .services.rtms_schedule import (
     format_rtms_label,
     next_open_day,
 )
+from .services.waitlist import ACTIVE_WAITLIST_STATUSES
 
 
 def _questionnaire_questions():
@@ -712,10 +713,18 @@ def generate_calendar_weeks(patient, treatment_course=None, course_number=None):
 
     if current_week: calendar_weeks.append(current_week)
 
-    # 評価イベントを予定日に追加（AssessmentSchedule の上書きがあれば優先。HAM-Dのみ未実施なら自動順延）
-    schedule_query = {'treatment_course': treatment_course} if treatment_course else {
-        'patient': patient, 'course_number': course_number,
+    assessment_schedule_scope = {'treatment_course': treatment_course} if treatment_course else {
+        'patient': patient,
+        'treatment_course': treatment_course,
+        'course_number': course_number,
     }
+    if not treatment_start and not AssessmentSchedule.objects.filter(
+        **assessment_schedule_scope,
+    ).exists():
+        return calendar_weeks, []
+
+    # 評価イベントを予定日に追加（AssessmentSchedule の上書きがあれば優先。HAM-Dのみ未実施なら自動順延）
+    schedule_query = assessment_schedule_scope
     schedule_overrides = {
         (row.scale_id, row.timing): row.planned_date
         for row in AssessmentSchedule.objects.filter(**schedule_query)
@@ -1405,8 +1414,14 @@ def patient_first_visit(request, patient_id):
         'formtarget': '_blank',
         'docs_form_id': 'bundlePrintFormFirstVisit',
     }]
+    active_waitlist_entry = None
+    if treatment_course is not None:
+        active_waitlist_entry = treatment_course.rtms_waitlist_entries.filter(
+            status__in=ACTIVE_WAITLIST_STATUSES,
+        ).order_by("registered_at", "pk").first()
     return render(request, 'rtms_app/patient_first_visit.html', {
         'patient': patient,
+        'treatment_course': treatment_course,
         'course_number': course_number,
         'form': form,
         'referral_options': referral_options,
@@ -1421,6 +1436,7 @@ def patient_first_visit(request, patient_id):
         'floating_print_options': floating_print_options,
         'can_view_audit': can_view_audit(request.user),
         'can_edit_basic': can_view_audit(request.user),
+        'active_waitlist_entry': active_waitlist_entry,
     })
 
 def patient_basic_edit(request, patient_id):

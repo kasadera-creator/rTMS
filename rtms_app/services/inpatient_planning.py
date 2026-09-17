@@ -26,6 +26,33 @@ def get_or_create_inpatient_plan(*, treatment_course: TreatmentCourse, user=None
 
 
 @transaction.atomic
+def update_calendar_course_adjustment(
+    *, treatment_course: TreatmentCourse, admission_date, treatment_start_date,
+    private_room_planned, is_all_case_survey, planned_treatment_sessions=30, user=None,
+):
+    """Persist calendar controls through the Course and its existing plan."""
+    locked_course = TreatmentCourse.objects.select_for_update().get(pk=treatment_course.pk)
+    locked_course.admission_date = admission_date
+    locked_course.first_treatment_date = treatment_start_date
+    locked_course.private_room_planned = private_room_planned
+    locked_course.is_all_case_survey = is_all_case_survey
+    locked_course.planned_treatment_sessions = planned_treatment_sessions
+    locked_course.save(update_fields=[
+        "admission_date",
+        "first_treatment_date",
+        "private_room_planned",
+        "is_all_case_survey",
+        "planned_treatment_sessions",
+        "updated_at",
+    ])
+    plan = get_or_create_inpatient_plan(treatment_course=locked_course, user=user)
+    plan.planned_admission_date = admission_date
+    plan.updated_by = user
+    plan.save(update_fields=["planned_admission_date", "updated_by", "updated_at"])
+    return {"course": locked_course, "plan": plan}
+
+
+@transaction.atomic
 def confirm_inpatient_schedule(
     *,
     treatment_course: TreatmentCourse,

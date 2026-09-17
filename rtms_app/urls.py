@@ -50,6 +50,16 @@ urlpatterns = [
         views_inpatient.rtms_waitlist_view,
         name="rtms_waitlist",
     ),
+    path(
+        "inpatient/waitlist/select/",
+        views_inpatient.rtms_waitlist_patient_select_view,
+        name="rtms_waitlist_patient_select",
+    ),
+    path(
+        "inpatient/waitlist/",
+        views_inpatient.rtms_waitlist_management_view,
+        name="inpatient_waitlist",
+    ),
 
     # ★ 基本情報編集（権限制限）
     path(

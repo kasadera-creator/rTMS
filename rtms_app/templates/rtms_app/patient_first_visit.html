@@ -52,6 +52,9 @@
 {% block content %}
   <div class="stack-md">
     {% include "rtms_app/partials/patient_inline_bar.html" with page_title="初診・基本情報入力" title_icon="fa-file-medical" patient=patient %}
+    <div class="small text-muted">
+      初診日：{% if course_first_visit_date %}{{ course_first_visit_date|date:"Y/m/d" }}{% else %}-{% endif %}
+    </div>
     <form method="post" id="mainForm" class="form-rtms" data-original-first-treatment-date="{{ course_first_treatment_date|date:'Y-m-d' }}">
       {% csrf_token %}
       {# Hidden backing fields moved here after removing reference card #}
@@ -61,6 +64,7 @@
              name="birth_date"
              value="{{ patient.birth_date|date:'Y-m-d' }}">
       <input type="hidden" name="gender" value="{{ patient.gender }}">
+      <input type="hidden" name="first_visit_date" value="{{ course_first_visit_date|date:'Y-m-d' }}">
       {% if form.errors %}
         <div class="alert alert-danger">
           <strong>保存できませんでした:</strong> {{ form.errors }}
@@ -257,10 +261,6 @@
               <div class="card-body">
                 <div class="row g-3">
                   <div class="col-md-6">
-                    <label class="form-label">初診日</label>
-                    {{ form.first_visit_date }}
-                  </div>
-                  <div class="col-md-6">
                     <label class="form-label">入院予定日</label>
                     {{ form.admission_date }}
                   </div>
@@ -272,11 +272,30 @@
                     <label class="form-label">今後の担当医</label>
                     {{ form.attending_physician }}
                   </div>
-                  <div class="col-12 mt-2">
-                    <div class="form-check">
-                      {{ form.is_all_case_survey }}
-                      <label class="form-check-label" for="id_is_all_case_survey">全例調査対象（※該当時は4週目にもHAM-D指示）</label>
+                  <div class="col-12">
+                    <div class="d-flex flex-wrap align-items-center gap-4">
+                      {% if treatment_course %}
+                        <div class="form-check mb-0">
+                          {{ form.private_room_planned }}
+                          <label class="form-check-label" for="id_private_room_planned">個室利用予定</label>
+                        </div>
+                      {% endif %}
+                      <div class="form-check mb-0">
+                        {{ form.is_all_case_survey }}
+                        <label class="form-check-label" for="id_is_all_case_survey">全例調査対象</label>
+                      </div>
                     </div>
+                    {% if treatment_course %}<div class="form-text">個室の割当は日程調整で決定します。</div>{% endif %}
+                  </div>
+                  <div class="col-12 border-top pt-3 mt-2">
+                    {% if active_waitlist_entry %}
+                      <span class="btn btn-outline-secondary btn-sm disabled" aria-disabled="true"><i class="fas fa-user-clock"></i> 待機者登録済み</span>
+                      <span class="small text-muted ms-2">{{ active_waitlist_entry.get_status_display }}</span>
+                    {% else %}
+                      <a class="btn btn-outline-primary btn-sm" href="{% url 'rtms_app:rtms_waitlist' patient.id %}?course_number={{ course_number }}">
+                        <i class="fas fa-user-clock"></i> rTMS待機者リストに登録
+                      </a>
+                    {% endif %}
                   </div>
                 </div>
               </div>
@@ -291,12 +310,6 @@
             <button type="submit" form="mainForm" class="btn btn-first-visit">
               <i class="fas fa-save"></i> 保存
             </button>
-            <a class="btn btn-success" href="{% url 'rtms_app:inpatient_calendar' %}?patient_id={{ patient.id }}&course_number={{ course_number }}">
-              <i class="fas fa-calendar-check"></i> rTMS日程を相談
-            </a>
-            <a class="btn btn-outline-success" href="{% url 'rtms_app:rtms_waitlist' patient.id %}?course_number={{ course_number }}">
-              <i class="fas fa-list"></i> rTMS待機リストへ
-            </a>
             <a class="btn btn-primary"
                href="{% url 'rtms_app:print:patient_print_admission' patient.id %}?course_number={{ course_number }}"
                target="_blank"
@@ -323,12 +336,6 @@
           <button type="submit" form="mainForm" class="btn btn-first-visit">
             <i class="fas fa-save"></i> 保存
           </button>
-          <a class="btn btn-success" href="{% url 'rtms_app:inpatient_calendar' %}?patient_id={{ patient.id }}&course_number={{ course_number }}">
-            <i class="fas fa-calendar-check"></i> rTMS日程を相談
-          </a>
-          <a class="btn btn-outline-success" href="{% url 'rtms_app:rtms_waitlist' patient.id %}?course_number={{ course_number }}">
-            <i class="fas fa-list"></i> rTMS待機リストへ
-          </a>
           <a class="btn btn-primary"
              href="{% url 'rtms_app:print:patient_print_admission' patient.id %}?course_number={{ course_number }}"
              target="_blank"

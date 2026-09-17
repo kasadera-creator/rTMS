@@ -1,0 +1,62 @@
+{% extends "rtms_app/base.html" %}
+{% block body_class %}page-rtms-waitlist-management{% endblock %}
+{% block header_breadcrumb %}<span class="text-white-50 ms-2">/ rTMS待機者リスト</span>{% endblock %}
+{% block content %}
+<div class="container py-3">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div>
+      <h1 class="h4 mb-1">rTMS待機者リスト</h1>
+      <div class="text-muted small">現在の待機者 {{ active_count }}名 / 優先度・登録日順</div>
+    </div>
+    <form method="get" class="d-flex align-items-center gap-2">
+      <label class="small text-muted" for="id_status">表示</label>
+      <select class="form-select form-select-sm" id="id_status" name="status" onchange="this.form.submit()">
+        {% for value, label in status_filter_choices %}
+          <option value="{{ value }}"{% if status_filter == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </form>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-bordered table-hover align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>患者 / Course</th>
+          <th>登録日</th>
+          <th>待機日数</th>
+          <th>希望時期</th>
+          <th>希望入院期間</th>
+          <th>優先度</th>
+          <th>状態</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in entries %}
+        <tr>
+          <td>
+            <a class="fw-bold" href="{% url 'rtms_app:patient_first_visit' entry.treatment_course.patient_id %}?course_number={{ entry.treatment_course.course_number }}">
+              {{ entry.treatment_course.patient.name }}
+            </a>
+            <div class="small text-muted">患者ID: {{ entry.treatment_course.patient.card_id }} / Course #{{ entry.treatment_course.course_number }}</div>
+          </td>
+          <td>{{ entry.registered_at|date:"Y/m/d" }}</td>
+          <td>{{ entry.waiting_days }}日</td>
+          <td>{{ entry.preferred_start_from|date:"Y/m/d"|default:"-" }}{% if entry.preferred_start_to %}〜{{ entry.preferred_start_to|date:"Y/m/d" }}{% endif %}</td>
+          <td>{% if entry.estimated_inpatient_days %}{{ entry.estimated_inpatient_days }}日{% else %}-{% endif %}</td>
+          <td>{{ entry.priority }}</td>
+          <td>{{ entry.get_status_display }}</td>
+          <td class="text-nowrap">
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'rtms_app:inpatient_calendar' %}?patient_id={{ entry.treatment_course.patient_id }}&amp;course_number={{ entry.treatment_course.course_number }}">日程を調整</a>
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'rtms_app:rtms_waitlist' entry.treatment_course.patient_id %}?course_number={{ entry.treatment_course.course_number }}">詳細</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="text-center text-muted py-4">現在、rTMS待機者はいません。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

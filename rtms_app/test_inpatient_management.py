@@ -60,9 +60,9 @@ class Phase1ModelTests(TestCase):
             status="waiting",
             priority=1,
         )
-        second = register_waitlist_entry(
+        second = RtmSWaitlistEntry.objects.create(
             treatment_course=self.course_one,
-            user=self.user,
+            registered_by=self.user,
             status="withdrawn",
             priority=2,
         )
