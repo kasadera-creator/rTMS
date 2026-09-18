@@ -97,9 +97,9 @@
           <th>治療終了予定（30回）</th>
         </tr>
         <tr>
-          <td>{{ patient.admission_date|default:"-" }}</td>
-          <td>{{ patient.mapping_date|default:"-" }}</td>
-          <td>{{ patient.first_treatment_date|default:"-" }}</td>
+          <td>{{ admission_date|default:"-" }}</td>
+          <td>{{ mapping_date|default:"-" }}</td>
+          <td>{{ first_treatment_date|default:"-" }}</td>
           <td>{{ end_date_est|date:"Y-m-d"|default:"-" }}</td>
         </tr>
       </table>

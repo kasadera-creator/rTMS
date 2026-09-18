@@ -89,7 +89,7 @@
     {% include "rtms_app/partials/patient_inline_bar.html" with page_title="治療実施" title_icon="fa-bolt" title_controls_html=mode_switch_html %}
     <div class="mt-2">
       <a class="btn btn-sm btn-outline-secondary"
-         href="{% url 'rtms_app:treatment_skip_list' patient.id %}">スキップ履歴</a>
+         href="{% url 'rtms_app:treatment_skip_list' patient.id %}?course_number={{ course_number }}">スキップ履歴</a>
     </div>
     {# print toolbar is only for print preview pages; remove from regular screen #}
     {% if alert_msg %}
@@ -271,17 +271,23 @@
                 <div class="row g-2 mt-2 align-items-end">
                   <div class="col-12 col-lg-6">
                     <label class="form-label fw-bold">使用したTMSコイル</label>
-                    <select class="form-select form-select-sm" name="coil_type" aria-label="使用したTMSコイル">
+                    <select class="form-select form-select-sm"
+                            name="coil_type"
+                            aria-label="使用したTMSコイル">
                       {% for value, label in form.coil_type.field.choices %}
-                        <option value="{{ value }}" {% if form.coil_type.value == value %}selected{% endif %}>{{ label }}</option>
+                        <option value="{{ value }}"
+                                {% if form.coil_type.value == value %}selected{% endif %}>{{ label }}</option>
                       {% endfor %}
                     </select>
                   </div>
                   <div class="col-12 col-lg-6">
                     <label class="form-label fw-bold">刺激部位</label>
-                    <select class="form-select form-select-sm" name="target_site" aria-label="刺激部位">
+                    <select class="form-select form-select-sm"
+                            name="target_site"
+                            aria-label="刺激部位">
                       {% for value, label in form.target_site.field.choices %}
-                        <option value="{{ value }}" {% if form.target_site.value == value %}selected{% endif %}>{{ label }}</option>
+                        <option value="{{ value }}"
+                                {% if form.target_site.value == value %}selected{% endif %}>{{ label }}</option>
                       {% endfor %}
                     </select>
                   </div>
@@ -361,7 +367,9 @@
                 </div>
                 <hr class="my-2">
                 <div class="d-flex justify-content-start align-items-center flex-wrap gap-2 my-2">
-                  <button type="button" class="btn btn-success fw-bold" id="sideEffectNoneOutsideBtn">
+                  <button type="button"
+                          class="btn btn-success fw-bold"
+                          id="sideEffectNoneOutsideBtn">
                     <i class="fas fa-check me-1"></i>副作用なし
                   </button>
                   <button type="button"
@@ -373,18 +381,57 @@
                   </button>
                   <span class="small text-success align-self-center" id="sideEffectStatus">{{ side_effect_status }}</span>
                 </div>
-                <div id="adverseReportAction" class="{% if not sae_event_types_checked %}d-none{% endif %} alert alert-warning py-2 mb-2">
-                  <div class="fw-bold text-danger"><i class="fas fa-exclamation-triangle me-1"></i>有害事象報告</div>
-                  <button type="button" class="btn btn-danger btn-sm mt-1" id="openAdverseReportBtn">
-                    {% if sae_report_exists %}✓ 有害事象報告書入力済み（確認・編集）{% else %}有害事象報告書入力{% endif %}
+                <div id="adverseReportAction"
+                     class="{% if not sae_event_types_checked %}d-none{% endif %} alert alert-warning py-2 mb-2">
+                  <div class="fw-bold text-danger">
+                    <i class="fas fa-exclamation-triangle me-1"></i>有害事象報告
+                  </div>
+                  <button type="button"
+                          class="btn btn-danger btn-sm mt-1"
+                          id="openAdverseReportBtn">
+                    {% if sae_report_exists %}
+                      ✓ 有害事象報告書入力済み（確認・編集）
+                    {% else %}
+                      有害事象報告書入力
+                    {% endif %}
                   </button>
                 </div>
-                <input class="d-none sae-check" type="checkbox" name="sae_seizure" id="sae_seizure" form="treatmentForm" {% if sae_event_types_checked.sae_seizure %}checked{% endif %}>
-                <input class="d-none sae-check" type="checkbox" name="sae_finger_muscle" id="sae_finger_muscle" form="treatmentForm" {% if sae_event_types_checked.sae_finger_muscle %}checked{% endif %}>
-                <input class="d-none sae-check" type="checkbox" name="sae_syncope" id="sae_syncope" form="treatmentForm" {% if sae_event_types_checked.sae_syncope %}checked{% endif %}>
-                <input class="d-none sae-check" type="checkbox" name="sae_mania" id="sae_mania" form="treatmentForm" {% if sae_event_types_checked.sae_mania %}checked{% endif %}>
-                <input class="d-none sae-check" type="checkbox" name="sae_suicide_attempt" id="sae_suicide_attempt" form="treatmentForm" {% if sae_event_types_checked.sae_suicide_attempt %}checked{% endif %}>
-                <input class="d-none sae-check" type="checkbox" name="sae_other" id="sae_other" form="treatmentForm" {% if sae_event_types_checked.sae_other %}checked{% endif %}>
+                <input class="d-none sae-check"
+                       type="checkbox"
+                       name="sae_seizure"
+                       id="sae_seizure"
+                       form="treatmentForm"
+                       {% if sae_event_types_checked.sae_seizure %}checked{% endif %}>
+                <input class="d-none sae-check"
+                       type="checkbox"
+                       name="sae_finger_muscle"
+                       id="sae_finger_muscle"
+                       form="treatmentForm"
+                       {% if sae_event_types_checked.sae_finger_muscle %}checked{% endif %}>
+                <input class="d-none sae-check"
+                       type="checkbox"
+                       name="sae_syncope"
+                       id="sae_syncope"
+                       form="treatmentForm"
+                       {% if sae_event_types_checked.sae_syncope %}checked{% endif %}>
+                <input class="d-none sae-check"
+                       type="checkbox"
+                       name="sae_mania"
+                       id="sae_mania"
+                       form="treatmentForm"
+                       {% if sae_event_types_checked.sae_mania %}checked{% endif %}>
+                <input class="d-none sae-check"
+                       type="checkbox"
+                       name="sae_suicide_attempt"
+                       id="sae_suicide_attempt"
+                       form="treatmentForm"
+                       {% if sae_event_types_checked.sae_suicide_attempt %}checked{% endif %}>
+                <input class="d-none sae-check"
+                       type="checkbox"
+                       name="sae_other"
+                       id="sae_other"
+                       form="treatmentForm"
+                       {% if sae_event_types_checked.sae_other %}checked{% endif %}>
                 <div id="sae_notice" class="d-none alert alert-warning mt-2">
                   <div class="fw-bold">
                     <i class="fas fa-bell me-1"></i>重篤を含む有害事象が発現した場合、速やかに報告書を作成し送付してください
@@ -459,22 +506,61 @@
         </div>
         <div class="modal-body">
           <div id="sideEffectWidget" data-initial-id="sideEffectInitialRows"></div>
-                <div id="sideEffectCandidates" class="alert alert-warning d-none mt-3 mb-2">
-            <div class="fw-bold"><i class="fas fa-exclamation-triangle me-1"></i>有害事象候補</div>
+          <div id="sideEffectCandidates"
+               class="alert alert-warning d-none mt-3 mb-2">
+            <div class="fw-bold">
+              <i class="fas fa-exclamation-triangle me-1"></i>有害事象候補
+            </div>
             <div class="small mb-2">この副作用は有害事象の類型に該当する可能性があります。最終判断は医療者が行ってください。</div>
             <div id="sideEffectCandidateText" class="small"></div>
             <div class="form-check mt-2">
-              <input class="form-check-input" type="checkbox" id="reportAsAdverseEvent" {% if sae_event_types_checked %}checked{% endif %}>
-              <label class="form-check-label fw-bold" for="reportAsAdverseEvent">有害事象として報告する <small class="fw-normal text-muted">（この画面を保存して閉じ、有害事象報告書を別途作成してください）</small></label>
+              <input class="form-check-input"
+                     type="checkbox"
+                     id="reportAsAdverseEvent"
+                     {% if sae_event_types_checked %}checked{% endif %}>
+              <label class="form-check-label fw-bold" for="reportAsAdverseEvent">
+                有害事象として報告する <small class="fw-normal text-muted">（この画面を保存して閉じ、有害事象報告書を別途作成してください）</small>
+              </label>
             </div>
-            <div id="candidateEventTypes" class="{% if not sae_event_types_checked %}d-none{% endif %} mt-2">
+            <div id="candidateEventTypes"
+                 class="{% if not sae_event_types_checked %}d-none{% endif %} mt-2">
               <div class="small fw-bold">有害事象の類型</div>
-              <label class="form-check form-check-inline"><input class="form-check-input candidate-event-type" type="checkbox" data-target="sae_seizure"><span class="form-check-label">けいれん発作</span></label>
-              <label class="form-check form-check-inline"><input class="form-check-input candidate-event-type" type="checkbox" data-target="sae_finger_muscle"><span class="form-check-label">手指の筋収縮</span></label>
-              <label class="form-check form-check-inline"><input class="form-check-input candidate-event-type" type="checkbox" data-target="sae_syncope"><span class="form-check-label">失神</span></label>
-              <label class="form-check form-check-inline"><input class="form-check-input candidate-event-type" type="checkbox" data-target="sae_mania"><span class="form-check-label">躁病・軽躁病の出現</span></label>
-              <label class="form-check form-check-inline"><input class="form-check-input candidate-event-type" type="checkbox" data-target="sae_suicide_attempt"><span class="form-check-label">自殺企図</span></label>
-              <label class="form-check form-check-inline"><input class="form-check-input candidate-event-type" type="checkbox" data-target="sae_other"><span class="form-check-label">その他</span></label>
+              <label class="form-check form-check-inline">
+                <input class="form-check-input candidate-event-type"
+                       type="checkbox"
+                       data-target="sae_seizure">
+                <span class="form-check-label">けいれん発作</span>
+              </label>
+              <label class="form-check form-check-inline">
+                <input class="form-check-input candidate-event-type"
+                       type="checkbox"
+                       data-target="sae_finger_muscle">
+                <span class="form-check-label">手指の筋収縮</span>
+              </label>
+              <label class="form-check form-check-inline">
+                <input class="form-check-input candidate-event-type"
+                       type="checkbox"
+                       data-target="sae_syncope">
+                <span class="form-check-label">失神</span>
+              </label>
+              <label class="form-check form-check-inline">
+                <input class="form-check-input candidate-event-type"
+                       type="checkbox"
+                       data-target="sae_mania">
+                <span class="form-check-label">躁病・軽躁病の出現</span>
+              </label>
+              <label class="form-check form-check-inline">
+                <input class="form-check-input candidate-event-type"
+                       type="checkbox"
+                       data-target="sae_suicide_attempt">
+                <span class="form-check-label">自殺企図</span>
+              </label>
+              <label class="form-check form-check-inline">
+                <input class="form-check-input candidate-event-type"
+                       type="checkbox"
+                       data-target="sae_other">
+                <span class="form-check-label">その他</span>
+              </label>
             </div>
           </div>
           <input type="hidden"
