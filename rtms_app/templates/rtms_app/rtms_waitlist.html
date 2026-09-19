@@ -14,8 +14,8 @@
     {% for field in form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}</div>{% endfor %}
     <button class="btn btn-outline-primary" type="submit">rTMS待機リストへ登録</button>
   </form>
-  <div class="table-responsive"><table class="table table-bordered align-middle"><thead class="table-light"><tr><th>登録日</th><th>希望時期</th><th>希望入院日数</th><th>status</th></tr></thead><tbody>
-  {% for entry in entries %}<tr><td>{{ entry.registered_at|date:"Y/m/d" }}</td><td>{{ entry.preferred_start_from|default:'-' }}〜{{ entry.preferred_start_to|default:'-' }}</td><td>{{ entry.estimated_inpatient_days|default:'-' }}日</td><td>{{ entry.get_status_display }}</td></tr>{% empty %}<tr><td colspan="4" class="text-center text-muted">待機登録はありません。</td></tr>{% endfor %}
+  <div class="table-responsive"><table class="table table-bordered align-middle"><thead class="table-light"><tr><th>登録日</th><th>治療開始希望時期・備考</th><th>status</th></tr></thead><tbody>
+  {% for entry in entries %}<tr><td>{{ entry.registered_at|date:"Y/m/d" }}</td><td>{{ entry.preferred_start_note|default:'-' }}</td><td>{{ entry.get_status_display }}</td></tr>{% empty %}<tr><td colspan="3" class="text-center text-muted">待機登録はありません。</td></tr>{% endfor %}
   </tbody></table></div>
 </div>
 {% endblock %}

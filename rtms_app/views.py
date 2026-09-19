@@ -373,13 +373,13 @@ def get_weekly_session_count(patient, target_date, course_number=None):
 def get_assessment_timing_for_date(patient, target_date):
     """
     指定日がどの評価タイミングに該当するか判定。
-    baseline: 入院日 <= date < 治療開始日
-    week3: 治療開始日を起点とした第3週 (14-20日目)
-    week6: 治療開始日を起点とした第6週 (35-41日目)
+    baseline: 入院日 <= date < 初回治療日
+    week3: 初回治療日を起点とした第3週 (14-20日目)
+    week6: 初回治療日を起点とした第6週 (35-41日目)
     該当しない場合は None
     """
-    # admission_date に依存せず、治療開始日が設定されていれば
-    # 対象日が治療開始日当日またはそれ以前なら baseline と見なす
+    # admission_date に依存せず、初回治療日が設定されていれば
+    # 対象日が初回治療日当日またはそれ以前なら baseline と見なす
     if not patient.first_treatment_date:
         return None
 
@@ -398,7 +398,7 @@ def get_assessment_timing_for_date(patient, target_date):
 
 def get_nth_treatment_date(first_treatment_date, n):
     """
-    治療開始日からn日目の治療日を返す（平日、祝日除く）
+    初回治療日からn日目の治療日を返す（平日、祝日除く）
     """
     current = first_treatment_date
     count = 0
@@ -413,15 +413,15 @@ def get_nth_treatment_date(first_treatment_date, n):
 def get_assessment_deadline(patient, timing):
     """
     指定 timing の評価期限最終日を返す。
-    baseline: 治療開始日前日
-    week3: 第3週の最終日 (治療開始日から15日目の治療日)
-    week6: 第6週の最終日 (治療開始日から45日目の治療日)
+    baseline: 初回治療日前日
+    week3: 第3週の最終日 (初回治療日から15日目の治療日)
+    week6: 第6週の最終日 (初回治療日から45日目の治療日)
     """
     if not patient.first_treatment_date:
         return None
 
     if timing == 'baseline':
-        # baseline は治療開始日当日を含めて許可するため、期限は初回治療日までとする
+        # baseline は初回治療日当日を含めて許可するため、期限は初回治療日までとする
         return patient.first_treatment_date
     elif timing == 'week3':
         return get_nth_treatment_date(patient.first_treatment_date, 15)

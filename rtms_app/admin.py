@@ -237,7 +237,7 @@ class ResourceAssignmentAdmin(admin.ModelAdmin):
 class RtmSWaitlistEntryAdmin(admin.ModelAdmin):
     list_display = (
         'treatment_course', 'status', 'priority', 'registered_at',
-        'preferred_start_from', 'preferred_start_to', 'scheduled_at', 'closed_at',
+        'preferred_start_note', 'scheduled_at', 'closed_at',
     )
     list_filter = ('status', 'priority')
     search_fields = ('treatment_course__patient__name', 'treatment_course__patient__card_id')

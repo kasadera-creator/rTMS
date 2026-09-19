@@ -110,11 +110,11 @@ class Phase2InpatientTests(TestCase):
     def test_waitlist_registration_creates_no_assignment_and_keeps_history(self):
         first = register_waitlist_entry(
             treatment_course=self.course_one, user=self.user,
-            status="waiting", preferred_start_from=date(2026, 10, 15), priority=1,
+            status="waiting", preferred_start_note="10月中旬希望", priority=1,
         )
         second = RtmSWaitlistEntry.objects.create(
             treatment_course=self.course_one,
-            status="withdrawn", preferred_start_to=date(2026, 11, 1), priority=2,
+            status="withdrawn", preferred_start_note="11月以降希望", priority=2,
         )
         self.assertEqual(self.course_one.rtms_waitlist_entries.count(), 2)
         self.assertIsNone(first.inpatient_plan_id)
@@ -636,16 +636,28 @@ class Phase2InpatientTests(TestCase):
         self.assertNotContains(response, "rTMS調整画面へ")
         self.assertNotContains(response, ">待機者登録</a>")
 
-    def test_initial_visit_places_first_visit_date_outside_schedule_card(self):
+    def test_initial_visit_places_schedule_fields_in_requested_order(self):
         self.course_one.first_visit_date = date(2026, 9, 10)
         self.course_one.save(update_fields=["first_visit_date", "updated_at"])
         response = self.client.get(
             reverse("rtms_app:patient_first_visit", args=[self.patient.pk]),
             {"course_number": 1},
         )
-        self.assertContains(response, "初診日：2026/09/10")
-        schedule_start = response.content.decode().index("スケジュール・担当医")
-        self.assertNotIn("初診日", response.content.decode()[schedule_start:])
+        content = response.content.decode()
+        schedule_start = content.index("スケジュール・担当医")
+        schedule = content[schedule_start:]
+        self.assertIn('name="first_visit_date"', schedule)
+        self.assertIn('value="2026-09-10"', schedule)
+        field_order = (
+            "初診日",
+            "入院予定日",
+            "初回治療日",
+            "rTMS日程調整",
+            "個室利用予定",
+            "今後の担当医",
+        )
+        positions = [schedule.index(label) for label in field_order]
+        self.assertEqual(positions, sorted(positions))
 
     def test_initial_visit_shows_registered_state_per_course(self):
         RtmSWaitlistEntry.objects.create(
@@ -739,13 +751,13 @@ class Phase2InpatientTests(TestCase):
             treatment_course=self.course_one,
             status="waiting",
             priority=2,
-            preferred_start_from=date(2026, 10, 15),
+            preferred_start_note="10月中旬希望",
         )
         RtmSWaitlistEntry.objects.create(
             treatment_course=self.course_two,
             status="requested",
             priority=1,
-            preferred_start_from=date(2026, 11, 1),
+            preferred_start_note="11月希望",
         )
 
         global_response = self.client.get(
@@ -793,8 +805,8 @@ class Phase2InpatientTests(TestCase):
         )
         self.assertContains(filtered_response, "選択中: Phase Two")
         self.assertContains(filtered_response, "Course #1")
-        self.assertContains(filtered_response, "希望開始日")
-        self.assertContains(filtered_response, "2026/10/15")
+        self.assertContains(filtered_response, "治療開始希望時期・備考")
+        self.assertContains(filtered_response, "10月中旬希望")
         self.assertNotContains(filtered_response, "2026/11/01")
 
     def test_weekly_private_room_planned_fallback_and_assignment_priority(self):
@@ -837,9 +849,7 @@ class Phase2InpatientTests(TestCase):
             reverse("rtms_app:rtms_waitlist", args=[self.patient.pk])
             + "?course_number=1",
             {
-                "preferred_start_from": "2026-10-15",
-                "preferred_start_to": "2026-10-20",
-                "estimated_inpatient_days": "14",
+                "preferred_start_note": "2026/10/15〜10/20希望、入院14日程度",
                 "priority": "2",
                 "comment": "希望日程あり",
                 "course_number": "1",
@@ -853,9 +863,7 @@ class Phase2InpatientTests(TestCase):
         )
         entry = self.course_one.rtms_waitlist_entries.get()
         self.assertEqual(entry.status, "waiting")
-        self.assertEqual(entry.preferred_start_from, date(2026, 10, 15))
-        self.assertEqual(entry.preferred_start_to, date(2026, 10, 20))
-        self.assertEqual(entry.estimated_inpatient_days, 14)
+        self.assertEqual(entry.preferred_start_note, "2026/10/15〜10/20希望、入院14日程度")
         self.assertEqual(entry.comment, "希望日程あり")
         self.assertEqual(ResourceAssignment.objects.count(), 0)
 
@@ -873,6 +881,10 @@ class Phase2InpatientTests(TestCase):
         )
         self.assertNotContains(response, "priority")
         self.assertNotContains(response, "優先度")
+        self.assertContains(response, "治療開始希望時期・備考")
+        self.assertNotContains(response, "希望開始時期（早い方）")
+        self.assertNotContains(response, "希望開始時期（遅い方）")
+        self.assertNotContains(response, "希望入院日数")
 
     def test_waitlist_registration_stores_editable_planned_treatment_count(self):
         response = self.client.post(
@@ -898,12 +910,15 @@ class Phase2InpatientTests(TestCase):
         entry = RtmSWaitlistEntry.objects.create(
             treatment_course=self.course_one,
             status="waiting",
-            preferred_start_from=date(2026, 10, 15),
+            preferred_start_note="10月中旬希望",
         )
         response = self.client.get(reverse("rtms_app:inpatient_calendar"))
         self.assertContains(response, "日程設定")
         self.assertNotContains(response, 'details class="waitlist-adjustment" open')
-        self.assertContains(response, "waitlist-adjustment-period")
+        self.assertContains(response, "治療開始希望時期・備考")
+        self.assertNotContains(response, "希望開始日")
+        self.assertNotContains(response, "希望終了日")
+        self.assertNotContains(response, "希望入院日数")
         self.assertContains(response, "waitlist-adjustment-grid")
         self.assertContains(response, "waitlist-adjustment-flags")
         self.assertNotContains(response, ">待機者登録</a>")
@@ -913,12 +928,12 @@ class Phase2InpatientTests(TestCase):
         entry_one = RtmSWaitlistEntry.objects.create(
             treatment_course=self.course_one,
             status="waiting",
-            preferred_start_from=date(2026, 10, 1),
+            preferred_start_note="10月希望",
         )
         entry_two = RtmSWaitlistEntry.objects.create(
             treatment_course=self.course_two,
             status="waiting",
-            preferred_start_from=date(2026, 11, 1),
+            preferred_start_note="11月希望",
         )
         response = self.client.post(
             reverse("rtms_app:inpatient_calendar"),
@@ -926,8 +941,7 @@ class Phase2InpatientTests(TestCase):
                 "action": "save_calendar_course",
                 "treatment_course_id": self.course_one.pk,
                 "waitlist_entry_id": entry_one.pk,
-                "preferred_start_from": "2026-10-15",
-                "preferred_start_to": "2026-10-20",
+                "preferred_start_note": "2026/10/15〜10/20希望",
                 "admission_date": "2026-10-05",
                 "first_treatment_date": "2026-10-08",
                 "private_room_planned": "on",
@@ -940,15 +954,14 @@ class Phase2InpatientTests(TestCase):
         self.course_two.refresh_from_db()
         entry_one.refresh_from_db()
         entry_two.refresh_from_db()
-        self.assertEqual(entry_one.preferred_start_from, date(2026, 10, 15))
-        self.assertEqual(entry_one.preferred_start_to, date(2026, 10, 20))
+        self.assertEqual(entry_one.preferred_start_note, "2026/10/15〜10/20希望")
         self.assertEqual(self.course_one.admission_date, date(2026, 10, 5))
         self.assertEqual(self.course_one.first_treatment_date, date(2026, 10, 8))
         self.assertTrue(self.course_one.private_room_planned)
         self.assertTrue(self.course_one.is_all_case_survey)
         self.assertEqual(self.course_one.planned_treatment_sessions, 28)
         self.assertIsNone(self.course_two.admission_date)
-        self.assertEqual(entry_two.preferred_start_from, date(2026, 11, 1))
+        self.assertEqual(entry_two.preferred_start_note, "11月希望")
         self.assertEqual(TreatmentSession.objects.count(), 0)
 
     def test_course_without_treatment_start_has_no_virtual_assessment_events(self):

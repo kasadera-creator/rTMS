@@ -8,13 +8,9 @@ class CalendarCourseAdjustmentForm(forms.ModelForm):
         label="予定治療回数（回）", required=False, min_value=1,
         widget=forms.NumberInput(attrs={"class": "form-control form-control-sm", "min": 1}),
     )
-    preferred_start_from = forms.DateField(
-        label="希望開始日", required=False,
-        widget=forms.DateInput(attrs={"type": "date", "class": "form-control form-control-sm"}),
-    )
-    preferred_start_to = forms.DateField(
-        label="希望終了日", required=False,
-        widget=forms.DateInput(attrs={"type": "date", "class": "form-control form-control-sm"}),
+    preferred_start_note = forms.CharField(
+        label="治療開始希望時期・備考", required=False,
+        widget=forms.Textarea(attrs={"class": "form-control form-control-sm", "rows": 2}),
     )
 
     class Meta:
@@ -38,11 +34,7 @@ class CalendarCourseAdjustmentForm(forms.ModelForm):
         admission_date = cleaned.get("admission_date")
         treatment_date = cleaned.get("first_treatment_date")
         if admission_date and treatment_date and treatment_date < admission_date:
-            self.add_error("first_treatment_date", "rTMS治療開始日は入院日以降にしてください。")
-        start = cleaned.get("preferred_start_from")
-        end = cleaned.get("preferred_start_to")
-        if start and end and end < start:
-            self.add_error("preferred_start_to", "希望終了日は希望開始日以降にしてください。")
+            self.add_error("first_treatment_date", "初回治療日は入院日以降にしてください。")
         if cleaned.get("planned_treatment_sessions") is None:
             cleaned["planned_treatment_sessions"] = (
                 self.instance.planned_treatment_sessions or 30
@@ -52,7 +44,7 @@ class CalendarCourseAdjustmentForm(forms.ModelForm):
 
 class InpatientScheduleForm(forms.Form):
     admission_date = forms.DateField(label="入院予定日", widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
-    treatment_start_date = forms.DateField(label="rTMS開始日", widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
+    treatment_start_date = forms.DateField(label="初回治療日", widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
     room_start_date = forms.DateField(label="個室使用開始日", widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
     room_end_date = forms.DateField(label="個室使用終了日", required=False, widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
     planned_discharge_date = forms.DateField(label="退院予定日", required=False, widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
@@ -84,23 +76,17 @@ class InpatientScheduleForm(forms.Form):
         room_start = cleaned.get("room_start_date")
         room_end = cleaned.get("room_end_date")
         if admission and treatment and treatment < admission:
-            self.add_error("treatment_start_date", "rTMS開始日は入院予定日以降にしてください。")
+            self.add_error("treatment_start_date", "初回治療日は入院予定日以降にしてください。")
         if room_start and room_end and room_end < room_start:
             self.add_error("room_end_date", "個室終了日は開始日以降にしてください。")
         return cleaned
 
 
 class RtmSWaitlistEntryForm(forms.Form):
-    preferred_start_from = forms.DateField(label="希望開始時期（早い方）", required=False, widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
-    preferred_start_to = forms.DateField(label="希望開始時期（遅い方）", required=False, widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
-    estimated_inpatient_days = forms.IntegerField(label="希望入院日数（日）", required=False, min_value=1, widget=forms.NumberInput(attrs={"class": "form-control"}))
+    preferred_start_note = forms.CharField(label="治療開始希望時期・備考", required=False, widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}))
     planned_treatment_sessions = forms.IntegerField(label="予定治療回数（回）", required=False, min_value=1, initial=30, widget=forms.NumberInput(attrs={"class": "form-control"}))
     comment = forms.CharField(label="コメント", required=False, widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}))
 
     def clean(self):
         cleaned = super().clean()
-        start = cleaned.get("preferred_start_from")
-        end = cleaned.get("preferred_start_to")
-        if start and end and end < start:
-            self.add_error("preferred_start_to", "希望終了日は希望開始日以降にしてください。")
         return cleaned

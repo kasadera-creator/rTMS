@@ -4787,7 +4787,7 @@ class TestClinicalPathReschedule(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-original-first-treatment-date="2026-08-24"')
-        self.assertContains(response, '治療開始日を変更すると')
+        self.assertContains(response, '初回治療日を変更すると')
 
     def test_first_visit_post_rebuilds_treatment_calendar_from_changed_start_date(self):
         doctor_group, _ = Group.objects.get_or_create(name='医師')

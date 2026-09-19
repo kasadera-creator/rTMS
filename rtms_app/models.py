@@ -506,10 +506,7 @@ class RtmSWaitlistEntry(models.Model):
         related_name="registered_rtms_waitlist_entries",
         verbose_name="登録者",
     )
-    preferred_start_from = models.DateField("希望開始日（早い方）", null=True, blank=True)
-    preferred_start_to = models.DateField("希望開始日（遅い方）", null=True, blank=True)
-    estimated_inpatient_days = models.PositiveIntegerField("入院見込み日数", null=True, blank=True)
-    preferred_treatment_start = models.DateField("治療開始希望日", null=True, blank=True)
+    preferred_start_note = models.TextField("治療開始希望時期・備考", blank=True, default="")
     comment = models.TextField("コメント", blank=True, default="")
     scheduled_at = models.DateTimeField("予定化日時", null=True, blank=True)
     closed_at = models.DateTimeField("終了日時", null=True, blank=True)
@@ -532,14 +529,6 @@ class RtmSWaitlistEntry(models.Model):
             models.Index(fields=["treatment_course", "status"]),
         ]
         constraints = [
-            models.CheckConstraint(
-                check=(
-                    models.Q(preferred_start_to__isnull=True)
-                    | models.Q(preferred_start_from__isnull=True)
-                    | models.Q(preferred_start_to__gte=models.F("preferred_start_from"))
-                ),
-                name="waitlist_preferred_start_to_gte_from",
-            ),
             models.UniqueConstraint(
                 fields=["treatment_course"],
                 condition=models.Q(

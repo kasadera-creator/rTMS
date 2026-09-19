@@ -68,7 +68,7 @@
     }
     if (link.dataset.firstTreatment === 'true') {
       confirmationMessages.push(
-        '治療開始日を変更すると、現在の治療予定を新しい開始日を基準に再構成します。よろしいですか？'
+        '初回治療日を変更すると、現在の治療予定を新しい初回治療日を基準に再構成します。よろしいですか？'
       );
     }
     if (confirmationMessages.length && !window.confirm(confirmationMessages.join('\n\n'))) {

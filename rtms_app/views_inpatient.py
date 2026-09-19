@@ -84,9 +84,8 @@ def inpatient_calendar_view(request):
                     is_all_case_survey=form.cleaned_data["is_all_case_survey"],
                     planned_treatment_sessions=form.cleaned_data["planned_treatment_sessions"],
                 )
-                entry.preferred_start_from = form.cleaned_data["preferred_start_from"]
-                entry.preferred_start_to = form.cleaned_data["preferred_start_to"]
-                entry.save(update_fields=["preferred_start_from", "preferred_start_to", "updated_at"])
+                entry.preferred_start_note = form.cleaned_data["preferred_start_note"]
+                entry.save(update_fields=["preferred_start_note", "updated_at"])
             return redirect(request.get_full_path())
         adjustment_course_id = course.pk
     else:
@@ -139,8 +138,7 @@ def inpatient_calendar_view(request):
         entry.adjustment_form = CalendarCourseAdjustmentForm(
             instance=entry.treatment_course,
             initial={
-                "preferred_start_from": entry.preferred_start_from,
-                "preferred_start_to": entry.preferred_start_to,
+                "preferred_start_note": entry.preferred_start_note,
             },
         )
         entry.adjustment_form_open = False

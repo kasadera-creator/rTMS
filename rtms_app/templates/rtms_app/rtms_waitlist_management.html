@@ -25,8 +25,7 @@
           <th>患者 / Course</th>
           <th>登録日</th>
           <th>待機日数</th>
-          <th>希望時期</th>
-          <th>希望入院期間</th>
+          <th>治療開始希望時期・備考</th>
           <th>優先度</th>
           <th>状態</th>
           <th>操作</th>
@@ -43,8 +42,7 @@
           </td>
           <td>{{ entry.registered_at|date:"Y/m/d" }}</td>
           <td>{{ entry.waiting_days }}日</td>
-          <td>{{ entry.preferred_start_from|date:"Y/m/d"|default:"-" }}{% if entry.preferred_start_to %}〜{{ entry.preferred_start_to|date:"Y/m/d" }}{% endif %}</td>
-          <td>{% if entry.estimated_inpatient_days %}{{ entry.estimated_inpatient_days }}日{% else %}-{% endif %}</td>
+          <td>{{ entry.preferred_start_note|default:"-" }}</td>
           <td>{{ entry.priority }}</td>
           <td>{{ entry.get_status_display }}</td>
           <td class="text-nowrap">
