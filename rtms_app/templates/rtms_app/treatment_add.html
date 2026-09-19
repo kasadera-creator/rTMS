@@ -102,44 +102,6 @@
       <input type="hidden" name="skip_reason" id="id_skip_reason" value="">
       <div class="row g-3 mt-1">
         <div class="col-12 col-lg-4">
-          <div class="card shadow-sm">
-            <div class="card-header fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2"
-                 style="color:#198754;
-                        background:rgba(25,135,84,.1)">
-              <div>
-                <i class="fas fa-calendar-day me-1"></i>実施日時・安全確認
-              </div>
-              {% if plan_date_range_text %}<div class="text-muted small">{{ plan_date_range_text }}</div>{% endif %}
-            </div>
-            <div class="card-body">
-              <div class="row g-2 mb-3">
-                <div class="col-md-6">
-                  <label class="form-label fw-bold">実施日</label>
-                  {{ form.treatment_date }}
-                </div>
-                <div class="col-md-6">
-                  <label class="form-label fw-bold">開始時間</label>
-                  {{ form.treatment_time }}
-                </div>
-              </div>
-              <hr class="my-2">
-              <div class="fw-bold text-success mb-1">安全確認（問題があればOFF）</div>
-              <div class="vstack gap-1">
-                <label class="form-check d-flex align-items-center gap-2 mb-0">
-                  {{ form.safety_sleep }}
-                  <span>睡眠時間</span>
-                </label>
-                <label class="form-check d-flex align-items-center gap-2 mb-0">
-                  {{ form.safety_alcohol }}
-                  <span>飲酒、過量のカフェイン</span>
-                </label>
-                <label class="form-check d-flex align-items-center gap-2 mb-0">
-                  {{ form.safety_meds }}
-                  <span>薬剤変更</span>
-                </label>
-              </div>
-            </div>
-          </div>
           <div class="card shadow-sm mt-3">
             <div class="card-header fw-bold"
                  style="color: #dc3545;
@@ -234,6 +196,8 @@
                     <div class="fw-bold fs-5">{{ current_week_mapping.resting_mt }}</div>
                   </div>
                   <div class="col-md-8">
+                    <div class="small text-muted">MT測定日</div>
+                    <div class="fw-bold">{{ current_week_mapping.date|date:'Y/m/d' }} 実施</div>
                     <div class="small text-muted">位置</div>
                     <div class="fw-bold small">
                       a({{ current_week_mapping.helmet_position_a_x }},{{ current_week_mapping.helmet_position_a_y }})
@@ -250,6 +214,26 @@
         </div>
         <div class="col-12 col-lg-8">
           <div class="card shadow-sm">
+            <div class="card-header fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2"
+                 style="color:#198754; background:rgba(25,135,84,.1)">
+              <div><i class="fas fa-calendar-day me-1"></i>実施日時・安全確認</div>
+              {% if plan_date_range_text %}<div class="text-muted small">{{ plan_date_range_text }}</div>{% endif %}
+            </div>
+            <div class="card-body">
+              <div class="row g-2 mb-3">
+                <div class="col-md-6"><label class="form-label fw-bold">実施日</label>{{ form.treatment_date }}</div>
+                <div class="col-md-6"><label class="form-label fw-bold">開始時間</label>{{ form.treatment_time }}</div>
+              </div>
+              <hr class="my-2">
+              <div class="fw-bold text-success mb-1">安全確認（問題があればOFF）</div>
+              <div class="d-flex flex-wrap align-items-center gap-3">
+                <label class="form-check d-flex align-items-center gap-2 mb-0">{{ form.safety_sleep }}<span>睡眠時間</span></label>
+                <label class="form-check d-flex align-items-center gap-2 mb-0">{{ form.safety_alcohol }}<span>飲酒、過量のカフェイン</span></label>
+                <label class="form-check d-flex align-items-center gap-2 mb-0">{{ form.safety_meds }}<span>薬剤変更</span></label>
+              </div>
+            </div>
+          </div>
+          <div class="card shadow-sm">
             <div class="card-header fw-bold text-success d-flex justify-content-between align-items-center flex-wrap gap-2"
                  style="background: rgba(25,135,84,.1);
                         border-left: 4px solid #198754">
@@ -261,7 +245,8 @@
             <div class="card-body">
               {% if session_num and week_num %}
                 <div class="mb-3 px-2 py-1 border-start border-4 border-success bg-light fw-bold">
-                  {{ session_num }}回目（第{{ week_num }}週）
+                  <div>Course内 第{{ session_num }}回</div>
+                  <div class="small">第{{ session_week_num }}週 {{ session_day_num }}日目</div>
                 </div>
               {% endif %}
               <div class="mb-3 p-2 rounded" style="border:1px solid rgba(25,135,84,.22)">
@@ -506,8 +491,7 @@
         </div>
         <div class="modal-body">
           <div id="sideEffectWidget" data-initial-id="sideEffectInitialRows"></div>
-          <div id="sideEffectCandidates"
-               class="alert alert-warning d-none mt-3 mb-2">
+          <div id="sideEffectCandidates" class="alert alert-warning d-none mt-3 mb-2">
             <div class="fw-bold">
               <i class="fas fa-exclamation-triangle me-1"></i>有害事象候補
             </div>
@@ -516,14 +500,12 @@
             <div class="form-check mt-2">
               <input class="form-check-input"
                      type="checkbox"
-                     id="reportAsAdverseEvent"
-                     {% if sae_event_types_checked %}checked{% endif %}>
+                     id="reportAsAdverseEvent" {% if sae_event_types_checked %}checked{% endif %}>
               <label class="form-check-label fw-bold" for="reportAsAdverseEvent">
                 有害事象として報告する <small class="fw-normal text-muted">（この画面を保存して閉じ、有害事象報告書を別途作成してください）</small>
               </label>
             </div>
-            <div id="candidateEventTypes"
-                 class="{% if not sae_event_types_checked %}d-none{% endif %} mt-2">
+              <div id="candidateEventTypes" class="{% if not sae_event_types_checked %}d-none{% endif %} mt-2">
               <div class="small fw-bold">有害事象の類型</div>
               <label class="form-check form-check-inline">
                 <input class="form-check-input candidate-event-type"

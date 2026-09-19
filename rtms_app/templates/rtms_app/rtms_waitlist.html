@@ -1,0 +1,21 @@
+{% extends "rtms_app/base.html" %}
+{% block body_class %}page-rtms-waitlist{% endblock %}
+{% block header_breadcrumb %}<span class="text-white-50 ms-2">/ rTMS待機リスト</span>{% endblock %}
+{% block content %}
+<div class="container py-3">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <h1 class="h4 mb-0">rTMS待機リスト</h1>
+    <a class="btn btn-outline-primary btn-sm" href="{% url 'rtms_app:inpatient_calendar' %}">rTMS日程調整へ戻る</a>
+  </div>
+  <p class="text-muted">{{ treatment_course.patient.name }} / Course {{ treatment_course.course_number }}</p>
+  <form method="post" class="card p-3 p-md-4 mb-4">
+    {% csrf_token %}<input type="hidden" name="course_number" value="{{ treatment_course.course_number }}">
+    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+    {% for field in form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}</div>{% endfor %}
+    <button class="btn btn-outline-primary" type="submit">rTMS待機リストへ登録</button>
+  </form>
+  <div class="table-responsive"><table class="table table-bordered align-middle"><thead class="table-light"><tr><th>登録日</th><th>希望時期</th><th>希望入院日数</th><th>status</th></tr></thead><tbody>
+  {% for entry in entries %}<tr><td>{{ entry.registered_at|date:"Y/m/d" }}</td><td>{{ entry.preferred_start_from|default:'-' }}〜{{ entry.preferred_start_to|default:'-' }}</td><td>{{ entry.estimated_inpatient_days|default:'-' }}日</td><td>{{ entry.get_status_display }}</td></tr>{% empty %}<tr><td colspan="4" class="text-center text-muted">待機登録はありません。</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}

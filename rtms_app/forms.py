@@ -227,6 +227,7 @@ class PatientFirstVisitForm(forms.ModelForm):
 
         # Transfer form-only fields into model fields
         instance.is_all_case_survey = bool(self.cleaned_data.get('is_all_case_survey'))
+        instance.private_room_planned = bool(self.cleaned_data.get('private_room_planned'))
         instance.estimated_onset_year = self.cleaned_data.get('estimated_onset_year')
         instance.estimated_onset_month = self.cleaned_data.get('estimated_onset_month')
         instance.has_other_psychiatric_history = self.cleaned_data.get('has_other_psychiatric_history') or 'no'
@@ -258,6 +259,7 @@ class TreatmentCourseFirstVisitForm(PatientFirstVisitForm):
             'has_other_psychiatric_history', 'psychiatric_history',
             'psychiatric_history_other_text',
             'first_visit_date', 'admission_date', 'first_treatment_date', 'mapping_date',
+            'private_room_planned',
         ]
         widgets = {
             'referral_source': forms.TextInput(attrs={'class': 'form-control', 'list': 'referral-options', 'placeholder': '医療機関名'}),

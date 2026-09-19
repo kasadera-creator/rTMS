@@ -1,0 +1,50 @@
+{% extends "rtms_app/base.html" %}
+{% block body_class %}page-rtms-waitlist-patient-select{% endblock %}
+{% block header_breadcrumb %}<span class="text-white-50 ms-2">/ 待機者登録 / 患者選択</span>{% endblock %}
+{% block content %}
+<div class="stack-md" data-theme="patient-list">
+  <section class="app-card">
+    <div class="app-card__header"><i class="fas fa-user-clock me-2"></i>rTMS待機者登録</div>
+    <div class="app-card__body">
+      <p class="text-muted mb-3">登録対象の患者 / Courseを選択してください。</p>
+      <form method="get" class="row g-2 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label" for="id_card">患者ID</label>
+          <input class="form-control" id="id_card" name="card" value="{{ card_query }}" placeholder="患者ID">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="id_name">患者名</label>
+          <input class="form-control" id="id_name" name="q" value="{{ name_query }}" placeholder="患者名">
+        </div>
+        <div class="col-auto d-flex gap-2">
+          <button class="btn btn-patient-list" type="submit"><i class="fas fa-search me-1"></i>検索</button>
+          <a class="btn btn-outline-secondary" href="{% url 'rtms_app:rtms_waitlist_patient_select' %}"><i class="fas fa-times me-1"></i>クリア</a>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="app-card">
+    <div class="app-card__header"><i class="fas fa-users me-2"></i>患者 / Course</div>
+    <div class="app-card__body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light"><tr><th>患者ID</th><th>患者名</th><th>Course</th><th>操作</th></tr></thead>
+          <tbody>
+          {% for course in courses %}
+            <tr>
+              <td>{{ course.patient.card_id }}</td>
+              <td>{{ course.patient.name }}</td>
+              <td>Course #{{ course.course_number }}</td>
+              <td><a class="btn btn-outline-primary btn-sm" href="{% url 'rtms_app:patient_first_visit' course.patient_id %}?course_number={{ course.course_number }}"><i class="fas fa-arrow-right me-1"></i>初診画面へ</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-center text-muted py-4">該当する患者 / Courseがありません。</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}

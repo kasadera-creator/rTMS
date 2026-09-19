@@ -44,6 +44,7 @@
     }
 
     if (link.dataset.eventType === 'assessment') {
+      payload.source_date = link.dataset.sourceDate;
       payload.timing = link.dataset.timing;
       payload.scale_code = link.dataset.scaleCode;
     }
