@@ -29,7 +29,6 @@
     </div>
     <div class="app-card__body">
       <div class="d-flex align-items-center gap-2 flex-wrap">
-        <a class="btn btn-outline-secondary btn-sm rtms-page-nav-link" href="{% url 'rtms_app:dashboard' %}"><i class="fas fa-th-large me-1"></i>Dashboard</a>
         <a class="btn btn-outline-secondary btn-sm rtms-page-nav-link" href="{% url 'rtms_app:patient_list' %}"><i class="fas fa-users me-1"></i>患者一覧</a>
         <a class="btn btn-outline-success btn-sm rtms-page-nav-link" href="{% url 'rtms_app:inpatient_calendar' %}"><i class="fas fa-calendar-check me-1"></i>rTMS日程調整</a>
         <a class="btn btn-outline-secondary btn-sm" href="{% url 'rtms_app:calendar_month' %}?year={{ prev_year }}&month={{ prev_month }}{% if request.GET.course_number %}&course_number={{ request.GET.course_number }}{% endif %}"><i class="fas fa-chevron-left me-1"></i>前月</a>
