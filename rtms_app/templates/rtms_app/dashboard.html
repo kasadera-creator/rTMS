@@ -1,56 +1,41 @@
 {% extends "rtms_app/base.html" %}
 {% block extrastyle %}
     <style>
-    .dashboard-shell { display: flex; flex-direction: column; gap: var(--space-3); }
-    
-    /* === ダッシュボード用カード（date-navは.app-cardで統一） === */
-    .date-nav {
-        padding: 1rem;
-        border-bottom: none;
-    }
-
-    .dashboard-grid { gap: 1rem; }
-    .task-group-wrapper { min-width: 320px; max-width: 420px; margin: 0 auto; }
-    
-    /* === タスクカード改修：app-cardの色スキーム適用 === */
-    .card-task {
-        border: 0;
-        border-radius: 8px;
-        box-shadow: 0 2px 8px rgba(25, 38, 54, 0.06);
-        background: #fff;
-        overflow: hidden;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-    .card-task:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(25, 38, 54, 0.12); }
-    
-    .task-header {
-        padding: 0.875rem 1rem;
-        color: #fff;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-weight: 700;
-        font-size: 0.95rem;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-    }
-
-    /* テーマベースのグラデーション */
-    .bg-g-first-visit { background: linear-gradient(135deg, var(--color-first-visit), var(--color-first-visit-dark)); }
-    .bg-g-admission { background: linear-gradient(135deg, var(--color-admission), var(--color-admission-dark)); }
-    .bg-g-mapping { background: linear-gradient(135deg, var(--color-mapping), var(--color-mapping-dark)); color: #333 !important; }
-    .bg-g-treatment { background: linear-gradient(135deg, var(--color-treatment), var(--color-treatment-dark)); }
-    .bg-g-assessment { background: linear-gradient(135deg, var(--color-assessment), var(--color-assessment-dark)); }
-    .bg-g-discharge { background: linear-gradient(135deg, var(--color-discharge), var(--color-discharge-dark)); }
-
-    .list-group-item {
-        border: none;
-        border-bottom: 1px solid #f0f0f0;
-        padding: 0.875rem 1rem;
-        font-size: 0.95rem;
-        line-height: 1.35;
-    }
-    .list-group-item:hover { background-color: #f8f9fa; }
-    .list-group-item a { text-decoration: none; color: inherit; display: block; }
+    .date-nav { padding: 0; border-bottom: none; }
+    .dashboard-board { overflow: hidden; }
+    .dashboard-board > .app-card__header { border-left: 0; background: #fff; color: #343a40; box-shadow: 0 1px 3px rgba(25, 38, 54, 0.08); }
+    .dashboard-header { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 1rem; }
+    .dashboard-header__title { justify-self: start; margin: 0; }
+    .dashboard-header__date { display: flex; align-items: center; justify-content: center; gap: 0.5rem; min-width: 0; }
+    .dashboard-header__action { justify-self: end; }
+    .dashboard-header__date .date-picker-wrapper { min-width: 12rem; justify-content: center; }
+    .dashboard-board__body { padding: 1rem; }
+    .dashboard-workspace { display: grid; grid-template-columns: minmax(220px, 250px) minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+    .dashboard-work-menu { border-right: 1px solid rgba(25, 38, 54, 0.1); padding-right: 1rem; }
+    .dashboard-section-title { margin: 0 0 0.75rem; color: #495057; font-size: 0.95rem; font-weight: 700; }
+    .dashboard-menu-list { display: grid; gap: 0.35rem; }
+    .dashboard-menu-item { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 0.75rem; padding: 0.7rem 0.75rem; border: 0; border-left: 4px solid transparent; border-radius: 4px; background: transparent; color: #495057; font: inherit; text-align: left; }
+    .dashboard-menu-item:hover, .dashboard-menu-item:focus-visible { background: #f8fafc; color: #212529; }
+    .dashboard-menu-item.is-active { border-left-color: var(--menu-accent); background: color-mix(in srgb, var(--menu-accent) 10%, white); color: #212529; font-weight: 700; }
+    .dashboard-menu-item__label { display: inline-flex; align-items: center; min-width: 0; gap: 0.5rem; }
+    .dashboard-menu-item__label i { color: var(--menu-accent); width: 1rem; text-align: center; }
+    .dashboard-menu-item__count { min-width: 2.5rem; padding: 0.2rem 0.45rem; border: 1px solid rgba(25, 38, 54, 0.12); border-radius: 999px; background: #fff; color: #6c757d; font-size: 0.75rem; text-align: center; }
+    .dashboard-menu-item.is-active .dashboard-menu-item__count { color: #212529; }
+    .dashboard-menu-item--backlog { margin-top: 0.6rem; border-top: 1px solid rgba(25, 38, 54, 0.14); border-radius: 0 0 4px 4px; padding-top: 1rem; }
+    .dashboard-menu-item--backlog .dashboard-menu-item__label i { color: #6c757d; }
+    .dashboard-work-main { min-width: 0; }
+    .dashboard-panel { display: none; overflow: hidden; border: 0; border-radius: 6px; box-shadow: 0 1px 8px rgba(25, 38, 54, 0.08); }
+    .dashboard-panel.is-active { display: block; }
+    .dashboard-panel__header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.8rem 1rem; border-left: 5px solid var(--panel-accent); background: color-mix(in srgb, var(--panel-accent) 9%, white); color: #343a40; }
+    .dashboard-panel__title { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 1.1rem; font-weight: 700; }
+    .dashboard-panel__title i { color: var(--panel-accent); }
+    .dashboard-panel .list-group { gap: 0.6rem; padding: 0.6rem 0; }
+    .dashboard-panel .list-group-item { padding: 0; border: 1px solid rgba(25, 38, 54, 0.12); border-radius: 4px; }
+    .dashboard-panel:not([data-dashboard-panel="6"]) .list-group-item { border-left: 4px solid var(--panel-accent) !important; }
+    .dashboard-panel .task-empty { padding: 1rem; color: #6c757d; }
+    .dashboard-task-link { display: block; min-height: 92px; box-sizing: border-box; padding: 1rem; color: inherit; text-decoration: none; }
+    .dashboard-task-link:hover, .dashboard-task-link:focus-visible { background: #f8fafc; color: inherit; }
+    .dashboard-task-link:focus-visible { outline: 3px solid rgba(13, 123, 183, 0.35); outline-offset: -3px; }
 
     .status-badge { font-size: 0.72rem; padding: 3px 8px; border-radius: 12px; min-width: 64px; text-align: center; margin-left: 5px; }
     .status-success, .status-done, .status-手続済, .status-実施済, .status-登録済, .status-診察済 { background-color: #e6f9ed; color: #198754; border: 1px solid #c3e6cb; }
@@ -58,169 +43,263 @@
     .status-danger, .status-実施未 { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     .status-info, .status-退院準備 { background-color: #cff4fc; color: #055160; border: 1px solid #b6effb; }
 
-    .todo-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 8px; }
-    .todo-badge { font-size: 0.82rem; font-weight: 700; color: #495057; background-color: #e9ecef; padding: 3px 8px; border-radius: 4px; }
-    .name-row { margin-bottom: 4px; line-height: 1.3; }
-    .task-meta { font-size: 0.78rem; color: #6c757d; display: flex; justify-content: space-between; border-top: 1px dashed #eee; padding-top: 4px; gap: 6px; }
+    .dashboard-task-detail { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; min-width: 0; margin-top: 0.35rem; line-height: 1.45; }
+    .todo-row { min-width: 0; flex: 1 1 auto; }
+    .todo-badge { display: inline-block; font-size: 0.86rem; font-weight: 600; color: #495057; background: transparent; padding: 0; }
+    .name-row { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin-bottom: 0; line-height: 1.5; }
+    .patient-name { min-width: 0; }
+    .course-label { margin-left: 0.35rem; color: #6c757d; font-size: 0.78rem; white-space: nowrap; }
+    .name-row .status-badge { flex: 0 0 auto; margin-left: auto; }
+    .name-row .text-primary { font-size: 1.05rem; }
+    .task-meta { flex: 0 1 auto; display: flex; justify-content: flex-end; gap: 0.75rem; min-width: 0; color: #6c757d; font-size: 0.75rem; white-space: nowrap; }
 
     /* 日付ピッカー用スタイル */
     .date-picker-wrapper { position: relative; cursor: pointer; transition: background 0.2s; }
     .date-picker-wrapper:hover { background-color: #e2e6ea !important; }
     .date-picker-input { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10; }
 
-    @media (min-width: 1024px) and (max-width: 1366px) and (orientation: landscape) {
-        .date-nav { padding: 0.75rem 1rem; }
-        .task-header { padding: 0.75rem 1rem; }
-        .list-group-item { padding: 0.75rem 1rem; }
+    .dashboard-backlog { margin-top: 1.5rem; }
+    .dashboard-backlog__item { position: relative; padding: 0; border-left: 4px solid var(--backlog-accent) !important; }
+    .dashboard-backlog__item > a { display: block; padding: 1rem; color: inherit; text-decoration: none; }
+    .dashboard-backlog__item > a:hover, .dashboard-backlog__item > a:focus-visible { background: #f8fafc; color: inherit; }
+    .dashboard-backlog__category { display: inline-flex; align-items: center; gap: 0.4rem; margin-right: 0.45rem; color: var(--backlog-accent); font-size: 0.82rem; font-weight: 700; }
+    .dashboard-backlog__category i { font-size: 0.75rem; }
+    .dashboard-task-category { display: inline-flex; align-items: center; gap: 0.4rem; margin-right: 0.45rem; color: var(--panel-accent); font-size: 0.82rem; font-weight: 700; }
+    .dashboard-task-category i { font-size: 0.75rem; }
+    .dashboard-backlog__item .name-row { flex-wrap: nowrap; }
+    .dashboard-backlog__item .patient-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dashboard-backlog__item .dashboard-task-detail { flex-wrap: nowrap; }
+    .dashboard-backlog__item .todo-badge { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dashboard-panel:not([data-dashboard-panel="6"]) .name-row { flex-wrap: nowrap; }
+    .dashboard-panel:not([data-dashboard-panel="6"]) .patient-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dashboard-panel:not([data-dashboard-panel="6"]) .dashboard-task-detail { flex-wrap: nowrap; }
+    .dashboard-panel:not([data-dashboard-panel="6"]) .todo-badge { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dashboard-panel:not([data-dashboard-panel="6"]) .list-group-item > a { display: block; min-height: 92px; box-sizing: border-box; padding: 1rem; color: inherit; text-decoration: none; }
+    .dashboard-panel:not([data-dashboard-panel="6"]) .list-group-item > a:hover,
+    .dashboard-panel:not([data-dashboard-panel="6"]) .list-group-item > a:focus-visible { background: #f8fafc; color: inherit; }
+
+    @media (min-width: 576px) and (max-width: 1023.98px) {
+        .dashboard-header { grid-template-columns: 1fr; gap: 0.75rem; }
+        .dashboard-header__title,
+        .dashboard-header__action { justify-self: center; }
+        .dashboard-header__date { flex-wrap: wrap; }
+        .dashboard-workspace { grid-template-columns: minmax(190px, 220px) minmax(0, 1fr); gap: 1rem; }
+    }
+    @media (max-width: 575.98px) {
+        .dashboard-workspace { grid-template-columns: 1fr; gap: 1rem; }
+        .dashboard-work-menu { border-right: 0; border-bottom: 1px solid rgba(25, 38, 54, 0.1); padding: 0 0 1rem; }
+        .dashboard-menu-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     </style>
 {% endblock %}
 {% block content %}
     <div class="dashboard-container" data-theme="dashboard">
-        <!-- 日付ナビゲーション（カード化） -->
-        <div class="app-card date-nav">
-            <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
-                <!-- 左側: タイトルと日付操作 -->
-                <div class="d-flex flex-wrap align-items-center justify-content-center gap-2 w-100 w-md-auto">
-                    <h4 class="mb-0 fw-bold me-3 d-none d-lg-block text-nowrap">
-                        <i class="fas fa-tachometer-alt" style="color: var(--card-accent)"></i> ダッシュボード
-                    </h4>
-                    <div class="d-flex align-items-center">
-                        <a href="?date={{ prev_day|date:'Y-m-d' }}"
-                           class="btn btn-outline-secondary btn-sm me-2"
-                           title="前日">
-                            <i class="fas fa-chevron-left"></i>
-                        </a>
-                        <!-- 日付表示 + カレンダーピッカー -->
-                        <div class="d-inline-flex align-items-center bg-light px-3 py-1 rounded border position-relative date-picker-wrapper">
-                            <span class="fw-bold fs-6 fs-md-5 me-2 text-nowrap"
-                                  onclick="document.getElementById('datePicker').showPicker()">
-                                {{ target_date_display }}
-                            </span>
-                            <input type="date"
-                                   id="datePicker"
-                                   class="date-picker-input"
-                                   value="{{ today|date:'Y-m-d' }}"
-                                   onchange="location.href='?date='+this.value"
-                                   onclick="this.showPicker()">
-                            <i class="far fa-calendar-alt text-primary fs-5 pointer-events-none"></i>
-                        </div>
-                        <a href="?date={{ next_day|date:'Y-m-d' }}"
-                           class="btn btn-outline-secondary btn-sm ms-2"
-                           title="翌日">
-                            <i class="fas fa-chevron-right"></i>
-                        </a>
+        <div class="app-card dashboard-board date-nav">
+            <div class="app-card__header dashboard-header">
+                <div class="rtms-page-title dashboard-header__title">
+                <i class="fas fa-tachometer-alt page-title-icon"></i>
+                <span class="rtms-page-title__text">ダッシュボード</span>
+                </div>
+                <div class="dashboard-header__date">
+                    <a href="?date={{ prev_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm" title="前日">
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                    <div class="d-inline-flex align-items-center bg-light px-3 py-1 rounded border position-relative date-picker-wrapper">
+                        <span class="fw-bold fs-6 fs-md-5 me-2 text-nowrap" onclick="document.getElementById('datePicker').showPicker()">
+                            {{ target_date_display }}
+                        </span>
+                        <input type="date" id="datePicker" class="date-picker-input" value="{{ today|date:'Y-m-d' }}" onchange="location.href='?date='+this.value" onclick="this.showPicker()">
+                        <i class="far fa-calendar-alt text-primary fs-5 pointer-events-none"></i>
                     </div>
-                    <a href="?date={{ today_raw|date:'Y-m-d' }}"
-                       class="btn btn-sm btn-outline-dark text-nowrap">
+                    <a href="?date={{ next_day|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm" title="翌日">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                    <a href="?date={{ today_raw|date:'Y-m-d' }}" class="btn btn-sm btn-outline-dark text-nowrap">
                         <i class="fas fa-calendar-day"></i> 今日
                     </a>
                 </div>
-                <!-- 右側: アクションボタン -->
-                <div class="w-100 w-md-auto">
-                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                        <a href="{% url 'rtms_app:patient_list' %}?dashboard_date={{ today|date:'Y-m-d' }}"
-                           class="btn btn-outline-secondary btn-sm fw-bold text-nowrap rtms-page-nav-link">
-                            <i class="fas fa-users me-1"></i> 患者一覧
-                        </a>
-                        <a href="{% url 'rtms_app:calendar_month' %}?year={{ today.year }}&month={{ today.month }}"
-                           class="btn btn-outline-primary btn-sm text-nowrap rtms-page-nav-link">
-                            <i class="fas fa-calendar-alt me-1"></i> 月間カレンダー
-                        </a>
-                        <a href="{% url 'rtms_app:inpatient_calendar' %}"
-                           class="btn btn-outline-success btn-sm text-nowrap rtms-page-nav-link">
-                            <i class="fas fa-calendar-check me-1"></i> rTMS日程調整
-                        </a>
-                        <a href="{% url 'rtms_app:patient_add' %}"
-                           class="btn btn-first-visit btn-sm text-nowrap">
-                            <i class="fas fa-user-plus me-1"></i> 新規患者登録
-                        </a>
-                    </div>
+                <div class="dashboard-header__action">
+                    <a href="{% url 'rtms_app:patient_add' %}"
+                       class="btn btn-first-visit rtms-action-primary text-nowrap">
+                        <i class="fas fa-user-plus me-1"></i> 新規患者登録
+                    </a>
+                </div>
+            </div>
+            <div class="app-card__body dashboard-board__body">
+                <div class="dashboard-workspace">
+                    <nav class="dashboard-work-menu" aria-label="業務カテゴリ">
+                        <h2 class="dashboard-section-title">今日の業務</h2>
+                        <div class="dashboard-menu-list">
+                            {% for task_group in dashboard_tasks %}
+                                <button type="button"
+                                        class="dashboard-menu-item{% if forloop.counter0 == 3 %} is-active{% endif %}"
+                                        style="--menu-accent: var(--color-{{ task_group.color_class|cut:'bg-g-' }});"
+                                        data-dashboard-category="{{ forloop.counter0 }}"
+                                        aria-controls="dashboard-panel-{{ forloop.counter0 }}"
+                                        aria-selected="{% if forloop.counter0 == 3 %}true{% else %}false{% endif %}">
+                                    <span class="dashboard-menu-item__label"><i class="fas {{ task_group.icon }}"></i><span>{{ task_group.title }}</span></span>
+                                    <span class="dashboard-menu-item__count">{{ task_group.list|length }}件</span>
+                                </button>
+                            {% endfor %}
+                            <button type="button"
+                                    class="dashboard-menu-item dashboard-menu-item--backlog"
+                                    style="--menu-accent: #6c757d;"
+                                    data-dashboard-category="6"
+                                    aria-controls="dashboard-panel-6"
+                                    aria-selected="false">
+                                <span class="dashboard-menu-item__label"><i class="fas fa-list-check"></i><span>⑦ 未実施一覧</span></span>
+                                <span class="dashboard-menu-item__count">{{ backlog_tasks|length }}件</span>
+                            </button>
+                        </div>
+                    </nav>
+                    <main class="dashboard-work-main" aria-live="polite">
+                        {% for task_group in dashboard_tasks %}
+                            <section id="dashboard-panel-{{ forloop.counter0 }}"
+                                     class="dashboard-panel{% if forloop.counter0 == 3 %} is-active{% endif %}"
+                                     style="--panel-accent: var(--color-{{ task_group.color_class|cut:'bg-g-' }});"
+                                     data-dashboard-panel="{{ forloop.counter0 }}"
+                                     {% if forloop.counter0 != 3 %}hidden{% endif %}
+                                     aria-labelledby="dashboard-panel-title-{{ forloop.counter0 }}">
+                                <div class="dashboard-panel__header">
+                                    <h2 id="dashboard-panel-title-{{ forloop.counter0 }}" class="dashboard-panel__title"><i class="fas {{ task_group.icon }}"></i>{{ task_group.title }}</h2>
+                                    <span class="badge bg-light text-dark rounded-pill">{{ task_group.list|length }}件</span>
+                                </div>
+                                <div class="list-group list-group-flush">
+                                    {% for item in task_group.list %}
+                                        <div class="list-group-item">
+                                        {% if task_group.title == "① 初診" %}
+                                            <a href="{% url 'rtms_app:patient_first_visit' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
+                                        {% elif task_group.title == "② 入院" %}
+                                            <a href="{% url 'rtms_app:admission_procedure' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
+                                        {% elif task_group.title == "③ MT測定" %}
+                                            <a href="{% url 'rtms_app:mapping_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
+                                        {% elif task_group.title == "④ 治療実施" %}
+                                            <a href="{% url 'rtms_app:treatment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
+                                        {% elif task_group.title == "⑤ 尺度評価" %}
+                                            {% if item.timing_code == 'baseline' %}
+                                                <a href="{% url 'rtms_app:assessment_add' item.obj.id 'baseline' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
+                                            {% elif item.timing_code == 'week3' %}
+                                                <a href="{% url 'rtms_app:assessment_add' item.obj.id 'week3' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
+                                            {% elif item.timing_code == 'week4' %}
+                                                <a href="{% url 'rtms_app:assessment_add' item.obj.id 'week4' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
+                                            {% elif item.timing_code == 'week6' %}
+                                                <a href="{% url 'rtms_app:assessment_add' item.obj.id 'week6' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
+                                            {% else %}
+                                                <a href="{% url 'rtms_app:assessment_add' item.obj.id 'baseline' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
+                                            {% endif %}
+                                        {% elif task_group.title == "⑥ 退院準備" %}
+                                            <a href="{% url 'rtms_app:patient_home' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
+                                        {% endif %}
+                                            <div class="name-row" aria-label="{{ item.obj.name }}の{{ task_group.title }}を開く">
+                                                <span class="patient-name fw-bold fs-5 text-primary"><span class="dashboard-task-category"><i class="fas {{ task_group.icon }}"></i>{{ task_group.title }}</span>{{ item.obj.name }}
+                                                {% if item.obj.course_number > 1 %}
+                                                    <span class="course-label">{{ item.obj.course_number }}クール</span>
+                                                {% endif %}
+                                                </span>
+                                                <span class="status-badge status-{{ item.color }}">{{ item.status }}</span>
+                                            </div>
+                                            <div class="dashboard-task-detail">
+                                                <div class="todo-row"><div class="todo-badge"><i class="fas fa-check-circle me-1"></i>{{ item.todo }}{% if item.note %}<span class="small ms-1">({{ item.note }})</span>{% endif %}</div></div>
+                                                <div class="task-meta">
+                                                    <span>ID: {{ item.obj.card_id }}</span>
+                                                    <span>担当医: {% if item.obj.attending_physician %}{{ item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
+                                                </div>
+                                            </div>
+                                        </a>
+                                        </div>
+                                    {% empty %}
+                                        <div class="task-empty text-center text-muted small">本日の予定はありません</div>
+                                    {% endfor %}
+                                </div>
+                            </section>
+                        {% endfor %}
+                        <section id="dashboard-panel-6"
+                                 class="dashboard-panel"
+                                 style="--panel-accent: #6c757d;"
+                                 data-dashboard-panel="6"
+                                 hidden
+                                 aria-labelledby="dashboard-panel-title-6">
+                            <div class="dashboard-panel__header">
+                                <h2 id="dashboard-panel-title-6" class="dashboard-panel__title"><i class="fas fa-list-check"></i>⑦ 未実施一覧</h2>
+                                <span class="badge bg-light text-dark rounded-pill">{{ backlog_tasks|length }}件</span>
+                            </div>
+                            <div class="list-group list-group-flush">
+                                {% for backlog in backlog_tasks %}
+                                    <div class="dashboard-backlog__item list-group-item"
+                                         {% if backlog.group_title == "② 入院" %}style="--backlog-accent: var(--color-admission);"
+                                         {% elif backlog.group_title == "③ MT測定" %}style="--backlog-accent: var(--color-mapping);"
+                                         {% elif backlog.group_title == "④ 治療実施" %}style="--backlog-accent: var(--color-treatment);"
+                                         {% elif backlog.group_title == "⑤ 尺度評価" %}style="--backlog-accent: var(--color-assessment);"
+                                         {% else %}style="--backlog-accent: #6c757d;"{% endif %}>
+                                        {% if backlog.group_title == "② 入院" %}
+                                            <a href="{% url 'rtms_app:admission_procedure' backlog.item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ backlog.item.course_number }}">
+                                        {% elif backlog.group_title == "③ MT測定" %}
+                                            <a href="{% url 'rtms_app:mapping_add' backlog.item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ backlog.item.course_number }}">
+                                        {% elif backlog.group_title == "④ 治療実施" %}
+                                            <a href="{% url 'rtms_app:treatment_add' backlog.item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ backlog.item.course_number }}">
+                                        {% elif backlog.group_title == "⑤ 尺度評価" %}
+                                            <a href="{% url 'rtms_app:assessment_add' backlog.item.obj.id backlog.item.timing_code|default:'baseline' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ backlog.item.course_number }}">
+                                        {% endif %}
+                                            <div class="name-row">
+                                                <span class="patient-name fw-bold fs-5 text-primary"><span class="dashboard-backlog__category"><i class="fas fa-tag"></i>{{ backlog.group_title }}</span>{{ backlog.item.obj.name }}
+                                                    {% if backlog.item.obj.course_number > 1 %}<span class="course-label">{{ backlog.item.obj.course_number }}クール</span>{% endif %}
+                                                </span>
+                                                <span class="status-badge status-{{ backlog.item.color }}">{{ backlog.item.status }}</span>
+                                            </div>
+                                            <div class="dashboard-task-detail">
+                                                <div class="todo-row"><div class="todo-badge"><i class="fas fa-check-circle me-1"></i>{{ backlog.item.todo }}</div></div>
+                                                <div class="task-meta">
+                                                    <span>ID: {{ backlog.item.obj.card_id }}</span>
+                                                    <span>担当医: {% if backlog.item.obj.attending_physician %}{{ backlog.item.obj.attending_physician.last_name }}{% else %}-{% endif %}</span>
+                                                </div>
+                                            </div>
+                                            </a>
+                                    </div>
+                                {% empty %}
+                                    <div class="task-empty text-center text-muted small">未実施の項目はありません</div>
+                                {% endfor %}
+                            </div>
+                        </section>
+                    </main>
                 </div>
             </div>
         </div>
-        <!-- 3列 x 2行 のグリッドレイアウト -->
-        <div class="dashboard-grid mt-3">
-            <!-- views.pyから渡されたデータを使用 -->
-            {% for task_group in dashboard_tasks %}
-                <div class="task-group-wrapper">
-                    <div class="card-task bg-white">
-                        <div class="task-header {{ task_group.color_class }}">
-                            <span><i class="fas {{ task_group.icon }} me-2"></i>{{ task_group.title }}</span>
-                            <span class="badge bg-white text-dark rounded-pill opacity-75">{{ task_group.list|length }}</span>
-                        </div>
-                        <!-- 初診のみ新規登録ボタンを表示 -->
-                        {% if task_group.title == "① 初診" %}
-                            <div class="p-2 border-bottom text-center bg-light">
-                                <a href="{% url 'rtms_app:patient_add' %}"
-                                   class="btn btn-outline-primary btn-sm w-100 fw-bold border-0">
-                                    <i class="fas fa-plus-circle"></i> 新規患者登録
-                                </a>
-                            </div>
-                        {% endif %}
-                        <div class="list-group list-group-flush">
-                            {% for item in task_group.list %}
-                                <div class="list-group-item">
-                                    {% if task_group.title == "① 初診" %}
-                                        <a href="{% url 'rtms_app:patient_first_visit' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
-                                        {% elif task_group.title == "② 入院" %}
-                                            <a href="{% url 'rtms_app:admission_procedure' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
-                                            {% elif task_group.title == "③ MT測定" %}
-                                                <a href="{% url 'rtms_app:mapping_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
-                                                {% elif task_group.title == "④ 治療実施" %}
-                                                    <a href="{% url 'rtms_app:treatment_add' item.obj.id %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
-                                                    {% elif task_group.title == "⑤ 尺度評価" %}
-                                                        {% if item.timing_code == 'baseline' %}
-                                                            <a href="{% url 'rtms_app:assessment_add' item.obj.id 'baseline' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
-                                                            {% elif item.timing_code == 'week3' %}
-                                                                <a href="{% url 'rtms_app:assessment_add' item.obj.id 'week3' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
-                                                                {% elif item.timing_code == 'week4' %}
-                                                                    <a href="{% url 'rtms_app:assessment_add' item.obj.id 'week4' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
-                                                                    {% elif item.timing_code == 'week6' %}
-                                                                        <a href="{% url 'rtms_app:assessment_add' item.obj.id 'week6' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
-                                                                        {% else %}
-                                                                            <a href="{% url 'rtms_app:assessment_add' item.obj.id 'baseline' %}?date={{ today|date:'Y-m-d' }}&dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
-                                                                            {% endif %}
-                                                                        {% elif task_group.title == "⑥ 退院準備" %}
-                                                                            <a href="{% url 'rtms_app:patient_home' item.obj.id %}?dashboard_date={{ today|date:'Y-m-d' }}&course_number={{ item.course_number }}">
-                                                                            {% endif %}
-                                                                            <!-- 1. やること (上) -->
-                                                                            <div class="todo-row">
-                                                                                <div class="todo-badge">
-                                                                                    <i class="fas fa-check-circle me-1"></i>{{ item.todo }}
-                                                                                    {% if item.note %}<span class="small ms-1">({{ item.note }})</span>{% endif %}
-                                                                                </div>
-                                                                                <span class="status-badge status-{{ item.color }}">{{ item.status }}</span>
-                                                                            </div>
-                                                                            <!-- 2. 名前 (中) -->
-                                                                            <div class="name-row">
-                                                                                <span class="fw-bold fs-5 text-primary">{{ item.obj.name }}</span>
-                                                                                {% if item.obj.course_number > 1 %}
-                                                                                    <span class="badge bg-secondary rounded-pill small ms-1">{{ item.obj.course_number }}クール</span>
-                                                                                {% endif %}
-                                                                            </div>
-                                                                            <!-- 3. ID・担当医 (下) -->
-                                                                            <div class="task-meta">
-                                                                                <span>ID: {{ item.obj.card_id }}</span>
-                                                                                <!-- 担当医: 姓のみ表示 -->
-                                                                                <span>担当医:
-                                                                                    {% if item.obj.attending_physician %}
-                                                                                        {{ item.obj.attending_physician.last_name }}
-                                                                                    {% else %}
-                                                                                        -
-                                                                                    {% endif %}
-                                                                                </span>
-                                                                            </div>
-                                                                        </a>
-                                                                    </div>
-                                                                {% empty %}
-                                                                    <div class="text-center py-4 text-muted small">予定なし</div>
-                                                                {% endfor %}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                {% endfor %}
-                                            </div>
+        <script>
+            (() => {
+                const menuItems = [...document.querySelectorAll('[data-dashboard-category]')];
+                const panels = [...document.querySelectorAll('[data-dashboard-panel]')];
+                const defaultCategory = '3';
+
+                const getCategory = () => {
+                    const category = new URLSearchParams(window.location.search).get('category');
+                    return menuItems.some((item) => item.dataset.dashboardCategory === category) ? category : defaultCategory;
+                };
+
+                const setCategory = (category, updateUrl = false) => {
+                    menuItems.forEach((item) => {
+                        const isActive = item.dataset.dashboardCategory === category;
+                        item.classList.toggle('is-active', isActive);
+                        item.setAttribute('aria-selected', String(isActive));
+                    });
+                    panels.forEach((panel) => {
+                        const isActive = panel.dataset.dashboardPanel === category;
+                        panel.classList.toggle('is-active', isActive);
+                        panel.hidden = !isActive;
+                    });
+                    if (updateUrl) {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('category', category);
+                        window.history.replaceState({}, '', url);
+                    }
+                };
+
+                menuItems.forEach((item) => {
+                    item.addEventListener('click', () => setCategory(item.dataset.dashboardCategory, true));
+                });
+                window.addEventListener('popstate', () => setCategory(getCategory()));
+                setCategory(getCategory());
+            })();
+        </script>
                                             <!-- Patient login footer -->
                                             <div class="mt-5 pt-4 border-top text-center small text-muted">
                                                 <p>
