@@ -1,15 +1,30 @@
-{# page-exit-menu: back button only (no wrapper, no print button). #}
 {# The including template handles the wrapper and any screen-specific buttons. #}
-{# Relies on context var: dashboard_date (optional). #}
+{# Relies on context vars: dashboard_date (optional), user, and patient. #}
 {% url 'rtms_app:dashboard' as dashboard_url %}
-{% if dashboard_date %}
-    {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
-        <a class="btn btn-secondary" href="{{ back_url }}">
-            <i class="fas fa-undo"></i> 戻る
+<div class="rtms-global-page-links" aria-label="全体ページへの移動">
+    {% if dashboard_date %}
+        {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
+            <a class="btn btn-secondary rtms-action-secondary" href="{{ back_url }}">
+                <i class="fas fa-undo"></i> ダッシュボード
+            </a>
+        {% endwith %}
+    {% else %}
+        <a class="btn btn-patient-list rtms-action-secondary" href="{{ dashboard_url }}">
+            <i class="fas fa-th-large"></i> ダッシュボード
         </a>
-    {% endwith %}
-{% else %}
-    <a class="btn btn-patient-list" href="{{ dashboard_url }}">
-        <i class="fas fa-undo"></i> 戻る
+    {% endif %}
+    <a class="btn btn-outline-secondary rtms-action-secondary" href="{% url 'rtms_app:patient_list' %}">
+        <i class="fas fa-users"></i> 患者一覧
     </a>
-{% endif %}
+    <a class="btn btn-outline-secondary rtms-action-secondary" href="{% url 'rtms_app:calendar_month' %}">
+        <i class="fas fa-calendar-alt"></i> 月間スケジュール
+    </a>
+    <a class="btn btn-outline-success rtms-action-secondary" href="{% url 'rtms_app:inpatient_calendar' %}">
+        <i class="fas fa-calendar-check"></i> rTMS日程調整
+    </a>
+    {% if user.is_superuser %}
+        <a class="btn btn-outline-dark rtms-action-secondary" href="{% url 'admin:index' %}" target="_blank" rel="noopener">
+            <i class="fas fa-cog"></i> 管理画面
+        </a>
+    {% endif %}
+</div>

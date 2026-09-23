@@ -1,6 +1,6 @@
-<div class="mb-3">
+<div class="mb-3 rtms-patient-header">
   <div class="d-flex justify-content-between align-items-center">
-    <div class="page-title d-flex align-items-center gap-2">
+    <div class="page-title rtms-page-title">
       {% if title_icon %}<i class="fas {{ title_icon }} page-title-icon"></i>{% endif %} {{ page_title|default:"" }}
       {% if title_controls_html %}
         <span class="ms-3">{{ title_controls_html|safe }}</span>
@@ -11,7 +11,7 @@
     {% endif %}
   </div>
 
-  <div class="patient-meta mt-1" style="font-size:0.95rem; color: #333;">
+  <div class="patient-meta rtms-page-title__meta">
     <span>ID {{ patient.card_id }}</span>
     <span class="mx-2 text-muted">|</span>
     <span class="patient-name">

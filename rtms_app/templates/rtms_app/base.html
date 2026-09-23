@@ -18,6 +18,7 @@
         <link rel="stylesheet" href="{% static 'css/print_a4.css' %}" media="print">
         <link rel="stylesheet" href="{% static 'rtms_app/box_style.css' %}">
         <link rel="stylesheet" href="{% static 'rtms_app/app.css' %}">
+        <link rel="stylesheet" href="{% static 'rtms_app/page_actions.css' %}">
         <style>
         /* テーマカラー定義 */
         :root {
@@ -231,20 +232,11 @@
                         <i class="fas fa-users"></i><span class="rtms-nav-label">患者一覧</span>
                     </a>
                     <a class="btn btn-outline-light btn-menu rtms-global-nav-link rtms-nav-action rtms-global-nav-secondary" href="{% url 'rtms_app:calendar_month' %}">
-                        <i class="fas fa-calendar-alt"></i><span class="rtms-nav-label">月間カレンダー</span>
+                        <i class="fas fa-calendar-alt"></i><span class="rtms-nav-label">月間スケジュール</span>
                     </a>
                     <a class="btn btn-outline-light btn-menu rtms-global-nav-link rtms-nav-action rtms-global-nav-secondary" href="{% url 'rtms_app:inpatient_calendar' %}">
                         <i class="fas fa-calendar-check"></i><span class="rtms-nav-label">rTMS日程調整</span>
                     </a>
-                    <style>
-                .rtms-topnav .rtms-global-nav-link { line-height: 1.2; }
-                .rtms-topnav .dropdown-menu { min-width: 250px; z-index: 1000; }
-                .rtms-topnav .dropdown-menu .patient-name { font-weight: 700; }
-                .rtms-topnav .rtms-dashboard-nav-link { order: 1; }
-                .rtms-topnav .rtms-menu-toggle { order: 4; }
-                .rtms-topnav .rtms-global-nav-secondary { order: 2; }
-                @media (max-width: 992px) { .rtms-topnav .rtms-global-nav-secondary { display: none; } }
-                    </style>
                     <div class="dropdown rtms-menu-toggle">
                         <button class="btn btn-outline-light btn-menu rtms-global-nav-link rtms-nav-action"
                                 type="button"
@@ -338,18 +330,18 @@
                                 </a>
                             </li>
                             <li>
+                                <a class="dropdown-item" href="{% url 'rtms_app:patient_list' %}">
+                                    <i class="fas fa-users me-2"></i> 患者一覧
+                                </a>
+                            </li>
+                            <li>
                                 <a class="dropdown-item" href="{% url 'rtms_app:calendar_month' %}">
-                                    <i class="fas fa-calendar-alt me-2"></i> 月間カレンダー
+                                    <i class="fas fa-calendar-alt me-2"></i> 月間スケジュール
                                 </a>
                             </li>
                             <li>
                                 <a class="dropdown-item" href="{% url 'rtms_app:inpatient_calendar' %}">
                                     <i class="fas fa-calendar-check me-2"></i> rTMS日程調整
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="{% url 'rtms_app:patient_list' %}">
-                                    <i class="fas fa-users me-2"></i> 患者一覧
                                 </a>
                             </li>
                             {% if user.is_superuser %}
