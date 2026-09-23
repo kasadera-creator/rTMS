@@ -1378,8 +1378,8 @@ class TestTreatmentCourseScheduleIsolation(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Course 1')
-        self.assertContains(response, 'Course 2')
+        self.assertContains(response, 'Two Course Patient #1 (C1)')
+        self.assertContains(response, 'Two Course Patient #1 (C2)')
 
     def test_course_two_month_calendar_event_opens_treatment_view_in_course_two(self):
         from rtms_app.views import _build_month_calendar
@@ -2890,6 +2890,41 @@ class TestPatientListNavigation(TestCase):
         self.assertContains(response, f'href="{reverse("rtms_app:dashboard")}"')
         self.assertContains(response, 'fa-th-large')
         self.assertNotContains(response, 'ダッシュボードへ戻る')
+
+    def test_patient_page_keeps_patient_and_global_navigation(self):
+        patient = Patient.objects.create(
+            card_id='S6023', name='Navigation Patient', birth_date=date(1980, 1, 1),
+            course_number=1,
+        )
+        TreatmentCourse.objects.create(patient=patient, course_number=1)
+
+        response = self.client.get(
+            reverse('rtms_app:patient_clinical_path', args=[patient.pk]),
+            {'course_number': 1},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        for label in ('初診', 'スケジュール', 'MT測定', '治療', '尺度', '退院'):
+            self.assertContains(response, label)
+        for url in (
+            reverse('rtms_app:dashboard'),
+            reverse('rtms_app:patient_list'),
+            reverse('rtms_app:calendar_month'),
+            reverse('rtms_app:inpatient_calendar'),
+        ):
+            self.assertContains(response, f'href="{url}"')
+        self.assertNotContains(response, f'href="{reverse("admin:index")}"')
+
+    def test_global_menu_shows_admin_link_only_to_superusers(self):
+        regular_response = self.client.get(reverse('rtms_app:patient_list'))
+        self.assertNotContains(regular_response, f'href="{reverse("admin:index")}"')
+
+        superuser = get_user_model().objects.create_superuser(
+            username='patient-navigation-superuser', password='pw', email='superuser@example.com',
+        )
+        self.client.force_login(superuser)
+        superuser_response = self.client.get(reverse('rtms_app:patient_list'))
+        self.assertContains(superuser_response, f'href="{reverse("admin:index")}"')
 
 
 class TestAdminNavigation(TestCase):

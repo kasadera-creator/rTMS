@@ -980,11 +980,18 @@ def dashboard_view(request):
                     elif event_type == 'discharge':
                         task_discharge.append(event_task)
 
-    # サービス化したスケジュールタスクをダッシュボードに反映
-
-
     dashboard_tasks = [{'list': task_first_visit, 'title': "① 初診", 'color_class': "bg-g-first-visit", 'icon': "fa-user-plus"}, {'list': task_admission, 'title': "② 入院", 'color_class': "bg-g-admission", 'icon': "fa-procedures"}, {'list': task_mapping, 'title': "③ MT測定", 'color_class': "bg-g-mapping", 'icon': "fa-crosshairs"}, {'list': task_treatment, 'title': "④ 治療実施", 'color_class': "bg-g-treatment", 'icon': "fa-bolt"}, {'list': task_assessment, 'title': "⑤ 尺度評価", 'color_class': "bg-g-assessment", 'icon': "fa-clipboard-check"}, {'list': task_discharge, 'title': "⑥ 退院準備", 'color_class': "bg-g-discharge", 'icon': "fa-file-export"}]
-    return render(request, 'rtms_app/dashboard.html', {'today': target_date, 'target_date_display': target_date_display, 'prev_day': prev_day, 'next_day': next_day, 'today_raw': jst_now.date(), 'dashboard_tasks': dashboard_tasks})
+    incomplete_statuses = {"要手続", "実施未"}
+    backlog_tasks = [
+        {
+            'group_title': task_group['title'],
+            'item': item,
+        }
+        for task_group in dashboard_tasks
+        for item in task_group['list']
+        if item.get('status') in incomplete_statuses
+    ]
+    return render(request, 'rtms_app/dashboard.html', {'today': target_date, 'target_date_display': target_date_display, 'prev_day': prev_day, 'next_day': next_day, 'today_raw': jst_now.date(), 'dashboard_tasks': dashboard_tasks, 'backlog_tasks': backlog_tasks})
 
 def get_patient_admission_status(patient, *, as_of=None, treatment_course=None):
     """Return the selected course's derived treatment lifecycle status."""
@@ -2715,6 +2722,11 @@ def _build_month_calendar(year, month, is_print=False):
         and session.status != 'skipped'
         and grid_start <= session.session_date <= grid_end
     ]
+    print_label_counts = {}
+    for session in treatments:
+        treatment_number = treatment_number_by_id[session.id]
+        print_key = (session.patient.name or '', treatment_number)
+        print_label_counts[print_key] = print_label_counts.get(print_key, 0) + 1
 
     def surname(patient):
         name = (patient.name or '').strip()
@@ -2754,9 +2766,15 @@ def _build_month_calendar(year, month, is_print=False):
             if p.discharge_date == day_date:
                 events.append({'kind': 'discharge', 'label': f'退院（{surname(p)}）', 'url': build_url('patient_home', [p.id])})
         for session in treatment_by_date.get(day_date, []):
+            treatment_number = treatment_number_by_id[session.id]
+            print_key = (session.patient.name or '', treatment_number)
+            print_label = f'{session.patient.name} #{treatment_number}'
+            if print_label_counts[print_key] > 1:
+                print_label += f' (C{session.course_number})'
             events.append({
                 'kind': 'treatment',
-                'label': f'rTMS治療（{surname(session.patient)}＃{treatment_number_by_id[session.id]}回）',
+                'label': f'rTMS治療（{surname(session.patient)}＃{treatment_number}回）',
+                'print_label': print_label,
                 'course_number': session.course_number,
                 'url': build_url('treatment_add', [session.patient_id], query={'date': day_date.isoformat(), 'course_number': session.course_number}),
                 'is_planned': session.status == 'planned',
@@ -2795,6 +2813,7 @@ def _build_month_calendar(year, month, is_print=False):
         'today': today,
         'peak_inpatients': max((d['inpatient_count'] for d in all_days), default=0),
         'peak_rtms': max((d['rtms_count'] for d in all_days), default=0),
+        'is_print': is_print,
     }
 
 
