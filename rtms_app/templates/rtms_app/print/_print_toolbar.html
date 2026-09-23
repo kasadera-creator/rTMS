@@ -1,17 +1,16 @@
 {% load static %}
 <style>
-  .print-toolbar-floating { position: fixed; top: 66px; right: 10px; z-index: 100; }
-  .print-toolbar-floating .btn { margin-left: 6px; }
-  @media print { .print-toolbar-floating { display: none !important; } }
+  .print-toolbar { display: flex; justify-content: flex-end; align-items: center; gap: 0.5rem; margin: 0 0 1rem; }
+  .print-toolbar .btn { min-height: var(--rtms-control-height, 36px); }
+  .print-toolbar__filename { margin-left: 0.25rem; color: #6c757d; font-size: 0.8rem; }
+  @media print { .print-toolbar { display: none !important; } }
 </style>
 
-<div class="print-toolbar-floating" id="printToolbar" data-back-url="{{ back_url|default:'' }}">
-  <div class="btn-group" role="group" aria-label="Print toolbar">
-    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-back" title="戻る"><i class="fas fa-arrow-left"></i> 戻る</button>
-    <button type="button" class="btn btn-primary btn-sm" id="btn-print-screen" title="印刷"><i class="fas fa-print"></i> 印刷</button>
-    <button type="button" class="btn btn-success btn-sm" id="btn-save-pdf" data-filename="{{ pdf_filename|default:'' }}" title="PDF保存"><i class="fas fa-file-pdf"></i> PDF保存</button>
-  </div>
-  <div class="small text-muted mt-1">ファイル名: <span id="pdfFilenamePreview">{{ pdf_filename|default:'' }}</span></div>
+<div class="print-toolbar no-print" id="printToolbar" data-back-url="{{ back_url|default:'' }}">
+  <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-back" title="戻る"><i class="fas fa-arrow-left"></i> 戻る</button>
+  <button type="button" class="btn btn-primary btn-sm" id="btn-print-screen" title="印刷"><i class="fas fa-print"></i> 印刷</button>
+  <button type="button" class="btn btn-success btn-sm" id="btn-save-pdf" data-filename="{{ pdf_filename|default:'' }}" title="PDF保存"><i class="fas fa-file-pdf"></i> PDF保存</button>
+  <span class="print-toolbar__filename">ファイル名: <span id="pdfFilenamePreview">{{ pdf_filename|default:'' }}</span></span>
 </div>
 
 <script src="https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>

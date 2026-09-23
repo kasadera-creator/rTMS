@@ -38,10 +38,9 @@
   .date-row { margin-bottom: 1px; }
 
   .cal-print-legend {
-    position: fixed;
-    right: 8mm;
-    bottom: 8mm;
     display: flex;
+    justify-content: flex-end;
+    margin-top: 2mm;
     gap: 6px;
     font-size: 9pt;
   }
@@ -114,7 +113,7 @@
                   {% if ev.kind == 'discharge' %}<i class="fas fa-home me-1"></i>{% endif %}
                   {% if ev.kind == 'treatment' %}<i class="fas fa-bolt me-1"></i>{% endif %}
                   {% if ev.kind == 'first-visit' %}<i class="fas fa-user-plus me-1"></i>{% endif %}
-                  {{ ev.label }}{% if ev.kind == 'treatment' %} <span class="event-course">Course {{ ev.course_number }}</span>{% endif %}
+                  {% if ev.kind == 'treatment' and is_print %}{{ ev.print_label }}{% else %}{{ ev.label }}{% if ev.kind == 'treatment' %} <span class="event-course">Course {{ ev.course_number }}</span>{% endif %}{% endif %}
                 </a>
               {% endfor %}
               {% if day.events_hidden_count > 0 %}
