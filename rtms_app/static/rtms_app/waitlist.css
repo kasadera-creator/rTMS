@@ -1,0 +1,45 @@
+.waitlist-page {
+  max-width: 100%;
+}
+
+.waitlist-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.waitlist-page__header .rtms-page-title {
+  margin-bottom: 0;
+}
+
+.waitlist-page__body {
+  padding: 0.875rem 1rem;
+}
+
+.waitlist-page__context {
+  color: #6c757d;
+  font-size: 0.875rem;
+}
+
+.waitlist-page__form {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.waitlist-page__table {
+  margin: 0;
+}
+
+@media (max-width: 575.98px) {
+  .waitlist-page__header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .waitlist-page__header > :last-child {
+    width: 100%;
+  }
+}

@@ -1,13 +1,13 @@
 {% extends "rtms_app/base.html" %}
+{% load static %}
 {% block body_class %}page-rtms-waitlist-management{% endblock %}
 {% block header_breadcrumb %}<span class="text-white-50 ms-2">/ rTMS待機者リスト</span>{% endblock %}
+{% block extrastyle %}<link rel="stylesheet" href="{% static 'rtms_app/waitlist.css' %}">{% endblock %}
 {% block content %}
-<div class="container py-3">
-  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-    <div>
-      <h1 class="h4 mb-1">rTMS待機者リスト</h1>
-      <div class="text-muted small">現在の待機者 {{ active_count }}名 / 優先度・登録日順</div>
-    </div>
+<div class="container py-3 waitlist-page">
+  <section class="app-card">
+  <div class="app-card__header waitlist-page__header">
+    <div class="rtms-page-title"><i class="fas fa-user-clock page-title-icon"></i><div><span class="rtms-page-title__text">rTMS待機者リスト</span><div class="text-muted small">現在の待機者 {{ active_count }}名 / 優先度・登録日順</div></div></div>
     <form method="get" class="d-flex align-items-center gap-2">
       <label class="small text-muted" for="id_status">表示</label>
       <select class="form-select form-select-sm" id="id_status" name="status" onchange="this.form.submit()">
@@ -18,6 +18,7 @@
     </form>
   </div>
 
+  <div class="app-card__body p-0">
   <div class="table-responsive">
     <table class="table table-bordered table-hover align-middle">
       <thead class="table-light">
@@ -56,5 +57,7 @@
       </tbody>
     </table>
   </div>
+  </div>
+  </section>
 </div>
 {% endblock %}

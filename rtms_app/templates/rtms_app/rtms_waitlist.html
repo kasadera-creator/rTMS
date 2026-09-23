@@ -1,21 +1,27 @@
 {% extends "rtms_app/base.html" %}
+{% load static %}
 {% block body_class %}page-rtms-waitlist{% endblock %}
 {% block header_breadcrumb %}<span class="text-white-50 ms-2">/ rTMS待機リスト</span>{% endblock %}
+{% block extrastyle %}<link rel="stylesheet" href="{% static 'rtms_app/waitlist.css' %}">{% endblock %}
 {% block content %}
-<div class="container py-3">
-  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-    <h1 class="h4 mb-0">rTMS待機リスト</h1>
-    <a class="btn btn-outline-primary btn-sm" href="{% url 'rtms_app:inpatient_calendar' %}">rTMS日程調整へ戻る</a>
+<div class="container py-3 waitlist-page">
+  <section class="app-card">
+  <div class="app-card__header waitlist-page__header">
+    <div class="rtms-page-title"><i class="fas fa-user-clock page-title-icon"></i><span class="rtms-page-title__text">rTMS待機リスト</span></div>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'rtms_app:inpatient_calendar' %}"><i class="fas fa-arrow-left me-1"></i>日程調整へ戻る</a>
   </div>
-  <p class="text-muted">{{ treatment_course.patient.name }} / Course {{ treatment_course.course_number }}</p>
-  <form method="post" class="card p-3 p-md-4 mb-4">
+  <div class="app-card__body waitlist-page__body">
+  <div class="waitlist-page__context mb-3">{{ treatment_course.patient.name }} / Course {{ treatment_course.course_number }}</div>
+  <form method="post" class="waitlist-page__form mb-4">
     {% csrf_token %}<input type="hidden" name="course_number" value="{{ treatment_course.course_number }}">
     {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
     {% for field in form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}</div>{% endfor %}
     <button class="btn btn-outline-primary" type="submit">rTMS待機リストへ登録</button>
   </form>
-  <div class="table-responsive"><table class="table table-bordered align-middle"><thead class="table-light"><tr><th>登録日</th><th>治療開始希望時期・備考</th><th>status</th></tr></thead><tbody>
+  <div class="table-responsive"><table class="table table-bordered align-middle waitlist-page__table"><thead class="table-light"><tr><th>登録日</th><th>治療開始希望時期・備考</th><th>status</th></tr></thead><tbody>
   {% for entry in entries %}<tr><td>{{ entry.registered_at|date:"Y/m/d" }}</td><td>{{ entry.preferred_start_note|default:'-' }}</td><td>{{ entry.get_status_display }}</td></tr>{% empty %}<tr><td colspan="3" class="text-center text-muted">待機登録はありません。</td></tr>{% endfor %}
   </tbody></table></div>
+  </div>
+  </section>
 </div>
 {% endblock %}

@@ -1,11 +1,16 @@
 {% extends "rtms_app/base.html" %}
+{% load static %}
 {% block body_class %}page-rtms-waitlist-patient-select{% endblock %}
 {% block header_breadcrumb %}<span class="text-white-50 ms-2">/ 待機者登録 / 患者選択</span>{% endblock %}
+{% block extrastyle %}<link rel="stylesheet" href="{% static 'rtms_app/waitlist.css' %}">{% endblock %}
 {% block content %}
-<div class="stack-md" data-theme="patient-list">
+<div class="stack-md waitlist-page" data-theme="patient-list">
   <section class="app-card">
-    <div class="app-card__header"><i class="fas fa-user-clock me-2"></i>rTMS待機者登録</div>
-    <div class="app-card__body">
+    <div class="app-card__header waitlist-page__header">
+      <div class="rtms-page-title"><i class="fas fa-user-clock page-title-icon"></i><span class="rtms-page-title__text">rTMS待機者登録</span></div>
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'rtms_app:inpatient_calendar' %}"><i class="fas fa-arrow-left me-1"></i>日程調整へ戻る</a>
+    </div>
+    <div class="app-card__body waitlist-page__body">
       <p class="text-muted mb-3">登録対象の患者 / Courseを選択してください。</p>
       <form method="get" class="row g-2 align-items-end">
         <div class="col-md-3">
