@@ -1,17 +1,47 @@
 .inpatient-timeline {
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--rtms-radius-md, 8px);
   background: #fff;
-  padding: 0.75rem;
-  box-shadow: 0 2px 8px rgba(25, 38, 54, 0.06);
+  box-shadow: var(--rtms-shadow-card, 0 6px 20px rgba(25, 38, 54, 0.08));
+  overflow: hidden;
 }
 
 .calendar-section {
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--rtms-radius-md, 8px);
   background: #fff;
-  padding: 1rem;
-  box-shadow: 0 2px 8px rgba(25, 38, 54, 0.06);
+  box-shadow: var(--rtms-shadow-card, 0 6px 20px rgba(25, 38, 54, 0.08));
+  overflow: hidden;
+}
+
+.rtms-inpatient-page .inpatient-page-header {
+  margin-bottom: 0;
+}
+
+.rtms-inpatient-page .inpatient-page-summary {
+  padding: 0.75rem 1rem 0;
+}
+
+.rtms-inpatient-page .inpatient-page-summary--course {
+  padding-top: 0.25rem;
+  padding-bottom: 0.75rem;
+}
+
+.rtms-inpatient-page .inpatient-timeline,
+.rtms-inpatient-page .calendar-section {
+  margin-right: 1rem;
+  margin-left: 1rem;
+}
+
+.rtms-inpatient-page .app-card__header h2 {
+  color: inherit;
+}
+
+.rtms-inpatient-page .timeline-legend {
+  padding: 0.5rem 0.625rem;
+  border: 1px solid rgba(25, 38, 54, 0.08);
+  border-radius: var(--rtms-radius-sm, 6px);
+  background: #f8f9fa;
 }
 
 .calendar-details {
@@ -417,7 +447,19 @@
 
 @media (max-width: 576px) {
   .inpatient-timeline {
-    padding: 0.5rem;
+    border-radius: var(--rtms-radius-sm, 6px);
+  }
+
+  .rtms-inpatient-page .app-card__header,
+  .rtms-inpatient-page .app-card__body {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .rtms-inpatient-page .inpatient-timeline,
+  .rtms-inpatient-page .calendar-section {
+    margin-right: 0.75rem;
+    margin-left: 0.75rem;
   }
 
   .timeline-grid {

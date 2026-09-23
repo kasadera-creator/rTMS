@@ -6,23 +6,26 @@
   <link rel="stylesheet" href="{% static 'rtms_app/inpatient_calendar.css' %}">
 {% endblock extrastyle %}
 {% block content %}
-<div class="container py-3">
-  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-    <div>
-      <h1 class="h4 mb-1">rTMS調整カレンダー</h1>
-      <div class="text-muted">今週から18週間 / 全体の運用状況</div>
+<div class="container py-3 rtms-inpatient-page">
+  <div class="app-card inpatient-page-header">
+    <div class="app-card__header rtms-page-title mb-0">
+      <i class="fas fa-calendar-check page-title-icon"></i>
+      <span class="rtms-page-title__text">rTMS日程調整</span>
+      <span class="visually-hidden">rTMS調整カレンダー</span>
+    </div>
+    <div class="app-card__body inpatient-page-body p-0">
+      <div class="inpatient-page-summary small text-muted">今週から18週間 / 全体の運用状況</div>
       {% if treatment_course %}
-        <div class="small text-primary mt-1" aria-label="選択中のCourse">
+        <div class="inpatient-page-summary inpatient-page-summary--course small text-primary" aria-label="選択中のCourse">
           選択中: {{ patient.name }} / Patient ID {{ patient.card_id }} / Course #{{ treatment_course.course_number }}
         </div>
       {% endif %}
-    </div>
-  </div>
-  <section class="inpatient-timeline mb-4" aria-labelledby="timeline-heading">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-      <h2 id="timeline-heading" class="h6 mb-0">① rTMS予定一覧</h2>
+  <section class="inpatient-timeline app-card mb-4" aria-labelledby="timeline-heading">
+    <div class="app-card__header d-flex justify-content-between align-items-center">
+      <h2 id="timeline-heading" class="h6 mb-0"><i class="fas fa-chart-gantt me-2"></i>rTMS治療スケジュール <span class="small text-muted">（① rTMS予定一覧）</span></h2>
       <span class="small text-muted">表示専用</span>
     </div>
+    <div class="app-card__body">
     <div class="timeline-legend small text-muted mb-2" aria-label="rTMS session status legend">
       rTMS：<span class="timeline-legend__rtms">治療予定期間</span>
       <span class="timeline-legend__room-planned ms-3">▒ 個室利用予定</span>
@@ -97,11 +100,12 @@
         {% endfor %}
       </div>
     </div>
+    </div>
   </section>
-  <section class="calendar-section mb-4" aria-labelledby="waitlist-heading">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+  <section class="calendar-section app-card mb-4" aria-labelledby="waitlist-heading">
+    <div class="app-card__header d-flex justify-content-between align-items-center flex-wrap gap-2">
       <div>
-          <h2 id="waitlist-heading" class="h6 mb-0">② 待機者リスト</h2>
+          <h2 id="waitlist-heading" class="h6 mb-0"><i class="fas fa-user-clock me-2"></i>待機者・日程調整 <span class="small text-muted">（② 待機者リスト）</span></h2>
         <div class="small text-muted">次に日程を組む患者 / Course（待機中 {{ waitlist_active_count }}件）</div>
       </div>
       {% if treatment_course %}
@@ -110,6 +114,7 @@
         <a class="btn btn-outline-primary btn-sm" href="{% url 'rtms_app:rtms_waitlist_patient_select' %}">＋ rTMS待機者登録</a>
       {% endif %}
     </div>
+    <div class="app-card__body pt-0">
     <div class="table-responsive">
       <table class="table table-bordered table-hover align-middle mb-0">
         <thead class="table-light"><tr><th>患者</th><th>Course</th><th>治療開始希望時期・備考</th><th>状態</th><th>登録日</th><th>操作</th></tr></thead>
@@ -151,7 +156,10 @@
         </tbody>
       </table>
     </div>
+    </div>
   </section>
 
+  </div>
+  </div>
 </div>
 {% endblock %}
