@@ -3800,6 +3800,23 @@ class TestSkipSessions(TestCase):
         self.client.login(username='skipper', password='pw')
         self.patient = Patient.objects.create(card_id='SKIP1', name='Skip Test', birth_date=datetime.date(1990,1,1))
 
+    def _skip_post(self, treatment_date):
+        return self.client.post(
+            reverse('rtms_app:treatment_add', args=[self.patient.id]),
+            {
+                'treatment_date': treatment_date.isoformat(),
+                'treatment_time': '09:00',
+                'mt_percent': '120',
+                'frequency_hz': '18.0',
+                'train_seconds': '2.0',
+                'intertrain_seconds': '20.0',
+                'train_count': '55',
+                'total_pulses': '1980',
+                'action': 'skip',
+            },
+            follow=False,
+        )
+
     def test_skip_shifts_future_planned_sessions_and_discharge(self):
         # create three planned sessions: day1, day2, day3
         from datetime import date, timedelta
@@ -3934,6 +3951,102 @@ class TestSkipSessions(TestCase):
             course_two_session.session_date,
             schedule_service.next_treatment_day(skipped.session_date + datetime.timedelta(days=1)),
         )
+
+    def test_skip_rolls_back_when_future_shift_fails(self):
+        self.patient.first_treatment_date = date(2026, 1, 9)
+        self.patient.save(update_fields=['first_treatment_date'])
+        first = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 9), status='planned',
+        )
+        future = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 12), status='planned',
+        )
+        later = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 13), status='planned',
+        )
+        mapping = MappingSchedule.objects.create(
+            patient=self.patient, course_number=1, week_number=1,
+            planned_date=date(2026, 1, 9),
+        )
+
+        with patch('rtms_app.views.shift_future_sessions', side_effect=RuntimeError('forced shift failure')):
+            response = self._skip_post(first.session_date)
+
+        first.refresh_from_db()
+        future.refresh_from_db()
+        later.refresh_from_db()
+        mapping.refresh_from_db()
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, '変更は保存されていません', status_code=400)
+        self.assertEqual(first.status, 'planned')
+        self.assertEqual(future.session_date, date(2026, 1, 12))
+        self.assertEqual(later.session_date, date(2026, 1, 13))
+        self.assertEqual(mapping.planned_date, date(2026, 1, 9))
+
+    def test_skip_rolls_back_when_mapping_sync_fails(self):
+        self.patient.first_treatment_date = date(2026, 1, 9)
+        self.patient.save(update_fields=['first_treatment_date'])
+        first = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 9), status='planned',
+        )
+        future = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 10), status='planned',
+        )
+        later = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 12), status='planned',
+        )
+        mapping = MappingSchedule.objects.create(
+            patient=self.patient, course_number=1, week_number=1,
+            planned_date=date(2026, 1, 9),
+        )
+
+        with patch(
+            'rtms_app.services.schedule._sync_mapping_schedules_to_treatment_weeks',
+            side_effect=RuntimeError('forced mapping sync failure'),
+        ):
+            response = self._skip_post(first.session_date)
+
+        first.refresh_from_db()
+        future.refresh_from_db()
+        later.refresh_from_db()
+        mapping.refresh_from_db()
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, '変更は保存されていません', status_code=400)
+        self.assertEqual(first.status, 'planned')
+        self.assertEqual(future.session_date, date(2026, 1, 10))
+        self.assertEqual(later.session_date, date(2026, 1, 12))
+        self.assertEqual(mapping.planned_date, date(2026, 1, 9))
+
+    def test_repeating_skip_post_keeps_current_http_state(self):
+        self.patient.first_treatment_date = date(2026, 1, 9)
+        self.patient.save(update_fields=['first_treatment_date'])
+        first = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 9), status='planned',
+        )
+        future = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 10), status='planned',
+        )
+        later = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 12), status='planned',
+        )
+        mapping = MappingSchedule.objects.create(
+            patient=self.patient, course_number=1, week_number=1,
+            planned_date=date(2026, 1, 9),
+        )
+
+        first_response = self._skip_post(first.session_date)
+        second_response = self._skip_post(first.session_date)
+
+        first.refresh_from_db()
+        future.refresh_from_db()
+        later.refresh_from_db()
+        mapping.refresh_from_db()
+        self.assertIn(first_response.status_code, (302, 303))
+        self.assertIn(second_response.status_code, (302, 303))
+        self.assertEqual(first.status, 'skipped')
+        self.assertEqual(future.session_date, date(2026, 1, 12))
+        self.assertEqual(later.session_date, date(2026, 1, 13))
+        self.assertEqual(mapping.planned_date, date(2026, 1, 9))
 
 
 class TestCourseAwareInitialVisit(TestCase):

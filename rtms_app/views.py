@@ -1936,27 +1936,27 @@ def treatment_add(request, patient_id):
             if action == 'skip':
                 # Record snapshot of affected future planned sessions, then mark skip and shift
                 try:
-                    session_scope = {'treatment_course': s.treatment_course} if s.treatment_course else {
-                        'patient': patient, 'course_number': s.course_number,
-                    }
-                    futures = list(TreatmentSession.objects.filter(**session_scope, session_date__gt=s.session_date).order_by('session_date', 'id'))
-                    snapshot_list = []
-                    for ts in futures:
-                        snapshot_list.append({
-                            'id': ts.id,
-                            'session_date': ts.session_date.isoformat() if ts.session_date else None,
-                            'date': ts.date.isoformat() if getattr(ts, 'date', None) else None,
-                        })
-                    snapshot = {
-                        'affected_sessions': snapshot_list,
-                        'patient_discharge_date': patient.discharge_date.isoformat() if getattr(patient, 'discharge_date', None) else None,
-                        'course_discharge_date': s.treatment_course.discharge_date.isoformat() if s.treatment_course and s.treatment_course.discharge_date else None,
-                        'skipped_session_id': s.id,
-                        'skipped_session_date': s.session_date.isoformat() if s.session_date else None,
-                    }
+                    with transaction.atomic():
+                        session_scope = {'treatment_course': s.treatment_course} if s.treatment_course else {
+                            'patient': patient, 'course_number': s.course_number,
+                        }
+                        futures = list(TreatmentSession.objects.filter(**session_scope, session_date__gt=s.session_date).order_by('session_date', 'id'))
+                        snapshot_list = []
+                        for ts in futures:
+                            snapshot_list.append({
+                                'id': ts.id,
+                                'session_date': ts.session_date.isoformat() if ts.session_date else None,
+                                'date': ts.date.isoformat() if getattr(ts, 'date', None) else None,
+                            })
+                        snapshot = {
+                            'affected_sessions': snapshot_list,
+                            'patient_discharge_date': patient.discharge_date.isoformat() if getattr(patient, 'discharge_date', None) else None,
+                            'course_discharge_date': s.treatment_course.discharge_date.isoformat() if s.treatment_course and s.treatment_course.discharge_date else None,
+                            'skipped_session_id': s.id,
+                            'skipped_session_date': s.session_date.isoformat() if s.session_date else None,
+                        }
 
-                    reason = (request.POST.get('skip_reason') or '').strip()
-                    try:
+                        reason = (request.POST.get('skip_reason') or '').strip()
                         sk = TreatmentSkip.objects.create(
                             treatment=s,
                             action_type='postpone',
@@ -1965,38 +1965,15 @@ def treatment_add(request, patient_id):
                             performed_by=request.user,
                             snapshot=snapshot,
                         )
-                    except Exception:
-                        pass
 
-                    # Mark the session as skipped
-                    s.status = 'skipped'
-                    s.save(update_fields=['status'])
-
-                    # Shift subsequent planned sessions forward by one treatment day each
-                    try:
-                        shift_future_sessions(patient, s.session_date, s.course_number)
-                    except Exception:
-                        pass
-                except Exception as _outer_err:
-                    # On any error, fallback to best-effort simple skip record
-                    try:
+                        # Mark the session as skipped
                         s.status = 'skipped'
                         s.save(update_fields=['status'])
-                        reason = (request.POST.get('skip_reason') or '').strip()
-                        TreatmentSkip.objects.create(
-                            treatment=s,
-                            action_type='postpone',
-                            effective_date=s.session_date,
-                            reason=reason,
-                            performed_by=request.user,
-                        )
-                    except Exception as _fallback_err:
-                        pass
-                    # Audit
-                    try:
-                        log_audit_action(patient, 'skip_treatment', 'TreatmentSession', s.id, summary=f"skipped via UI (fallback)")
-                    except Exception:
-                        pass
+
+                        # Shift subsequent planned sessions forward by one treatment day each
+                        shift_future_sessions(patient, s.session_date, s.course_number)
+                except Exception:
+                    return HttpResponseBadRequest('治療予定のスキップに失敗しました。変更は保存されていません。')
 
                 # Redirect back to dashboard or treatment page
                 if dashboard_date:

@@ -326,9 +326,9 @@ def shift_future_sessions(patient: Patient, from_date: date, course_number: int)
         return
     with transaction.atomic():
         _reflow_sessions(patient, course_number, from_date, target_date=None, moved_session=None)
-    _sync_mapping_schedules_to_treatment_weeks(
-        patient, course_number, from_date=from_date,
-    )
+        _sync_mapping_schedules_to_treatment_weeks(
+            patient, course_number, from_date=from_date,
+        )
 
 
 def reschedule_planned_session(
