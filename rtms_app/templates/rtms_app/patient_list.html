@@ -223,14 +223,16 @@
                                     {% if patient.list_status == "inpatient_waiting_treatment" %}
                                         <span class="badge bg-success">入院中（治療待ち）</span>
                                     {% elif patient.list_status == "treatment_in_progress" %}
-                                        <span class="badge bg-success">入院中（治療中）</span>
+                                        {% if patient.list_inpatient_state.is_actually_admitted %}<span class="badge bg-success">入院中（治療中）</span>{% else %}<span class="badge bg-info text-dark">治療中（入院実績未記録）</span>{% endif %}
                                     {% elif patient.list_status == "treatment_finished_waiting_discharge" %}
-                                        <span class="badge bg-success">入院中（治療後）</span>
+                                        {% if patient.list_inpatient_state.is_actually_admitted %}<span class="badge bg-success">入院中（治療後）</span>{% else %}<span class="badge bg-info text-dark">治療後（入院実績未記録）</span>{% endif %}
                                     {% elif patient.list_status == "waiting" %}
                                         <span class="badge bg-warning text-dark">入院待ち</span>
                                     {% elif patient.list_status == "discharged" %}
                                         <span class="badge bg-secondary">退院済</span>
                                     {% endif %}
+                                    {% if patient.list_inpatient_state.admission_overdue %}<span class="badge bg-warning text-dark">入院予定超過（実績未記録）</span>{% endif %}
+                                    {% if patient.list_inpatient_state.discharge_overdue %}<span class="badge bg-warning text-dark">退院予定超過（実績未記録）</span>{% endif %}
                                 </td>
                                 <td class="fw-bold">{{ patient.card_id }}</td>
                                 <td>

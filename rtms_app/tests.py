@@ -17,7 +17,7 @@ from importlib import import_module
 
 from rtms_app import assessment_rules
 from rtms_app.models import (
-    Patient, TreatmentCourse, Assessment, AssessmentRecord, TreatmentSession,
+    Patient, TreatmentCourse, InpatientPlan, Assessment, AssessmentRecord, TreatmentSession,
     MappingSession, MappingSchedule, AssessmentSchedule, ScaleDefinition, TreatmentSkip,
     SideEffectCheck, PatientSurveySession, SeriousAdverseEvent, AdverseEventReport, TimingScaleConfig,
 )
@@ -2339,13 +2339,13 @@ class TestStage6PatientAndCalendar(TestCase):
         self.assertEqual(days[date(2026, 8, 24)]['rtms_count'], 1)
         self.assertEqual(days[date(2026, 8, 25)]['rtms_count'], 0)
         labels = [event['label'] for event in days[date(2026, 8, 10)]['events_visible']]
-        self.assertIn('入院（Calendar）', labels)
+        self.assertIn('入院予定（Calendar）', labels)
         labels = [event['label'] for event in days[date(2026, 8, 24)]['events_visible']]
         self.assertIn('rTMS治療（Calendar＃1回）', labels)
         labels = [event['label'] for event in days[date(2026, 8, 26)]['events_visible']]
         self.assertIn('rTMS治療（Calendar＃3回）', labels)
         labels = [event['label'] for event in days[date(2026, 8, 12)]['events_visible']]
-        self.assertIn('退院（Discharged）', labels)
+        self.assertIn('退院予定（Discharged）', labels)
 
     def test_diagnosis_choices_are_preserved_in_existing_string_format(self):
         patient = Patient.objects.create(
@@ -2573,9 +2573,13 @@ class TestPatientListNavigation(TestCase):
             card_id='S6010', name='Hospitalized', birth_date=date(1980, 1, 1),
             admission_date=date(2026, 8, 1), status='inpatient',
         )
-        TreatmentCourse.objects.create(
+        course = TreatmentCourse.objects.create(
             patient=patient, course_number=2, course_status='waiting_admission',
             admission_date=date(2026, 9, 1),
+        )
+        InpatientPlan.objects.create(
+            treatment_course=course,
+            actual_admission_at=timezone.now() - timedelta(days=1),
         )
 
         response = self.client.get(reverse('rtms_app:patient_list'))
@@ -2665,10 +2669,10 @@ class TestPatientListNavigation(TestCase):
             get_patient_admission_status(
                 patient, as_of=date(2026, 9, 5), treatment_course=course_two,
             ),
-            'inpatient_waiting_treatment',
+            'waiting',
         )
 
-    def test_course_less_status_keeps_patient_date_fallback(self):
+    def test_course_less_status_does_not_infer_discharge_from_patient_date(self):
         patient = Patient.objects.create(
             card_id='S6023', name='Legacy Status', birth_date=date(1980, 1, 1),
             admission_date=date(2026, 1, 1), first_treatment_date=date(2026, 1, 5),
@@ -2677,7 +2681,7 @@ class TestPatientListNavigation(TestCase):
 
         self.assertEqual(
             get_patient_admission_status(patient, as_of=date(2026, 9, 5)),
-            'discharged',
+            'treatment_finished_waiting_discharge',
         )
 
     def test_patient_list_derives_all_treatment_lifecycle_states(self):
@@ -2696,10 +2700,21 @@ class TestPatientListNavigation(TestCase):
                 admission_date=admission_date, first_treatment_date=first_treatment_date,
                 discharge_date=discharge_date,
             )
-            TreatmentCourse.objects.create(
+            course = TreatmentCourse.objects.create(
                 patient=patient, course_number=1, admission_date=admission_date,
                 first_treatment_date=first_treatment_date, discharge_date=discharge_date,
             )
+            if card_id in {'S6014', 'S6015', 'S6016', 'S6017'}:
+                plan_values = {
+                    'actual_admission_at': timezone.make_aware(
+                        datetime.datetime.combine(admission_date, datetime.time(12)),
+                    ),
+                }
+                if card_id == 'S6017':
+                    plan_values['actual_discharge_at'] = timezone.make_aware(
+                        datetime.datetime.combine(as_of, datetime.time(12)),
+                    )
+                InpatientPlan.objects.create(treatment_course=course, **plan_values)
             patients.append((patient, expected))
 
         with patch('rtms_app.views.timezone.localdate', return_value=as_of):
@@ -2755,7 +2770,7 @@ class TestPatientListNavigation(TestCase):
         course.save(update_fields=['discharge_date'])
         self.assertEqual(
             get_patient_admission_status(patient, as_of=treatment_end, treatment_course=course),
-            'discharged',
+            'treatment_in_progress',
         )
 
     def test_patient_list_treatment_status_isolated_between_courses(self):
@@ -2780,13 +2795,13 @@ class TestPatientListNavigation(TestCase):
         )
         self.assertEqual(
             get_patient_admission_status(patient, as_of=as_of, treatment_course=course_two),
-            'inpatient_waiting_treatment',
+            'waiting',
         )
         response = self.client.get(reverse('rtms_app:patient_list'))
         course_two_row = next(
             row for row in response.context['patients'] if row.list_course_number == 2
         )
-        self.assertEqual(course_two_row.list_status, 'inpatient_waiting_treatment')
+        self.assertEqual(course_two_row.list_status, 'waiting')
 
     def test_patient_list_includes_course_aware_scale_link(self):
         patient = Patient.objects.create(

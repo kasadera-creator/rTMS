@@ -28,7 +28,7 @@ sys.stderr.write("===== views.py module loaded =====\n")
 sys.stderr.flush()
 
 from .models import (
-    Patient, TreatmentCourse, TreatmentSession, MappingSession, MappingSchedule, Assessment, AssessmentRecord,
+    Patient, TreatmentCourse, TreatmentSession, InpatientPlan, MappingSession, MappingSchedule, Assessment, AssessmentRecord,
     ScaleDefinition, TimingScaleConfig, AssessmentSchedule, ConsentDocument, AuditLog,
     SideEffectCheck, TreatmentSkip, PatientSurveySession, AdverseEventReport,
     SeriousAdverseEvent,
@@ -994,7 +994,7 @@ def dashboard_view(request):
     return render(request, 'rtms_app/dashboard.html', {'today': target_date, 'target_date_display': target_date_display, 'prev_day': prev_day, 'next_day': next_day, 'today_raw': jst_now.date(), 'dashboard_tasks': dashboard_tasks, 'backlog_tasks': backlog_tasks})
 
 def get_patient_admission_status(patient, *, as_of=None, treatment_course=None):
-    """Return the selected course's derived treatment lifecycle status."""
+    """Return the selected course's inpatient and treatment display status."""
     as_of = as_of or timezone.localdate()
     course = treatment_course
     if course is None:
@@ -1003,22 +1003,26 @@ def get_patient_admission_status(patient, *, as_of=None, treatment_course=None):
             course_number=patient.course_number or 1,
         ).first()
     course_number = course.course_number if course else patient.course_number or 1
+    plan = getattr(course, 'inpatient_plan', None) if course else None
+    actual_discharge_at = plan.actual_discharge_at if plan else None
+    if actual_discharge_at and timezone.localtime(actual_discharge_at).date() <= as_of:
+        return 'discharged'
+
+    actual_admission_at = plan.actual_admission_at if plan else None
+    actually_admitted = bool(
+        actual_admission_at
+        and timezone.localtime(actual_admission_at).date() <= as_of
+    )
 
     def course_date(field_name):
         if treatment_course is not None:
             return getattr(treatment_course, field_name, None)
         return getattr(patient, field_name, None)
 
-    admission_date = course_date('admission_date')
-    discharge_date = course_date('discharge_date')
     treatment_start = course_date('first_treatment_date')
 
-    if discharge_date and discharge_date <= as_of:
-        return 'discharged'
-    if not admission_date or admission_date > as_of:
-        return 'waiting'
     if not treatment_start or treatment_start > as_of:
-        return 'inpatient_waiting_treatment'
+        return 'inpatient_waiting_treatment' if actually_admitted else 'waiting'
 
     canonical_dates = generate_treatment_dates(
         treatment_start, total=MAX_TREATMENT_SESSIONS, holidays=JP_HOLIDAYS,
@@ -1029,6 +1033,41 @@ def get_patient_admission_status(patient, *, as_of=None, treatment_course=None):
     if treatment_end and as_of <= treatment_end:
         return 'treatment_in_progress'
     return 'treatment_finished_waiting_discharge'
+
+
+def get_course_inpatient_display_state(treatment_course, *, as_of=None):
+    """Return actual-admission and overdue flags for one course's plan."""
+    as_of = as_of or timezone.localdate()
+    plan = getattr(treatment_course, 'inpatient_plan', None)
+    if plan is None:
+        return {
+            'is_actually_admitted': False,
+            'admission_overdue': False,
+            'discharge_overdue': False,
+        }
+
+    actual_admitted = bool(
+        plan.actual_admission_at
+        and timezone.localtime(plan.actual_admission_at).date() <= as_of
+    )
+    actual_discharged = bool(
+        plan.actual_discharge_at
+        and timezone.localtime(plan.actual_discharge_at).date() <= as_of
+    )
+    return {
+        'is_actually_admitted': actual_admitted and not actual_discharged,
+        'admission_overdue': bool(
+            not actual_admitted
+            and not actual_discharged
+            and plan.planned_admission_date
+            and plan.planned_admission_date <= as_of
+        ),
+        'discharge_overdue': bool(
+            not actual_discharged
+            and plan.planned_discharge_date
+            and plan.planned_discharge_date <= as_of
+        ),
+    }
 
 
 @login_required
@@ -1075,7 +1114,7 @@ def patient_list_view(request):
 
     # ===== QuerySet: one row per TreatmentCourse =====
     qs = TreatmentCourse.objects.select_related(
-        'patient', 'patient__attending_physician',
+        'patient', 'patient__attending_physician', 'inpatient_plan',
     )
 
     if q:
@@ -1094,18 +1133,21 @@ def patient_list_view(request):
             patient,
             treatment_course=course,
         )
+        patient.list_inpatient_state = get_course_inpatient_display_state(course)
         patients.append(patient)
-    status_groups = {
-        'waiting': {'waiting'},
-        'inpatient': {
-            'inpatient_waiting_treatment',
-            'treatment_in_progress',
-            'treatment_finished_waiting_discharge',
-        },
-        'discharged': {'discharged'},
-    }
-    if status in status_groups:
-        patients = [patient for patient in patients if patient.list_status in status_groups[status]]
+    if status == 'waiting':
+        patients = [
+            patient for patient in patients
+            if not patient.list_inpatient_state['is_actually_admitted']
+            and patient.list_status != 'discharged'
+        ]
+    elif status == 'inpatient':
+        patients = [
+            patient for patient in patients
+            if patient.list_inpatient_state['is_actually_admitted']
+        ]
+    elif status == 'discharged':
+        patients = [patient for patient in patients if patient.list_status == 'discharged']
 
     # ===== sort link 用：検索条件を保持 =====
     preserved_params = request.GET.copy()
@@ -1798,6 +1840,13 @@ def treatment_add(request, patient_id):
                         session_date=session_date,
                         slot=slot,
                         defaults=defaults,
+                    )
+                    from rtms_app.services.rtms_treatment_reservations import (
+                        sync_rtms_treatment_reservation_from_sessions,
+                    )
+                    sync_rtms_treatment_reservation_from_sessions(
+                        treatment_course=treatment_course,
+                        user=request.user,
                     )
                 else:
                     s, created = update_or_create_treatment_session_legacy(
@@ -2739,9 +2788,9 @@ def _build_month_calendar(year, month, is_print=False):
         events = []
         for p in patients:
             if p.admission_date == day_date:
-                events.append({'kind': 'admission', 'label': f'入院（{surname(p)}）', 'url': build_url('admission_procedure', [p.id])})
+                events.append({'kind': 'admission', 'label': f'入院予定（{surname(p)}）', 'url': build_url('admission_procedure', [p.id]), 'is_planned': True})
             if p.discharge_date == day_date:
-                events.append({'kind': 'discharge', 'label': f'退院（{surname(p)}）', 'url': build_url('patient_home', [p.id])})
+                events.append({'kind': 'discharge', 'label': f'退院予定（{surname(p)}）', 'url': build_url('patient_home', [p.id]), 'is_planned': True})
         for session in treatment_by_date.get(day_date, []):
             treatment_number = treatment_number_by_id[session.id]
             print_key = (session.patient.name or '', treatment_number)
@@ -2757,7 +2806,7 @@ def _build_month_calendar(year, month, is_print=False):
                 'is_planned': session.status == 'planned',
             })
         for p in estimated_discharge_by_date.get(day_date, []):
-            events.append({'kind': 'discharge', 'label': f'退院（{surname(p)}）', 'url': build_url('patient_home', [p.id]), 'is_planned': True})
+            events.append({'kind': 'discharge', 'label': f'退院予定（推定・{surname(p)}）', 'url': build_url('patient_home', [p.id]), 'is_planned': True})
         events.sort(key=lambda e: (e['kind'] != 'admission', e['kind'] != 'treatment'))
         visible_limit = 8
         current_week.append({
@@ -3431,6 +3480,12 @@ def patient_summary_view(request, patient_id):
             treatment_course.discharge_prescription = discharge_prescription_post
             treatment_course.discharge_date = discharge_date
             treatment_course.save(update_fields=['summary_text', 'discharge_prescription', 'discharge_date'])
+            inpatient_plan = InpatientPlan.objects.filter(
+                treatment_course=treatment_course,
+            ).first()
+            if inpatient_plan is not None:
+                inpatient_plan.planned_discharge_date = discharge_date
+                inpatient_plan.save(update_fields=['planned_discharge_date', 'updated_at'])
             if treatment_course.course_number == 1:
                 patient.discharge_date = discharge_date
         else:
@@ -4019,15 +4074,26 @@ def clinical_path_reschedule(request, patient_id):
             if conflict:
                 return JsonResponse({'error': 'その日には既に予定・実施記録があります'}, status=400)
             delta = target_date - session.session_date
-            if session.date:
-                session.date = session.date + delta
-            session.session_date = target_date
-            if treatment_course is not None:
-                save_treatment_session_strict(
-                    session, patient, treatment_course, course_number=course_number,
-                )
-            else:
-                save_treatment_session_legacy(session, patient, course_number)
+            try:
+                with transaction.atomic():
+                    if session.date:
+                        session.date = session.date + delta
+                    session.session_date = target_date
+                    if treatment_course is not None:
+                        save_treatment_session_strict(
+                            session, patient, treatment_course, course_number=course_number,
+                        )
+                        from rtms_app.services.rtms_treatment_reservations import (
+                            sync_rtms_treatment_reservation_from_sessions,
+                        )
+                        sync_rtms_treatment_reservation_from_sessions(
+                            treatment_course=treatment_course,
+                            user=request.user,
+                        )
+                    else:
+                        save_treatment_session_legacy(session, patient, course_number)
+            except (IntegrityError, ValueError) as error:
+                return JsonResponse({'error': str(error)}, status=400)
             return JsonResponse({'status': 'ok'})
 
         if status not in (None, 'planned'):

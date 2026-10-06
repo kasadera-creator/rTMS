@@ -19,6 +19,8 @@ from .models import (
     ResourcePool,
     RtmSAdmissionCapacity,
     InpatientPlan,
+        RtmSTreatmentCapacity,
+        RtmSTreatmentReservation,
     ResourceAssignment,
     RtmSWaitlistEntry,
 )
@@ -212,6 +214,17 @@ class RtmSAdmissionCapacityAdmin(admin.ModelAdmin):
     search_fields = ('notes',)
     ordering = ('-valid_from',)
 
+@admin.register(RtmSTreatmentCapacity)
+class RtmSTreatmentCapacityAdmin(admin.ModelAdmin):
+    list_display = ('capacity_type', 'capacity', 'valid_from', 'valid_to', 'is_active', 'updated_at')
+    list_filter = ('capacity_type', 'is_active')
+    ordering = ('capacity_type', '-valid_from')
+
+@admin.register(RtmSTreatmentReservation)
+class RtmSTreatmentReservationAdmin(admin.ModelAdmin):
+    list_display = ('treatment_course', 'sequence_number', 'treatment_date', 'status', 'capacity_type')
+    list_filter = ('status', 'capacity_type', 'treatment_date')
+    search_fields = ('treatment_course__patient__name', 'treatment_course__patient__card_id')
 
 @admin.register(InpatientPlan)
 class InpatientPlanAdmin(admin.ModelAdmin):

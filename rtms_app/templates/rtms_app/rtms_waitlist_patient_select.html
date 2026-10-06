@@ -34,17 +34,32 @@
     <div class="app-card__body p-0">
       <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
-          <thead class="table-light"><tr><th>患者ID</th><th>患者名</th><th>Course</th><th>操作</th></tr></thead>
+          <thead class="table-light"><tr><th>患者ID</th><th>患者名</th><th>Course</th><th>状態</th><th>操作</th></tr></thead>
           <tbody>
-          {% for course in courses %}
+          {% for row in course_rows %}
+            {% with course=row.course %}
             <tr>
               <td>{{ course.patient.card_id }}</td>
               <td>{{ course.patient.name }}</td>
               <td>Course #{{ course.course_number }}</td>
-              <td><a class="btn btn-outline-primary btn-sm" href="{% url 'rtms_app:patient_first_visit' course.patient_id %}?course_number={{ course.course_number }}"><i class="fas fa-arrow-right me-1"></i>初診画面へ</a></td>
+              <td>
+                {% if row.status == "inpatient_waiting_treatment" %}<span class="badge bg-success">入院中（治療待ち）</span>
+                {% elif row.status == "treatment_in_progress" %}{% if row.is_actually_admitted %}<span class="badge bg-success">入院中（治療中）</span>{% else %}<span class="badge bg-info text-dark">治療中（入院実績未記録）</span>{% endif %}
+                {% elif row.status == "treatment_finished_waiting_discharge" %}{% if row.is_actually_admitted %}<span class="badge bg-success">入院中（治療後）</span>{% else %}<span class="badge bg-info text-dark">治療後（入院実績未記録）</span>{% endif %}
+                {% elif row.status == "waiting" %}<span class="badge bg-warning text-dark">入院待ち</span>
+                {% elif row.status == "discharged" %}<span class="badge bg-secondary">退院済</span>
+                {% endif %}
+                {% if row.admission_overdue %}<span class="badge bg-warning text-dark">入院予定超過（実績未記録）</span>{% endif %}
+                {% if row.discharge_overdue %}<span class="badge bg-warning text-dark">退院予定超過（実績未記録）</span>{% endif %}
+              </td>
+              <td class="text-nowrap">
+                <a class="btn btn-primary btn-sm" href="{% url 'rtms_app:rtms_waitlist' course.patient_id %}?course_number={{ course.course_number }}"><i class="fas fa-user-clock me-1"></i>待機登録</a>
+                <a class="btn btn-outline-secondary btn-sm" href="{% url 'rtms_app:patient_first_visit' course.patient_id %}?course_number={{ course.course_number }}"><i class="fas fa-arrow-right me-1"></i>初診画面へ</a>
+              </td>
             </tr>
+            {% endwith %}
           {% empty %}
-            <tr><td colspan="4" class="text-center text-muted py-4">該当する患者 / Courseがありません。</td></tr>
+            <tr><td colspan="5" class="text-center text-muted py-4">該当する患者 / Courseがありません。</td></tr>
           {% endfor %}
           </tbody>
         </table>

@@ -1,26 +1,46 @@
 from datetime import date, timedelta
 from urllib.parse import urlencode
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.http import HttpResponseBadRequest
+from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django.views.decorators.http import require_POST
 
 from rtms_app.forms_inpatient import (
     CalendarCourseAdjustmentForm,
     InpatientScheduleForm,
     RtmSWaitlistEntryForm,
 )
-from rtms_app.models import Patient, RtmSWaitlistEntry, TreatmentCourse
+from rtms_app.models import Patient, ResourceAssignment, RtmSWaitlistEntry, TreatmentCourse
+from rtms_app.views import (
+    get_course_inpatient_display_state,
+    get_patient_admission_status,
+)
 from rtms_app.queries.assessment_queries import resolve_treatment_course
 from rtms_app.services.inpatient_planning import (
+    ActiveResourceAssignmentError,
+    ActualAdmissionError,
+    ActualDischargeError,
     confirm_inpatient_schedule,
+    InvalidWaitlistEntryError,
+    ScheduleConfirmationBusyError,
+    record_actual_admission,
+    record_actual_discharge,
     update_calendar_course_adjustment,
 )
 from rtms_app.services.resource_capacity import CapacityConflict
+from rtms_app.services.rtms_treatment_reservations import (
+    InvalidTreatmentReservationError,
+    TreatmentCapacityConfigurationError,
+    TreatmentReservationBusyError,
+    TreatmentReservationCapacityConflict,
+    preview_rtms_treatment_reservation,
+)
 from rtms_app.services.rtms_inpatient_calendar import (
     build_inpatient_calendar,
     build_inpatient_calendar_range,
@@ -44,6 +64,7 @@ def _course_for_request(request, patient):
 
 @login_required
 def inpatient_calendar_view(request):
+    selected_booking_waitlist_id = ""
     patient_id = request.GET.get("patient_id")
     treatment_course = None
     patient = None
@@ -66,31 +87,44 @@ def inpatient_calendar_view(request):
                 treatment_course=course,
                 status__in=ACTIVE_WAITLIST_STATUSES,
             )
+            selected_booking_waitlist_id = entry.pk
         else:
-            entry = get_object_or_404(
-                RtmSWaitlistEntry,
-                treatment_course=course,
-                status__in=ACTIVE_WAITLIST_STATUSES,
-            )
+            entry = None
         form = CalendarCourseAdjustmentForm(request.POST, instance=course)
         if form.is_valid():
-            with transaction.atomic():
-                update_calendar_course_adjustment(
-                    treatment_course=course,
-                    user=request.user,
-                    admission_date=form.cleaned_data["admission_date"],
-                    treatment_start_date=form.cleaned_data["first_treatment_date"],
-                    private_room_planned=form.cleaned_data["private_room_planned"],
-                    is_all_case_survey=form.cleaned_data["is_all_case_survey"],
-                    planned_treatment_sessions=form.cleaned_data["planned_treatment_sessions"],
-                )
-                entry.preferred_start_note = form.cleaned_data["preferred_start_note"]
-                entry.save(update_fields=["preferred_start_note", "updated_at"])
-            return redirect(request.get_full_path())
-        adjustment_course_id = course.pk
+            try:
+                with transaction.atomic():
+                    update_calendar_course_adjustment(
+                        treatment_course=course,
+                        user=request.user,
+                        admission_date=form.cleaned_data["admission_date"],
+                        treatment_start_date=form.cleaned_data["first_treatment_date"],
+                        is_all_case_survey=form.cleaned_data["is_all_case_survey"],
+                        planned_treatment_sessions=30,
+                        waitlist_entry=entry,
+                    )
+                    if entry is not None:
+                        entry.preferred_start_note = form.cleaned_data["preferred_start_note"]
+                        entry.save(update_fields=["preferred_start_note", "updated_at"])
+            except (
+                InvalidTreatmentReservationError,
+                TreatmentCapacityConfigurationError,
+                TreatmentReservationBusyError,
+                TreatmentReservationCapacityConflict,
+            ) as exc:
+                form.add_error(None, str(exc))
+                adjustment_course_id = course.pk
+            else:
+                return redirect(request.get_full_path())
+        else:
+            adjustment_course_id = course.pk
     else:
         adjustment_course_id = None
     today = timezone.localdate()
+    calendar_week_count = 12
+    current_week_start = today - timedelta(days=today.weekday())
+    range_start = parse_date(request.GET.get("week_start", "")) or current_week_start
+    range_start -= timedelta(days=range_start.weekday())
     try:
         year = int(request.GET.get("year", today.year))
         month = int(request.GET.get("month", today.month))
@@ -116,11 +150,9 @@ def inpatient_calendar_view(request):
         month=month,
         treatment_course=treatment_course,
     )
-    current_week_start = today - timedelta(days=today.weekday())
     context.update(build_inpatient_calendar_range(
-        start_date=current_week_start,
-        week_count=18,
-        treatment_course=treatment_course,
+        start_date=range_start,
+        week_count=calendar_week_count,
         resource_pool=context["resource_pool"],
         today=today,
     ))
@@ -131,24 +163,45 @@ def inpatient_calendar_view(request):
         "treatment_course__patient__name",
         "pk",
     )
-    if treatment_course is not None:
-        waitlist_entries = waitlist_entries.filter(treatment_course=treatment_course)
     waitlist_entries = list(waitlist_entries)
-    for entry in waitlist_entries:
-        entry.adjustment_form = CalendarCourseAdjustmentForm(
-            instance=entry.treatment_course,
-            initial={
-                "preferred_start_note": entry.preferred_start_note,
-            },
-        )
-        entry.adjustment_form_open = False
-        if entry.treatment_course_id == adjustment_course_id:
-            entry.adjustment_form = form
-            entry.adjustment_form_open = True
+    range_query = request.GET.copy()
+    range_query["week_start"] = (range_start - timedelta(weeks=1)).isoformat()
+    previous_week_url = f"?{urlencode(range_query, doseq=True)}"
+    range_query["week_start"] = (range_start + timedelta(weeks=1)).isoformat()
+    next_week_url = f"?{urlencode(range_query, doseq=True)}"
+    range_query["week_start"] = (range_start - timedelta(weeks=calendar_week_count)).isoformat()
+    previous_range_url = f"?{urlencode(range_query, doseq=True)}"
+    range_query["week_start"] = (range_start + timedelta(weeks=calendar_week_count)).isoformat()
+    next_range_url = f"?{urlencode(range_query, doseq=True)}"
+    range_query["week_start"] = current_week_start.isoformat()
+    today_range_url = f"?{urlencode(range_query, doseq=True)}"
+    booking_courses = TreatmentCourse.objects.select_related("patient").order_by(
+        "patient__name", "patient__card_id", "course_number", "pk",
+    )
+    selected_booking_course_id = (
+        form.instance.pk if request.method == "POST" and "form" in locals()
+        else treatment_course.pk if treatment_course else ""
+    )
     context.update({
         "patient": patient,
         "treatment_course": treatment_course,
         "waitlist_entries": waitlist_entries,
+        "booking_courses": booking_courses,
+        "calendar_form": (
+            form if request.method == "POST" and "form" in locals()
+            else CalendarCourseAdjustmentForm(
+                instance=treatment_course,
+                initial={"planned_treatment_sessions": 30},
+            )
+        ),
+        "selected_booking_course_id": selected_booking_course_id,
+        "selected_booking_waitlist_id": selected_booking_waitlist_id,
+        "previous_week_url": previous_week_url,
+        "next_week_url": next_week_url,
+        "previous_range_url": previous_range_url,
+        "next_range_url": next_range_url,
+        "today_range_url": today_range_url,
+        "range_preview_url": reverse("rtms_app:rtms_reservation_preview"),
         "waitlist_active_count": RtmSWaitlistEntry.objects.filter(
             status__in=ACTIVE_WAITLIST_STATUSES,
         ).count(),
@@ -164,11 +217,41 @@ def inpatient_calendar_view(request):
 
 
 @login_required
+def rtms_reservation_preview_view(request):
+    first_treatment_date = parse_date(request.GET.get("first_treatment_date", ""))
+    if first_treatment_date is None:
+        return JsonResponse({"error": "初回治療日を入力してください。"}, status=400)
+    course_id = request.GET.get("treatment_course_id", "")
+    try:
+        exclude_course_id = int(course_id) if course_id else None
+        preview = preview_rtms_treatment_reservation(
+            first_treatment_date=first_treatment_date,
+            exclude_course_id=exclude_course_id,
+        )
+    except (ValueError, TreatmentCapacityConfigurationError) as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    return JsonResponse({
+        "treatment_end_date": preview["treatment_end_date"].isoformat(),
+        "treatment_count": len(preview["treatment_dates"]),
+        "conflicts": [
+            {
+                "date": item["date"].isoformat(),
+                "private": item["rTMS_private"],
+                "general": item["general_ward"],
+                "total_capacity": item["total_capacity"],
+                "total_occupied": item["total_occupied"],
+            }
+            for item in preview["conflicts"]
+        ],
+    })
+
+
+@login_required
 def rtms_waitlist_patient_select_view(request):
     """Choose a Patient/Course before entering the existing first-visit flow."""
     card_query = (request.GET.get("card") or "").strip()
     name_query = (request.GET.get("q") or "").strip()
-    courses = TreatmentCourse.objects.select_related("patient").order_by(
+    courses = TreatmentCourse.objects.select_related("patient", "inpatient_plan").order_by(
         "patient__name", "patient__card_id", "course_number", "pk"
     )
     if card_query:
@@ -176,11 +259,90 @@ def rtms_waitlist_patient_select_view(request):
     if name_query:
         courses = courses.filter(patient__name__icontains=name_query)
     courses = courses[:100]
+    course_rows = [
+        {
+            "course": course,
+            "status": get_patient_admission_status(
+                course.patient,
+                treatment_course=course,
+            ),
+            **get_course_inpatient_display_state(course),
+        }
+        for course in courses
+    ]
     return render(request, "rtms_app/rtms_waitlist_patient_select.html", {
-        "courses": courses,
+        "course_rows": course_rows,
         "card_query": card_query,
         "name_query": name_query,
     })
+
+
+@login_required
+@require_POST
+def record_actual_admission_view(request, patient_id):
+    patient = get_object_or_404(Patient, pk=patient_id)
+    requested_course_number = request.POST.get("course_number")
+    if not requested_course_number:
+        return HttpResponseBadRequest("対象の治療クールが指定されていません")
+    treatment_course = resolve_treatment_course(
+        patient,
+        course_number=requested_course_number,
+    )
+    if treatment_course is None:
+        return HttpResponseBadRequest("対象の治療クールが見つかりません")
+
+    try:
+        result = record_actual_admission(
+            treatment_course=treatment_course,
+            user=request.user,
+        )
+    except ActualAdmissionError as exc:
+        messages.error(request, str(exc))
+    else:
+        if result["already_recorded"]:
+            messages.info(request, "実入院実績はすでに登録されています。登録日時は変更していません。")
+        else:
+            messages.success(request, "実入院を記録しました。")
+
+    schedule_url = reverse("rtms_app:inpatient_schedule", args=[patient.pk])
+    return redirect(
+        f"{schedule_url}?patient_id={patient.pk}"
+        f"&course_number={treatment_course.course_number}"
+    )
+
+
+@login_required
+@require_POST
+def record_actual_discharge_view(request, patient_id):
+    patient = get_object_or_404(Patient, pk=patient_id)
+    requested_course_number = request.POST.get("course_number")
+    if not requested_course_number:
+        return HttpResponseBadRequest("対象の治療クールが指定されていません")
+    treatment_course = resolve_treatment_course(
+        patient,
+        course_number=requested_course_number,
+    )
+    if treatment_course is None:
+        return HttpResponseBadRequest("対象の治療クールが見つかりません")
+
+    try:
+        result = record_actual_discharge(
+            treatment_course=treatment_course,
+            user=request.user,
+        )
+    except ActualDischargeError as exc:
+        messages.error(request, str(exc))
+    else:
+        if result["already_recorded"]:
+            messages.info(request, "実退院実績はすでに登録されています。登録日時は変更していません。")
+        else:
+            messages.success(request, "実退院を記録しました。")
+
+    schedule_url = reverse("rtms_app:inpatient_schedule", args=[patient.pk])
+    return redirect(
+        f"{schedule_url}?patient_id={patient.pk}"
+        f"&course_number={treatment_course.course_number}"
+    )
 
 
 @login_required
@@ -192,9 +354,14 @@ def inpatient_schedule_view(request, patient_id):
         return HttpResponseBadRequest(str(exc))
     if treatment_course is None:
         return HttpResponseBadRequest("対象の治療クールが見つかりません")
+    inpatient_plan = getattr(treatment_course, "inpatient_plan", None)
     if request.method == "POST":
         form = InpatientScheduleForm(request.POST)
         if form.is_valid():
+            waitlist_entry = RtmSWaitlistEntry.objects.filter(
+                treatment_course=treatment_course,
+                status__in=("waiting", "provisional"),
+            ).order_by("-priority", "registered_at", "pk").first()
             try:
                 confirm_inpatient_schedule(
                     treatment_course=treatment_course,
@@ -207,8 +374,17 @@ def inpatient_schedule_view(request, patient_id):
                     estimated_discharge_date=form.cleaned_data["estimated_discharge_date"],
                     certainty=form.cleaned_data["certainty"],
                     user=request.user,
+                    waitlist_entry=waitlist_entry,
                 )
-            except CapacityConflict as exc:
+            except (
+                CapacityConflict,
+                ActiveResourceAssignmentError,
+                InvalidWaitlistEntryError,
+                InvalidTreatmentReservationError,
+                ScheduleConfirmationBusyError,
+                TreatmentCapacityConfigurationError,
+                TreatmentReservationCapacityConflict,
+            ) as exc:
                 form.add_error(None, str(exc))
             else:
                 return redirect(
@@ -216,17 +392,33 @@ def inpatient_schedule_view(request, patient_id):
                     f"&course_number={treatment_course.course_number}"
                 )
     else:
-        plan = getattr(treatment_course, "inpatient_plan", None)
-        form_pool = None
+        assignment = ResourceAssignment.objects.filter(
+            treatment_course=treatment_course,
+            status__in=("planned", "active"),
+        ).select_related("resource_pool").order_by("-pk").first()
+        form_pool = assignment.resource_pool if assignment else None
         selected_date = parse_date(request.GET.get("selected_date", ""))
-        if plan:
+        if inpatient_plan:
             defaults = {
-                "admission_date": plan.planned_admission_date,
-                "planned_discharge_date": plan.planned_discharge_date,
-                "estimated_discharge_date": plan.estimated_discharge_date,
+                "admission_date": inpatient_plan.planned_admission_date,
+                "treatment_start_date": treatment_course.first_treatment_date,
+                "room_start_date": assignment.planned_start_date if assignment else inpatient_plan.planned_admission_date,
+                "room_end_date": assignment.planned_end_date if assignment else None,
+                "planned_discharge_date": inpatient_plan.planned_discharge_date,
+                "estimated_discharge_date": inpatient_plan.estimated_discharge_date,
+                "certainty": (
+                    assignment.certainty if assignment
+                    else "provisional" if inpatient_plan.uncertainty == "provisional"
+                    else "estimated" if inpatient_plan.uncertainty == "unknown"
+                    else "confirmed"
+                ),
             }
         else:
-            defaults = {"admission_date": treatment_course.admission_date}
+            defaults = {
+                "admission_date": treatment_course.admission_date,
+                "treatment_start_date": treatment_course.first_treatment_date,
+                "room_start_date": treatment_course.admission_date,
+            }
         if selected_date:
             defaults.update({
                 "admission_date": selected_date,
@@ -238,6 +430,7 @@ def inpatient_schedule_view(request, patient_id):
         "patient": patient,
         "treatment_course": treatment_course,
         "form": form,
+        "inpatient_plan": inpatient_plan,
     })
 
 

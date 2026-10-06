@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -176,7 +178,7 @@ class TreatmentCourse(models.Model):
 
     first_visit_date = models.DateField("初診日", null=True, blank=True)
     admission_date = models.DateField("入院予定日", null=True, blank=True)
-    private_room_planned = models.BooleanField("個室利用予定", default=False)
+    private_room_planned = models.BooleanField("特別個室利用予定", default=False)
     planned_treatment_sessions = models.PositiveIntegerField("予定治療回数（回）", default=30)
     admission_type = models.CharField(
         "入院形態",
@@ -220,7 +222,7 @@ class TreatmentCourse(models.Model):
 
 class ResourcePool(models.Model):
     RESOURCE_TYPE_CHOICES = [
-        ("rTMS_private", "rTMS個室"),
+        ("rTMS_private", "rTMS特別個室"),
         ("general_ward", "一般病棟"),
         ("other_inpatient", "その他の入院資源"),
     ]
@@ -259,8 +261,14 @@ class ResourcePool(models.Model):
             ),
         ]
 
+    @property
+    def display_name(self):
+        if "特別個室" not in self.name:
+            return self.name.replace("個室", "特別個室")
+        return self.name
+
     def __str__(self):
-        return f"{self.name} ({self.code})"
+        return f"{self.display_name} ({self.code})"
 
 
 class RtmSAdmissionCapacity(models.Model):
@@ -320,6 +328,109 @@ class RtmSAdmissionCapacity(models.Model):
     def __str__(self):
         end = self.valid_to.isoformat() if self.valid_to else "継続"
         return f"rTMS新規入院受入枠 {self.capacity} ({self.valid_from}〜{end})"
+
+
+class RtmSTreatmentCapacity(models.Model):
+    CAPACITY_TYPE_CHOICES = [
+        ("rTMS_private", "特別個室"),
+        ("general_ward", "一般病棟"),
+    ]
+
+    capacity_type = models.CharField("治療枠区分", max_length=32, choices=CAPACITY_TYPE_CHOICES)
+    capacity = models.PositiveIntegerField("日別治療枠", default=0)
+    valid_from = models.DateField("有効開始日")
+    valid_to = models.DateField("有効終了日", null=True, blank=True)
+    is_active = models.BooleanField("有効", default=True, db_index=True)
+    created_at = models.DateTimeField("作成日時", auto_now_add=True)
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "rTMS日別治療枠"
+        verbose_name_plural = "rTMS日別治療枠"
+        indexes = [
+            models.Index(fields=["capacity_type", "is_active", "valid_from"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(valid_to__isnull=True)
+                    | models.Q(valid_to__gte=models.F("valid_from"))
+                ),
+                name="rtms_treatment_capacity_valid_to_gte_from",
+            ),
+        ]
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        if self.valid_to and self.valid_to < self.valid_from:
+            raise ValidationError({"valid_to": "有効終了日は開始日以降にしてください。"})
+        if not self.is_active:
+            return
+        overlapping = type(self).objects.filter(
+            capacity_type=self.capacity_type,
+            is_active=True,
+            valid_from__lte=self.valid_to or date.max,
+        ).filter(
+            models.Q(valid_to__isnull=True) | models.Q(valid_to__gte=self.valid_from),
+        ).exclude(pk=self.pk)
+        if overlapping.exists():
+            raise ValidationError("同一区分に重複する有効期間の治療枠設定があります。")
+
+    def __str__(self):
+        end = self.valid_to.isoformat() if self.valid_to else "継続"
+        return f"{self.get_capacity_type_display()} {self.capacity} ({self.valid_from}〜{end})"
+
+
+class RtmSTreatmentReservation(models.Model):
+    STATUS_CHOICES = [
+        ("provisional", "仮予定"),
+        ("confirmed", "確定"),
+        ("cancelled", "キャンセル"),
+    ]
+
+    CAPACITY_TYPE_CHOICES = RtmSTreatmentCapacity.CAPACITY_TYPE_CHOICES
+
+    treatment_course = models.ForeignKey(
+        TreatmentCourse,
+        on_delete=models.CASCADE,
+        related_name="rtms_treatment_reservations",
+        verbose_name="治療クール",
+    )
+    treatment_date = models.DateField("治療予定日")
+    sequence_number = models.PositiveSmallIntegerField("回数")
+    status = models.CharField(
+        "予約状態", max_length=16, choices=STATUS_CHOICES, default="provisional", db_index=True,
+    )
+    capacity_type = models.CharField("治療枠区分", max_length=32, choices=CAPACITY_TYPE_CHOICES)
+    created_at = models.DateTimeField("作成日時", auto_now_add=True)
+    updated_at = models.DateTimeField("更新日時", auto_now=True)
+
+    class Meta:
+        verbose_name = "rTMS治療予約日"
+        verbose_name_plural = "rTMS治療予約日"
+        ordering = ("treatment_date", "sequence_number")
+        indexes = [
+            models.Index(fields=["treatment_date", "status", "capacity_type"]),
+            models.Index(fields=["treatment_course", "status"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["treatment_course", "sequence_number"],
+                name="unique_rtms_reservation_course_sequence",
+            ),
+            models.UniqueConstraint(
+                fields=["treatment_course", "treatment_date"],
+                name="unique_rtms_reservation_course_date",
+            ),
+            models.CheckConstraint(
+                check=(models.Q(sequence_number__gte=1) & models.Q(sequence_number__lte=30)),
+                name="rtms_reservation_sequence_1_to_30",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.treatment_course} - {self.sequence_number}回目 ({self.treatment_date})"
 
 
 class InpatientPlan(models.Model):

@@ -46,6 +46,16 @@ urlpatterns = [
         name="inpatient_schedule",
     ),
     path(
+        "patient/<int:patient_id>/inpatient/admission/record/",
+        views_inpatient.record_actual_admission_view,
+        name="record_actual_admission",
+    ),
+    path(
+        "patient/<int:patient_id>/inpatient/discharge/record/",
+        views_inpatient.record_actual_discharge_view,
+        name="record_actual_discharge",
+    ),
+    path(
         "patient/<int:patient_id>/inpatient/waitlist/",
         views_inpatient.rtms_waitlist_view,
         name="rtms_waitlist",
@@ -183,6 +193,11 @@ urlpatterns = [
         "inpatient/calendar/",
         views_inpatient.inpatient_calendar_view,
         name="inpatient_calendar",
+    ),
+    path(
+        "inpatient/calendar/reservation-preview/",
+        views_inpatient.rtms_reservation_preview_view,
+        name="rtms_reservation_preview",
     ),
     path(
         "calendar/month/print/",

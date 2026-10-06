@@ -3,8 +3,13 @@
 {% block header_breadcrumb %}<span class="text-white-50 ms-2">/ 日程設定</span>{% endblock %}
 {% block content %}
 <div class="container py-3">
-  <h1 class="h4">rTMS入院・個室日程設定</h1>
+  <h1 class="h4">rTMS入院・特別個室日程設定</h1>
   <p class="text-muted">{{ treatment_course.patient.name }} / Course {{ treatment_course.course_number }}</p>
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert {% if message.tags == 'error' %}alert-danger{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %}" role="status">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
   {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
   <form method="post" class="card p-3 p-md-4">
     {% csrf_token %}
@@ -12,5 +17,47 @@
     {% for field in form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}</div>{% endfor %}
     <div class="d-flex gap-2"><button class="btn btn-primary" type="submit">日程を確定</button><a class="btn btn-outline-secondary" href="{% url 'rtms_app:inpatient_calendar' %}?patient_id={{ treatment_course.patient_id }}&course_number={{ treatment_course.course_number }}">戻る</a></div>
   </form>
+  <section class="card mt-3" aria-labelledby="actual-admission-heading">
+    <div class="card-body">
+      <h2 class="h6" id="actual-admission-heading">実入院</h2>
+      {% if inpatient_plan.actual_admission_at %}
+        <p class="mb-0"><span class="badge bg-success">入院実施済み</span> {{ inpatient_plan.actual_admission_at|date:"Y/m/d H:i" }}</p>
+      {% elif inpatient_plan.status == "provisional" or inpatient_plan.status == "scheduled" %}
+        <p class="text-muted">予定・確定済みの日程に対して、実入院を別途記録できます。</p>
+        <form method="post" action="{% url 'rtms_app:record_actual_admission' treatment_course.patient_id %}">
+          {% csrf_token %}
+          <input type="hidden" name="course_number" value="{{ treatment_course.course_number }}">
+          <button class="btn btn-outline-success" type="submit">実入院を記録</button>
+        </form>
+      {% elif inpatient_plan %}
+        <p class="text-muted mb-0">現在の日程状態からは実入院を記録できません。</p>
+      {% else %}
+        <p class="text-muted mb-0">入院予定が登録されていないため、実入院を記録できません。先に日程を確定してください。</p>
+      {% endif %}
+    </div>
+  </section>
+  <section class="card mt-3" aria-labelledby="actual-discharge-heading">
+    <div class="card-body">
+      <h2 class="h6" id="actual-discharge-heading">実退院</h2>
+      {% if inpatient_plan.actual_discharge_at and inpatient_plan.status == "discharged" %}
+        <p class="mb-0"><span class="badge bg-secondary">実退院記録済み</span> {{ inpatient_plan.actual_discharge_at|date:"Y/m/d H:i" }}</p>
+      {% elif inpatient_plan.actual_discharge_at or inpatient_plan.status == "discharged" %}
+        <p class="text-danger mb-0">実退院日時と入院計画の状態が一致しません。実退院操作はできません。</p>
+      {% elif inpatient_plan.status == "admitted" and inpatient_plan.actual_admission_at %}
+        <p class="text-muted">実入院済みのCourseに対して、実退院を別途記録できます。</p>
+        <form method="post" action="{% url 'rtms_app:record_actual_discharge' treatment_course.patient_id %}">
+          {% csrf_token %}
+          <input type="hidden" name="course_number" value="{{ treatment_course.course_number }}">
+          <button class="btn btn-outline-danger" type="submit">実退院を記録</button>
+        </form>
+      {% elif inpatient_plan.status == "admitted" or inpatient_plan.actual_admission_at %}
+        <p class="text-danger mb-0">実入院日時と入院中の状態が一致しません。実退院操作はできません。</p>
+      {% elif inpatient_plan %}
+        <p class="text-muted mb-0">実入院の記録後に実退院を記録できます。</p>
+      {% else %}
+        <p class="text-muted mb-0">入院計画が登録されていないため、実退院を記録できません。</p>
+      {% endif %}
+    </div>
+  </section>
 </div>
 {% endblock %}

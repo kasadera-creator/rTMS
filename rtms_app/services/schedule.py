@@ -255,9 +255,6 @@ def _reflow_sessions(patient: Patient, course_number: int, source_date: date, ta
         others_qs = others_qs.exclude(pk=moved_session.pk)
     others = list(others_qs)
 
-    if not others and moved_session is None:
-        return {'affected_count': 0}
-
     original_last = others[-1].session_date if others else source_date
 
     assignments = []  # (obj, original_date, new_date)
@@ -308,6 +305,13 @@ def _reflow_sessions(patient: Patient, course_number: int, source_date: date, ta
         treatment_course = TreatmentCourse.objects.filter(
             patient=patient, course_number=course_number,
         ).first()
+    if treatment_course is not None:
+        from rtms_app.services.rtms_treatment_reservations import (
+            sync_rtms_treatment_reservation_from_sessions,
+        )
+        sync_rtms_treatment_reservation_from_sessions(
+            treatment_course=treatment_course,
+        )
     delta = new_last - original_last
     _shift_discharge_date(patient, treatment_course, source_date, delta)
 
@@ -479,6 +483,13 @@ def reschedule_treatment_start_date(
             treatment_course.first_treatment_date = new_start_date
             treatment_course.mapping_date = new_start_date
             treatment_course.save(update_fields=['first_treatment_date', 'mapping_date'])
+            from rtms_app.services.rtms_treatment_reservations import (
+                sync_rtms_treatment_reservation_from_sessions,
+            )
+            sync_rtms_treatment_reservation_from_sessions(
+                treatment_course=treatment_course,
+                allow_canonical_fallback=True,
+            )
 
         if treatment_course is None or treatment_course.course_number == 1:
             locked_patient.first_treatment_date = new_start_date

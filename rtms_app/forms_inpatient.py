@@ -18,14 +18,12 @@ class CalendarCourseAdjustmentForm(forms.ModelForm):
         fields = (
             "admission_date",
             "first_treatment_date",
-            "private_room_planned",
             "is_all_case_survey",
             "planned_treatment_sessions",
         )
         widgets = {
             "admission_date": forms.DateInput(attrs={"type": "date", "class": "form-control form-control-sm"}),
             "first_treatment_date": forms.DateInput(attrs={"type": "date", "class": "form-control form-control-sm"}),
-            "private_room_planned": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "is_all_case_survey": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
@@ -45,8 +43,8 @@ class CalendarCourseAdjustmentForm(forms.ModelForm):
 class InpatientScheduleForm(forms.Form):
     admission_date = forms.DateField(label="入院予定日", widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
     treatment_start_date = forms.DateField(label="初回治療日", widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
-    room_start_date = forms.DateField(label="個室使用開始日", widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
-    room_end_date = forms.DateField(label="個室使用終了日", required=False, widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
+    room_start_date = forms.DateField(label="特別個室使用開始日", widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
+    room_end_date = forms.DateField(label="特別個室使用終了日", required=False, widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
     planned_discharge_date = forms.DateField(label="退院予定日", required=False, widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
     estimated_discharge_date = forms.DateField(label="退院見込み日", required=False, widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}))
     certainty = forms.ChoiceField(
@@ -56,7 +54,7 @@ class InpatientScheduleForm(forms.Form):
         widget=forms.Select(attrs={"class": "form-select"}),
     )
     resource_pool = forms.ModelChoiceField(
-        label="個室資源",
+        label="特別個室資源",
         queryset=ResourcePool.objects.none(),
         widget=forms.Select(attrs={"class": "form-select"}),
     )
@@ -78,7 +76,7 @@ class InpatientScheduleForm(forms.Form):
         if admission and treatment and treatment < admission:
             self.add_error("treatment_start_date", "初回治療日は入院予定日以降にしてください。")
         if room_start and room_end and room_end < room_start:
-            self.add_error("room_end_date", "個室終了日は開始日以降にしてください。")
+            self.add_error("room_end_date", "特別個室終了日は開始日以降にしてください。")
         return cleaned
 
 

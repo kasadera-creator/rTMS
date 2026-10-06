@@ -18,6 +18,323 @@
   margin-bottom: 0;
 }
 
+.capacity-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.week-calendar-scroll {
+  overflow-x: auto;
+  padding: 0.75rem 0.1rem 0.25rem;
+}
+
+.calendar-week {
+  min-width: 940px;
+  margin-bottom: 0.85rem;
+  border-bottom: 1px solid #cfd9df;
+}
+
+.calendar-week:last-child {
+  margin-bottom: 0;
+}
+
+.calendar-week__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0 0 0.25rem;
+  padding: 0 0.25rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.calendar-week-grid {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.2fr) repeat(7, minmax(5.5rem, 1fr));
+}
+
+.calendar-week-grid__label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.15rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #d9e1e7;
+  border-right: 0;
+  background: #f5f8fa;
+  color: #344b58;
+  font-size: 0.76rem;
+}
+
+.calendar-week-grid__label span {
+  color: #6b7e88;
+  font-size: 0.65rem;
+}
+
+.capacity-day {
+  display: flex;
+  min-width: 0;
+  min-height: 7.1rem;
+  flex-direction: column;
+  padding: 0.35rem 0.4rem;
+  border: 1px solid #d9e1e7;
+  border-left: 0;
+  background: #fff;
+}
+
+.capacity-day--weekend {
+  background: #f5f7f8;
+}
+
+.capacity-day--today {
+  border: 2px solid #168f83;
+  padding: calc(0.45rem - 1px);
+}
+
+.capacity-day--full {
+  background: #f4f7f7;
+}
+
+.capacity-day__date {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 0.15rem;
+  border-bottom: 1px solid #e6ebef;
+  color: #253746;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.capacity-day--weekend .capacity-day__date span {
+  color: #697b88;
+}
+
+.capacity-day__total {
+  margin-top: 0.15rem;
+  color: #263b48;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.capacity-day__remaining {
+  color: #147c72;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.capacity-day__remaining.is-full {
+  color: #876023;
+}
+
+.capacity-day__types {
+  overflow: hidden;
+  color: #657680;
+  font-size: 0.59rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reservation-chip {
+  display: block;
+  width: 100%;
+  padding: 0.2rem 0.3rem;
+  border: 1px solid #cdd9df;
+  border-left: 3px solid #b48a47;
+  border-radius: 3px;
+  background: #fffaf0;
+  color: #273b49;
+  text-align: left;
+}
+
+.reservation-chip--confirmed {
+  border-left-color: #168f83;
+  background: #f0f8f6;
+}
+
+.reservation-chip:hover {
+  border-color: #168f83;
+  background: #e8f4f1;
+}
+
+.reservation-chip__name,
+.reservation-chip__meta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reservation-chip__name {
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.reservation-chip__meta {
+  color: #5c6d77;
+  font-size: 0.59rem;
+}
+
+.capacity-day__add {
+  align-self: flex-start;
+  margin-top: auto;
+  padding: 0.08rem 0.3rem;
+  border: 1px solid #c7d9d5;
+  border-radius: 3px;
+  background: transparent;
+  color: #176b63;
+  font-size: 0.62rem;
+  line-height: 1.35;
+}
+
+.capacity-day__add:hover {
+  color: #0d4f49;
+  text-decoration: underline;
+}
+
+.calendar-week-grid--patient {
+  min-height: 4.1rem;
+  border-bottom: 1px solid #e3e9ed;
+}
+
+.calendar-week-patient-label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.08rem;
+  padding: 0.3rem 0.55rem;
+  border-right: 1px solid #d9e1e7;
+  border-left: 1px solid #d9e1e7;
+  background: #fbfcfd;
+  color: #536772;
+  font-size: 0.61rem;
+  line-height: 1.2;
+}
+
+.calendar-week-patient-label a {
+  overflow: hidden;
+  color: #263f4c;
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-week-patient-label .schedule-status {
+  align-self: flex-start;
+  font-size: 0.6rem;
+}
+
+.calendar-week-patient-label__resource {
+  color: #53746e;
+}
+
+.calendar-week-patient-label__edit {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #176b63;
+  font-size: 0.62rem;
+  text-decoration: underline;
+}
+
+.week-patient-track {
+  display: grid;
+  grid-column: 2 / -1;
+  grid-template-columns: repeat(7, minmax(5.5rem, 1fr));
+  align-items: center;
+  min-width: 0;
+  min-height: 4.1rem;
+  border-right: 1px solid #d9e1e7;
+  background-image: linear-gradient(to right, transparent calc(100% - 1px), #e5ebef calc(100% - 1px));
+  background-size: calc(100% / 7) 100%;
+}
+
+.week-patient-bar {
+  display: block;
+  overflow: hidden;
+  min-width: 0;
+  margin: 0 0.18rem;
+  padding: 0.25rem 0.35rem;
+  border: 1px solid #987635;
+  border-left-width: 3px;
+  border-radius: 3px;
+  background: #fff6e5;
+  color: #60491f;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-patient-bar--confirmed {
+  border-color: #168f83;
+  background: #eaf6f3;
+  color: #145d56;
+}
+
+.schedule-status {
+  display: inline-block;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid #d2b775;
+  border-radius: 3px;
+  background: #fff8e8;
+  color: #71551e;
+  font-size: 0.65rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.schedule-status--scheduled {
+  border-color: #d2b775;
+  background: #fff8e8;
+  color: #71551e;
+}
+
+.schedule-status--completed {
+  border-color: #9acbc2;
+  background: #eef8f5;
+  color: #176b63;
+}
+
+.schedule-status--waiting {
+  border-color: #c7d2da;
+  background: #f3f6f8;
+  color: #536572;
+}
+
+.booking-date-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.booking-preview {
+  min-height: 3rem;
+  padding: 0.65rem;
+  border: 1px solid #d9e1e7;
+  border-radius: 4px;
+  background: #f8fafb;
+}
+
+.booking-conflicts {
+  max-height: 12rem;
+  overflow: auto;
+  padding-left: 1.25rem;
+  color: #634b25;
+  font-size: 0.8rem;
+}
+
+.booking-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
 .rtms-inpatient-page .inpatient-page-summary {
   padding: 0.75rem 1rem 0;
 }
@@ -38,27 +355,41 @@
 }
 
 .rtms-inpatient-page .timeline-legend {
-  padding: 0.5rem 0.625rem;
-  border: 1px solid rgba(25, 38, 54, 0.08);
-  border-radius: var(--rtms-radius-sm, 6px);
-  background: #f8f9fa;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  color: #536572;
 }
 
-.calendar-details {
-  border-bottom: 1px solid #d8e0e8;
-  padding-bottom: 0.75rem;
+.timeline-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
-.calendar-details summary {
-  cursor: pointer;
-  color: #495057;
+.timeline-legend__segment {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 2px;
+}
+
+.timeline-legend__segment--admission {
+  background: #246a91;
+}
+
+.timeline-legend__segment--treatment {
+  background: #65508e;
+}
+
+.timeline-legend__segment--post-treatment {
+  background: #4c8876;
 }
 
 .timeline-scroll {
   overflow-x: auto;
   max-width: 100%;
   --timeline-label-width: 13rem;
-  --timeline-lane-width: 4.5rem;
   --timeline-week-width: 4rem;
 }
 
@@ -72,65 +403,154 @@
 
 .timeline-board {
   width: max-content;
-  min-width: calc(var(--timeline-label-width) + var(--timeline-lane-width) + (var(--timeline-weeks) * var(--timeline-week-width)));
+  min-width: calc(var(--timeline-label-width) + (var(--timeline-weeks) * var(--timeline-week-width)));
   border-top: 1px solid #d8e0e8;
-  border-left: 1px solid #d8e0e8;
-}
-
-.timeline-summary {
-  width: max-content;
-  min-width: calc(var(--timeline-label-width) + var(--timeline-lane-width) + (var(--timeline-weeks) * var(--timeline-week-width)));
-  margin-top: 0.75rem;
-  border-top: 2px solid #9eb3c3;
   border-left: 1px solid #d8e0e8;
 }
 
 .timeline-header-row {
   display: grid;
-  grid-template-columns: var(--timeline-label-width) var(--timeline-lane-width) calc(var(--timeline-weeks) * var(--timeline-week-width));
+  grid-template-columns: var(--timeline-label-width) calc(var(--timeline-weeks) * var(--timeline-week-width));
+}
+
+.timeline-week-row {
+  display: grid;
+  grid-template-columns: var(--timeline-label-width) calc(var(--timeline-weeks) * var(--timeline-week-width));
+}
+
+.timeline-week-row__label {
+  display: flex;
+  align-items: center;
+  padding: 0.35rem 0.55rem;
+  background: #eaf1f4;
+}
+
+.timeline-week-row--header .timeline-week-row__label {
+  background: #f5f8fb;
+}
+
+.timeline-week-track {
+  display: grid;
+  grid-template-columns: repeat(var(--timeline-weeks), var(--timeline-week-width));
+  min-height: 2.5rem;
+  border-right: 1px solid #d8e0e8;
+  border-bottom: 1px solid #b8c7d0;
+  background: #f8fafb;
+}
+
+.timeline-week-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.12rem;
+  overflow: hidden;
+  padding: 0.2rem 0.08rem;
+  border-left: 1px solid #dfe6ea;
+  color: #435660;
+  font-size: 0.66rem;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.timeline-week-cell--header {
+  background: #f5f8fb;
+  font-weight: 700;
+}
+
+.timeline-week-cell strong {
+  color: #213d4b;
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-week-cell--capacity {
+  min-height: 3rem;
+  background: #f8fafb;
+}
+
+@media (max-width: 1024px) {
+  .timeline-scroll {
+    container-type: inline-size;
+    --timeline-label-width: 10rem;
+    --timeline-week-width: clamp(2rem, calc((100cqi - var(--timeline-label-width) - 1px) / 12), 4rem);
+  }
+
+  .timeline-week-cell--header {
+    font-size: 0.52rem;
+  }
+}
+
+@media (min-width: 576px) and (max-width: 1024px) {
+  .timeline-scroll {
+    --timeline-label-width: 7rem;
+  }
 }
 
 .timeline-course-group {
   display: grid;
-  grid-template-columns: var(--timeline-label-width) var(--timeline-lane-width) calc(var(--timeline-weeks) * var(--timeline-week-width));
-  grid-template-rows: repeat(3, minmax(1.65rem, auto));
+  grid-template-columns: var(--timeline-label-width) calc(var(--timeline-weeks) * var(--timeline-week-width));
+  grid-template-rows: minmax(4rem, auto);
 }
 
-.timeline-summary-row {
-  display: grid;
-  grid-template-columns: var(--timeline-label-width) var(--timeline-lane-width) calc(var(--timeline-weeks) * var(--timeline-week-width));
-  min-height: 2rem;
+.timeline-course-group--schedule {
+  min-height: 4rem;
 }
 
-.timeline-summary-label {
-  padding: 0.45rem 0.625rem;
-  background: #f8fafc;
-  border-right: 1px solid #d8e0e8;
-  border-bottom: 1px solid #d8e0e8;
-  font-size: 0.78rem;
-  font-weight: 700;
+.timeline-course-group--schedule .timeline-course-label {
+  grid-column: 1;
+  grid-row: 1;
+  padding: 0.35rem 0.55rem;
 }
 
-.timeline-summary-track {
-  display: grid;
-  grid-template-columns: repeat(var(--timeline-weeks), var(--timeline-week-width));
-  min-height: 2rem;
-  border-right: 1px solid #d8e0e8;
+.timeline-course-label > a {
+  color: #263f4c;
+  font-size: 0.82rem;
+  line-height: 1.2;
 }
 
-.timeline-summary-track > span {
+.timeline-course-label__meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  border-left: 1px solid #eef1f4;
-  border-bottom: 1px solid #d8e0e8;
-  color: #495057;
-  font-size: 0.78rem;
-  font-weight: 700;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+  color: #536772;
+  font-size: 0.7rem;
 }
 
 .waitlist-action-cell {
   min-width: 8rem;
+}
+
+.waitlist-compact-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 0.4rem 1rem;
+}
+
+.waitlist-compact-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.2rem 0.75rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #e3e9ed;
+  font-size: 0.8rem;
+}
+
+.waitlist-compact-row > strong,
+.waitlist-compact-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waitlist-compact-row > button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
 }
 
 .waitlist-adjustment summary {
@@ -200,6 +620,17 @@
 .timeline-track {
   border-right: 1px solid #d8e0e8;
   border-bottom: 1px solid #d8e0e8;
+}
+
+.timeline-header-label:first-child,
+.timeline-course-label {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+}
+
+.timeline-header-label:first-child {
+  z-index: 4;
 }
 
 .timeline-header-label,
@@ -280,7 +711,7 @@
 .timeline-course-label {
   background: #f8fafc;
   align-self: stretch;
-  grid-row: 1 / span 3;
+  grid-row: 1;
 }
 
 .timeline-lane-label {
@@ -330,21 +761,25 @@
   grid-template-columns: repeat(var(--timeline-weeks), var(--timeline-week-width));
 }
 
-.timeline-week-cell {
-  display: flex;
-  min-height: 2rem;
-  align-items: center;
-  justify-content: center;
-  gap: 0.15rem;
-  border-left: 1px solid #eef1f4;
-  overflow: hidden;
-}
-
 .timeline-bar {
   display: block;
+  overflow: hidden;
   height: 0.62rem;
   margin: 0 0.15rem;
   border-radius: 0.2rem;
+  position: relative;
+}
+
+.timeline-bar__label {
+  display: block;
+  overflow: hidden;
+  padding: 0 0.25rem;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .timeline-bar--inpatient {
@@ -380,6 +815,20 @@
   height: 0.72rem;
   background: #5b3f9b;
   box-shadow: inset 0 0 0 1px #3d2a70;
+}
+
+.timeline-bar--rtms.timeline-bar--planned-only {
+  background: repeating-linear-gradient(135deg, #9c8bc6 0, #9c8bc6 5px, #e6e0f1 5px, #e6e0f1 10px);
+  border: 1px dashed #5b3f9b;
+}
+
+.timeline-bar--actual {
+  box-shadow: inset 0 0 0 2px #0d3e68;
+}
+
+.timeline-bar--planned,
+.timeline-bar--estimated {
+  opacity: 0.92;
 }
 
 .timeline-legend__rtms {
@@ -467,15 +916,14 @@
     grid-template-columns: 10rem minmax(0, 1fr);
   }
 
-  .timeline-scroll {
-    --timeline-label-width: 11rem;
-    --timeline-week-width: 3.75rem;
+  .booking-date-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .timeline-header-row,
-  .timeline-course-group {
-    grid-template-columns: var(--timeline-label-width) var(--timeline-lane-width) calc(var(--timeline-weeks) * var(--timeline-week-width));
+  .capacity-week {
+    min-width: 900px;
   }
+
 }
 
 .timeline-axis--weekly,
@@ -485,4 +933,55 @@
 
 .timeline-track--weekly {
   background-size: calc(100% / var(--timeline-weeks)) 100%;
+}
+
+.timeline-track--schedule {
+  position: relative;
+  display: block;
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 4rem;
+  border-right: 1px solid #d8e0e8;
+  background-image: linear-gradient(to right, transparent calc(100% - 1px), #e3e9ed calc(100% - 1px));
+  background-size: calc(100% / var(--timeline-weeks)) 100%;
+}
+
+.timeline-schedule-segment {
+  position: absolute;
+  top: 50%;
+  display: flex;
+  height: 1.55rem;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 0 0.3rem;
+  transform: translateY(-50%);
+  border-right: 2px solid #fff;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-schedule-segment[hidden] {
+  display: none;
+}
+
+.timeline-schedule-segment--admission {
+  background: #246a91;
+}
+
+.timeline-schedule-segment--treatment {
+  background: #65508e;
+}
+
+.timeline-schedule-segment--post-treatment {
+  background: #4c8876;
+}
+
+.timeline-schedule-segment--compact {
+  padding: 0;
+  font-size: 0;
 }

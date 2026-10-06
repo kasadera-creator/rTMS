@@ -6,160 +6,263 @@
   <link rel="stylesheet" href="{% static 'rtms_app/inpatient_calendar.css' %}">
 {% endblock extrastyle %}
 {% block content %}
-<div class="container py-3 rtms-inpatient-page">
-  <div class="app-card inpatient-page-header">
-    <div class="app-card__header rtms-page-title mb-0">
-      <i class="fas fa-calendar-check page-title-icon"></i>
-      <span class="rtms-page-title__text">rTMS日程調整</span>
-      <span class="visually-hidden">rTMS調整カレンダー</span>
-    </div>
-    <div class="app-card__body inpatient-page-body p-0">
-      <div class="inpatient-page-summary small text-muted">今週から18週間 / 全体の運用状況</div>
-      {% if treatment_course %}
-        <div class="inpatient-page-summary inpatient-page-summary--course small text-primary" aria-label="選択中のCourse">
-          選択中: {{ patient.name }} / Patient ID {{ patient.card_id }} / Course #{{ treatment_course.course_number }}
-        </div>
-      {% endif %}
-  <section class="inpatient-timeline app-card mb-4" aria-labelledby="timeline-heading">
-    <div class="app-card__header d-flex justify-content-between align-items-center">
-      <h2 id="timeline-heading" class="h6 mb-0"><i class="fas fa-chart-gantt me-2"></i>rTMS治療スケジュール <span class="small text-muted">（① rTMS予定一覧）</span></h2>
-      <span class="small text-muted">表示専用</span>
-    </div>
-    <div class="app-card__body">
-    <div class="timeline-legend small text-muted mb-2" aria-label="rTMS session status legend">
-      rTMS：<span class="timeline-legend__rtms">治療予定期間</span>
-      <span class="timeline-legend__room-planned ms-3">▒ 個室利用予定</span>
-      <span class="timeline-legend__room-assigned ms-2">■ 個室割当済み</span>
-    </div>
-    <div class="timeline-scroll">
-      <div class="timeline-board" style="--timeline-weeks: {{ week_count }};">
-        <div class="timeline-header-row">
-          <div class="timeline-header-label">患者 / Course</div>
-          <div class="timeline-header-label timeline-lane-label">区分</div>
-          <div class="timeline-header-track">
-            <div class="timeline-month-axis">
-              {% for month in month_spans %}<span style="grid-column: {{ month.start_week }} / span {{ month.span }};">{{ month.label }}</span>{% endfor %}
-            </div>
-            <div class="timeline-axis timeline-axis--weekly">
-              {% for week in weeks %}<span class="{% if week.is_current %}timeline-week--current{% endif %}">{{ week.label }}{% if week.is_current %}<small>今週</small>{% endif %}</span>{% endfor %}
-            </div>
-          </div>
-        </div>
-        {% for row in weekly_calendar_rows %}
-          <div class="timeline-course-group">
-            <div class="timeline-course-label" data-patient-id="{{ row.patient_id }}" data-course-id="{{ row.treatment_course_id }}" data-course-number="{{ row.course_number }}">
-              <a class="text-decoration-none" href="{% url 'rtms_app:patient_first_visit' row.patient_id %}?course_number={{ row.course_number }}">
-                <div class="fw-bold">{{ row.patient.name }}</div>
-                <div class="small text-muted">ID {{ row.patient.card_id }} / Course #{{ row.course_number }}</div>
-              </a>
-            </div>
-            <div class="timeline-lane-label">入院</div>
-            <div class="timeline-track timeline-track--weekly" data-patient-id="{{ row.patient_id }}" data-course-id="{{ row.treatment_course_id }}" data-course-number="{{ row.course_number }}" data-timeline-type="inpatient">
-              {% for item in row.timelines.inpatient %}
-                <span class="timeline-bar timeline-bar--inpatient{% if item.end_kind == 'unknown' %} timeline-bar--unknown{% endif %}" style="grid-column: {{ item.start_week }} / span {{ item.span }};" data-patient-id="{{ row.patient_id }}" data-course-id="{{ row.treatment_course_id }}" data-course-number="{{ row.course_number }}" data-timeline-type="inpatient" data-start-date="{{ item.start|date:'Y-m-d' }}" data-end-date="{{ item.end|date:'Y-m-d' }}" data-status="{{ item.status }}" data-end-kind="{{ item.end_kind }}" aria-label="入院 {{ item.start|date:'Y/m/d' }}{% if item.end_kind == 'unknown' %} 終了日不明{% else %}〜{{ item.end|date:'Y/m/d' }}{% endif %}" title="入院 {{ item.start|date:'Y/m/d' }}{% if item.end_kind == 'unknown' %}〜終了日不明{% else %}〜{{ item.end|date:'Y/m/d' }}{% endif %}">{% if item.end_kind == 'unknown' %}<span class="timeline-unknown-label">終了日不明</span>{% else %}&nbsp;{% endif %}</span>
-              {% endfor %}
-            </div>
-            <div class="timeline-lane-label">個室</div>
-            <div class="timeline-track timeline-track--weekly" data-patient-id="{{ row.patient_id }}" data-course-id="{{ row.treatment_course_id }}" data-course-number="{{ row.course_number }}" data-timeline-type="private_room">
-              {% for item in row.timelines.private_room %}
-                <span class="timeline-bar timeline-bar--private-room{% if item.planned_only %} timeline-bar--planned-only{% endif %}{% if item.end_kind == 'unknown' %} timeline-bar--unknown{% endif %}" style="grid-column: {{ item.start_week }} / span {{ item.span }};" data-patient-id="{{ row.patient_id }}" data-course-id="{{ row.treatment_course_id }}" data-course-number="{{ row.course_number }}" data-timeline-type="private_room" data-start-date="{{ item.start|date:'Y-m-d' }}" data-end-date="{{ item.end|date:'Y-m-d' }}" data-status="{{ item.status }}" data-end-kind="{{ item.end_kind|default:'known' }}"{% if item.resource_pool %} data-resource-id="{{ item.resource_pool.pk }}"{% endif %} title="{% if item.planned_only %}個室利用予定{% else %}個室 {{ item.resource_pool.name }}{% endif %} / {{ item.start|date:'Y/m/d' }}{% if item.end_kind == 'unknown' %}〜終了日不明{% else %}〜{{ item.end|date:'Y/m/d' }}{% endif %}"><span class="timeline-resource-name">{% if item.planned_only %}個室利用予定{% else %}{{ item.resource_pool.name }}{% endif %}</span></span>
-              {% endfor %}
-            </div>
-            <div class="timeline-lane-label">rTMS</div>
-            <div class="timeline-track timeline-track--weekly" data-patient-id="{{ row.patient_id }}" data-course-id="{{ row.treatment_course_id }}" data-course-number="{{ row.course_number }}" data-timeline-type="rtms">
-              {% for item in row.timelines.rtms_period %}
-                <span class="timeline-bar timeline-bar--rtms" style="grid-column: {{ item.start_week }} / span {{ item.span }};" data-patient-id="{{ row.patient_id }}" data-course-id="{{ row.treatment_course_id }}" data-course-number="{{ row.course_number }}" data-timeline-type="rtms" data-start-date="{{ item.start|date:'Y-m-d' }}" data-end-date="{{ item.end|date:'Y-m-d' }}" data-session-count="{{ item.session_count }}" title="{{ item.title }}" aria-label="{{ item.title }}">&nbsp;</span>
-              {% endfor %}
-            </div>
-          </div>
-        {% empty %}
-          <div class="timeline-empty">表示対象の入院・個室・rTMS予定はありません。</div>
-        {% endfor %}
-      </div>
-      <div class="timeline-summary" style="--timeline-weeks: {{ week_count }};" aria-label="週別集計">
-        <div class="timeline-summary-row timeline-summary-header">
-          <div class="timeline-summary-label">週別集計</div>
-          <div class="timeline-lane-label">区分</div>
-          <div class="timeline-header-track">
-            <div class="timeline-month-axis">
-              {% for month in month_spans %}<span style="grid-column: {{ month.start_week }} / span {{ month.span }};">{{ month.label }}</span>{% endfor %}
-            </div>
-            <div class="timeline-axis timeline-axis--weekly">
-              {% for week in weeks %}<span class="{% if week.is_current %}timeline-week--current{% endif %}">{{ week.label }}{% if week.is_current %}<small>今週</small>{% endif %}</span>{% endfor %}
-            </div>
-          </div>
-        </div>
-        {% for metric in weekly_metrics %}
-          <div class="timeline-summary-row">
-            <div class="timeline-summary-label">{{ metric.label }}</div>
-            <div class="timeline-lane-label">人数</div>
-            <div class="timeline-summary-track">
-              {% for item in metric.weeks %}<span class="{% if item.week.is_current %}timeline-week--current{% endif %}">{{ item.value }}</span>{% endfor %}
-            </div>
-          </div>
-        {% endfor %}
-      </div>
-    </div>
-    </div>
-  </section>
-  <section class="calendar-section app-card mb-4" aria-labelledby="waitlist-heading">
-    <div class="app-card__header d-flex justify-content-between align-items-center flex-wrap gap-2">
+<div class="container-fluid py-3 rtms-inpatient-page">
+  <header class="app-card inpatient-page-header mb-3">
+    <div class="app-card__body d-flex flex-wrap align-items-center justify-content-between gap-3">
       <div>
-          <h2 id="waitlist-heading" class="h6 mb-0"><i class="fas fa-user-clock me-2"></i>待機者・日程調整 <span class="small text-muted">（② 待機者リスト）</span></h2>
-        <div class="small text-muted">次に日程を組む患者 / Course（待機中 {{ waitlist_active_count }}件）</div>
+        <h1 class="h4 mb-1"><i class="fas fa-calendar-check me-2" aria-hidden="true"></i>rTMS日程調整</h1>
+        <div class="small text-muted">{{ period_start|date:"Y/m/d" }}〜{{ period_end|date:"Y/m/d" }} / {{ week_count }}週間</div>
       </div>
-      {% if treatment_course %}
-        <a class="btn btn-outline-primary btn-sm" href="{% url 'rtms_app:rtms_waitlist_patient_select' %}">＋ rTMS待機者登録</a>
-      {% else %}
-        <a class="btn btn-outline-primary btn-sm" href="{% url 'rtms_app:rtms_waitlist_patient_select' %}">＋ rTMS待機者登録</a>
-      {% endif %}
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <a class="btn btn-outline-secondary btn-sm" href="{{ previous_range_url }}" aria-label="前の{{ week_count }}週間"><i class="fas fa-chevron-left" aria-hidden="true"></i><span class="ms-1">前の{{ week_count }}週</span></a>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ previous_week_url }}" aria-label="1週前"><i class="fas fa-chevron-left" aria-hidden="true"></i><span class="ms-1">1週</span></a>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ today_range_url }}">今日へ</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ next_week_url }}" aria-label="1週後"><span class="me-1">1週</span><i class="fas fa-chevron-right" aria-hidden="true"></i></a>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ next_range_url }}" aria-label="次の{{ week_count }}週間"><span class="me-1">次の{{ week_count }}週</span><i class="fas fa-chevron-right" aria-hidden="true"></i></a>
+      </div>
     </div>
-    <div class="app-card__body pt-0">
-    <div class="table-responsive">
-      <table class="table table-bordered table-hover align-middle mb-0">
-        <thead class="table-light"><tr><th>患者</th><th>Course</th><th>治療開始希望時期・備考</th><th>状態</th><th>登録日</th><th>操作</th></tr></thead>
-        <tbody>
-        {% for entry in waitlist_entries %}
-          <tr>
-            <td>{{ entry.treatment_course.patient.name }}<div class="small text-muted">ID {{ entry.treatment_course.patient.card_id }}</div></td>
-            <td>Course #{{ entry.treatment_course.course_number }}</td>
-            <td>{{ entry.preferred_start_note|default:"-" }}</td>
-            <td>{{ entry.get_status_display }}</td>
-            <td>{{ entry.registered_at|date:"Y/m/d" }}</td>
-            <td class="waitlist-action-cell">
-              <details class="waitlist-adjustment"{% if entry.adjustment_form_open %} open{% endif %}>
-                <summary class="btn btn-outline-primary btn-sm">日程設定</summary>
-                <form method="post" class="waitlist-adjustment-form mt-2">
-                  {% csrf_token %}
-                  <input type="hidden" name="action" value="save_calendar_course">
-                  <input type="hidden" name="treatment_course_id" value="{{ entry.treatment_course_id }}">
-                  <input type="hidden" name="waitlist_entry_id" value="{{ entry.pk }}">
-                  <div class="mb-2"><label for="{{ entry.adjustment_form.preferred_start_note.id_for_label }}">治療開始希望時期・備考</label>{{ entry.adjustment_form.preferred_start_note }}</div>
-                  <div class="waitlist-adjustment-grid">
-                    <div><label for="{{ entry.adjustment_form.admission_date.id_for_label }}">入院日</label>{{ entry.adjustment_form.admission_date }}</div>
-                    <div><label for="{{ entry.adjustment_form.first_treatment_date.id_for_label }}">初回治療日</label>{{ entry.adjustment_form.first_treatment_date }}</div>
-                  </div>
-                  <div class="waitlist-adjustment-flags">
-                    <label>{{ entry.adjustment_form.private_room_planned }} 個室利用</label>
-                    <label>{{ entry.adjustment_form.is_all_case_survey }} 全例調査対象</label>
-                  </div>
-                  <div class="mt-2"><label for="{{ entry.adjustment_form.planned_treatment_sessions.id_for_label }}">予定治療回数（回）</label>{{ entry.adjustment_form.planned_treatment_sessions }}</div>
-                  {% if entry.adjustment_form.errors %}<div class="small text-danger">{% for field in entry.adjustment_form %}{% for error in field.errors %}{{ error }}{% endfor %}{% endfor %}</div>{% endif %}
-                  <button type="submit" class="btn btn-primary btn-sm mt-1">保存</button>
-                </form>
-              </details>
-            </td>
-          </tr>
-        {% empty %}
-          <tr><td colspan="6" class="text-center text-muted py-3">現在、rTMS待機者はいません。</td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
+  </header>
+
+  <section class="inpatient-timeline app-card mb-4" aria-labelledby="timeline-heading">
+    <div class="app-card__body">
+      <h2 id="timeline-heading" class="visually-hidden">患者ガントチャート</h2>
+      <div class="timeline-legend small mb-2" aria-label="予定バーの区分">
+        <span><i class="timeline-legend__segment timeline-legend__segment--admission" aria-hidden="true"></i>入院</span>
+        <span><i class="timeline-legend__segment timeline-legend__segment--treatment" aria-hidden="true"></i>rTMS</span>
+        <span><i class="timeline-legend__segment timeline-legend__segment--post-treatment" aria-hidden="true"></i>治療後</span>
+      </div>
+      <div class="timeline-scroll">
+        <div class="timeline-board" style="--timeline-weeks: {{ week_count }};">
+          <div class="timeline-week-row timeline-week-row--header" aria-label="週の時間軸">
+            <div class="timeline-header-label timeline-week-row__label">患者 / Course</div>
+            <div class="timeline-week-track">
+              {% for week in weeks %}
+                <div class="timeline-week-cell timeline-week-cell--header{% if week.is_current %} timeline-week--current{% endif %}" data-week-start="{{ week.start|date:'Y-m-d' }}" data-week-end="{{ week.end|date:'Y-m-d' }}" aria-label="{{ week.start|date:'n/j' }}週">
+                  <span>{{ week.start|date:"n/j" }}週</span>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% for row in weekly_calendar_rows %}
+            <div class="timeline-course-group timeline-course-group--schedule">
+              <div class="timeline-course-label" data-patient-id="{{ row.patient_id }}" data-course-id="{{ row.treatment_course_id }}" data-course-number="{{ row.course_number }}">
+                <a class="text-decoration-none" href="{% url 'rtms_app:patient_first_visit' row.patient_id %}?course_number={{ row.course_number }}"><strong>{{ row.patient.name }}</strong></a>
+                <div class="timeline-course-label__meta">
+                  <span>Course #{{ row.course_number }}</span>
+                  {% if row.materialized_session_count and row.materialized_session_count != row.planned_treatment_sessions %}<span>rTMS {{ row.materialized_session_count }}/{{ row.planned_treatment_sessions }}</span>{% endif %}
+                  <span class="schedule-status schedule-status--{{ row.schedule_status }}">{{ row.schedule_status_label }}</span>
+                </div>
+              </div>
+              <div class="timeline-track timeline-track--schedule" data-patient-id="{{ row.patient_id }}" data-course-id="{{ row.treatment_course_id }}" data-course-number="{{ row.course_number }}" data-timeline-type="patient_schedule" data-period-start="{{ period_start|date:'Y-m-d' }}" data-period-end="{{ period_end|date:'Y-m-d' }}" data-admission-start="{% if row.inpatient_plan and row.inpatient_plan.planned_admission_date %}{{ row.inpatient_plan.planned_admission_date|date:'Y-m-d' }}{% else %}{{ row.admission_date|date:'Y-m-d' }}{% endif %}" data-treatment-start="{% if row.reservation_start %}{{ row.reservation_start|date:'Y-m-d' }}{% elif row.rtms_planned_period %}{{ row.rtms_planned_period.start|date:'Y-m-d' }}{% elif row.timelines.rtms_period %}{{ row.timelines.rtms_period.0.start|date:'Y-m-d' }}{% endif %}" data-treatment-end="{% if row.treatment_end_date %}{{ row.treatment_end_date|date:'Y-m-d' }}{% elif row.rtms_planned_period %}{{ row.rtms_planned_period.end|date:'Y-m-d' }}{% elif row.timelines.rtms_period %}{{ row.timelines.rtms_period.0.end|date:'Y-m-d' }}{% endif %}" data-discharge-end="{% if row.inpatient_plan and row.inpatient_plan.planned_discharge_date %}{{ row.inpatient_plan.planned_discharge_date|date:'Y-m-d' }}{% elif row.inpatient_plan and row.inpatient_plan.estimated_discharge_date %}{{ row.inpatient_plan.estimated_discharge_date|date:'Y-m-d' }}{% else %}{{ row.treatment_course.discharge_date|date:'Y-m-d' }}{% endif %}">
+                <span class="timeline-schedule-segment timeline-schedule-segment--admission" aria-label="入院">入院</span>
+                <span class="timeline-schedule-segment timeline-schedule-segment--treatment" aria-label="rTMS治療">rTMS</span>
+                <span class="timeline-schedule-segment timeline-schedule-segment--post-treatment" aria-label="治療後の入院">治療後</span>
+              </div>
+            </div>
+          {% empty %}<div class="timeline-empty">表示期間内の予約・入院・治療記録はありません。</div>{% endfor %}
+          <div class="timeline-week-row timeline-week-row--capacity" aria-label="週別rTMS新規開始可能枠">
+            <div class="timeline-header-label timeline-week-row__label">週別rTMS新規開始可能枠</div>
+            <div class="timeline-week-track">
+              {% for week in weeks %}
+                <div class="timeline-week-cell timeline-week-cell--capacity{% if week.is_current %} timeline-week--current{% endif %}" data-week-start="{{ week.start|date:'Y-m-d' }}" data-week-end="{{ week.end|date:'Y-m-d' }}" aria-label="{{ week.start|date:'n/j' }}週の新規rTMS開始可能枠{% if week.new_course_start_capacity is None %}は算出不可{% else %}{{ week.new_course_start_capacity }}枠{% endif %}">
+                  <strong>{% if week.new_course_start_capacity is None %}—{% else %}{{ week.new_course_start_capacity }}枠{% endif %}</strong>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="small text-muted mt-2" aria-label="予定と確定の説明">
+        <div>予定：入院・rTMSの日程が決まっている状態です。まだ実施済みとは限りません。</div>
+        <div>確定（実施済）：診療フローの実施開始が確認された状態です。30回の治療完了を意味するものではありません。</div>
+      </div>
     </div>
   </section>
 
-  </div>
-  </div>
+  <section class="calendar-section app-card mb-4" aria-labelledby="waitlist-heading">
+    <div class="app-card__header d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <div><h2 id="waitlist-heading" class="h6 mb-1"><i class="fas fa-user-clock me-2" aria-hidden="true"></i>待機患者</h2><div class="small text-muted">{{ waitlist_active_count }}名</div></div>
+      <a class="btn btn-outline-primary btn-sm" href="{% url 'rtms_app:rtms_waitlist_patient_select' %}"><i class="fas fa-user-plus me-1" aria-hidden="true"></i>待機登録</a>
+    </div>
+    <div class="app-card__body pt-0">
+      <div class="waitlist-compact-list">
+        {% for entry in waitlist_entries %}
+          <div class="waitlist-compact-row">
+            <strong>{{ entry.treatment_course.patient.name }} <span class="text-muted">Course #{{ entry.treatment_course.course_number }}</span></strong>
+            <span>希望: {{ entry.preferred_start_note|default:"未指定" }}</span>
+            {% if entry.comment %}<span class="text-muted">{{ entry.comment }}</span>{% endif %}
+            {% if entry.status == 'requested' or entry.status == 'waiting' or entry.status == 'provisional' %}<button type="button" class="btn btn-outline-primary btn-sm" aria-label="日程設定: {{ entry.treatment_course.patient.name }}" data-booking-open data-course-id="{{ entry.treatment_course_id }}" data-waitlist-id="{{ entry.pk }}" data-admission-date="{{ entry.treatment_course.admission_date|date:'Y-m-d' }}" data-first-date="{{ entry.treatment_course.first_treatment_date|date:'Y-m-d' }}">日程設定</button>{% endif %}
+          </div>
+        {% empty %}<div class="text-center text-muted py-3">現在、rTMS待機者はいません。</div>{% endfor %}
+      </div>
+    </div>
+  </section>
 </div>
+
+<div class="modal fade" id="reservationModal" tabindex="-1" aria-labelledby="reservationModalTitle" aria-hidden="true" data-preview-url="{{ range_preview_url }}">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
+    <form method="post" id="reservationForm">
+      {% csrf_token %}<input type="hidden" name="action" value="save_calendar_course"><input type="hidden" name="planned_treatment_sessions" value="30">
+      <div class="modal-header"><h2 class="modal-title h5" id="reservationModalTitle">rTMS日程設定</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button></div>
+      <div class="modal-body">
+        {% if calendar_form.errors %}<div class="alert alert-danger" role="alert">{{ calendar_form.non_field_errors }}{% for field in calendar_form %}{% for error in field.errors %}<div>{{ field.label }}: {{ error }}</div>{% endfor %}{% endfor %}</div>{% endif %}
+        <div class="mb-3"><label class="form-label" for="bookingCourseSelect">患者 / Course</label><select class="form-select" id="bookingCourseSelect" name="treatment_course_id" required><option value="">選択してください</option>{% for course in booking_courses %}<option value="{{ course.pk }}"{% if course.pk|stringformat:"s" == selected_booking_course_id|stringformat:"s" %} selected{% endif %}>{{ course.patient.name }} / ID {{ course.patient.card_id }} / Course #{{ course.course_number }}</option>{% endfor %}</select></div>
+        <input type="hidden" name="waitlist_entry_id" id="bookingWaitlistId" value="{% if selected_booking_waitlist_id %}{{ selected_booking_waitlist_id }}{% endif %}">
+        <div class="booking-date-grid">
+          <div><label class="form-label" for="id_admission_date">入院日</label>{{ calendar_form.admission_date }}</div>
+          <div><label class="form-label" for="id_first_treatment_date">初回治療日</label>{{ calendar_form.first_treatment_date }}</div>
+          <div><label class="form-label" for="treatmentEndDate">治療終了予定日</label><input class="form-control" id="treatmentEndDate" type="text" readonly aria-live="polite" placeholder="初回治療日から自動計算"></div>
+        </div>
+        <div class="booking-preview mt-3" id="bookingPreview" aria-live="polite"><div class="text-muted">患者と初回治療日を選択すると、30回分の枠を確認します。</div></div>
+        <details class="mt-3"><summary>追加情報</summary><div class="booking-flags mt-2"><label>{{ calendar_form.is_all_case_survey }} 全例調査対象</label></div><div class="mt-2"><label class="form-label" for="{{ calendar_form.preferred_start_note.id_for_label }}">待機メモ</label>{{ calendar_form.preferred_start_note }}</div></details>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">戻る</button><button type="submit" class="btn btn-primary" id="reservationSubmit" disabled><i class="fas fa-calendar-plus me-1" aria-hidden="true"></i>予定を登録</button></div>
+    </form>
+  </div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const millisecondsPerDay = 24 * 60 * 60 * 1000;
+
+function parseScheduleDate(value) {
+  if (!value) return null;
+  const timestamp = Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+document.querySelectorAll('.timeline-track--schedule').forEach((track) => {
+  const periodStart = parseScheduleDate(track.dataset.periodStart);
+  const periodEnd = parseScheduleDate(track.dataset.periodEnd);
+  if (periodStart === null || periodEnd === null || periodEnd < periodStart) return;
+  const periodDays = Math.floor((periodEnd - periodStart) / millisecondsPerDay) + 1;
+  const admissionStart = parseScheduleDate(track.dataset.admissionStart);
+  const treatmentStart = parseScheduleDate(track.dataset.treatmentStart);
+  const treatmentEnd = parseScheduleDate(track.dataset.treatmentEnd);
+  const dischargeEnd = parseScheduleDate(track.dataset.dischargeEnd);
+  const admissionEnd = treatmentStart !== null
+    ? treatmentStart - millisecondsPerDay
+    : dischargeEnd ?? admissionStart;
+  const segments = [
+    {selector: '.timeline-schedule-segment--admission', start: admissionStart, end: admissionEnd, label: '入院'},
+    {selector: '.timeline-schedule-segment--treatment', start: treatmentStart, end: treatmentEnd, label: 'rTMS治療'},
+    {
+      selector: '.timeline-schedule-segment--post-treatment',
+      start: treatmentEnd === null ? null : treatmentEnd + millisecondsPerDay,
+      end: dischargeEnd,
+      label: '治療後の入院',
+    },
+  ];
+
+  for (const definition of segments) {
+    const segment = track.querySelector(definition.selector);
+    if (definition.start === null || definition.end === null || definition.end < definition.start) {
+      segment.hidden = true;
+      continue;
+    }
+    const visibleStart = Math.max(definition.start, periodStart);
+    const visibleEnd = Math.min(definition.end, periodEnd);
+    if (visibleStart > visibleEnd) {
+      segment.hidden = true;
+      continue;
+    }
+    const offsetDays = (visibleStart - periodStart) / millisecondsPerDay;
+    const spanDays = (visibleEnd - visibleStart) / millisecondsPerDay + 1;
+    const left = (offsetDays / periodDays) * 100;
+    const width = (spanDays / periodDays) * 100;
+    segment.style.left = `${left}%`;
+    segment.style.width = `${width}%`;
+    segment.title = `${definition.label}: ${new Date(visibleStart).toISOString().slice(0, 10)}〜${new Date(visibleEnd).toISOString().slice(0, 10)}`;
+    segment.setAttribute('aria-label', segment.title);
+    if (width < 7) segment.classList.add('timeline-schedule-segment--compact');
+  }
+});
+
+(() => {
+  const modalElement = document.getElementById('reservationModal');
+  const form = document.getElementById('reservationForm');
+  const courseSelect = document.getElementById('bookingCourseSelect');
+  const waitlistInput = document.getElementById('bookingWaitlistId');
+  const admissionInput = document.getElementById('id_admission_date');
+  const firstDateInput = document.getElementById('id_first_treatment_date');
+  const endDateInput = document.getElementById('treatmentEndDate');
+  const preview = document.getElementById('bookingPreview');
+  const submitButton = document.getElementById('reservationSubmit');
+  const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+
+  function showPreviewMessage(message, kind = 'muted') {
+    preview.replaceChildren();
+    const element = document.createElement('div');
+    element.className = kind === 'error' ? 'alert alert-danger mb-0' : `text-${kind}`;
+    element.textContent = message;
+    preview.append(element);
+  }
+
+  async function refreshPreview() {
+    const firstDate = firstDateInput.value;
+    const courseId = courseSelect.value;
+    endDateInput.value = '';
+    submitButton.disabled = true;
+    if (!courseId || !firstDate) {
+      showPreviewMessage('患者と初回治療日を選択すると、30回分の枠を確認します。');
+      return;
+    }
+    showPreviewMessage('30回分の枠を確認しています…');
+    const query = new URLSearchParams({treatment_course_id: courseId, first_treatment_date: firstDate});
+    try {
+      const response = await fetch(`${modalElement.dataset.previewUrl}?${query}`, {headers: {'X-Requested-With': 'XMLHttpRequest'}});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '予約内容を確認できません。');
+      endDateInput.value = data.treatment_end_date;
+      preview.replaceChildren();
+      const summary = document.createElement('p');
+      summary.className = 'mb-2';
+      summary.textContent = `${data.treatment_count}回 / 終了予定 ${data.treatment_end_date.replaceAll('-', '/')}`;
+      preview.append(summary);
+      if (data.conflicts.length) {
+        const warning = document.createElement('div');
+        warning.className = 'alert alert-danger mb-2';
+        warning.textContent = `空き枠のない日が${data.conflicts.length}日あります。初回治療日を変更してください。`;
+        preview.append(warning);
+        const list = document.createElement('ul');
+        list.className = 'booking-conflicts mb-0';
+        for (const conflict of data.conflicts) {
+          const item = document.createElement('li');
+          const [year, month, day] = conflict.date.split('-');
+          item.textContent = `${year}/${month}/${day}: 特別個室 ${conflict.private.occupied}/${conflict.private.capacity}・一般病棟 ${conflict.general.occupied}/${conflict.general.capacity}・合計 ${conflict.total_occupied}/${conflict.total_capacity}`;
+          list.append(item);
+        }
+        preview.append(list);
+      } else {
+        const available = document.createElement('div');
+        available.className = 'text-success';
+        available.textContent = '30回分すべて予約可能です。';
+        preview.append(available);
+        submitButton.disabled = false;
+      }
+    } catch (error) {
+      endDateInput.value = '';
+      showPreviewMessage(error.message, 'error');
+    }
+  }
+
+  document.querySelectorAll('[data-booking-open]').forEach((button) => {
+    button.addEventListener('click', () => {
+      courseSelect.value = button.dataset.courseId || '';
+      waitlistInput.value = button.dataset.waitlistId || '';
+      admissionInput.value = button.dataset.admissionDate || button.dataset.firstDate || '';
+      firstDateInput.value = button.dataset.firstDate || '';
+      modal.show();
+      refreshPreview();
+    });
+  });
+  courseSelect.addEventListener('change', refreshPreview);
+  firstDateInput.addEventListener('change', refreshPreview);
+  admissionInput.addEventListener('change', () => {
+    if (firstDateInput.value && admissionInput.value > firstDateInput.value) firstDateInput.value = admissionInput.value;
+    refreshPreview();
+  });
+  {% if calendar_form.errors %}modal.show(); refreshPreview();{% endif %}
+})();
+</script>
 {% endblock %}

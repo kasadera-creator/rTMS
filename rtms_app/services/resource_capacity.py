@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
-from django.db import transaction
-from django.db.models import Q
+from django.db import connection, transaction
+from django.db.models import F, Q
 
 from rtms_app.models import (
     InpatientPlan,
@@ -18,6 +18,18 @@ ACTIVE_PLAN_STATUSES = ("draft", "provisional", "scheduled", "admitted")
 
 class CapacityConflict(ValueError):
     """Raised when a hard physical or admission capacity would be exceeded."""
+
+
+def reserve_sqlite_writer_for_capacity(target_date: date):
+    if connection.vendor != "sqlite":
+        return
+
+    RtmSAdmissionCapacity.objects.filter(
+        is_active=True,
+        valid_from__lte=target_date,
+    ).filter(
+        Q(valid_to__isnull=True) | Q(valid_to__gte=target_date),
+    ).update(capacity=F("capacity"))
 
 
 def admission_capacity_for_date(target_date: date, *, for_update=False):
@@ -136,7 +148,7 @@ def ensure_schedule_capacity(
         exclude_course_id=exclude_course_id,
     )
     if not snapshot["physical_capacity_available"]:
-        raise CapacityConflict("個室の物理容量を超えるため、日程を確定できません")
+        raise CapacityConflict("特別個室の物理容量を超えるため、日程を確定できません")
     if not snapshot["admission_capacity_configured"]:
         raise CapacityConflict("対象日のrTMS新規入院受入枠が設定されていません")
     if not snapshot["admission_capacity_available"]:

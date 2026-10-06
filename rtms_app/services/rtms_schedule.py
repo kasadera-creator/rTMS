@@ -111,6 +111,31 @@ def generate_treatment_dates(start_date: datetime.date,
     return dates
 
 
+def get_japanese_holidays(start_date: datetime.date, end_date: datetime.date) -> Set[datetime.date]:
+    """Return Japanese public holidays for every year intersecting the range."""
+    if end_date < start_date:
+        return set()
+    import holidays
+
+    years = range(start_date.year, end_date.year + 1)
+    return set(holidays.CountryHoliday("JP", years=years).keys())
+
+
+def generate_course_treatment_dates(start_date: datetime.date,
+                                    holidays: Optional[Set[datetime.date]] = None) -> List[datetime.date]:
+    """Generate the calendar's canonical 30-date plan for a Course start."""
+    if holidays is None:
+        holidays = get_japanese_holidays(
+            start_date,
+            start_date + datetime.timedelta(days=365),
+        )
+    return generate_treatment_dates(
+        start_date,
+        total=DEFAULT_TOTAL_SESSIONS,
+        holidays=holidays,
+    )
+
+
 def generate_mapping_dates(start_date: datetime.date,
                            weeks: int = 8,
                            holidays: Optional[Set[datetime.date]] = None) -> List[dict]:
