@@ -4952,6 +4952,48 @@ class TestClinicalPathReschedule(TestCase):
         self.assertContains(response, 'data-original-first-treatment-date="2026-08-24"')
         self.assertContains(response, '初回治療日を変更すると')
 
+    def test_first_visit_includes_weekly_start_capacity_choices(self):
+        response = self.client.get(reverse('rtms_app:patient_first_visit', args=[self.patient.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['weeks']), 12)
+        self.assertContains(response, 'rTMS日程を調整')
+        self.assertContains(response, 'rTMS治療開始日の調整')
+        self.assertContains(response, '開始可能な週の枠をクリックすると')
+        self.assertContains(response, 'timeline-week-row--capacity')
+        self.assertEqual(response.context['weeks'][0]['start'].weekday(), 0)
+
+    def test_first_visit_can_clear_schedule_dates_without_rescheduling_sessions(self):
+        session_date = date(2026, 8, 24)
+        session = TreatmentSession.objects.create(
+            patient=self.patient,
+            course_number=1,
+            session_date=session_date,
+            status='planned',
+        )
+
+        response = self.client.post(
+            reverse('rtms_app:patient_first_visit', args=[self.patient.pk]),
+            {
+                'card_id': self.patient.card_id,
+                'name': self.patient.name,
+                'birth_date': self.patient.birth_date.isoformat(),
+                'gender': self.patient.gender,
+                'attending_physician': str(self.user.pk),
+                'admission_date': '',
+                'first_visit_date': '2026-08-20',
+                'first_treatment_date': '',
+                'has_other_psychiatric_history': 'no',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.patient.refresh_from_db()
+        session.refresh_from_db()
+        self.assertIsNone(self.patient.admission_date)
+        self.assertIsNone(self.patient.first_treatment_date)
+        self.assertEqual(session.session_date, session_date)
+
     def test_first_visit_post_rebuilds_treatment_calendar_from_changed_start_date(self):
         doctor_group, _ = Group.objects.get_or_create(name='医師')
         doctor = get_user_model().objects.create_user(username='first-visit-start-doctor')

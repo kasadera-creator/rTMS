@@ -8,6 +8,7 @@
 {% endblock header_breadcrumb %}
 {% block extrastyle %}
   <link rel="stylesheet" href="{% static 'rtms_app/page_actions.css' %}">
+  <link rel="stylesheet" href="{% static 'rtms_app/inpatient_calendar.css' %}">
   <style>
   .fv-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-4); }
   @media (min-width: 992px) {
@@ -46,6 +47,15 @@
     background-color: #e8f5e9;
     border-left: 4px solid #4caf50;
     padding-left: 0.5rem;
+  }
+  .first-visit-start-modal .modal-dialog { max-width: min(66vw, 960px); }
+  body.first-visit-start-modal-open .rtms-topnav.navbar { z-index: 1030 !important; }
+  body.first-visit-start-modal-open .rtms-patient-nav { z-index: 1030 !important; }
+  @media (max-width: 767.98px) {
+    .first-visit-start-modal .modal-dialog {
+      max-width: calc(100% - 1rem);
+      margin: 0.5rem auto;
+    }
   }
   </style>
 {% endblock extrastyle %}
@@ -270,9 +280,10 @@
                   </div>
                   <div class="col-12">
                     <div class="d-flex flex-wrap gap-2 align-items-center">
-                      <a class="btn btn-outline-secondary btn-sm" href="{% url 'rtms_app:inpatient_calendar' %}?patient_id={{ patient.id }}&amp;course_number={{ course_number }}" target="_blank" rel="noopener">
-                        <i class="fas fa-calendar-check"></i> rTMS日程調整（別タブ）
-                      </a>
+                      <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#treatmentStartModal">
+                        <i class="fas fa-calendar-check" aria-hidden="true"></i> rTMS日程を調整
+                      </button>
+                      <button type="button" class="btn btn-outline-secondary btn-sm" id="clearRtmsScheduleButton">予定クリア</button>
                       {% if active_waitlist_entry %}
                         <span class="btn btn-outline-secondary btn-sm disabled" aria-disabled="true"><i class="fas fa-user-clock"></i> 待機者登録済み</span>
                         <span class="small text-muted">{{ active_waitlist_entry.get_status_display }}</span>
@@ -307,6 +318,26 @@
           </div>
         </div>
       </form>
+      <div class="modal fade first-visit-start-modal" id="treatmentStartModal" tabindex="-1" aria-labelledby="treatmentStartModalTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h2 class="modal-title h5" id="treatmentStartModalTitle">rTMS治療開始日の調整</h2>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body">
+              <p class="small text-muted mb-2">開始可能な週の枠をクリックすると、初回治療日と入院予定日が設定されます。</p>
+              <div class="first-visit-start-chart">
+                <h3 class="visually-hidden">患者ガントチャート</h3>
+                {% include "rtms_app/partials/inpatient_timeline_board.html" with enable_week_selection=True show_patient_links=False %}
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">閉じる</button>
+            </div>
+          </div>
+        </div>
+      </div>
       {% url 'rtms_app:dashboard' as dashboard_url %}
       {% if dashboard_date %}
         {% with back_url=dashboard_url|add:"?date="|add:dashboard_date %}
@@ -363,6 +394,46 @@
       {% endif %}
     {% endblock content %}
     {% block scripts %}
+      <script>
+        (() => {
+          const modalElement = document.getElementById('treatmentStartModal');
+          const modalTrigger = document.querySelector('[data-bs-target="#treatmentStartModal"]');
+          const admissionInput = document.getElementById('id_admission_date');
+          const firstTreatmentInput = document.getElementById('id_first_treatment_date');
+          const clearScheduleButton = document.getElementById('clearRtmsScheduleButton');
+          if (!modalElement || !admissionInput || !firstTreatmentInput) return;
+
+          modalElement.addEventListener('show.bs.modal', () => {
+            document.body.classList.add('first-visit-start-modal-open');
+          });
+          modalElement.addEventListener('hide.bs.modal', () => {
+            if (modalElement.contains(document.activeElement)) document.activeElement.blur();
+          });
+          modalElement.addEventListener('hidden.bs.modal', () => {
+            document.body.classList.remove('first-visit-start-modal-open');
+            modalTrigger?.focus();
+          });
+
+          function updateDate(input, value) {
+            input.value = value;
+            input.dispatchEvent(new Event('input', {bubbles: true}));
+            input.dispatchEvent(new Event('change', {bubbles: true}));
+          }
+
+          clearScheduleButton?.addEventListener('click', () => {
+            updateDate(admissionInput, '');
+            updateDate(firstTreatmentInput, '');
+          });
+
+          modalElement.querySelectorAll('[data-first-treatment-date]').forEach((button) => {
+            button.addEventListener('click', () => {
+              updateDate(admissionInput, button.dataset.admissionDate);
+              updateDate(firstTreatmentInput, button.dataset.firstTreatmentDate);
+              bootstrap.Modal.getOrCreateInstance(modalElement).hide();
+            });
+          });
+        })();
+      </script>
       <script>
         (function () {
           const form = document.getElementById('mainForm');

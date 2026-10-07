@@ -1,0 +1,115 @@
+<div class="timeline-legend small mb-2" aria-label="予定バーの区分">
+  <span><i class="timeline-legend__segment timeline-legend__segment--admission" aria-hidden="true"></i>入院</span>
+  <span><i class="timeline-legend__segment timeline-legend__segment--treatment" aria-hidden="true"></i>rTMS</span>
+  <span><i class="timeline-legend__segment timeline-legend__segment--post-treatment" aria-hidden="true"></i>治療後</span>
+</div>
+<div class="timeline-scroll{% if enable_week_selection %} timeline-scroll--selection{% endif %}">
+  <div class="timeline-board" style="--timeline-weeks: {{ week_count }};">
+    <div class="timeline-week-row timeline-week-row--header" aria-label="週の時間軸">
+      <div class="timeline-header-label timeline-week-row__label">患者 / Course</div>
+      <div class="timeline-week-track">
+        {% for week in weeks %}
+          <div class="timeline-week-cell timeline-week-cell--header{% if week.is_current %} timeline-week--current{% endif %}" data-week-start="{{ week.start|date:'Y-m-d' }}" data-week-end="{{ week.end|date:'Y-m-d' }}" aria-label="{{ week.start|date:'n/j' }}週">
+            <span>{{ week.start|date:"n/j" }}週</span>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% for row in treatment_calendar_rows %}
+      <div class="timeline-course-group timeline-course-group--schedule">
+        <div class="timeline-course-label" data-patient-id="{{ row.patient_id }}" data-course-id="{{ row.treatment_course_id }}" data-course-number="{{ row.course_number }}">
+          {% if show_patient_links %}
+            <a class="text-decoration-none" href="{% url 'rtms_app:patient_first_visit' row.patient_id %}?course_number={{ row.course_number }}"><strong>{{ row.patient.name }}</strong></a>
+          {% else %}
+            <strong>{{ row.patient.name }}</strong>
+          {% endif %}
+          <div class="timeline-course-label__meta">
+            <span>Course #{{ row.course_number }}</span>
+            {% if row.materialized_session_count and row.materialized_session_count != row.planned_treatment_sessions %}<span>rTMS {{ row.materialized_session_count }}/{{ row.planned_treatment_sessions }}</span>{% endif %}
+            <span class="schedule-status schedule-status--{{ row.schedule_status }}">{{ row.schedule_status_label }}</span>
+          </div>
+        </div>
+        <div class="timeline-track timeline-track--schedule" data-patient-id="{{ row.patient_id }}" data-course-id="{{ row.treatment_course_id }}" data-course-number="{{ row.course_number }}" data-timeline-type="patient_schedule" data-period-start="{{ period_start|date:'Y-m-d' }}" data-period-end="{{ period_end|date:'Y-m-d' }}" data-admission-start="{% if row.inpatient_plan and row.inpatient_plan.planned_admission_date %}{{ row.inpatient_plan.planned_admission_date|date:'Y-m-d' }}{% else %}{{ row.admission_date|date:'Y-m-d' }}{% endif %}" data-treatment-start="{% if row.reservation_start %}{{ row.reservation_start|date:'Y-m-d' }}{% elif row.rtms_planned_period %}{{ row.rtms_planned_period.start|date:'Y-m-d' }}{% elif row.timelines.rtms_period %}{{ row.timelines.rtms_period.0.start|date:'Y-m-d' }}{% endif %}" data-treatment-end="{% if row.treatment_end_date %}{{ row.treatment_end_date|date:'Y-m-d' }}{% elif row.rtms_planned_period %}{{ row.rtms_planned_period.end|date:'Y-m-d' }}{% elif row.timelines.rtms_period %}{{ row.timelines.rtms_period.0.end|date:'Y-m-d' }}{% endif %}" data-discharge-end="{% if row.inpatient_plan and row.inpatient_plan.planned_discharge_date %}{{ row.inpatient_plan.planned_discharge_date|date:'Y-m-d' }}{% elif row.inpatient_plan and row.inpatient_plan.estimated_discharge_date %}{{ row.inpatient_plan.estimated_discharge_date|date:'Y-m-d' }}{% else %}{{ row.treatment_course.discharge_date|date:'Y-m-d' }}{% endif %}">
+          <span class="timeline-schedule-segment timeline-schedule-segment--admission" aria-label="入院">入院</span>
+          <span class="timeline-schedule-segment timeline-schedule-segment--treatment" aria-label="rTMS治療">rTMS</span>
+          <span class="timeline-schedule-segment timeline-schedule-segment--post-treatment" aria-label="治療後の入院">治療後</span>
+        </div>
+      </div>
+    {% empty %}
+      <div class="timeline-empty" role="status">表示期間内にrTMS治療バーはありません。</div>
+    {% endfor %}
+    <div class="timeline-week-row timeline-week-row--capacity" aria-label="週別rTMS新規開始可能枠">
+      <div class="timeline-header-label timeline-week-row__label">週別rTMS新規開始可能枠</div>
+      <div class="timeline-week-track">
+        {% for week in weeks %}
+          {% if enable_week_selection and week.selectable %}
+            <button type="button" class="timeline-week-cell timeline-week-cell--capacity timeline-week-cell--selectable{% if week.is_current %} timeline-week--current{% endif %}" data-week-start="{{ week.start|date:'Y-m-d' }}" data-week-end="{{ week.end|date:'Y-m-d' }}" data-start-week="{{ week.start|date:'Y-m-d' }}" data-first-treatment-date="{{ week.first_treatment_date|date:'Y-m-d' }}" data-admission-date="{{ week.admission_date|date:'Y-m-d' }}" aria-label="{{ week.start|date:'n/j' }}週から治療開始、開始可能{{ week.new_course_start_capacity }}枠">
+              <span>{{ week.start|date:"n/j" }}週</span>
+              <strong>{{ week.new_course_start_capacity }}枠</strong>
+            </button>
+          {% else %}
+            <div class="timeline-week-cell timeline-week-cell--capacity{% if week.is_current %} timeline-week--current{% endif %}" data-week-start="{{ week.start|date:'Y-m-d' }}" data-week-end="{{ week.end|date:'Y-m-d' }}" aria-label="{{ week.start|date:'n/j' }}週の新規rTMS開始可能枠{% if week.new_course_start_capacity is None %}は算出不可{% else %}{{ week.new_course_start_capacity }}枠{% endif %}">
+              <strong>{% if week.new_course_start_capacity is None %}—{% else %}{{ week.new_course_start_capacity }}枠{% endif %}</strong>
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(() => {
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+
+  function parseScheduleDate(value) {
+    if (!value) return null;
+    const timestamp = Date.parse(`${value}T00:00:00Z`);
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  document.querySelectorAll('.timeline-track--schedule').forEach((track) => {
+    const periodStart = parseScheduleDate(track.dataset.periodStart);
+    const periodEnd = parseScheduleDate(track.dataset.periodEnd);
+    if (periodStart === null || periodEnd === null || periodEnd < periodStart) return;
+    const periodDays = Math.floor((periodEnd - periodStart) / millisecondsPerDay) + 1;
+    const admissionStart = parseScheduleDate(track.dataset.admissionStart);
+    const treatmentStart = parseScheduleDate(track.dataset.treatmentStart);
+    const treatmentEnd = parseScheduleDate(track.dataset.treatmentEnd);
+    const dischargeEnd = parseScheduleDate(track.dataset.dischargeEnd);
+    const admissionEnd = treatmentStart !== null
+      ? treatmentStart - millisecondsPerDay
+      : dischargeEnd ?? admissionStart;
+    const segments = [
+      {selector: '.timeline-schedule-segment--admission', start: admissionStart, end: admissionEnd, label: '入院'},
+      {selector: '.timeline-schedule-segment--treatment', start: treatmentStart, end: treatmentEnd, label: 'rTMS治療'},
+      {
+        selector: '.timeline-schedule-segment--post-treatment',
+        start: treatmentEnd === null ? null : treatmentEnd + millisecondsPerDay,
+        end: dischargeEnd,
+        label: '治療後の入院',
+      },
+    ];
+
+    for (const definition of segments) {
+      const segment = track.querySelector(definition.selector);
+      if (definition.start === null || definition.end === null || definition.end < definition.start) {
+        segment.hidden = true;
+        continue;
+      }
+      const visibleStart = Math.max(definition.start, periodStart);
+      const visibleEnd = Math.min(definition.end, periodEnd);
+      if (visibleStart > visibleEnd) {
+        segment.hidden = true;
+        continue;
+      }
+      const offsetDays = (visibleStart - periodStart) / millisecondsPerDay;
+      const spanDays = (visibleEnd - visibleStart) / millisecondsPerDay + 1;
+      segment.style.left = `${(offsetDays / periodDays) * 100}%`;
+      segment.style.width = `${(spanDays / periodDays) * 100}%`;
+      segment.title = `${definition.label}: ${new Date(visibleStart).toISOString().slice(0, 10)}〜${new Date(visibleEnd).toISOString().slice(0, 10)}`;
+      segment.setAttribute('aria-label', segment.title);
+      if (parseFloat(segment.style.width) < 7) segment.classList.add('timeline-schedule-segment--compact');
+    }
+  });
+})();
+</script>

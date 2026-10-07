@@ -470,6 +470,28 @@
   background: #f8fafb;
 }
 
+.timeline-week-cell--selectable {
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.timeline-week-cell--selectable:hover {
+  background: #e8f4f1;
+}
+
+.timeline-week-cell--selectable:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid #168f83;
+  outline-offset: -2px;
+}
+
 @media (max-width: 1024px) {
   .timeline-scroll {
     container-type: inline-size;

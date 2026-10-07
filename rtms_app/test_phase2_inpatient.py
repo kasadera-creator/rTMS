@@ -1404,6 +1404,10 @@ class Phase2InpatientTests(TestCase):
         self.assertEqual(row["timelines"]["rtms_reservation"][0]["session_count"], 30)
         self.assertEqual(response.context["weeks"][0]["new_course_start_capacity"], 3)
         self.assertContains(response, "3枠")
+        self.assertEqual(
+            [row["treatment_course_id"] for row in response.context["treatment_calendar_rows"]],
+            [self.course_one.pk],
+        )
         self.assertNotContains(response, "予定患者")
         self.assertNotContains(response, "A案")
         self.assertNotContains(response, "15回")
@@ -2614,9 +2618,11 @@ class Phase2InpatientTests(TestCase):
         self.assertContains(global_response, "患者ガントチャート")
         self.assertNotContains(global_response, "② 期間集計")
         self.assertNotContains(global_response, "表示対象:")
+        self.assertEqual(len(global_response.context["weekly_calendar_rows"]), 2)
+        self.assertEqual(global_response.context["treatment_calendar_rows"], [])
         self.assertContains(global_response, "timeline-header-row")
-        self.assertContains(global_response, "timeline-course-group")
-        self.assertContains(global_response, "timeline-track--schedule")
+        self.assertNotContains(global_response, "timeline-course-group")
+        self.assertNotContains(global_response, "timeline-track--schedule")
         self.assertNotContains(global_response, "timeline-summary")
         self.assertNotContains(global_response, 'timeline-lane-label">治療予約</div>')
         global_html = global_response.content.decode()
@@ -2626,10 +2632,11 @@ class Phase2InpatientTests(TestCase):
         self.assertEqual(global_html.count('class="timeline-week-cell timeline-week-cell--capacity'), 12)
         self.assertEqual(
             global_html.count('class="timeline-track timeline-track--schedule"'),
-            len(global_response.context["weekly_calendar_rows"]),
+            len(global_response.context["treatment_calendar_rows"]),
         )
         self.assertNotIn("TreatmentSession", global_html)
-        self.assertEqual(global_html.count('schedule-status--waiting">待機</span>'), 2)
+        self.assertEqual(global_html.count('schedule-status--waiting">待機</span>'), 0)
+        self.assertContains(global_response, "表示期間内にrTMS治療バーはありません。")
         self.assertNotIn("schedule-status--unreserved", global_html)
         self.assertContains(global_response, "待機患者")
         self.assertNotContains(global_response, "④ 日別詳細")

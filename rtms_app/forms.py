@@ -196,10 +196,13 @@ class PatientFirstVisitForm(forms.ModelForm):
         
         # 必須チェックを行う項目
         required_fields = {
-            'admission_date': '入院予定日',
-            'first_treatment_date': '初回治療日',
             'attending_physician': '今後の担当医',
         }
+        if cleaned_data.get('admission_date') or cleaned_data.get('first_treatment_date'):
+            required_fields.update({
+                'admission_date': '入院予定日',
+                'first_treatment_date': '初回治療日',
+            })
         
         errors = []
         for field_name, label in required_fields.items():

@@ -107,6 +107,15 @@ def _course_row(treatment_course):
     }
 
 
+def _has_visible_rtms_bar(row):
+    timelines = row["timelines"]
+    return bool(
+        row["rtms_planned_period"]
+        or timelines["rtms_period"]
+        or timelines["rtms_reservation"]
+    )
+
+
 def build_inpatient_calendar(*, year, month, treatment_course=None, resource_pool=None):
     month_start, month_end = _month_bounds(year, month)
     pool = resource_pool or ResourcePool.objects.filter(
@@ -775,6 +784,7 @@ def build_inpatient_calendar_range(
         rows_by_course.values(),
         key=lambda row: (row["patient"].name, row["course_number"], row["treatment_course_id"]),
     )
+    treatment_calendar_rows = [row for row in calendar_rows if _has_visible_rtms_bar(row)]
     rtms_course_counts_by_week = _weekly_rtms_course_counts(
         weeks,
         reservations_in_period,
@@ -920,6 +930,7 @@ def build_inpatient_calendar_range(
 
     return {
         "weekly_calendar_rows": calendar_rows,
+        "treatment_calendar_rows": treatment_calendar_rows,
         "weeks": weeks,
         "weekly_load": weeks,
         "month_spans": _week_month_spans(weeks),
