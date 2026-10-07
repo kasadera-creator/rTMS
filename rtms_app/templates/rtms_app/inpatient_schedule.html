@@ -11,12 +11,30 @@
     {% endfor %}
   {% endif %}
   {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
-  <form method="post" class="card p-3 p-md-4">
+  <form method="post" class="card p-3 p-md-4" id="scheduleConfirmationForm"{% if waitlist_confirmation %} action="{% url 'rtms_app:inpatient_schedule' patient.pk %}?course_number={{ treatment_course.course_number }}&amp;waitlist_confirmation=1"{% endif %}>
     {% csrf_token %}
     <input type="hidden" name="course_number" value="{{ treatment_course.course_number }}">
+    {% if waitlist_confirmation %}
+      <input type="hidden" name="waitlist_confirmation" value="1">
+      <div class="alert alert-info" role="status">
+        <strong>{{ treatment_course.patient.name }} / Course #{{ treatment_course.course_number }}</strong> の日程を確認してください。正式確定すると入院計画・特別個室・30回分のrTMS予約を更新し、待機状態を確定済みにします。
+      </div>
+    {% endif %}
     {% for field in form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}</div>{% endfor %}
-    <div class="d-flex gap-2"><button class="btn btn-primary" type="submit">日程を確定</button><a class="btn btn-outline-secondary" href="{% url 'rtms_app:inpatient_calendar' %}?patient_id={{ treatment_course.patient_id }}&course_number={{ treatment_course.course_number }}">戻る</a></div>
+    <div class="d-flex gap-2"><button class="btn btn-primary" type="submit">{% if waitlist_confirmation %}日程を正式に確定{% else %}日程を確定{% endif %}</button><a class="btn btn-outline-secondary" href="{% url 'rtms_app:inpatient_calendar' %}?patient_id={{ treatment_course.patient_id }}&course_number={{ treatment_course.course_number }}">戻る</a></div>
   </form>
+  {% if waitlist_confirmation %}
+    <script>
+      document.getElementById('scheduleConfirmationForm').addEventListener('submit', (event) => {
+        const admissionDate = document.getElementById('id_admission_date').value || '未入力';
+        const treatmentDate = document.getElementById('id_treatment_start_date').value || '未入力';
+        const resourcePool = document.getElementById('id_resource_pool');
+        const resourceName = resourcePool?.selectedOptions[0]?.textContent.trim() || '未選択';
+        const message = `この日程で正式に確定しますか？\n入院予定日：${admissionDate}\nrTMS開始日：${treatmentDate}\n特別個室：${resourceName}\n治療予定：30回分\n\n確定後、待機状態から確定状態へ変更されます。`;
+        if (!window.confirm(message)) event.preventDefault();
+      });
+    </script>
+  {% endif %}
   <section class="card mt-3" aria-labelledby="actual-admission-heading">
     <div class="card-body">
       <h2 class="h6" id="actual-admission-heading">実入院</h2>

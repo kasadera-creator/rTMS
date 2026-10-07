@@ -348,6 +348,22 @@ def record_actual_discharge_view(request, patient_id):
 @login_required
 def inpatient_schedule_view(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
+    waitlist_confirmation = (
+        request.GET.get("waitlist_confirmation") == "1"
+        or request.POST.get("waitlist_confirmation") == "1"
+    )
+    if waitlist_confirmation and (
+        request.GET.get("waitlist_confirmation") != "1"
+        or not request.GET.get("course_number")
+        or (
+            request.method == "POST"
+            and (
+                request.POST.get("waitlist_confirmation") != "1"
+                or request.POST.get("course_number") != request.GET.get("course_number")
+            )
+        )
+    ):
+        return HttpResponseBadRequest("対象Courseを確認できません")
     try:
         treatment_course = _course_for_request(request, patient)
     except ValueError as exc:
@@ -355,13 +371,28 @@ def inpatient_schedule_view(request, patient_id):
     if treatment_course is None:
         return HttpResponseBadRequest("対象の治療クールが見つかりません")
     inpatient_plan = getattr(treatment_course, "inpatient_plan", None)
+    confirmation_entry = None
+    if waitlist_confirmation:
+        confirmation_entry = treatment_course.rtms_waitlist_entries.filter(
+            status__in=ACTIVE_WAITLIST_STATUSES,
+        ).select_related("treatment_course").order_by("registered_at", "pk").first()
+        if confirmation_entry is None or confirmation_entry.status not in {"waiting", "provisional"}:
+            return HttpResponseBadRequest("このCourseに確定可能な待機登録がありません")
+        if request.method == "GET" and (
+            treatment_course.admission_date is None
+            or treatment_course.first_treatment_date is None
+        ):
+            return HttpResponseBadRequest("先に初診画面で日程候補を保存してください")
     if request.method == "POST":
         form = InpatientScheduleForm(request.POST)
         if form.is_valid():
-            waitlist_entry = RtmSWaitlistEntry.objects.filter(
-                treatment_course=treatment_course,
-                status__in=("waiting", "provisional"),
-            ).order_by("-priority", "registered_at", "pk").first()
+            if waitlist_confirmation:
+                waitlist_entry = confirmation_entry
+            else:
+                waitlist_entry = RtmSWaitlistEntry.objects.filter(
+                    treatment_course=treatment_course,
+                    status__in=("waiting", "provisional"),
+                ).order_by("-priority", "registered_at", "pk").first()
             try:
                 confirm_inpatient_schedule(
                     treatment_course=treatment_course,
@@ -425,12 +456,20 @@ def inpatient_schedule_view(request, patient_id):
                 "treatment_start_date": selected_date,
                 "room_start_date": selected_date,
             })
+        if waitlist_confirmation:
+            defaults.update({
+                "admission_date": treatment_course.admission_date,
+                "treatment_start_date": treatment_course.first_treatment_date,
+                "room_start_date": defaults.get("room_start_date") or treatment_course.admission_date,
+            })
         form = InpatientScheduleForm(initial=defaults, resource_pool=form_pool)
     return render(request, "rtms_app/inpatient_schedule.html", {
         "patient": patient,
         "treatment_course": treatment_course,
         "form": form,
         "inpatient_plan": inpatient_plan,
+        "waitlist_confirmation": waitlist_confirmation,
+        "waitlist_entry": confirmation_entry,
     })
 
 

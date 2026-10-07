@@ -1359,6 +1359,17 @@ def patient_first_visit(request, patient_id):
         form_class = TreatmentCourseFirstVisitForm if treatment_course is not None else PatientFirstVisitForm
         form_instance = treatment_course if treatment_course is not None else patient
         form = form_class(post, instance=form_instance, treatment_course=treatment_course)
+        action = request.POST.get('action')
+        if action == 'save_waitlist_candidate':
+            if treatment_course is None:
+                return HttpResponseBadRequest('待機患者の日程候補には対象Courseが必要です')
+            candidate_entry = treatment_course.rtms_waitlist_entries.filter(
+                status__in=ACTIVE_WAITLIST_STATUSES,
+            ).order_by('registered_at', 'pk').first()
+            if candidate_entry is None or candidate_entry.status not in {'waiting', 'provisional'}:
+                return HttpResponseBadRequest('日程候補を確定画面へ進める待機登録がありません')
+            if not post.get('admission_date') or not post.get('first_treatment_date'):
+                form.add_error('first_treatment_date', '入院予定日と初回治療日を入力してください。')
         if form.is_valid():
             p = form.save(commit=False)
             treatment_start_changed = p.first_treatment_date != old_first_treatment_date
@@ -1439,8 +1450,11 @@ def patient_first_visit(request, patient_id):
                                         get_completion_date(p.first_treatment_date),
                                     ),
                                 )
-                action = request.POST.get('action')
-
+                if action == 'save_waitlist_candidate':
+                    confirmation_url = reverse('rtms_app:inpatient_schedule', args=[patient.id])
+                    return redirect(
+                        f'{confirmation_url}?course_number={course_number}&waitlist_confirmation=1'
+                    )
                 if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                     redirect_url = f"{reverse('rtms_app:dashboard')}?date={dashboard_date}" if dashboard_date else reverse('rtms_app:dashboard')
                     return JsonResponse({'status': 'success', 'redirect_url': redirect_url})

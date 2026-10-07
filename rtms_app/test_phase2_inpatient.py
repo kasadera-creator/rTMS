@@ -146,6 +146,116 @@ class Phase2InpatientTests(TestCase):
         self.assertIsNone(plan.actual_admission_at)
         self.assertEqual(plan.planned_admission_date, date(2026, 10, 5))
 
+    def test_waitlist_confirmation_post_schedules_only_the_explicit_course(self):
+        for capacity_type, _label in RtmSTreatmentCapacity.CAPACITY_TYPE_CHOICES:
+            RtmSTreatmentCapacity.objects.filter(
+                capacity_type=capacity_type,
+                valid_from=date(2026, 1, 1),
+            ).update(capacity=100)
+        self.course_one.admission_date = date(2026, 10, 5)
+        self.course_one.first_treatment_date = date(2026, 10, 6)
+        self.course_one.save(update_fields=["admission_date", "first_treatment_date", "updated_at"])
+        self.course_two.admission_date = date(2026, 10, 7)
+        self.course_two.first_treatment_date = date(2026, 10, 8)
+        self.course_two.save(update_fields=["admission_date", "first_treatment_date", "updated_at"])
+        entry_one = RtmSWaitlistEntry.objects.create(
+            treatment_course=self.course_one,
+            status="waiting",
+        )
+        entry_two = RtmSWaitlistEntry.objects.create(
+            treatment_course=self.course_two,
+            status="provisional",
+        )
+
+        for course, entry, admission_date, treatment_date, room_end in (
+            (self.course_one, entry_one, "2026-10-05", "2026-10-06", "2026-10-15"),
+            (self.course_two, entry_two, "2026-10-07", "2026-10-08", "2026-10-17"),
+        ):
+            confirmation_url = (
+                f"{reverse('rtms_app:inpatient_schedule', args=[self.patient.pk])}"
+                f"?course_number={course.course_number}&waitlist_confirmation=1"
+            )
+            get_response = self.client.get(confirmation_url)
+            self.assertEqual(get_response.status_code, 200)
+            self.assertContains(get_response, "日程を正式に確定")
+            self.assertContains(get_response, "30回分のrTMS予約")
+            confirmed_at_before = django_timezone.now()
+            post_response = self.client.post(
+                confirmation_url,
+                {
+                    "course_number": str(course.course_number),
+                    "waitlist_confirmation": "1",
+                    "admission_date": admission_date,
+                    "treatment_start_date": treatment_date,
+                    "room_start_date": admission_date,
+                    "room_end_date": room_end,
+                    "certainty": "confirmed",
+                    "resource_pool": str(self.pool.pk),
+                },
+            )
+            confirmed_at_after = django_timezone.now()
+            self.assertEqual(post_response.status_code, 302)
+            entry.refresh_from_db()
+            self.assertEqual(entry.status, "scheduled")
+            self.assertIsNotNone(entry.scheduled_at)
+            self.assertLessEqual(confirmed_at_before, entry.scheduled_at)
+            self.assertLessEqual(entry.scheduled_at, confirmed_at_after)
+            self.assertEqual(entry.inpatient_plan_id, course.inpatient_plan.pk)
+            self.assertEqual(
+                RtmSTreatmentReservation.objects.filter(
+                    treatment_course=course,
+                    status="confirmed",
+                ).count(),
+                30,
+            )
+            self.assertTrue(
+                ResourceAssignment.objects.filter(
+                    treatment_course=course,
+                    resource_pool=self.pool,
+                    status="planned",
+                ).exists()
+            )
+
+    def test_waitlist_confirmation_rejects_course_mismatch_and_scheduled_entry(self):
+        entry_one = RtmSWaitlistEntry.objects.create(
+            treatment_course=self.course_one,
+            status="waiting",
+        )
+        entry_two = RtmSWaitlistEntry.objects.create(
+            treatment_course=self.course_two,
+            status="scheduled",
+        )
+        confirmation_url = (
+            f"{reverse('rtms_app:inpatient_schedule', args=[self.patient.pk])}"
+            "?course_number=1&waitlist_confirmation=1"
+        )
+
+        mismatch_response = self.client.post(
+            confirmation_url,
+            {
+                "course_number": "2",
+                "waitlist_confirmation": "1",
+                "admission_date": "2026-10-05",
+                "treatment_start_date": "2026-10-06",
+                "room_start_date": "2026-10-05",
+                "resource_pool": str(self.pool.pk),
+            },
+        )
+        scheduled_response = self.client.get(
+            f"{reverse('rtms_app:inpatient_schedule', args=[self.patient.pk])}"
+            "?course_number=2&waitlist_confirmation=1"
+        )
+
+        self.assertEqual(mismatch_response.status_code, 400)
+        self.assertEqual(scheduled_response.status_code, 400)
+        entry_one.refresh_from_db()
+        entry_two.refresh_from_db()
+        self.assertEqual(entry_one.status, "waiting")
+        self.assertEqual(entry_two.status, "scheduled")
+        self.assertFalse(InpatientPlan.objects.exists())
+        self.assertFalse(ResourceAssignment.objects.exists())
+        self.assertFalse(RtmSTreatmentReservation.objects.exists())
+
     def test_schedule_confirmation_after_admission_preserves_actual_and_updates_plan(self):
         self.patient.status = "waiting"
         self.patient.admission_date = date(2026, 8, 1)

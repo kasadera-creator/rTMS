@@ -287,6 +287,10 @@
                       {% if active_waitlist_entry %}
                         <span class="btn btn-outline-secondary btn-sm disabled" aria-disabled="true"><i class="fas fa-user-clock"></i> 待機者登録済み</span>
                         <span class="small text-muted">{{ active_waitlist_entry.get_status_display }}</span>
+                        {% if active_waitlist_entry.status == "waiting" or active_waitlist_entry.status == "provisional" %}
+                          <button type="submit" name="action" value="save_waitlist_candidate" class="btn btn-outline-primary btn-sm">候補日を保存して確定画面へ</button>
+                          <span class="small text-muted">次の画面で内容を確認して正式確定します。</span>
+                        {% endif %}
                       {% else %}
                         <a class="btn btn-outline-primary btn-sm" href="{% url 'rtms_app:rtms_waitlist' patient.id %}?course_number={{ course_number }}">
                           <i class="fas fa-user-clock"></i> rTMS待機者リストに登録
