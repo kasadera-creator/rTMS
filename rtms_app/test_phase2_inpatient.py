@@ -2502,7 +2502,7 @@ class Phase2InpatientTests(TestCase):
             priority=2,
         )
         response = self.client.get(reverse("rtms_app:inpatient_calendar"))
-        self.assertContains(response, "② 待機者リスト")
+        self.assertContains(response, "待機患者")
         self.assertContains(response, "Course #2")
 
     def test_calendar_month_navigation_uses_current_month_and_preserves_course_context(self):
@@ -2945,26 +2945,35 @@ class Phase2InpatientTests(TestCase):
         self.assertEqual(Assessment.objects.count(), 0)
         self.assertEqual(AssessmentRecord.objects.count(), 0)
 
-    def test_legacy_management_waitlist_redirects_to_calendar(self):
+    def test_management_waitlist_renders_list(self):
         response = self.client.get(reverse("rtms_app:inpatient_waitlist"))
-        self.assertRedirects(response, reverse("rtms_app:inpatient_calendar"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "rtms_app/rtms_waitlist_management.html")
 
-    def test_management_waitlist_lists_both_courses_and_excludes_non_waiting_statuses(self):
-        registered_at = timezone_now = datetime.now(timezone.utc) - timedelta(days=6)
-        RtmSWaitlistEntry.objects.create(
+    def test_management_waitlist_filters_orders_and_preserves_course_links(self):
+        registered_at = datetime.now(timezone.utc) - timedelta(days=6)
+        later_entry = RtmSWaitlistEntry.objects.create(
             treatment_course=self.course_one,
             status="waiting",
-            priority=2,
-            registered_at=registered_at,
-        )
-        RtmSWaitlistEntry.objects.create(
-            treatment_course=self.course_two,
-            status="requested",
-            priority=1,
+            priority=9,
             registered_at=registered_at + timedelta(days=1),
         )
-        scheduled_course = TreatmentCourse.objects.create(
+        earlier_entry = RtmSWaitlistEntry.objects.create(
+            treatment_course=self.course_two,
+            status="requested",
+            priority=0,
+            registered_at=registered_at,
+        )
+        course_three = TreatmentCourse.objects.create(
             patient=self.patient, course_number=3,
+        )
+        provisional_entry = RtmSWaitlistEntry.objects.create(
+            treatment_course=course_three,
+            status="provisional",
+            registered_at=registered_at + timedelta(days=2),
+        )
+        scheduled_course = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=4,
         )
         RtmSWaitlistEntry.objects.create(
             treatment_course=scheduled_course,
@@ -2980,20 +2989,37 @@ class Phase2InpatientTests(TestCase):
             status="withdrawn",
         )
 
-        response = self.client.get(reverse("rtms_app:inpatient_calendar"))
+        response = self.client.get(reverse("rtms_app:inpatient_waitlist"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [entry.pk for entry in response.context["entries"]],
+            [earlier_entry.pk, later_entry.pk, provisional_entry.pk],
+        )
         self.assertContains(response, "Course #1")
         self.assertContains(response, "Course #2")
-        self.assertContains(response, "② 待機者リスト")
+        self.assertContains(response, "Course #3")
+        self.assertNotContains(response, "Course #4")
+        self.assertNotContains(response, "キャンセル")
+        self.assertNotContains(response, "撤回")
+        for course_number in (1, 2):
+            self.assertContains(
+                response,
+                f'href="{reverse("rtms_app:patient_first_visit", args=[self.patient.pk])}?course_number={course_number}"',
+            )
+        self.assertNotContains(response, "waiting_days")
+        self.assertNotContains(response, "status_filter_choices")
         self.assertEqual(ResourceAssignment.objects.count(), 0)
         self.assertEqual(InpatientPlan.objects.count(), 0)
 
-    def test_management_waitlist_empty_state_and_status_filter(self):
+    def test_management_waitlist_empty_state_excludes_scheduled_entries(self):
         RtmSWaitlistEntry.objects.create(
             treatment_course=self.course_one,
             status="scheduled",
         )
 
-        response = self.client.get(reverse("rtms_app:inpatient_calendar"))
+        response = self.client.get(reverse("rtms_app:inpatient_waitlist"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["entries"], [])
         self.assertContains(response, "現在、rTMS待機者はいません。")
 
     def test_calendar_waitlist_rows_preserve_each_course(self):

@@ -520,4 +520,14 @@ def rtms_waitlist_view(request, patient_id):
 
 @login_required
 def rtms_waitlist_management_view(request):
-    return redirect("rtms_app:inpatient_calendar")
+    entries = list(
+        RtmSWaitlistEntry.objects.filter(
+            status__in=ACTIVE_WAITLIST_STATUSES,
+        )
+        .select_related("treatment_course__patient")
+        .order_by("registered_at", "treatment_course__patient__name", "pk")
+    )
+    return render(request, "rtms_app/rtms_waitlist_management.html", {
+        "entries": entries,
+        "active_count": len(entries),
+    })
