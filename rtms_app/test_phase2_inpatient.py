@@ -2504,6 +2504,7 @@ class Phase2InpatientTests(TestCase):
         response = self.client.get(reverse("rtms_app:inpatient_calendar"))
         self.assertContains(response, "待機患者")
         self.assertContains(response, "Course #2")
+        self.assertContains(response, "入院手続きが完了した状態")
 
     def test_calendar_month_navigation_uses_current_month_and_preserves_course_context(self):
         response = self.client.get(
