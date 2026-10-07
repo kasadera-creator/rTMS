@@ -3041,12 +3041,13 @@ class Phase2InpatientTests(TestCase):
         response = self.client.get(reverse("rtms_app:rtms_waitlist_patient_select"))
         self.assertContains(
             response,
-            f"{reverse('rtms_app:patient_first_visit', args=[self.patient.pk])}?course_number=1",
+            f'href="{reverse("rtms_app:patient_first_visit", args=[self.patient.pk])}?course_number=1">{self.patient.name}</a>',
         )
         self.assertContains(
             response,
-            f"{reverse('rtms_app:patient_first_visit', args=[self.patient.pk])}?course_number=2",
+            f'href="{reverse("rtms_app:patient_first_visit", args=[self.patient.pk])}?course_number=2">{self.patient.name}</a>',
         )
+        self.assertNotContains(response, "初診画面へ")
 
     def test_calendar_navigation_preserves_course_from_waitlist_destination(self):
         calendar_response = self.client.get(

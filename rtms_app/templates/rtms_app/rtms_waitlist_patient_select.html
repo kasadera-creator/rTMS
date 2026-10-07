@@ -40,7 +40,7 @@
             {% with course=row.course %}
             <tr>
               <td>{{ course.patient.card_id }}</td>
-              <td>{{ course.patient.name }}</td>
+              <td><a class="text-decoration-none" href="{% url 'rtms_app:patient_first_visit' course.patient_id %}?course_number={{ course.course_number }}">{{ course.patient.name }}</a></td>
               <td>Course #{{ course.course_number }}</td>
               <td>
                 {% if row.status == "inpatient_waiting_treatment" %}<span class="badge bg-success">入院中（治療待ち）</span>
@@ -54,7 +54,6 @@
               </td>
               <td class="text-nowrap">
                 <a class="btn btn-primary btn-sm" href="{% url 'rtms_app:rtms_waitlist' course.patient_id %}?course_number={{ course.course_number }}"><i class="fas fa-user-clock me-1"></i>待機登録</a>
-                <a class="btn btn-outline-secondary btn-sm" href="{% url 'rtms_app:patient_first_visit' course.patient_id %}?course_number={{ course.course_number }}"><i class="fas fa-arrow-right me-1"></i>初診画面へ</a>
               </td>
             </tr>
             {% endwith %}
