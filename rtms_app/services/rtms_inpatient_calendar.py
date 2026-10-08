@@ -31,6 +31,7 @@ from rtms_app.services.rtms_schedule import (
     generate_course_treatment_dates,
     get_japanese_holidays,
     is_closed,
+    next_open_day,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,29 @@ ACTIVE_SCHEDULE_COURSE_STATUSES = (
     "treatment_finished_waiting_discharge",
     "on_hold",
 )
+
+
+def add_new_course_start_options(weeks):
+    if not weeks:
+        return
+    holidays = get_japanese_holidays(
+        weeks[0]["start"], weeks[-1]["end"] + timedelta(days=365),
+    )
+    for week in weeks:
+        first_treatment_date = next_open_day(week["start"], holidays)
+        if first_treatment_date > week["end"]:
+            first_treatment_date = None
+        if first_treatment_date is None:
+            admission_date = None
+        else:
+            days_since_friday = (first_treatment_date.weekday() - 4) % 7 or 7
+            admission_date = first_treatment_date - timedelta(days=days_since_friday)
+        capacity = week["new_course_start_capacity"]
+        week.update({
+            "first_treatment_date": first_treatment_date,
+            "admission_date": admission_date,
+            "selectable": capacity is not None and capacity > 0 and first_treatment_date is not None,
+        })
 
 
 def _month_bounds(year, month):

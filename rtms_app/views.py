@@ -42,12 +42,14 @@ from .utils.request_context import get_current_request, get_client_ip, get_user_
 from .services.rtms_schedule import (
     generate_treatment_dates,
     generate_mapping_dates,
-    get_japanese_holidays,
     session_info_for_date,
     format_rtms_label,
     next_open_day,
 )
-from .services.rtms_inpatient_calendar import build_inpatient_calendar_range
+from .services.rtms_inpatient_calendar import (
+    add_new_course_start_options,
+    build_inpatient_calendar_range,
+)
 from .services.waitlist import ACTIVE_WAITLIST_STATUSES
 
 
@@ -1495,25 +1497,7 @@ def patient_first_visit(request, patient_id):
         week_count=12,
         today=today,
     )
-    start_week_holidays = get_japanese_holidays(
-        start_calendar["period_start"],
-        start_calendar["period_end"] + timedelta(days=365),
-    )
-    for week in start_calendar["weeks"]:
-        first_treatment_date = next_open_day(week["start"], start_week_holidays)
-        if first_treatment_date > week["end"]:
-            first_treatment_date = None
-        if first_treatment_date is None:
-            admission_date = None
-        else:
-            days_since_friday = (first_treatment_date.weekday() - 4) % 7 or 7
-            admission_date = first_treatment_date - timedelta(days=days_since_friday)
-        capacity = week["new_course_start_capacity"]
-        week.update({
-            "first_treatment_date": first_treatment_date,
-            "admission_date": admission_date,
-            "selectable": capacity is not None and capacity > 0 and first_treatment_date is not None,
-        })
+    add_new_course_start_options(start_calendar["weeks"])
     context = {
         'patient': patient,
         'treatment_course': treatment_course,

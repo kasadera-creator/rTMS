@@ -55,6 +55,7 @@ from rtms_app.services.rtms_schedule import (
     is_closed,
 )
 from rtms_app.services.rtms_inpatient_calendar import (
+    add_new_course_start_options,
     _weekly_rtms_course_counts,
     build_inpatient_calendar,
     build_inpatient_calendar_range,
@@ -1538,8 +1539,8 @@ class Phase2InpatientTests(TestCase):
         self.assertNotContains(response, "仮予定")
         rendered = response.content.decode()
         self.assertEqual(rendered.count('class="timeline-week-row timeline-week-row--header"'), 1)
-        self.assertEqual(rendered.count('class="timeline-week-row timeline-week-row--capacity"'), 1)
-        self.assertEqual(rendered.count('class="timeline-week-cell timeline-week-cell--capacity'), 12)
+        self.assertEqual(rendered.count('class="timeline-week-row timeline-week-row--capacity"'), 2)
+        self.assertEqual(rendered.count('class="timeline-week-cell timeline-week-cell--capacity'), 24)
         self.assertEqual(
             rendered.count('class="timeline-track timeline-track--schedule"'),
             len(response.context["weekly_calendar_rows"]),
@@ -1916,9 +1917,9 @@ class Phase2InpatientTests(TestCase):
         self.assertNotContains(response, "予定患者")
         self.assertNotContains(response, "30回コース開始の目安")
         rendered = response.content.decode()
-        self.assertEqual(rendered.count('class="timeline-week-row timeline-week-row--capacity"'), 1)
-        self.assertEqual(rendered.count('class="timeline-week-cell timeline-week-cell--capacity'), 12)
-        self.assertEqual(rendered.count("<strong>4枠</strong>"), 12)
+        self.assertEqual(rendered.count('class="timeline-week-row timeline-week-row--capacity"'), 2)
+        self.assertEqual(rendered.count('class="timeline-week-cell timeline-week-cell--capacity'), 24)
+        self.assertEqual(rendered.count("<strong>4枠</strong>"), 24)
 
     def test_calendar_a_capacity_checks_reservations_beyond_twelve_week_window(self):
         range_start = date(2026, 9, 7)
@@ -2328,6 +2329,39 @@ class Phase2InpatientTests(TestCase):
         self.assertNotContains(calendar, "予定変更")
         self.assertNotContains(calendar, "inpatient/schedule/")
         self.assertNotContains(calendar, "course-adjustment-form")
+
+    def test_weekly_start_options_only_enable_weeks_with_capacity(self):
+        weeks = [
+            {
+                "start": date(2026, 10, 5),
+                "end": date(2026, 10, 11),
+                "new_course_start_capacity": 2,
+            },
+            {
+                "start": date(2026, 10, 12),
+                "end": date(2026, 10, 18),
+                "new_course_start_capacity": 0,
+            },
+        ]
+
+        add_new_course_start_options(weeks)
+
+        self.assertTrue(weeks[0]["selectable"])
+        self.assertEqual(weeks[0]["first_treatment_date"], date(2026, 10, 5))
+        self.assertEqual(weeks[0]["admission_date"], date(2026, 10, 2))
+        self.assertFalse(weeks[1]["selectable"])
+
+    def test_waitlist_modal_contains_shared_week_capacity_picker(self):
+        response = self.client.get(
+            reverse("rtms_app:inpatient_calendar"),
+            {"week_start": "2026-10-05"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "booking-week-picker")
+        self.assertContains(response, "data-first-treatment-date")
+        self.assertContains(response, "data-admission-date")
+        self.assertContains(response, "waitlistInput.value = ''")
 
     def test_weekly_summary_counts_courses_not_sessions(self):
         for session_date in (date(2026, 9, 21), date(2026, 9, 23)):

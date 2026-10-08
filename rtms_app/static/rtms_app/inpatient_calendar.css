@@ -1007,3 +1007,16 @@
   padding: 0;
   font-size: 0;
 }
+
+.booking-week-picker .timeline-scroll {
+  --timeline-label-width: 9rem;
+  --timeline-week-width: 3.5rem;
+}
+
+.page-inpatient-calendar .modal-backdrop {
+  z-index: 2050;
+}
+
+.page-inpatient-calendar .modal {
+  z-index: 2060;
+}

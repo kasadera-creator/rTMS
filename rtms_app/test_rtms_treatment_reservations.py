@@ -892,6 +892,70 @@ class RtmsTreatmentReservationTests(TestCase):
         entry.refresh_from_db()
         self.assertEqual(entry.status, "provisional")
 
+    def test_calendar_adjustment_reflows_planned_sessions_and_preserves_history(self):
+        course = self.make_course()
+        other_course = TreatmentCourse.objects.create(
+            patient=course.patient,
+            course_number=2,
+        )
+        planned_session = TreatmentSession.objects.create(
+            patient=course.patient,
+            treatment_course=course,
+            course_number=1,
+            session_date=date(2026, 10, 5),
+            status="planned",
+        )
+        done_session = TreatmentSession.objects.create(
+            patient=course.patient,
+            treatment_course=course,
+            course_number=1,
+            session_date=date(2026, 10, 6),
+            status="done",
+        )
+        skipped_session = TreatmentSession.objects.create(
+            patient=course.patient,
+            treatment_course=course,
+            course_number=1,
+            session_date=date(2026, 10, 15),
+            status="skipped",
+        )
+        other_session = TreatmentSession.objects.create(
+            patient=course.patient,
+            treatment_course=other_course,
+            course_number=2,
+            session_date=date(2026, 10, 5),
+            status="planned",
+        )
+
+        update_calendar_course_adjustment(
+            treatment_course=course,
+            admission_date=date(2026, 10, 12),
+            treatment_start_date=date(2026, 10, 13),
+            is_all_case_survey=False,
+        )
+
+        planned_session.refresh_from_db()
+        done_session.refresh_from_db()
+        skipped_session.refresh_from_db()
+        other_session.refresh_from_db()
+        self.assertEqual(planned_session.session_date, date(2026, 10, 13))
+        self.assertEqual(done_session.session_date, date(2026, 10, 6))
+        self.assertEqual(done_session.status, "done")
+        self.assertEqual(skipped_session.session_date, date(2026, 10, 15))
+        self.assertEqual(skipped_session.status, "skipped")
+        self.assertEqual(other_session.session_date, date(2026, 10, 5))
+        self.assertEqual(
+            RtmSTreatmentReservation.objects.get(
+                treatment_course=course,
+                treatment_date=date(2026, 10, 15),
+            ).status,
+            "cancelled",
+        )
+        self.assertEqual(
+            RtmSTreatmentReservation.objects.filter(treatment_course=course).count(),
+            30,
+        )
+
     def test_inpatient_confirmation_creates_confirmed_reservations(self):
         course = self.make_course()
         pool = ResourcePool.objects.create(

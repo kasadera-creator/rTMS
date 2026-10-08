@@ -42,6 +42,7 @@ from rtms_app.services.rtms_treatment_reservations import (
     preview_rtms_treatment_reservation,
 )
 from rtms_app.services.rtms_inpatient_calendar import (
+    add_new_course_start_options,
     build_inpatient_calendar,
     build_inpatient_calendar_range,
 )
@@ -107,6 +108,7 @@ def inpatient_calendar_view(request):
                         entry.preferred_start_note = form.cleaned_data["preferred_start_note"]
                         entry.save(update_fields=["preferred_start_note", "updated_at"])
             except (
+                ValueError,
                 InvalidTreatmentReservationError,
                 TreatmentCapacityConfigurationError,
                 TreatmentReservationBusyError,
@@ -156,6 +158,7 @@ def inpatient_calendar_view(request):
         resource_pool=context["resource_pool"],
         today=today,
     ))
+    add_new_course_start_options(context["weeks"])
     waitlist_entries = RtmSWaitlistEntry.objects.filter(
         status__in=ACTIVE_WAITLIST_STATUSES,
     ).select_related("treatment_course__patient").order_by(

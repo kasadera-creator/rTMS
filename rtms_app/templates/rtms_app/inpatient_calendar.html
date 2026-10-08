@@ -68,6 +68,9 @@
           <div><label class="form-label" for="id_first_treatment_date">初回治療日</label>{{ calendar_form.first_treatment_date }}</div>
           <div><label class="form-label" for="treatmentEndDate">治療終了予定日</label><input class="form-control" id="treatmentEndDate" type="text" readonly aria-live="polite" placeholder="初回治療日から自動計算"></div>
         </div>
+        <div class="booking-week-picker mt-3" aria-label="週別rTMS新規開始可能枠">
+          {% include "rtms_app/partials/inpatient_timeline_board.html" with enable_week_selection=True capacity_only=True show_patient_links=False %}
+        </div>
         <div class="booking-preview mt-3" id="bookingPreview" aria-live="polite"><div class="text-muted">患者と初回治療日を選択すると、30回分の枠を確認します。</div></div>
         <details class="mt-3"><summary>追加情報</summary><div class="booking-flags mt-2"><label>{{ calendar_form.is_all_case_survey }} 全例調査対象</label></div><div class="mt-2"><label class="form-label" for="{{ calendar_form.preferred_start_note.id_for_label }}">待機メモ</label>{{ calendar_form.preferred_start_note }}</div></details>
       </div>
@@ -89,6 +92,7 @@
   const preview = document.getElementById('bookingPreview');
   const submitButton = document.getElementById('reservationSubmit');
   const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+  let waitlistCourseId = '';
 
   function showPreviewMessage(message, kind = 'muted') {
     preview.replaceChildren();
@@ -150,13 +154,28 @@
     button.addEventListener('click', () => {
       courseSelect.value = button.dataset.courseId || '';
       waitlistInput.value = button.dataset.waitlistId || '';
+      waitlistCourseId = courseSelect.value;
       admissionInput.value = button.dataset.admissionDate || button.dataset.firstDate || '';
       firstDateInput.value = button.dataset.firstDate || '';
       modal.show();
       refreshPreview();
     });
   });
-  courseSelect.addEventListener('change', refreshPreview);
+  courseSelect.addEventListener('change', () => {
+    if (courseSelect.value !== waitlistCourseId) {
+      waitlistInput.value = '';
+      waitlistCourseId = '';
+    }
+    refreshPreview();
+  });
+  modalElement.querySelectorAll('[data-first-treatment-date]').forEach((button) => {
+    button.addEventListener('click', () => {
+      admissionInput.value = button.dataset.admissionDate || '';
+      firstDateInput.value = button.dataset.firstTreatmentDate || '';
+      admissionInput.dispatchEvent(new Event('change', {bubbles: true}));
+      firstDateInput.dispatchEvent(new Event('change', {bubbles: true}));
+    });
+  });
   firstDateInput.addEventListener('change', refreshPreview);
   admissionInput.addEventListener('change', () => {
     if (firstDateInput.value && admissionInput.value > firstDateInput.value) firstDateInput.value = admissionInput.value;

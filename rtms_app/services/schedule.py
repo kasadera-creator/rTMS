@@ -388,6 +388,7 @@ def reschedule_treatment_start_date(
     holidays=None,
     mapping_weeks=8,
     allow_exceptional_day=False,
+    sync_reservations=True,
 ):
     """Rebuild a course from a new first-treatment date.
 
@@ -483,13 +484,14 @@ def reschedule_treatment_start_date(
             treatment_course.first_treatment_date = new_start_date
             treatment_course.mapping_date = new_start_date
             treatment_course.save(update_fields=['first_treatment_date', 'mapping_date'])
-            from rtms_app.services.rtms_treatment_reservations import (
-                sync_rtms_treatment_reservation_from_sessions,
-            )
-            sync_rtms_treatment_reservation_from_sessions(
-                treatment_course=treatment_course,
-                allow_canonical_fallback=True,
-            )
+            if sync_reservations:
+                from rtms_app.services.rtms_treatment_reservations import (
+                    sync_rtms_treatment_reservation_from_sessions,
+                )
+                sync_rtms_treatment_reservation_from_sessions(
+                    treatment_course=treatment_course,
+                    allow_canonical_fallback=True,
+                )
 
         if treatment_course is None or treatment_course.course_number == 1:
             locked_patient.first_treatment_date = new_start_date

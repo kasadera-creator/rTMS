@@ -1,10 +1,11 @@
-<div class="timeline-legend small mb-2" aria-label="予定バーの区分">
+{% if not capacity_only %}<div class="timeline-legend small mb-2" aria-label="予定バーの区分">
   <span><i class="timeline-legend__segment timeline-legend__segment--admission" aria-hidden="true"></i>入院</span>
   <span><i class="timeline-legend__segment timeline-legend__segment--treatment" aria-hidden="true"></i>rTMS</span>
   <span><i class="timeline-legend__segment timeline-legend__segment--post-treatment" aria-hidden="true"></i>治療後</span>
-</div>
+</div>{% endif %}
 <div class="timeline-scroll{% if enable_week_selection %} timeline-scroll--selection{% endif %}">
   <div class="timeline-board" style="--timeline-weeks: {{ week_count }};">
+    {% if not capacity_only %}
     <div class="timeline-week-row timeline-week-row--header" aria-label="週の時間軸">
       <div class="timeline-header-label timeline-week-row__label">患者 / Course</div>
       <div class="timeline-week-track">
@@ -38,6 +39,7 @@
     {% empty %}
       <div class="timeline-empty" role="status">表示期間内にrTMS治療バーはありません。</div>
     {% endfor %}
+    {% endif %}
     <div class="timeline-week-row timeline-week-row--capacity" aria-label="週別rTMS新規開始可能枠">
       <div class="timeline-header-label timeline-week-row__label">週別rTMS新規開始可能枠</div>
       <div class="timeline-week-track">

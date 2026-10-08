@@ -1,16 +1,19 @@
 import sqlite3
 import time
 from functools import wraps
+from datetime import timedelta
 
 from django.db import OperationalError, connection, transaction
 from django.utils import timezone
 
 from rtms_app.models import (
     InpatientPlan,
+    Patient,
     ResourceAssignment,
     ResourcePool,
     RtmSWaitlistEntry,
     TreatmentCourse,
+    TreatmentSession,
 )
 from rtms_app.services.resource_capacity import (
     ensure_schedule_capacity,
@@ -19,6 +22,7 @@ from rtms_app.services.resource_capacity import (
 from rtms_app.services.rtms_treatment_reservations import (
     create_or_replace_rtms_treatment_reservation,
 )
+from rtms_app.services.rtms_schedule import generate_treatment_dates, get_japanese_holidays
 
 
 class ActualAdmissionError(ValueError):
@@ -163,7 +167,21 @@ def update_calendar_course_adjustment(
     waitlist_entry=None, user=None,
 ):
     """Persist calendar controls through the Course and its existing plan."""
-    locked_course = TreatmentCourse.objects.select_for_update().get(pk=treatment_course.pk)
+    locked_patient = Patient.objects.select_for_update().get(pk=treatment_course.patient_id)
+    locked_course = TreatmentCourse.objects.select_for_update().get(
+        pk=treatment_course.pk,
+        patient=locked_patient,
+    )
+    has_sessions = TreatmentSession.objects.filter(treatment_course=locked_course).exists()
+    if has_sessions and locked_course.first_treatment_date != treatment_start_date:
+        from rtms_app.services.schedule import reschedule_treatment_start_date
+
+        reschedule_treatment_start_date(
+            locked_patient,
+            treatment_start_date,
+            course_number=locked_course.course_number,
+            sync_reservations=False,
+        )
     locked_course.admission_date = admission_date
     locked_course.first_treatment_date = treatment_start_date
     if private_room_planned is not None:
@@ -180,10 +198,33 @@ def update_calendar_course_adjustment(
     if private_room_planned is not None:
         update_fields.append("private_room_planned")
     locked_course.save(update_fields=update_fields)
+    treatment_dates = None
+    cancelled_treatment_dates = None
+    if has_sessions:
+        holidays = get_japanese_holidays(
+            treatment_start_date, treatment_start_date + timedelta(days=365),
+        )
+        treatment_dates = generate_treatment_dates(
+            treatment_start_date,
+            total=30,
+            holidays=holidays,
+        )
+        if len(treatment_dates) != 30 or treatment_dates[0] != treatment_start_date:
+            treatment_dates = None
+        else:
+            cancelled_treatment_dates = list(
+                TreatmentSession.objects.filter(
+                    treatment_course=locked_course,
+                    status="skipped",
+                    session_date__in=treatment_dates,
+                ).values_list("session_date", flat=True)
+            )
     reservation = create_or_replace_rtms_treatment_reservation(
         treatment_course=locked_course,
         admission_date=admission_date,
         first_treatment_date=treatment_start_date,
+        treatment_dates=treatment_dates,
+        cancelled_treatment_dates=cancelled_treatment_dates,
         reservation_status="provisional" if waitlist_entry is not None else None,
         waitlist_entry=waitlist_entry,
         user=user,
