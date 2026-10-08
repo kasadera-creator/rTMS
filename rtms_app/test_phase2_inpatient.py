@@ -2373,6 +2373,8 @@ class Phase2InpatientTests(TestCase):
         self.assertContains(response, "data-admission-date")
         self.assertContains(response, 'name="action" value="save_calendar_course"')
         self.assertContains(response, 'name="waitlist_entry_id"')
+        self.assertContains(response, 'type="date" name="admission_date"')
+        self.assertContains(response, 'type="date" name="first_treatment_date"')
         self.assertContains(response, 'aria-pressed="false" disabled aria-disabled="true"')
         self.assertNotContains(response, 'id="reservationModal"')
         self.assertEqual(response.content.count(b">10/5\xe9\x80\xb1</span>"), 1)

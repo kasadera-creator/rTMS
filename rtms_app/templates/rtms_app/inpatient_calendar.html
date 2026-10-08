@@ -58,8 +58,6 @@
             <input type="hidden" name="planned_treatment_sessions" value="30">
             <input type="hidden" name="treatment_course_id" id="bookingCourseId" value="{{ selected_booking_course_id }}">
             <input type="hidden" name="waitlist_entry_id" id="bookingWaitlistId" value="{{ selected_booking_waitlist_id }}">
-            {{ calendar_form.admission_date.as_hidden }}
-            {{ calendar_form.first_treatment_date.as_hidden }}
             <div class="calendar-scheduling-panel__header">
               <div>
                 <h2 class="h6 mb-1" id="bookingModeTitle" aria-live="polite">日程設定中</h2>
@@ -71,8 +69,8 @@
             <p class="small text-muted mt-2 mb-0" id="bookingInstruction">上のカレンダーから希望する開始週を選択してください。</p>
             <dl class="booking-candidate mt-3 mb-0" id="bookingCandidate" hidden>
               <div><dt>選択した開始週</dt><dd id="bookingSelectedWeek"></dd></div>
-              <div><dt>入院日</dt><dd id="bookingAdmissionDate"></dd></div>
-              <div><dt>初回治療日</dt><dd id="bookingFirstTreatmentDate"></dd></div>
+              <div><dt><label for="{{ calendar_form.admission_date.id_for_label }}">入院日</label></dt><dd>{{ calendar_form.admission_date }}</dd></div>
+              <div><dt><label for="{{ calendar_form.first_treatment_date.id_for_label }}">初回治療日</label></dt><dd>{{ calendar_form.first_treatment_date }}</dd></div>
               <div><dt>治療終了予定日</dt><dd id="bookingTreatmentEndDate">preview確認中</dd></div>
             </dl>
             <div class="booking-preview mt-3" id="bookingPreview" aria-live="polite"><div class="text-muted">開始週を選択すると、30回分の枠を確認します。</div></div>
@@ -104,8 +102,6 @@
   const instruction = document.getElementById('bookingInstruction');
   const candidate = document.getElementById('bookingCandidate');
   const selectedWeek = document.getElementById('bookingSelectedWeek');
-  const displayedAdmissionDate = document.getElementById('bookingAdmissionDate');
-  const displayedFirstTreatmentDate = document.getElementById('bookingFirstTreatmentDate');
   const displayedEndDate = document.getElementById('bookingTreatmentEndDate');
   const preview = document.getElementById('bookingPreview');
   const submitButton = document.getElementById('reservationSubmit');
@@ -146,14 +142,15 @@
   }
 
   async function refreshPreview() {
+    const admissionDate = admissionInput.value;
     const firstDate = firstDateInput.value;
     const courseId = courseInput.value;
     const requestId = ++previewRequest;
     displayedEndDate.textContent = 'preview確認中';
     submitButton.disabled = true;
-    if (!courseId || !firstDate) {
+    if (!courseId || !admissionDate || !firstDate || !admissionInput.validity.valid || !firstDateInput.validity.valid) {
       displayedEndDate.textContent = '未選択';
-      showPreviewMessage('開始週を選択すると、30回分の枠を確認します。');
+      showPreviewMessage('入院日と初回治療日を入力すると、30回分の枠を確認します。');
       return;
     }
     showPreviewMessage('30回分の枠を確認しています...');
@@ -223,8 +220,6 @@
     selectedWeek.textContent = `${Number(month)}/${Number(day)}週`;
     admissionInput.value = button.dataset.admissionDate;
     firstDateInput.value = button.dataset.firstTreatmentDate;
-    displayedAdmissionDate.textContent = displayDate(admissionInput.value);
-    displayedFirstTreatmentDate.textContent = displayDate(firstDateInput.value);
     displayedEndDate.textContent = 'preview確認中';
     candidate.hidden = false;
     clearButton.hidden = false;
@@ -254,14 +249,21 @@
       preferredNoteInput.value = button.dataset.preferredStartNote || '';
       clearCandidate();
     }
-    instruction.textContent = '希望する開始週の「週別rTMS新規開始可能枠」を選択してください。';
+    instruction.textContent = '上のカレンダーから希望する開始週を選択してください。';
     setWeekSelectionActive(true);
     if (preserveForm && firstDateInput.value) {
       const savedSlot = weekButtons.find((button) => button.dataset.firstTreatmentDate === firstDateInput.value);
-      if (savedSlot) selectWeek(savedSlot);
+      if (savedSlot) {
+        selectedSlot = savedSlot;
+        selectedSlot.classList.add('timeline-week-cell--selected');
+        selectedSlot.setAttribute('aria-pressed', 'true');
+        const [, month, day] = savedSlot.dataset.weekStart.split('-');
+        selectedWeek.textContent = `${Number(month)}/${Number(day)}週`;
+        candidate.hidden = false;
+        clearButton.hidden = false;
+        refreshPreview();
+      }
       else {
-        displayedAdmissionDate.textContent = displayDate(admissionInput.value);
-        displayedFirstTreatmentDate.textContent = displayDate(firstDateInput.value);
         candidate.hidden = false;
         clearButton.hidden = false;
         refreshPreview();
@@ -278,9 +280,11 @@
   weekButtons.forEach((button) => {
     button.addEventListener('click', () => selectWeek(button));
   });
+  admissionInput.addEventListener('change', refreshPreview);
+  firstDateInput.addEventListener('change', refreshPreview);
   clearButton.addEventListener('click', () => {
     clearCandidate();
-    instruction.textContent = '希望する開始週の「週別rTMS新規開始可能枠」を選択してください。';
+    instruction.textContent = '上のカレンダーから希望する開始週を選択してください。';
   });
   cancelButton.addEventListener('click', () => {
     clearCandidate();
