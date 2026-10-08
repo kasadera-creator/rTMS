@@ -307,6 +307,12 @@
   color: #536572;
 }
 
+.schedule-status--provisional {
+  border-color: #d59b52;
+  background: #fff3df;
+  color: #744917;
+}
+
 .booking-date-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1022,6 +1028,12 @@
   border-left: 4px solid #168f83;
   border-radius: 6px;
   background: #f8fafb;
+}
+
+.timeline-board > .calendar-scheduling-panel {
+  box-sizing: border-box;
+  width: min(72rem, calc(100vw - 3rem));
+  max-width: calc(100vw - 3rem);
 }
 
 .calendar-scheduling-panel__header,

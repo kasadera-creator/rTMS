@@ -167,6 +167,16 @@ def inpatient_calendar_view(request):
         "pk",
     )
     waitlist_entries = list(waitlist_entries)
+    provisional_entries_by_course = {
+        entry.treatment_course_id: entry
+        for entry in RtmSWaitlistEntry.objects.filter(
+            status="provisional",
+        ).select_related("treatment_course__patient")
+    }
+    for row in context["treatment_calendar_rows"]:
+        row["provisional_waitlist_entry"] = provisional_entries_by_course.get(
+            row["treatment_course_id"],
+        )
     range_query = request.GET.copy()
     range_query["week_start"] = (range_start - timedelta(weeks=1)).isoformat()
     previous_week_url = f"?{urlencode(range_query, doseq=True)}"

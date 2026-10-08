@@ -894,6 +894,10 @@ class RtmsTreatmentReservationTests(TestCase):
 
     def test_calendar_adjustment_reflows_planned_sessions_and_preserves_history(self):
         course = self.make_course()
+        entry = RtmSWaitlistEntry.objects.create(
+            treatment_course=course,
+            status="provisional",
+        )
         other_course = TreatmentCourse.objects.create(
             patient=course.patient,
             course_number=2,
@@ -932,18 +936,21 @@ class RtmsTreatmentReservationTests(TestCase):
             admission_date=date(2026, 10, 12),
             treatment_start_date=date(2026, 10, 13),
             is_all_case_survey=False,
+            waitlist_entry=entry,
         )
 
         planned_session.refresh_from_db()
         done_session.refresh_from_db()
         skipped_session.refresh_from_db()
         other_session.refresh_from_db()
+        entry.refresh_from_db()
         self.assertEqual(planned_session.session_date, date(2026, 10, 13))
         self.assertEqual(done_session.session_date, date(2026, 10, 6))
         self.assertEqual(done_session.status, "done")
         self.assertEqual(skipped_session.session_date, date(2026, 10, 15))
         self.assertEqual(skipped_session.status, "skipped")
         self.assertEqual(other_session.session_date, date(2026, 10, 5))
+        self.assertEqual(entry.status, "provisional")
         self.assertEqual(
             RtmSTreatmentReservation.objects.get(
                 treatment_course=course,

@@ -2367,7 +2367,7 @@ class Phase2InpatientTests(TestCase):
         self.assertContains(response, "data-booking-open")
         self.assertContains(response, 'data-patient-name="Phase Two"')
         self.assertContains(response, 'data-course-number="1"')
-        self.assertContains(response, "row.after(panel)")
+        self.assertContains(response, "(row || courseGroup).after(panel)")
         self.assertContains(response, "waitlist-compact-entry--active")
         self.assertContains(response, "data-first-treatment-date")
         self.assertContains(response, "data-admission-date")
@@ -2379,6 +2379,52 @@ class Phase2InpatientTests(TestCase):
         self.assertNotContains(response, 'id="reservationModal"')
         self.assertEqual(response.content.count(b">10/5\xe9\x80\xb1</span>"), 1)
         self.assertContains(response, "上のカレンダーから希望する開始週を選択してください")
+
+    def test_provisional_course_has_gantt_edit_action_only(self):
+        provisional = RtmSWaitlistEntry.objects.create(
+            treatment_course=self.course_one,
+            status="provisional",
+        )
+        waiting = RtmSWaitlistEntry.objects.create(
+            treatment_course=self.course_two,
+            status="waiting",
+        )
+        scheduled_course = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=3,
+            admission_date=date(2026, 10, 2),
+            first_treatment_date=date(2026, 10, 5),
+        )
+        RtmSWaitlistEntry.objects.create(
+            treatment_course=scheduled_course,
+            status="scheduled",
+        )
+        self.course_one.admission_date = date(2026, 10, 2)
+        self.course_one.first_treatment_date = date(2026, 10, 5)
+        self.course_one.save(update_fields=["admission_date", "first_treatment_date", "updated_at"])
+        self.course_two.admission_date = date(2026, 10, 2)
+        self.course_two.first_treatment_date = date(2026, 10, 5)
+        self.course_two.save(update_fields=["admission_date", "first_treatment_date", "updated_at"])
+
+        response = self.client.get(
+            reverse("rtms_app:inpatient_calendar"),
+            {"week_start": "2026-10-05"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        rows = {
+            row["treatment_course_id"]: row
+            for row in response.context["treatment_calendar_rows"]
+        }
+        self.assertEqual(rows[self.course_one.pk]["provisional_waitlist_entry"], provisional)
+        self.assertIsNone(rows[self.course_two.pk]["provisional_waitlist_entry"])
+        self.assertIsNone(rows[scheduled_course.pk]["provisional_waitlist_entry"])
+        self.assertContains(response, "日程調整中")
+        self.assertEqual(response.content.count(b"data-provisional-edit"), 1)
+        self.assertContains(response, 'data-waitlist-id="%s"' % provisional.pk)
+        self.assertContains(response, 'data-admission-date="2026-10-02"')
+        self.assertContains(response, 'data-first-treatment-date="2026-10-05"')
+        self.assertEqual(response.context["waitlist_entries"], [provisional, waiting])
 
     def test_first_visit_week_selection_remains_enabled(self):
         response = self.client.get(
