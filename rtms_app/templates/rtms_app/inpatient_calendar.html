@@ -23,41 +23,10 @@
     </div>
   </header>
 
-  <form method="post" id="reservationForm" class="calendar-scheduling-panel mb-3" data-preview-url="{{ range_preview_url }}" data-reopen-mode="{% if calendar_form.errors %}true{% else %}false{% endif %}" data-selected-course-id="{{ selected_booking_course_id }}" data-selected-waitlist-id="{{ selected_booking_waitlist_id }}"{% if not calendar_form.errors %} hidden{% endif %}>
-    {% csrf_token %}
-    <input type="hidden" name="action" value="save_calendar_course">
-    <input type="hidden" name="planned_treatment_sessions" value="30">
-    <input type="hidden" name="treatment_course_id" id="bookingCourseId" value="{{ selected_booking_course_id }}">
-    <input type="hidden" name="waitlist_entry_id" id="bookingWaitlistId" value="{{ selected_booking_waitlist_id }}">
-    {{ calendar_form.admission_date.as_hidden }}
-    {{ calendar_form.first_treatment_date.as_hidden }}
-    <div class="calendar-scheduling-panel__header">
-      <div>
-        <h2 class="h6 mb-1" id="bookingModeTitle" aria-live="polite">日程設定中</h2>
-        <strong id="bookingPatientCourse"></strong>
-      </div>
-      <button type="button" class="btn btn-outline-secondary btn-sm" id="bookingCancel">キャンセル</button>
-    </div>
-    {% if calendar_form.errors %}<div class="alert alert-danger mt-3 mb-0" role="alert">{{ calendar_form.non_field_errors }}{% for field in calendar_form %}{% for error in field.errors %}<div>{{ field.label }}: {{ error }}</div>{% endfor %}{% endfor %}</div>{% endif %}
-    <p class="small text-muted mt-2 mb-0" id="bookingInstruction">希望する開始週の「週別rTMS新規開始可能枠」を選択してください。</p>
-    <dl class="booking-candidate mt-3 mb-0" id="bookingCandidate" hidden>
-      <div><dt>選択した開始週</dt><dd id="bookingSelectedWeek"></dd></div>
-      <div><dt>入院日</dt><dd id="bookingAdmissionDate"></dd></div>
-      <div><dt>初回治療日</dt><dd id="bookingFirstTreatmentDate"></dd></div>
-      <div><dt>治療終了予定日</dt><dd id="bookingTreatmentEndDate">preview確認中</dd></div>
-    </dl>
-    <div class="booking-preview mt-3" id="bookingPreview" aria-live="polite"><div class="text-muted">開始週を選択すると、30回分の枠を確認します。</div></div>
-    <details class="mt-3"><summary>追加情報</summary><div class="booking-flags mt-2"><label>{{ calendar_form.is_all_case_survey }} 全例調査対象</label></div><div class="mt-2"><label class="form-label" for="{{ calendar_form.preferred_start_note.id_for_label }}">待機メモ</label>{{ calendar_form.preferred_start_note }}</div></details>
-    <div class="calendar-scheduling-panel__actions mt-3">
-      <button type="button" class="btn btn-outline-secondary btn-sm" id="bookingClear" hidden>予定をクリア</button>
-      <button type="submit" class="btn btn-primary btn-sm" id="reservationSubmit" disabled><i class="fas fa-calendar-plus me-1" aria-hidden="true"></i>予定を登録</button>
-    </div>
-  </form>
-
   <section class="inpatient-timeline app-card mb-4" aria-labelledby="timeline-heading">
     <div class="app-card__body">
       <h2 id="timeline-heading" class="visually-hidden">患者ガントチャート</h2>
-      {% include "rtms_app/partials/inpatient_timeline_board.html" with enable_week_selection=True week_selection_gated=True week_selection_active=False show_patient_links=True %}
+      {% include "rtms_app/partials/inpatient_timeline_board.html" with enable_week_selection=True week_selection_gated=True week_selection_active=False hide_capacity_week_labels=True show_patient_links=True %}
       <div class="small text-muted mt-2" aria-label="予定と確定の説明">
         <div>予定：入院・rTMSの日程が決まっている状態です。まだ実施済みとは限りません。</div>
         <div>確定（実施済）：入院手続きが完了した状態です。30回の治療完了を意味するものではありません。</div>
@@ -73,13 +42,47 @@
     <div class="app-card__body pt-0">
       <div class="waitlist-compact-list">
         {% for entry in waitlist_entries %}
-          <div class="waitlist-compact-row">
-            <strong>{{ entry.treatment_course.patient.name }} <span class="text-muted">Course #{{ entry.treatment_course.course_number }}</span></strong>
-            <span>希望: {{ entry.preferred_start_note|default:"未指定" }}</span>
-            {% if entry.comment %}<span class="text-muted">{{ entry.comment }}</span>{% endif %}
-            {% if entry.status == 'requested' or entry.status == 'waiting' or entry.status == 'provisional' %}<button type="button" class="btn btn-outline-primary btn-sm" aria-label="日程設定: {{ entry.treatment_course.patient.name }} / Course #{{ entry.treatment_course.course_number }}" data-booking-open data-course-id="{{ entry.treatment_course_id }}" data-course-number="{{ entry.treatment_course.course_number }}" data-patient-name="{{ entry.treatment_course.patient.name }}" data-waitlist-id="{{ entry.pk }}" data-preferred-start-note="{{ entry.preferred_start_note }}" data-is-all-case-survey="{{ entry.treatment_course.is_all_case_survey|yesno:'true,false' }}">日程設定</button>{% endif %}
+          <div class="waitlist-compact-entry">
+            <div class="waitlist-compact-row">
+              <strong>{{ entry.treatment_course.patient.name }} <span class="text-muted">Course #{{ entry.treatment_course.course_number }}</span></strong>
+              <span>希望: {{ entry.preferred_start_note|default:"未指定" }}</span>
+              {% if entry.comment %}<span class="text-muted">{{ entry.comment }}</span>{% endif %}
+              {% if entry.status == 'requested' or entry.status == 'waiting' or entry.status == 'provisional' %}<button type="button" class="btn btn-outline-primary btn-sm" aria-label="日程設定: {{ entry.treatment_course.patient.name }} / Course #{{ entry.treatment_course.course_number }}" aria-controls="reservationForm" aria-expanded="false" data-booking-open data-idle-label="日程設定" data-course-id="{{ entry.treatment_course_id }}" data-course-number="{{ entry.treatment_course.course_number }}" data-patient-name="{{ entry.treatment_course.patient.name }}" data-waitlist-id="{{ entry.pk }}" data-preferred-start-note="{{ entry.preferred_start_note }}" data-is-all-case-survey="{{ entry.treatment_course.is_all_case_survey|yesno:'true,false' }}">日程設定</button>{% endif %}
+            </div>
           </div>
         {% empty %}<div class="text-center text-muted py-3">現在、rTMS待機者はいません。</div>{% endfor %}
+        <div id="bookingPanelMount" hidden>
+          <form method="post" id="reservationForm" class="calendar-scheduling-panel mb-3" data-preview-url="{{ range_preview_url }}" data-reopen-mode="{% if calendar_form.errors %}true{% else %}false{% endif %}" data-selected-course-id="{{ selected_booking_course_id }}" data-selected-waitlist-id="{{ selected_booking_waitlist_id }}"{% if not calendar_form.errors %} hidden{% endif %}>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_calendar_course">
+            <input type="hidden" name="planned_treatment_sessions" value="30">
+            <input type="hidden" name="treatment_course_id" id="bookingCourseId" value="{{ selected_booking_course_id }}">
+            <input type="hidden" name="waitlist_entry_id" id="bookingWaitlistId" value="{{ selected_booking_waitlist_id }}">
+            {{ calendar_form.admission_date.as_hidden }}
+            {{ calendar_form.first_treatment_date.as_hidden }}
+            <div class="calendar-scheduling-panel__header">
+              <div>
+                <h2 class="h6 mb-1" id="bookingModeTitle" aria-live="polite">日程設定中</h2>
+                <strong id="bookingPatientCourse"></strong>
+              </div>
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="bookingCancel">キャンセル</button>
+            </div>
+            {% if calendar_form.errors %}<div class="alert alert-danger mt-3 mb-0" role="alert">{{ calendar_form.non_field_errors }}{% for field in calendar_form %}{% for error in field.errors %}<div>{{ field.label }}: {{ error }}</div>{% endfor %}{% endfor %}</div>{% endif %}
+            <p class="small text-muted mt-2 mb-0" id="bookingInstruction">上のカレンダーから希望する開始週を選択してください。</p>
+            <dl class="booking-candidate mt-3 mb-0" id="bookingCandidate" hidden>
+              <div><dt>選択した開始週</dt><dd id="bookingSelectedWeek"></dd></div>
+              <div><dt>入院日</dt><dd id="bookingAdmissionDate"></dd></div>
+              <div><dt>初回治療日</dt><dd id="bookingFirstTreatmentDate"></dd></div>
+              <div><dt>治療終了予定日</dt><dd id="bookingTreatmentEndDate">preview確認中</dd></div>
+            </dl>
+            <div class="booking-preview mt-3" id="bookingPreview" aria-live="polite"><div class="text-muted">開始週を選択すると、30回分の枠を確認します。</div></div>
+            <details class="mt-3"><summary>追加情報</summary><div class="booking-flags mt-2"><label>{{ calendar_form.is_all_case_survey }} 全例調査対象</label></div><div class="mt-2"><label class="form-label" for="{{ calendar_form.preferred_start_note.id_for_label }}">待機メモ</label>{{ calendar_form.preferred_start_note }}</div></details>
+            <div class="calendar-scheduling-panel__actions mt-3">
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="bookingClear" hidden>予定をクリア</button>
+              <button type="submit" class="btn btn-primary btn-sm" id="reservationSubmit" disabled><i class="fas fa-calendar-plus me-1" aria-hidden="true"></i>予定を登録</button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   </section>
@@ -112,6 +115,7 @@
   const weekButtons = [...timeline.querySelectorAll('.timeline-week-cell--selectable')];
   const openButtons = [...document.querySelectorAll('[data-booking-open]')];
   let activeTrigger = null;
+  let activeEntry = null;
   let selectedSlot = null;
   let previewRequest = 0;
 
@@ -129,6 +133,7 @@
     });
     openButtons.forEach((button) => {
       button.disabled = active && button !== activeTrigger;
+      button.setAttribute('aria-expanded', String(active && button === activeTrigger));
     });
   }
 
@@ -228,7 +233,16 @@
   }
 
   function startScheduling(button, preserveForm = false) {
+    const row = button.closest('.waitlist-compact-row');
+    const entry = row?.parentElement;
+    if (!row || !entry) return;
+    activeEntry?.classList.remove('waitlist-compact-entry--active');
+    activeEntry = entry;
+    activeEntry.classList.add('waitlist-compact-entry--active');
+    row.after(panel);
     activeTrigger = button;
+    button.textContent = '日程設定中';
+    button.setAttribute('aria-label', `日程設定中: ${button.dataset.patientName} / Course #${button.dataset.courseNumber}`);
     panel.hidden = false;
     patientCourse.textContent = `${button.dataset.patientName} / Course #${button.dataset.courseNumber}`;
     if (!preserveForm) {
@@ -272,6 +286,12 @@
     clearCandidate();
     setWeekSelectionActive(false);
     panel.hidden = true;
+    activeEntry?.classList.remove('waitlist-compact-entry--active');
+    activeEntry = null;
+    if (activeTrigger) {
+      activeTrigger.textContent = activeTrigger.dataset.idleLabel;
+      activeTrigger.setAttribute('aria-label', `日程設定: ${activeTrigger.dataset.patientName} / Course #${activeTrigger.dataset.courseNumber}`);
+    }
     activeTrigger?.focus();
     activeTrigger = null;
   });

@@ -552,6 +552,14 @@
   gap: 0.4rem 1rem;
 }
 
+.waitlist-compact-entry {
+  min-width: 0;
+}
+
+.waitlist-compact-entry--active {
+  grid-column: 1 / -1;
+}
+
 .waitlist-compact-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

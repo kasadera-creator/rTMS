@@ -2363,11 +2363,20 @@ class Phase2InpatientTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "calendar-scheduling-panel")
+        self.assertContains(response, 'id="bookingPanelMount"')
         self.assertContains(response, "data-booking-open")
+        self.assertContains(response, 'data-patient-name="Phase Two"')
+        self.assertContains(response, 'data-course-number="1"')
+        self.assertContains(response, "row.after(panel)")
+        self.assertContains(response, "waitlist-compact-entry--active")
         self.assertContains(response, "data-first-treatment-date")
         self.assertContains(response, "data-admission-date")
+        self.assertContains(response, 'name="action" value="save_calendar_course"')
+        self.assertContains(response, 'name="waitlist_entry_id"')
         self.assertContains(response, 'aria-pressed="false" disabled aria-disabled="true"')
         self.assertNotContains(response, 'id="reservationModal"')
+        self.assertEqual(response.content.count(b">10/5\xe9\x80\xb1</span>"), 1)
+        self.assertContains(response, "上のカレンダーから希望する開始週を選択してください")
 
     def test_first_visit_week_selection_remains_enabled(self):
         response = self.client.get(
@@ -2378,6 +2387,7 @@ class Phase2InpatientTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "data-first-treatment-date")
         self.assertNotContains(response, 'aria-pressed="false" disabled aria-disabled="true"')
+        self.assertGreaterEqual(response.content.count(b">10/5\xe9\x80\xb1</span>"), 2)
 
     def test_weekly_summary_counts_courses_not_sessions(self):
         for session_date in (date(2026, 9, 21), date(2026, 9, 23)):
