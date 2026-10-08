@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 from threading import Barrier, Event, Thread
 from types import SimpleNamespace
 import os
+import re
 import sqlite3
 import tempfile
 from unittest.mock import patch
@@ -2193,8 +2194,10 @@ class Phase2InpatientTests(TestCase):
         self.assertContains(response, "退院調整後")
         self.assertContains(response, "日程設定")
         self.assertNotContains(response, "新規予約")
-        self.assertContains(response, 'id="reservationModal"')
-        self.assertContains(response, 'data-booking-open data-course-id=')
+        self.assertContains(response, 'id="reservationForm"')
+        self.assertContains(response, 'id="bookingPanelMount"')
+        self.assertContains(response, 'data-booking-open data-idle-label="日程設定"')
+        self.assertContains(response, 'name="action" value="save_calendar_course"')
 
         response = self.client.post(
             reverse("rtms_app:inpatient_calendar"),
@@ -2391,13 +2394,20 @@ class Phase2InpatientTests(TestCase):
         )
         scheduled_course = TreatmentCourse.objects.create(
             patient=self.patient,
-            course_number=3,
+            course_number=4,
             admission_date=date(2026, 10, 2),
             first_treatment_date=date(2026, 10, 5),
         )
         RtmSWaitlistEntry.objects.create(
             treatment_course=scheduled_course,
             status="scheduled",
+        )
+        requested = RtmSWaitlistEntry.objects.create(
+            treatment_course=TreatmentCourse.objects.create(
+                patient=self.patient,
+                course_number=3,
+            ),
+            status="requested",
         )
         self.course_one.admission_date = date(2026, 10, 2)
         self.course_one.first_treatment_date = date(2026, 10, 5)
@@ -2420,11 +2430,58 @@ class Phase2InpatientTests(TestCase):
         self.assertIsNone(rows[self.course_two.pk]["provisional_waitlist_entry"])
         self.assertIsNone(rows[scheduled_course.pk]["provisional_waitlist_entry"])
         self.assertContains(response, "日程調整中")
-        self.assertEqual(response.content.count(b"data-provisional-edit"), 1)
+        provisional_actions = re.findall(
+            rb"<button\b[^>]*\bdata-provisional-edit(?:\s|=|>)[^>]*>",
+            response.content,
+            flags=re.DOTALL,
+        )
+        self.assertEqual(len(provisional_actions), 1)
         self.assertContains(response, 'data-waitlist-id="%s"' % provisional.pk)
         self.assertContains(response, 'data-admission-date="2026-10-02"')
         self.assertContains(response, 'data-first-treatment-date="2026-10-05"')
-        self.assertEqual(response.context["waitlist_entries"], [provisional, waiting])
+        self.assertCountEqual(response.context["waitlist_entries"], [waiting, requested])
+        self.assertEqual(response.context["waitlist_display_count"], 2)
+
+        management_response = self.client.get(reverse("rtms_app:inpatient_waitlist"))
+        self.assertCountEqual(management_response.context["entries"], [waiting, requested])
+
+    def test_waitlist_display_filters_provisional_by_course(self):
+        for course in (self.course_one, self.course_two):
+            course.admission_date = date(2026, 10, 2)
+            course.first_treatment_date = date(2026, 10, 5)
+            course.save(update_fields=["admission_date", "first_treatment_date", "updated_at"])
+        waiting = RtmSWaitlistEntry.objects.create(
+            treatment_course=self.course_one,
+            status="waiting",
+        )
+        provisional = RtmSWaitlistEntry.objects.create(
+            treatment_course=self.course_two,
+            status="provisional",
+        )
+
+        response = self.client.get(
+            reverse("rtms_app:inpatient_calendar"),
+            {"week_start": "2026-10-05"},
+        )
+
+        self.assertCountEqual(response.context["waitlist_entries"], [waiting])
+        self.assertEqual(response.context["waitlist_display_count"], 1)
+        rows = {
+            row["treatment_course_id"]: row
+            for row in response.context["treatment_calendar_rows"]
+        }
+        self.assertIsNone(rows[self.course_one.pk]["provisional_waitlist_entry"])
+        self.assertEqual(rows[self.course_two.pk]["provisional_waitlist_entry"], provisional)
+        provisional_actions = re.findall(
+            rb"<button\b[^>]*\bdata-provisional-edit(?:\s|=|>)[^>]*>",
+            response.content,
+            flags=re.DOTALL,
+        )
+        self.assertEqual(len(provisional_actions), 1)
+        self.assertIn(f'data-course-id="{self.course_two.pk}"'.encode(), provisional_actions[0])
+
+        management_response = self.client.get(reverse("rtms_app:inpatient_waitlist"))
+        self.assertEqual(list(management_response.context["entries"]), [waiting])
 
     def test_first_visit_week_selection_remains_enabled(self):
         response = self.client.get(
@@ -3102,11 +3159,11 @@ class Phase2InpatientTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             [entry.pk for entry in response.context["entries"]],
-            [earlier_entry.pk, later_entry.pk, provisional_entry.pk],
+            [earlier_entry.pk, later_entry.pk],
         )
         self.assertContains(response, "Course #1")
         self.assertContains(response, "Course #2")
-        self.assertContains(response, "Course #3")
+        self.assertNotContains(response, "Course #3")
         self.assertNotContains(response, "Course #4")
         self.assertNotContains(response, "キャンセル")
         self.assertNotContains(response, "撤回")

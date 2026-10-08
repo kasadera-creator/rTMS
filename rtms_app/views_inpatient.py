@@ -52,6 +52,8 @@ from rtms_app.services.waitlist import (
     register_waitlist_entry,
 )
 
+WAITLIST_DISPLAY_STATUSES = ("requested", "waiting")
+
 
 def _course_for_request(request, patient):
     requested = request.GET.get("course_number") or request.POST.get("course_number")
@@ -160,7 +162,7 @@ def inpatient_calendar_view(request):
     ))
     add_new_course_start_options(context["weeks"])
     waitlist_entries = RtmSWaitlistEntry.objects.filter(
-        status__in=ACTIVE_WAITLIST_STATUSES,
+        status__in=WAITLIST_DISPLAY_STATUSES,
     ).select_related("treatment_course__patient").order_by(
         "registered_at",
         "treatment_course__patient__name",
@@ -215,9 +217,7 @@ def inpatient_calendar_view(request):
         "next_range_url": next_range_url,
         "today_range_url": today_range_url,
         "range_preview_url": reverse("rtms_app:rtms_reservation_preview"),
-        "waitlist_active_count": RtmSWaitlistEntry.objects.filter(
-            status__in=ACTIVE_WAITLIST_STATUSES,
-        ).count(),
+        "waitlist_display_count": len(waitlist_entries),
         "selected_date": request.GET.get("selected_date"),
         "previous_month_url": month_url(previous_year, previous_month),
         "next_month_url": month_url(next_year, next_month),
@@ -535,7 +535,7 @@ def rtms_waitlist_view(request, patient_id):
 def rtms_waitlist_management_view(request):
     entries = list(
         RtmSWaitlistEntry.objects.filter(
-            status__in=ACTIVE_WAITLIST_STATUSES,
+            status__in=WAITLIST_DISPLAY_STATUSES,
         )
         .select_related("treatment_course__patient")
         .order_by("registered_at", "treatment_course__patient__name", "pk")
