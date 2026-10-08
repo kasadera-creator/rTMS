@@ -2351,17 +2351,33 @@ class Phase2InpatientTests(TestCase):
         self.assertEqual(weeks[0]["admission_date"], date(2026, 10, 2))
         self.assertFalse(weeks[1]["selectable"])
 
-    def test_waitlist_modal_contains_shared_week_capacity_picker(self):
+    def test_waitlist_calendar_selection_starts_with_disabled_capacity_slots(self):
+        RtmSWaitlistEntry.objects.create(
+            treatment_course=self.course_one,
+            status="waiting",
+        )
         response = self.client.get(
             reverse("rtms_app:inpatient_calendar"),
             {"week_start": "2026-10-05"},
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "booking-week-picker")
+        self.assertContains(response, "calendar-scheduling-panel")
+        self.assertContains(response, "data-booking-open")
         self.assertContains(response, "data-first-treatment-date")
         self.assertContains(response, "data-admission-date")
-        self.assertContains(response, "waitlistInput.value = ''")
+        self.assertContains(response, 'aria-pressed="false" disabled aria-disabled="true"')
+        self.assertNotContains(response, 'id="reservationModal"')
+
+    def test_first_visit_week_selection_remains_enabled(self):
+        response = self.client.get(
+            reverse("rtms_app:patient_first_visit", args=[self.patient.pk]),
+            {"course_number": 1},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-first-treatment-date")
+        self.assertNotContains(response, 'aria-pressed="false" disabled aria-disabled="true"')
 
     def test_weekly_summary_counts_courses_not_sessions(self):
         for session_date in (date(2026, 9, 21), date(2026, 9, 23)):

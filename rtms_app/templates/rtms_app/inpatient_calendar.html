@@ -23,10 +23,41 @@
     </div>
   </header>
 
+  <form method="post" id="reservationForm" class="calendar-scheduling-panel mb-3" data-preview-url="{{ range_preview_url }}" data-reopen-mode="{% if calendar_form.errors %}true{% else %}false{% endif %}" data-selected-course-id="{{ selected_booking_course_id }}" data-selected-waitlist-id="{{ selected_booking_waitlist_id }}"{% if not calendar_form.errors %} hidden{% endif %}>
+    {% csrf_token %}
+    <input type="hidden" name="action" value="save_calendar_course">
+    <input type="hidden" name="planned_treatment_sessions" value="30">
+    <input type="hidden" name="treatment_course_id" id="bookingCourseId" value="{{ selected_booking_course_id }}">
+    <input type="hidden" name="waitlist_entry_id" id="bookingWaitlistId" value="{{ selected_booking_waitlist_id }}">
+    {{ calendar_form.admission_date.as_hidden }}
+    {{ calendar_form.first_treatment_date.as_hidden }}
+    <div class="calendar-scheduling-panel__header">
+      <div>
+        <h2 class="h6 mb-1" id="bookingModeTitle" aria-live="polite">日程設定中</h2>
+        <strong id="bookingPatientCourse"></strong>
+      </div>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="bookingCancel">キャンセル</button>
+    </div>
+    {% if calendar_form.errors %}<div class="alert alert-danger mt-3 mb-0" role="alert">{{ calendar_form.non_field_errors }}{% for field in calendar_form %}{% for error in field.errors %}<div>{{ field.label }}: {{ error }}</div>{% endfor %}{% endfor %}</div>{% endif %}
+    <p class="small text-muted mt-2 mb-0" id="bookingInstruction">希望する開始週の「週別rTMS新規開始可能枠」を選択してください。</p>
+    <dl class="booking-candidate mt-3 mb-0" id="bookingCandidate" hidden>
+      <div><dt>選択した開始週</dt><dd id="bookingSelectedWeek"></dd></div>
+      <div><dt>入院日</dt><dd id="bookingAdmissionDate"></dd></div>
+      <div><dt>初回治療日</dt><dd id="bookingFirstTreatmentDate"></dd></div>
+      <div><dt>治療終了予定日</dt><dd id="bookingTreatmentEndDate">preview確認中</dd></div>
+    </dl>
+    <div class="booking-preview mt-3" id="bookingPreview" aria-live="polite"><div class="text-muted">開始週を選択すると、30回分の枠を確認します。</div></div>
+    <details class="mt-3"><summary>追加情報</summary><div class="booking-flags mt-2"><label>{{ calendar_form.is_all_case_survey }} 全例調査対象</label></div><div class="mt-2"><label class="form-label" for="{{ calendar_form.preferred_start_note.id_for_label }}">待機メモ</label>{{ calendar_form.preferred_start_note }}</div></details>
+    <div class="calendar-scheduling-panel__actions mt-3">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="bookingClear" hidden>予定をクリア</button>
+      <button type="submit" class="btn btn-primary btn-sm" id="reservationSubmit" disabled><i class="fas fa-calendar-plus me-1" aria-hidden="true"></i>予定を登録</button>
+    </div>
+  </form>
+
   <section class="inpatient-timeline app-card mb-4" aria-labelledby="timeline-heading">
     <div class="app-card__body">
       <h2 id="timeline-heading" class="visually-hidden">患者ガントチャート</h2>
-      {% include "rtms_app/partials/inpatient_timeline_board.html" with enable_week_selection=False show_patient_links=True %}
+      {% include "rtms_app/partials/inpatient_timeline_board.html" with enable_week_selection=True week_selection_gated=True week_selection_active=False show_patient_links=True %}
       <div class="small text-muted mt-2" aria-label="予定と確定の説明">
         <div>予定：入院・rTMSの日程が決まっている状態です。まだ実施済みとは限りません。</div>
         <div>確定（実施済）：入院手続きが完了した状態です。30回の治療完了を意味するものではありません。</div>
@@ -46,7 +77,7 @@
             <strong>{{ entry.treatment_course.patient.name }} <span class="text-muted">Course #{{ entry.treatment_course.course_number }}</span></strong>
             <span>希望: {{ entry.preferred_start_note|default:"未指定" }}</span>
             {% if entry.comment %}<span class="text-muted">{{ entry.comment }}</span>{% endif %}
-            {% if entry.status == 'requested' or entry.status == 'waiting' or entry.status == 'provisional' %}<button type="button" class="btn btn-outline-primary btn-sm" aria-label="日程設定: {{ entry.treatment_course.patient.name }}" data-booking-open data-course-id="{{ entry.treatment_course_id }}" data-waitlist-id="{{ entry.pk }}" data-admission-date="{{ entry.treatment_course.admission_date|date:'Y-m-d' }}" data-first-date="{{ entry.treatment_course.first_treatment_date|date:'Y-m-d' }}">日程設定</button>{% endif %}
+            {% if entry.status == 'requested' or entry.status == 'waiting' or entry.status == 'provisional' %}<button type="button" class="btn btn-outline-primary btn-sm" aria-label="日程設定: {{ entry.treatment_course.patient.name }} / Course #{{ entry.treatment_course.course_number }}" data-booking-open data-course-id="{{ entry.treatment_course_id }}" data-course-number="{{ entry.treatment_course.course_number }}" data-patient-name="{{ entry.treatment_course.patient.name }}" data-waitlist-id="{{ entry.pk }}" data-preferred-start-note="{{ entry.preferred_start_note }}" data-is-all-case-survey="{{ entry.treatment_course.is_all_case_survey|yesno:'true,false' }}">日程設定</button>{% endif %}
           </div>
         {% empty %}<div class="text-center text-muted py-3">現在、rTMS待機者はいません。</div>{% endfor %}
       </div>
@@ -54,45 +85,52 @@
   </section>
 </div>
 
-<div class="modal fade" id="reservationModal" tabindex="-1" aria-labelledby="reservationModalTitle" aria-hidden="true" data-preview-url="{{ range_preview_url }}">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
-    <form method="post" id="reservationForm">
-      {% csrf_token %}<input type="hidden" name="action" value="save_calendar_course"><input type="hidden" name="planned_treatment_sessions" value="30">
-      <div class="modal-header"><h2 class="modal-title h5" id="reservationModalTitle">rTMS日程設定</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button></div>
-      <div class="modal-body">
-        {% if calendar_form.errors %}<div class="alert alert-danger" role="alert">{{ calendar_form.non_field_errors }}{% for field in calendar_form %}{% for error in field.errors %}<div>{{ field.label }}: {{ error }}</div>{% endfor %}{% endfor %}</div>{% endif %}
-        <div class="mb-3"><label class="form-label" for="bookingCourseSelect">患者 / Course</label><select class="form-select" id="bookingCourseSelect" name="treatment_course_id" required><option value="">選択してください</option>{% for course in booking_courses %}<option value="{{ course.pk }}"{% if course.pk|stringformat:"s" == selected_booking_course_id|stringformat:"s" %} selected{% endif %}>{{ course.patient.name }} / ID {{ course.patient.card_id }} / Course #{{ course.course_number }}</option>{% endfor %}</select></div>
-        <input type="hidden" name="waitlist_entry_id" id="bookingWaitlistId" value="{% if selected_booking_waitlist_id %}{{ selected_booking_waitlist_id }}{% endif %}">
-        <div class="booking-date-grid">
-          <div><label class="form-label" for="id_admission_date">入院日</label>{{ calendar_form.admission_date }}</div>
-          <div><label class="form-label" for="id_first_treatment_date">初回治療日</label>{{ calendar_form.first_treatment_date }}</div>
-          <div><label class="form-label" for="treatmentEndDate">治療終了予定日</label><input class="form-control" id="treatmentEndDate" type="text" readonly aria-live="polite" placeholder="初回治療日から自動計算"></div>
-        </div>
-        <div class="booking-week-picker mt-3" aria-label="週別rTMS新規開始可能枠">
-          {% include "rtms_app/partials/inpatient_timeline_board.html" with enable_week_selection=True capacity_only=True show_patient_links=False %}
-        </div>
-        <div class="booking-preview mt-3" id="bookingPreview" aria-live="polite"><div class="text-muted">患者と初回治療日を選択すると、30回分の枠を確認します。</div></div>
-        <details class="mt-3"><summary>追加情報</summary><div class="booking-flags mt-2"><label>{{ calendar_form.is_all_case_survey }} 全例調査対象</label></div><div class="mt-2"><label class="form-label" for="{{ calendar_form.preferred_start_note.id_for_label }}">待機メモ</label>{{ calendar_form.preferred_start_note }}</div></details>
-      </div>
-      <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">戻る</button><button type="submit" class="btn btn-primary" id="reservationSubmit" disabled><i class="fas fa-calendar-plus me-1" aria-hidden="true"></i>予定を登録</button></div>
-    </form>
-  </div></div>
-</div>
 {% endblock %}
 {% block scripts %}
 <script>
 (() => {
-  const modalElement = document.getElementById('reservationModal');
   const form = document.getElementById('reservationForm');
-  const courseSelect = document.getElementById('bookingCourseSelect');
+  const courseInput = document.getElementById('bookingCourseId');
   const waitlistInput = document.getElementById('bookingWaitlistId');
   const admissionInput = document.getElementById('id_admission_date');
   const firstDateInput = document.getElementById('id_first_treatment_date');
-  const endDateInput = document.getElementById('treatmentEndDate');
+  const surveyInput = document.getElementById('id_is_all_case_survey');
+  const preferredNoteInput = document.getElementById('{{ calendar_form.preferred_start_note.id_for_label }}');
+  const panel = form;
+  const patientCourse = document.getElementById('bookingPatientCourse');
+  const instruction = document.getElementById('bookingInstruction');
+  const candidate = document.getElementById('bookingCandidate');
+  const selectedWeek = document.getElementById('bookingSelectedWeek');
+  const displayedAdmissionDate = document.getElementById('bookingAdmissionDate');
+  const displayedFirstTreatmentDate = document.getElementById('bookingFirstTreatmentDate');
+  const displayedEndDate = document.getElementById('bookingTreatmentEndDate');
   const preview = document.getElementById('bookingPreview');
   const submitButton = document.getElementById('reservationSubmit');
-  const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
-  let waitlistCourseId = '';
+  const clearButton = document.getElementById('bookingClear');
+  const cancelButton = document.getElementById('bookingCancel');
+  const timeline = document.querySelector('.inpatient-timeline');
+  const weekButtons = [...timeline.querySelectorAll('.timeline-week-cell--selectable')];
+  const openButtons = [...document.querySelectorAll('[data-booking-open]')];
+  let activeTrigger = null;
+  let selectedSlot = null;
+  let previewRequest = 0;
+
+  function displayDate(value) {
+    if (!value) return '';
+    const [year, month, day] = value.split('-');
+    return `${year}/${month}/${day}`;
+  }
+
+  function setWeekSelectionActive(active) {
+    timeline.dataset.weekSelectionActive = active ? 'true' : 'false';
+    weekButtons.forEach((button) => {
+      button.disabled = !active;
+      button.setAttribute('aria-disabled', String(!active));
+    });
+    openButtons.forEach((button) => {
+      button.disabled = active && button !== activeTrigger;
+    });
+  }
 
   function showPreviewMessage(message, kind = 'muted') {
     preview.replaceChildren();
@@ -104,24 +142,28 @@
 
   async function refreshPreview() {
     const firstDate = firstDateInput.value;
-    const courseId = courseSelect.value;
-    endDateInput.value = '';
+    const courseId = courseInput.value;
+    const requestId = ++previewRequest;
+    displayedEndDate.textContent = 'preview確認中';
     submitButton.disabled = true;
     if (!courseId || !firstDate) {
-      showPreviewMessage('患者と初回治療日を選択すると、30回分の枠を確認します。');
+      displayedEndDate.textContent = '未選択';
+      showPreviewMessage('開始週を選択すると、30回分の枠を確認します。');
       return;
     }
-    showPreviewMessage('30回分の枠を確認しています…');
+    showPreviewMessage('30回分の枠を確認しています...');
     const query = new URLSearchParams({treatment_course_id: courseId, first_treatment_date: firstDate});
     try {
-      const response = await fetch(`${modalElement.dataset.previewUrl}?${query}`, {headers: {'X-Requested-With': 'XMLHttpRequest'}});
+      const response = await fetch(`${form.dataset.previewUrl}?${query}`, {headers: {'X-Requested-With': 'XMLHttpRequest'}});
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '予約内容を確認できません。');
-      endDateInput.value = data.treatment_end_date;
+      if (requestId !== previewRequest) return;
+      if (data.treatment_count !== 30) throw new Error('30回分の予定を確認できません。');
+      displayedEndDate.textContent = displayDate(data.treatment_end_date);
       preview.replaceChildren();
       const summary = document.createElement('p');
       summary.className = 'mb-2';
-      summary.textContent = `${data.treatment_count}回 / 終了予定 ${data.treatment_end_date.replaceAll('-', '/')}`;
+      summary.textContent = `${data.treatment_count}回分の予定を確認しました。`;
       preview.append(summary);
       if (data.conflicts.length) {
         const warning = document.createElement('div');
@@ -145,43 +187,100 @@
         submitButton.disabled = false;
       }
     } catch (error) {
-      endDateInput.value = '';
+      if (requestId !== previewRequest) return;
+      displayedEndDate.textContent = '確認できません';
       showPreviewMessage(error.message, 'error');
     }
   }
 
-  document.querySelectorAll('[data-booking-open]').forEach((button) => {
-    button.addEventListener('click', () => {
-      courseSelect.value = button.dataset.courseId || '';
-      waitlistInput.value = button.dataset.waitlistId || '';
-      waitlistCourseId = courseSelect.value;
-      admissionInput.value = button.dataset.admissionDate || button.dataset.firstDate || '';
-      firstDateInput.value = button.dataset.firstDate || '';
-      modal.show();
-      refreshPreview();
-    });
-  });
-  courseSelect.addEventListener('change', () => {
-    if (courseSelect.value !== waitlistCourseId) {
-      waitlistInput.value = '';
-      waitlistCourseId = '';
+  function clearCandidate() {
+    previewRequest += 1;
+    selectedSlot?.classList.remove('timeline-week-cell--selected');
+    selectedSlot?.setAttribute('aria-pressed', 'false');
+    selectedSlot = null;
+    admissionInput.value = '';
+    firstDateInput.value = '';
+    candidate.hidden = true;
+    clearButton.hidden = true;
+    displayedEndDate.textContent = '未選択';
+    submitButton.disabled = true;
+    showPreviewMessage('開始週を選択すると、30回分の枠を確認します。');
+  }
+
+  function selectWeek(button) {
+    if (timeline.dataset.weekSelectionActive !== 'true' || button.disabled) return;
+    selectedSlot?.classList.remove('timeline-week-cell--selected');
+    selectedSlot?.setAttribute('aria-pressed', 'false');
+    selectedSlot = button;
+    selectedSlot.classList.add('timeline-week-cell--selected');
+    selectedSlot.setAttribute('aria-pressed', 'true');
+    const [, month, day] = button.dataset.weekStart.split('-');
+    selectedWeek.textContent = `${Number(month)}/${Number(day)}週`;
+    admissionInput.value = button.dataset.admissionDate;
+    firstDateInput.value = button.dataset.firstTreatmentDate;
+    displayedAdmissionDate.textContent = displayDate(admissionInput.value);
+    displayedFirstTreatmentDate.textContent = displayDate(firstDateInput.value);
+    displayedEndDate.textContent = 'preview確認中';
+    candidate.hidden = false;
+    clearButton.hidden = false;
+    instruction.textContent = '選択した週の日程候補を確認してください。';
+    refreshPreview();
+  }
+
+  function startScheduling(button, preserveForm = false) {
+    activeTrigger = button;
+    panel.hidden = false;
+    patientCourse.textContent = `${button.dataset.patientName} / Course #${button.dataset.courseNumber}`;
+    if (!preserveForm) {
+      courseInput.value = button.dataset.courseId;
+      waitlistInput.value = button.dataset.waitlistId;
+      admissionInput.value = '';
+      firstDateInput.value = '';
+      surveyInput.checked = button.dataset.isAllCaseSurvey === 'true';
+      preferredNoteInput.value = button.dataset.preferredStartNote || '';
+      clearCandidate();
     }
-    refreshPreview();
-  });
-  modalElement.querySelectorAll('[data-first-treatment-date]').forEach((button) => {
+    instruction.textContent = '希望する開始週の「週別rTMS新規開始可能枠」を選択してください。';
+    setWeekSelectionActive(true);
+    if (preserveForm && firstDateInput.value) {
+      const savedSlot = weekButtons.find((button) => button.dataset.firstTreatmentDate === firstDateInput.value);
+      if (savedSlot) selectWeek(savedSlot);
+      else {
+        displayedAdmissionDate.textContent = displayDate(admissionInput.value);
+        displayedFirstTreatmentDate.textContent = displayDate(firstDateInput.value);
+        candidate.hidden = false;
+        clearButton.hidden = false;
+        refreshPreview();
+      }
+    }
+    panel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  }
+
+  openButtons.forEach((button) => {
     button.addEventListener('click', () => {
-      admissionInput.value = button.dataset.admissionDate || '';
-      firstDateInput.value = button.dataset.firstTreatmentDate || '';
-      admissionInput.dispatchEvent(new Event('change', {bubbles: true}));
-      firstDateInput.dispatchEvent(new Event('change', {bubbles: true}));
+      startScheduling(button);
     });
   });
-  firstDateInput.addEventListener('change', refreshPreview);
-  admissionInput.addEventListener('change', () => {
-    if (firstDateInput.value && admissionInput.value > firstDateInput.value) firstDateInput.value = admissionInput.value;
-    refreshPreview();
+  weekButtons.forEach((button) => {
+    button.addEventListener('click', () => selectWeek(button));
   });
-  {% if calendar_form.errors %}modal.show(); refreshPreview();{% endif %}
+  clearButton.addEventListener('click', () => {
+    clearCandidate();
+    instruction.textContent = '希望する開始週の「週別rTMS新規開始可能枠」を選択してください。';
+  });
+  cancelButton.addEventListener('click', () => {
+    clearCandidate();
+    setWeekSelectionActive(false);
+    panel.hidden = true;
+    activeTrigger?.focus();
+    activeTrigger = null;
+  });
+
+  if (form.dataset.reopenMode === 'true') {
+    const savedWaitlistId = form.dataset.selectedWaitlistId;
+    const savedTrigger = openButtons.find((button) => button.dataset.waitlistId === savedWaitlistId);
+    if (savedTrigger) startScheduling(savedTrigger, true);
+  }
 })();
 </script>
 {% endblock %}

@@ -1008,15 +1008,58 @@
   font-size: 0;
 }
 
-.booking-week-picker .timeline-scroll {
-  --timeline-label-width: 9rem;
-  --timeline-week-width: 3.5rem;
+.calendar-scheduling-panel {
+  padding: 1rem;
+  border: 1px solid #b8c7d0;
+  border-left: 4px solid #168f83;
+  border-radius: 6px;
+  background: #f8fafb;
 }
 
-.page-inpatient-calendar .modal-backdrop {
-  z-index: 2050;
+.calendar-scheduling-panel__header,
+.calendar-scheduling-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
-.page-inpatient-calendar .modal {
-  z-index: 2060;
+.booking-candidate {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem 1rem;
+}
+
+.booking-candidate dt {
+  color: #536772;
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.booking-candidate dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-week-cell--selected {
+  position: relative;
+  z-index: 1;
+  background: #d9efeb;
+  box-shadow: inset 0 0 0 2px #168f83;
+}
+
+@media (max-width: 576px) {
+  .calendar-scheduling-panel {
+    padding: 0.75rem;
+  }
+
+  .booking-candidate {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .calendar-scheduling-panel__actions {
+    justify-content: flex-start;
+  }
 }

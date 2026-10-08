@@ -45,7 +45,7 @@
       <div class="timeline-week-track">
         {% for week in weeks %}
           {% if enable_week_selection and week.selectable %}
-            <button type="button" class="timeline-week-cell timeline-week-cell--capacity timeline-week-cell--selectable{% if week.is_current %} timeline-week--current{% endif %}" data-week-start="{{ week.start|date:'Y-m-d' }}" data-week-end="{{ week.end|date:'Y-m-d' }}" data-start-week="{{ week.start|date:'Y-m-d' }}" data-first-treatment-date="{{ week.first_treatment_date|date:'Y-m-d' }}" data-admission-date="{{ week.admission_date|date:'Y-m-d' }}" aria-label="{{ week.start|date:'n/j' }}週から治療開始、開始可能{{ week.new_course_start_capacity }}枠">
+            <button type="button" class="timeline-week-cell timeline-week-cell--capacity timeline-week-cell--selectable{% if week.is_current %} timeline-week--current{% endif %}" data-week-start="{{ week.start|date:'Y-m-d' }}" data-week-end="{{ week.end|date:'Y-m-d' }}" data-start-week="{{ week.start|date:'Y-m-d' }}" data-first-treatment-date="{{ week.first_treatment_date|date:'Y-m-d' }}" data-admission-date="{{ week.admission_date|date:'Y-m-d' }}" aria-label="{{ week.start|date:'n/j' }}週から治療開始、開始可能{{ week.new_course_start_capacity }}枠" aria-pressed="false"{% if week_selection_gated and not week_selection_active %} disabled aria-disabled="true"{% endif %}>
               <span>{{ week.start|date:"n/j" }}週</span>
               <strong>{{ week.new_course_start_capacity }}枠</strong>
             </button>
