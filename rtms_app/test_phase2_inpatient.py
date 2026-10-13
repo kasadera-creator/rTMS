@@ -17,7 +17,10 @@ from django.urls import reverse
 from django.utils import timezone as django_timezone
 
 from rtms_app.models import (
+    AuditLog,
     InpatientPlan,
+    MappingSchedule,
+    MappingSession,
     Patient,
     Assessment,
     AssessmentRecord,
@@ -39,6 +42,8 @@ from rtms_app.services.inpatient_planning import (
     ScheduleConfirmationBusyError,
     record_actual_admission,
     record_actual_discharge,
+    rollback_provisional_schedule,
+    update_calendar_course_adjustment,
 )
 from rtms_app.services.resource_capacity import (
     CapacityConflict,
@@ -84,6 +89,499 @@ class Phase2InpatientTests(TestCase):
         self.capacity = RtmSAdmissionCapacity.objects.create(
             capacity=3, valid_from=date(2026, 10, 1), valid_to=date(2026, 10, 31),
         )
+
+    def make_provisional_schedule(
+        self, course=None, *, private_room_planned=None,
+        is_all_case_survey=False, planned_treatment_sessions=30,
+    ):
+        course = course or self.course_one
+        RtmSTreatmentCapacity.objects.filter(is_active=True).update(capacity=100)
+        entry = RtmSWaitlistEntry.objects.create(
+            treatment_course=course,
+            status="waiting",
+            registered_by=self.user,
+        )
+        update_calendar_course_adjustment(
+            treatment_course=course,
+            admission_date=date(2026, 10, 2),
+            treatment_start_date=date(2026, 10, 5),
+            is_all_case_survey=is_all_case_survey,
+            private_room_planned=private_room_planned,
+            planned_treatment_sessions=planned_treatment_sessions,
+            waitlist_entry=entry,
+            user=self.user,
+        )
+        entry.refresh_from_db()
+        course.refresh_from_db()
+        return entry
+
+    def post_provisional_rollback(self, course, entry):
+        return self.client.post(
+            reverse("rtms_app:rollback_provisional_waitlist"),
+            {"course_id": str(course.pk), "waitlist_entry_id": str(entry.pk)},
+        )
+
+    def test_clean_provisional_can_return_to_waiting_and_reappear_in_waitlist(self):
+        self.course_one.is_all_case_survey = True
+        self.course_one.private_room_planned = True
+        self.course_one.planned_treatment_sessions = 18
+        self.course_one.save(update_fields=[
+            "is_all_case_survey", "private_room_planned",
+            "planned_treatment_sessions", "updated_at",
+        ])
+        entry = self.make_provisional_schedule(
+            private_room_planned=False,
+            is_all_case_survey=False,
+            planned_treatment_sessions=30,
+        )
+        reservation_ids = list(
+            RtmSTreatmentReservation.objects.filter(
+                treatment_course=self.course_one,
+            ).values_list("pk", flat=True)
+        )
+
+        response = self.client.get(
+            reverse("rtms_app:inpatient_calendar"),
+            {"week_start": "2026-10-05"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-rollback-open")
+        self.assertContains(response, "rollbackConfirmDialog")
+        self.assertContains(response, "治療実績は変更されません")
+
+        rollback_response = self.post_provisional_rollback(self.course_one, entry)
+
+        self.assertEqual(rollback_response.status_code, 302)
+        entry.refresh_from_db()
+        self.course_one.refresh_from_db()
+        plan = InpatientPlan.objects.get(treatment_course=self.course_one)
+        self.assertEqual(entry.status, "waiting")
+        self.assertIsNone(entry.inpatient_plan_id)
+        self.assertEqual(plan.status, "draft")
+        self.assertIsNone(plan.planned_admission_date)
+        self.assertIsNone(self.course_one.admission_date)
+        self.assertIsNone(self.course_one.first_treatment_date)
+        self.assertIsNone(self.course_one.mapping_date)
+        self.assertTrue(self.course_one.is_all_case_survey)
+        self.assertTrue(self.course_one.private_room_planned)
+        self.assertEqual(self.course_one.planned_treatment_sessions, 18)
+        reservations = RtmSTreatmentReservation.objects.filter(
+            treatment_course=self.course_one,
+        )
+        self.assertEqual(list(reservations.values_list("pk", flat=True)), reservation_ids)
+        self.assertFalse(reservations.exclude(status="cancelled").exists())
+        self.assertTrue(AuditLog.objects.filter(
+            target_model="RtmSWaitlistEntry",
+            target_pk=str(entry.pk),
+            meta__event="provisional_schedule_rollback",
+            meta__course_id=self.course_one.pk,
+            meta__inpatient_plan_id=plan.pk,
+        ).exists())
+
+        displayed = self.client.get(
+            reverse("rtms_app:inpatient_calendar"),
+            {"week_start": "2026-10-05"},
+        )
+        self.assertEqual(list(displayed.context["waitlist_entries"]), [entry])
+        self.assertEqual(
+            len(re.findall(rb"<button\b[^>]*\bdata-rollback-open(?:\s|=|>)", displayed.content)),
+            0,
+        )
+        self.assertEqual(displayed.context["treatment_calendar_rows"], [])
+
+    def test_rollback_requires_provisional_state_and_matching_course(self):
+        entry = self.make_provisional_schedule()
+        mismatch = self.post_provisional_rollback(self.course_two, entry)
+        self.assertEqual(mismatch.status_code, 302)
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, "provisional")
+
+        entry.status = "waiting"
+        entry.save(update_fields=["status"])
+        non_provisional = self.post_provisional_rollback(self.course_one, entry)
+        self.assertEqual(non_provisional.status_code, 302)
+        self.course_one.refresh_from_db()
+        self.assertEqual(self.course_one.first_treatment_date, date(2026, 10, 5))
+
+    def test_rollback_rejects_sessions_assignments_mapping_and_confirmed_reservations(self):
+        for blocker in ("session", "assignment", "mapping", "confirmed_reservation"):
+            with self.subTest(blocker=blocker):
+                course = TreatmentCourse.objects.create(
+                    patient=self.patient,
+                    course_number=10 + ("session", "assignment", "mapping", "confirmed_reservation").index(blocker),
+                )
+                entry = self.make_provisional_schedule(course)
+                plan = InpatientPlan.objects.get(treatment_course=course)
+                if blocker == "session":
+                    TreatmentSession.objects.create(
+                        patient=self.patient, treatment_course=course,
+                        course_number=course.course_number,
+                        session_date=date(2026, 10, 5), status="planned",
+                    )
+                elif blocker == "assignment":
+                    ResourceAssignment.objects.create(
+                        treatment_course=course, resource_pool=self.pool,
+                        planned_start_date=date(2026, 10, 2),
+                        planned_end_date=date(2026, 10, 10), status="planned",
+                    )
+                elif blocker == "mapping":
+                    MappingSession.objects.create(
+                        patient=self.patient, treatment_course=course,
+                        course_number=course.course_number, resting_mt=50,
+                    )
+                else:
+                    RtmSTreatmentReservation.objects.filter(
+                        treatment_course=course, sequence_number=1,
+                    ).update(status="confirmed")
+
+                response = self.post_provisional_rollback(course, entry)
+
+                self.assertEqual(response.status_code, 302)
+                entry.refresh_from_db()
+                course.refresh_from_db()
+                plan.refresh_from_db()
+                self.assertEqual(entry.status, "provisional")
+                self.assertEqual(plan.status, "provisional")
+                self.assertEqual(course.first_treatment_date, date(2026, 10, 5))
+
+    def test_rollback_rejects_course_dates_that_were_not_null_before_booking(self):
+        self.course_one.admission_date = date(2026, 9, 30)
+        self.course_one.mapping_date = date(2026, 10, 1)
+        self.course_one.save(update_fields=["admission_date", "mapping_date", "updated_at"])
+        entry = self.make_provisional_schedule()
+
+        response = self.post_provisional_rollback(self.course_one, entry)
+
+        self.assertEqual(response.status_code, 302)
+        entry.refresh_from_db()
+        self.course_one.refresh_from_db()
+        self.assertEqual(entry.status, "provisional")
+        self.assertEqual(self.course_one.admission_date, date(2026, 10, 2))
+        self.assertEqual(self.course_one.mapping_date, date(2026, 10, 1))
+
+    def test_rollback_rejects_provisional_rows_without_a_baseline_audit(self):
+        self.course_one.admission_date = date(2026, 10, 2)
+        self.course_one.first_treatment_date = date(2026, 10, 5)
+        self.course_one.save(update_fields=["admission_date", "first_treatment_date", "updated_at"])
+        plan = InpatientPlan.objects.create(
+            treatment_course=self.course_one,
+            status="provisional",
+            planned_admission_date=date(2026, 10, 2),
+        )
+        entry = RtmSWaitlistEntry.objects.create(
+            treatment_course=self.course_one,
+            status="provisional",
+            inpatient_plan=plan,
+        )
+
+        response = self.client.get(
+            reverse("rtms_app:inpatient_calendar"),
+            {"week_start": "2026-10-05"},
+        )
+        rollback_response = self.post_provisional_rollback(self.course_one, entry)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            len(re.findall(rb"<button\b[^>]*\bdata-rollback-open(?:\s|=|>)", response.content)),
+            0,
+        )
+        self.assertEqual(rollback_response.status_code, 302)
+        entry.refresh_from_db()
+        plan.refresh_from_db()
+        self.course_one.refresh_from_db()
+        self.assertEqual(entry.status, "provisional")
+        self.assertEqual(plan.status, "provisional")
+        self.assertEqual(self.course_one.first_treatment_date, date(2026, 10, 5))
+
+    def test_rollback_rejects_malformed_or_mismatched_baseline_metadata(self):
+        cases = (
+            "root_not_object",
+            "missing_course_before",
+            "missing_course_date_key",
+            "missing_entry_snapshot_key",
+            "course_id_wrong_type",
+            "course_id_mismatch",
+            "entry_id_mismatch",
+            "course_before_wrong_type",
+            "plan_snapshot_id_mismatch",
+            "plan_baseline_snapshot_id_mismatch",
+        )
+        for index, case in enumerate(cases):
+            with self.subTest(case=case):
+                course = TreatmentCourse.objects.create(
+                    patient=self.patient, course_number=10 + index,
+                )
+                if case == "plan_baseline_snapshot_id_mismatch":
+                    InpatientPlan.objects.create(treatment_course=course, status="draft")
+                entry = self.make_provisional_schedule(course)
+                baseline_log = AuditLog.objects.get(
+                    target_model="RtmSWaitlistEntry",
+                    target_pk=str(entry.pk),
+                    meta__event="provisional_schedule_baseline",
+                )
+                meta = baseline_log.meta
+                if case == "root_not_object":
+                    baseline_log.meta = []
+                elif case == "missing_course_before":
+                    meta.pop("course_before")
+                elif case == "missing_course_date_key":
+                    meta["course_before"].pop("admission_date")
+                elif case == "missing_entry_snapshot_key":
+                    meta["provisional_values"]["entry"].pop("scheduled_at")
+                elif case == "course_id_wrong_type":
+                    meta["course_id"] = str(course.pk)
+                elif case == "course_id_mismatch":
+                    meta["course_id"] = self.course_one.pk
+                elif case == "entry_id_mismatch":
+                    meta["waitlist_entry_id"] = entry.pk + 1000
+                elif case == "course_before_wrong_type":
+                    meta["course_before"] = []
+                elif case == "plan_baseline_snapshot_id_mismatch":
+                    meta["plan_before"]["id"] += 1000
+                else:
+                    meta["provisional_values"]["plan"]["id"] += 1000
+                if case != "root_not_object":
+                    baseline_log.meta = meta
+                baseline_log.save(update_fields=["meta"])
+
+                response = self.post_provisional_rollback(course, entry)
+
+                self.assertEqual(response.status_code, 302)
+                entry.refresh_from_db()
+                self.assertEqual(entry.status, "provisional")
+
+    def test_rollback_rejects_corrupt_baseline_json_read(self):
+        entry = self.make_provisional_schedule()
+        with patch.object(AuditLog.objects, "filter", side_effect=ValueError("invalid JSON")):
+            response = self.post_provisional_rollback(self.course_one, entry)
+
+        self.assertEqual(response.status_code, 302)
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, "provisional")
+
+    def test_rollback_rejects_baseline_plan_linked_to_another_course(self):
+        foreign_plan = InpatientPlan.objects.create(
+            treatment_course=self.course_one,
+            status="draft",
+        )
+        entry = RtmSWaitlistEntry.objects.create(
+            treatment_course=self.course_two,
+            status="waiting",
+            inpatient_plan=foreign_plan,
+        )
+        update_calendar_course_adjustment(
+            treatment_course=self.course_two,
+            admission_date=date(2026, 10, 2),
+            treatment_start_date=date(2026, 10, 5),
+            is_all_case_survey=False,
+            waitlist_entry=entry,
+            user=self.user,
+        )
+        entry.refresh_from_db()
+        course_two_plan = InpatientPlan.objects.get(treatment_course=self.course_two)
+        self.assertEqual(entry.inpatient_plan_id, course_two_plan.pk)
+
+        response = self.post_provisional_rollback(self.course_two, entry)
+
+        self.assertEqual(response.status_code, 302)
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, "provisional")
+        self.assertEqual(entry.inpatient_plan_id, course_two_plan.pk)
+        self.assertNotEqual(entry.inpatient_plan_id, foreign_plan.pk)
+
+    def test_rollback_rejects_changes_to_course_entry_or_plan_snapshot(self):
+        for index, field in enumerate(("course", "entry", "plan")):
+            with self.subTest(field=field):
+                course = TreatmentCourse.objects.create(
+                    patient=self.patient, course_number=20 + index,
+                )
+                entry = self.make_provisional_schedule(course)
+                plan = InpatientPlan.objects.get(treatment_course=course)
+                if field == "course":
+                    course.is_all_case_survey = True
+                    course.save(update_fields=["is_all_case_survey", "updated_at"])
+                elif field == "entry":
+                    entry.scheduled_at = django_timezone.now()
+                    entry.save(update_fields=["scheduled_at", "updated_at"])
+                else:
+                    plan.uncertainty = "unknown"
+                    plan.save(update_fields=["uncertainty", "updated_at"])
+
+                response = self.post_provisional_rollback(course, entry)
+
+                self.assertEqual(response.status_code, 302)
+                entry.refresh_from_db()
+                self.assertEqual(entry.status, "provisional")
+
+    def test_rollback_preserves_existing_mapping_schedule(self):
+        mapping_schedule = MappingSchedule.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_one,
+            course_number=self.course_one.course_number,
+            week_number=1,
+            planned_date=date(2026, 10, 6),
+        )
+        entry = self.make_provisional_schedule(self.course_two)
+
+        response = self.post_provisional_rollback(self.course_two, entry)
+
+        self.assertEqual(response.status_code, 302)
+        mapping_schedule.refresh_from_db()
+        self.assertEqual(mapping_schedule.planned_date, date(2026, 10, 6))
+
+    def test_rollback_rejects_course_and_legacy_mapping_schedules(self):
+        for index, legacy in enumerate((False, True)):
+            with self.subTest(legacy=legacy):
+                course = TreatmentCourse.objects.create(
+                    patient=self.patient, course_number=30 + index,
+                )
+                mapping_schedule = MappingSchedule.objects.create(
+                    patient=self.patient,
+                    treatment_course=None if legacy else course,
+                    course_number=course.course_number,
+                    week_number=1,
+                    planned_date=date(2026, 10, 6),
+                )
+                entry = self.make_provisional_schedule(course)
+
+                response = self.post_provisional_rollback(course, entry)
+
+                self.assertEqual(response.status_code, 302)
+                entry.refresh_from_db()
+                mapping_schedule.refresh_from_db()
+                self.assertEqual(entry.status, "provisional")
+                self.assertEqual(mapping_schedule.planned_date, date(2026, 10, 6))
+
+    def test_rollback_rejects_actual_admission(self):
+        entry = self.make_provisional_schedule()
+        plan = InpatientPlan.objects.get(treatment_course=self.course_one)
+        plan.actual_admission_at = django_timezone.now()
+        plan.save(update_fields=["actual_admission_at"])
+
+        response = self.post_provisional_rollback(self.course_one, entry)
+
+        self.assertEqual(response.status_code, 302)
+        entry.refresh_from_db()
+        plan.refresh_from_db()
+        self.assertEqual(entry.status, "provisional")
+        self.assertIsNotNone(plan.actual_admission_at)
+
+    def test_course_one_rollback_does_not_change_course_two(self):
+        waiting_entry = RtmSWaitlistEntry.objects.create(
+            treatment_course=self.course_two, status="waiting",
+        )
+        provisional_entry = self.make_provisional_schedule(self.course_one)
+        self.course_two.admission_date = date(2026, 9, 29)
+        self.course_two.first_treatment_date = date(2026, 9, 30)
+        self.course_two.save(update_fields=["admission_date", "first_treatment_date", "updated_at"])
+
+        response = self.post_provisional_rollback(self.course_one, provisional_entry)
+
+        self.assertEqual(response.status_code, 302)
+        waiting_entry.refresh_from_db()
+        self.course_two.refresh_from_db()
+        self.assertEqual(waiting_entry.status, "waiting")
+        self.assertEqual(self.course_two.admission_date, date(2026, 9, 29))
+        self.assertEqual(self.course_two.first_treatment_date, date(2026, 9, 30))
+
+    def test_rollback_preserves_course_two_patient_mirrors_and_course_one(self):
+        self.patient.first_treatment_date = date(2026, 8, 3)
+        self.patient.mapping_date = date(2026, 8, 4)
+        self.patient.save(update_fields=["first_treatment_date", "mapping_date"])
+        waiting_entry = RtmSWaitlistEntry.objects.create(
+            treatment_course=self.course_one, status="waiting",
+        )
+        provisional_entry = self.make_provisional_schedule(self.course_two)
+
+        response = self.post_provisional_rollback(self.course_two, provisional_entry)
+
+        self.assertEqual(response.status_code, 302)
+        self.patient.refresh_from_db()
+        self.course_one.refresh_from_db()
+        waiting_entry.refresh_from_db()
+        self.assertEqual(self.patient.first_treatment_date, date(2026, 8, 3))
+        self.assertEqual(self.patient.mapping_date, date(2026, 8, 4))
+        self.assertEqual(waiting_entry.status, "waiting")
+        self.assertIsNone(self.course_one.first_treatment_date)
+
+    def test_rollback_reuses_cancelled_reservations_on_rebooking(self):
+        entry = self.make_provisional_schedule()
+        other_entry = self.make_provisional_schedule(self.course_two)
+        reservation_ids = list(
+            RtmSTreatmentReservation.objects.filter(
+                treatment_course=self.course_one,
+            ).values_list("pk", flat=True)
+        )
+        other_reservations_before = list(
+            RtmSTreatmentReservation.objects.filter(
+                treatment_course=self.course_two,
+            ).order_by("sequence_number").values_list(
+                "pk", "sequence_number", "treatment_date", "status", "capacity_type",
+            )
+        )
+        self.post_provisional_rollback(self.course_one, entry)
+        entry.refresh_from_db()
+        self.course_one.refresh_from_db()
+
+        result = update_calendar_course_adjustment(
+            treatment_course=self.course_one,
+            admission_date=date(2026, 10, 2),
+            treatment_start_date=date(2026, 10, 13),
+            is_all_case_survey=False,
+            waitlist_entry=entry,
+            user=self.user,
+        )
+
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, "provisional")
+        reservations = list(RtmSTreatmentReservation.objects.filter(
+            treatment_course=self.course_one,
+        ).order_by("sequence_number"))
+        self.assertEqual(len(reservations), 30)
+        self.assertEqual([item.pk for item in reservations], reservation_ids)
+        self.assertEqual([item.treatment_course_id for item in reservations], [self.course_one.pk] * 30)
+        self.assertEqual([item.sequence_number for item in reservations], list(range(1, 31)))
+        self.assertTrue(all(item.status == "provisional" for item in reservations))
+        self.assertEqual(
+            [item.treatment_date for item in reservations],
+            generate_treatment_dates(
+                date(2026, 10, 13), total=30,
+                holidays=get_japanese_holidays(date(2026, 10, 13), date(2027, 10, 13)),
+            ),
+        )
+        self.assertEqual(len({item.treatment_date for item in reservations}), 30)
+        self.assertEqual(
+            [item.capacity_type for item in reservations],
+            [item.capacity_type for item in result["reservation"]["reservations"]],
+        )
+        self.assertEqual(
+            list(RtmSTreatmentReservation.objects.filter(
+                treatment_course=self.course_two,
+            ).order_by("sequence_number").values_list(
+                "pk", "sequence_number", "treatment_date", "status", "capacity_type",
+            )),
+            other_reservations_before,
+        )
+        self.assertEqual(other_entry.status, "provisional")
+
+    def test_rollback_audit_failure_rolls_back_all_course_state(self):
+        entry = self.make_provisional_schedule()
+        plan = InpatientPlan.objects.get(treatment_course=self.course_one)
+
+        with patch.object(AuditLog.objects, "create", side_effect=RuntimeError("audit unavailable")):
+            with self.assertRaises(RuntimeError):
+                rollback_provisional_schedule(
+                    treatment_course=self.course_one,
+                    waitlist_entry=entry,
+                    user=self.user,
+                )
+
+        entry.refresh_from_db()
+        plan.refresh_from_db()
+        self.course_one.refresh_from_db()
+        self.assertEqual(entry.status, "provisional")
+        self.assertEqual(plan.status, "provisional")
+        self.assertEqual(self.course_one.first_treatment_date, date(2026, 10, 5))
 
     def test_independent_capacity_values_and_operational_warning(self):
         self.assertEqual(self.pool.physical_capacity, 5)

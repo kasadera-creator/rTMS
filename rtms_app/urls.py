@@ -66,6 +66,11 @@ urlpatterns = [
         name="rtms_waitlist_patient_select",
     ),
     path(
+        "inpatient/waitlist/rollback/",
+        views_inpatient.rollback_provisional_waitlist_view,
+        name="rollback_provisional_waitlist",
+    ),
+    path(
         "inpatient/waitlist/",
         views_inpatient.rtms_waitlist_management_view,
         name="inpatient_waitlist",

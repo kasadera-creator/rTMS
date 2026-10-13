@@ -6,6 +6,23 @@
   overflow: hidden;
 }
 
+.rollback-confirm-dialog {
+  width: min(34rem, calc(100vw - 2rem));
+  max-width: none;
+  padding: 1.25rem;
+  border: 0;
+  border-radius: var(--rtms-radius-md, 8px);
+  box-shadow: 0 1rem 3rem rgba(25, 38, 54, 0.24);
+}
+
+.rollback-confirm-dialog::backdrop {
+  background: rgba(20, 34, 43, 0.48);
+}
+
+.rollback-confirm-dialog p {
+  overflow-wrap: anywhere;
+}
+
 .calendar-section {
   border: 0;
   border-radius: var(--rtms-radius-md, 8px);

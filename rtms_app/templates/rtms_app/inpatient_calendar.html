@@ -84,6 +84,22 @@
       </div>
     </div>
   </section>
+
+  <dialog class="rollback-confirm-dialog" id="rollbackConfirmDialog" aria-labelledby="rollbackConfirmTitle">
+    <form method="post" action="{% url 'rtms_app:rollback_provisional_waitlist' %}">
+      {% csrf_token %}
+      <input type="hidden" name="course_id" id="rollbackCourseId">
+      <input type="hidden" name="waitlist_entry_id" id="rollbackWaitlistEntryId">
+      <h2 class="h5" id="rollbackConfirmTitle">待機状態へ戻しますか？</h2>
+      <p>この患者を待機状態に戻しますか？</p>
+      <p>現在の仮の日程と入院予定を取り消し、待機患者として再度日程を設定できる状態に戻します。</p>
+      <p>治療実績は変更されません。</p>
+      <div class="d-flex flex-wrap justify-content-end gap-2">
+        <button type="button" class="btn btn-outline-secondary" data-rollback-cancel>キャンセル</button>
+        <button type="submit" class="btn btn-danger">待機に戻す</button>
+      </div>
+    </form>
+  </dialog>
 </div>
 
 {% endblock %}
@@ -112,6 +128,9 @@
   const timeline = document.querySelector('.inpatient-timeline');
   const weekButtons = [...timeline.querySelectorAll('.timeline-week-cell--selectable')];
   const openButtons = [...document.querySelectorAll('[data-booking-open]')];
+  const rollbackDialog = document.getElementById('rollbackConfirmDialog');
+  const rollbackCourseId = document.getElementById('rollbackCourseId');
+  const rollbackEntryId = document.getElementById('rollbackWaitlistEntryId');
   let activeTrigger = null;
   let activeEntry = null;
   let selectedSlot = null;
@@ -292,6 +311,16 @@
     button.addEventListener('click', () => {
       startScheduling(button);
     });
+  });
+  document.querySelectorAll('[data-rollback-open]').forEach((button) => {
+    button.addEventListener('click', () => {
+      rollbackCourseId.value = button.dataset.courseId;
+      rollbackEntryId.value = button.dataset.waitlistEntryId;
+      rollbackDialog.showModal();
+    });
+  });
+  document.querySelector('[data-rollback-cancel]').addEventListener('click', () => {
+    rollbackDialog.close();
   });
   weekButtons.forEach((button) => {
     button.addEventListener('click', () => selectWeek(button));

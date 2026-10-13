@@ -17,6 +17,7 @@ from rtms_app.forms_inpatient import (
     RtmSWaitlistEntryForm,
 )
 from rtms_app.models import Patient, ResourceAssignment, RtmSWaitlistEntry, TreatmentCourse
+from rtms_app.utils.request_context import get_client_ip, get_user_agent
 from rtms_app.views import (
     get_course_inpatient_display_state,
     get_patient_admission_status,
@@ -26,11 +27,14 @@ from rtms_app.services.inpatient_planning import (
     ActiveResourceAssignmentError,
     ActualAdmissionError,
     ActualDischargeError,
+    can_rollback_provisional_schedule,
     confirm_inpatient_schedule,
     InvalidWaitlistEntryError,
+    ProvisionalRollbackError,
     ScheduleConfirmationBusyError,
     record_actual_admission,
     record_actual_discharge,
+    rollback_provisional_schedule,
     update_calendar_course_adjustment,
 )
 from rtms_app.services.resource_capacity import CapacityConflict
@@ -179,6 +183,13 @@ def inpatient_calendar_view(request):
         row["provisional_waitlist_entry"] = provisional_entries_by_course.get(
             row["treatment_course_id"],
         )
+        row["can_rollback_provisional"] = bool(
+            row["provisional_waitlist_entry"]
+            and can_rollback_provisional_schedule(
+                treatment_course=row["treatment_course"],
+                waitlist_entry=row["provisional_waitlist_entry"],
+            )
+        )
     range_query = request.GET.copy()
     range_query["week_start"] = (range_start - timedelta(weeks=1)).isoformat()
     previous_week_url = f"?{urlencode(range_query, doseq=True)}"
@@ -227,6 +238,34 @@ def inpatient_calendar_view(request):
         pool = context["resource_pool"]
         context["schedule_form"] = InpatientScheduleForm(resource_pool=pool)
     return render(request, "rtms_app/inpatient_calendar.html", context)
+
+
+@login_required
+@require_POST
+def rollback_provisional_waitlist_view(request):
+    course_id = request.POST.get("course_id", "")
+    entry_id = request.POST.get("waitlist_entry_id", "")
+    if not course_id.isdigit() or not entry_id.isdigit():
+        return HttpResponseBadRequest("対象Courseと待機リストが指定されていません")
+    course = get_object_or_404(TreatmentCourse.objects.select_related("patient"), pk=course_id)
+    entry = get_object_or_404(RtmSWaitlistEntry, pk=entry_id)
+    try:
+        rollback_provisional_schedule(
+            treatment_course=course,
+            waitlist_entry=entry,
+            user=request.user,
+            ip=get_client_ip(request),
+            user_agent=get_user_agent(request),
+        )
+    except ProvisionalRollbackError as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, "待機状態に戻しました。")
+    calendar_url = reverse("rtms_app:inpatient_calendar")
+    return redirect(
+        f"{calendar_url}?patient_id={course.patient_id}"
+        f"&course_number={course.course_number}"
+    )
 
 
 @login_required
