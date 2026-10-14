@@ -125,10 +125,34 @@ SIDE_EFFECT_SCHEMA = {
 }
 
 # --- Admin設定 ---
+class ReadOnlyModelAdmin(admin.ModelAdmin):
+    actions = None
+    list_display_links = ()
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_view_permission(self, request, obj=None):
+        if obj is not None:
+            return False
+        opts = self.opts
+        return (
+            request.user.has_perm(f'{opts.app_label}.view_{opts.model_name}')
+            or request.user.has_perm(f'{opts.app_label}.change_{opts.model_name}')
+        )
+
+
 @admin.register(Patient)
 class PatientAdmin(admin.ModelAdmin):
     list_display = ('card_id', 'name', 'diagnosis')
     search_fields = ('name', 'card_id')
+    readonly_fields = ('admission_date', 'mapping_date', 'first_treatment_date')
     
     # JSON入力フォームの適用
     # formfield_overrides = { ... } # 前回の定義があれば維持
@@ -152,7 +176,7 @@ class PatientAdmin(admin.ModelAdmin):
     )
 
 @admin.register(TreatmentSession)
-class TreatmentSessionAdmin(admin.ModelAdmin):
+class TreatmentSessionAdmin(ReadOnlyModelAdmin):
     list_display = ('date', 'patient', 'performer')
     list_filter = ('date',)
     # formfield_overrides ...
@@ -191,7 +215,7 @@ class ConsentDocumentAdmin(admin.ModelAdmin):
     list_display = ("id", "uploaded_at", "file")
 
 @admin.register(AuditLog)
-class AuditLogAdmin(admin.ModelAdmin):
+class AuditLogAdmin(ReadOnlyModelAdmin):
     list_display = ('created_at', 'user', 'patient', 'action', 'target_model', 'target_pk', 'summary')
     list_filter = ('action', 'target_model', 'created_at')
     search_fields = ('user__username', 'patient__name', 'summary')
@@ -221,13 +245,13 @@ class RtmSTreatmentCapacityAdmin(admin.ModelAdmin):
     ordering = ('capacity_type', '-valid_from')
 
 @admin.register(RtmSTreatmentReservation)
-class RtmSTreatmentReservationAdmin(admin.ModelAdmin):
+class RtmSTreatmentReservationAdmin(ReadOnlyModelAdmin):
     list_display = ('treatment_course', 'sequence_number', 'treatment_date', 'status', 'capacity_type')
     list_filter = ('status', 'capacity_type', 'treatment_date')
     search_fields = ('treatment_course__patient__name', 'treatment_course__patient__card_id')
 
 @admin.register(InpatientPlan)
-class InpatientPlanAdmin(admin.ModelAdmin):
+class InpatientPlanAdmin(ReadOnlyModelAdmin):
     list_display = (
         'treatment_course', 'status', 'planned_admission_date',
         'planned_discharge_date', 'actual_admission_at', 'actual_discharge_at',
@@ -247,7 +271,7 @@ class ResourceAssignmentAdmin(admin.ModelAdmin):
 
 
 @admin.register(RtmSWaitlistEntry)
-class RtmSWaitlistEntryAdmin(admin.ModelAdmin):
+class RtmSWaitlistEntryAdmin(ReadOnlyModelAdmin):
     list_display = (
         'treatment_course', 'status', 'priority', 'registered_at',
         'preferred_start_note', 'scheduled_at', 'closed_at',
@@ -323,13 +347,14 @@ rtms_admin_site.register(TimingScaleConfig, TimingScaleConfigAdmin)
 rtms_admin_site.register(AssessmentRecord, AssessmentRecordAdmin)
 rtms_admin_site.register(ResourcePool, ResourcePoolAdmin)
 rtms_admin_site.register(RtmSAdmissionCapacity, RtmSAdmissionCapacityAdmin)
+rtms_admin_site.register(RtmSTreatmentReservation, RtmSTreatmentReservationAdmin)
 rtms_admin_site.register(InpatientPlan, InpatientPlanAdmin)
 rtms_admin_site.register(ResourceAssignment, ResourceAssignmentAdmin)
 rtms_admin_site.register(RtmSWaitlistEntry, RtmSWaitlistEntryAdmin)
 
 
 @admin.register(TreatmentSkip)
-class TreatmentSkipAdmin(admin.ModelAdmin):
+class TreatmentSkipAdmin(ReadOnlyModelAdmin):
     list_display = ('treatment', 'action_type', 'effective_date', 'performed_by', 'undone_by', 'undone_at', 'created_at')
     list_filter = ('action_type', 'created_at', 'undone_at')
     search_fields = ('treatment__patient__name', 'reason')
