@@ -10,9 +10,10 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.db import IntegrityError, connections, transaction
+from django.db import IntegrityError, connections, connection, transaction
 from django.db.models import F
 from django.test import TestCase, TransactionTestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone as django_timezone
 
@@ -51,6 +52,7 @@ from rtms_app.services.resource_capacity import (
     earliest_admission_forecast,
 )
 from rtms_app.services.rtms_treatment_reservations import (
+    TreatmentReservationBusyError,
     create_or_replace_rtms_treatment_reservation,
     treatment_capacity_snapshot,
 )
@@ -71,6 +73,11 @@ from rtms_app.services.waitlist import (
     register_waitlist_entry,
 )
 from rtms_app.views import generate_calendar_weeks, get_patient_admission_status
+
+
+class _SQLiteBusyCause(Exception):
+    sqlite_errorcode = sqlite3.SQLITE_BUSY
+    sqlite_errorname = "SQLITE_BUSY"
 
 
 class Phase2InpatientTests(TestCase):
@@ -3754,6 +3761,144 @@ class Phase2InpatientTests(TestCase):
         for link_name in ("previous_month_url", "next_month_url", "today_month_url"):
             self.assertIn(f"patient_id={self.patient.pk}", calendar_response.context[link_name])
             self.assertIn("course_number=2", calendar_response.context[link_name])
+
+
+class InpatientConfirmationRetryContractTests(TransactionTestCase):
+    reset_sequences = True
+    admission_date = date(2026, 10, 5)
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="confirmation-retry-contract", password="pw",
+        )
+        self.patient = Patient.objects.create(
+            card_id="CONFIRMRETRY",
+            name="Confirmation Retry",
+            birth_date=date(1980, 1, 1),
+        )
+        self.course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+        )
+        self.course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+        )
+        self.pool = ResourcePool.objects.create(
+            code="CONFIRM_RETRY_POOL",
+            name="Confirmation Retry Pool",
+            resource_type="rTMS_private",
+            physical_capacity=5,
+            operational_target=3,
+        )
+        RtmSAdmissionCapacity.objects.create(
+            capacity=3,
+            valid_from=date(2026, 10, 1),
+            valid_to=date(2026, 10, 31),
+        )
+
+    def _confirm(self, treatment_course):
+        return confirm_inpatient_schedule(
+            treatment_course=treatment_course,
+            resource_pool=self.pool,
+            admission_date=self.admission_date,
+            treatment_start_date=self.admission_date + timedelta(days=1),
+            room_start_date=self.admission_date,
+            room_end_date=self.admission_date + timedelta(days=10),
+            user=self.user,
+        )
+
+    def _raise_busy_reservation_error(self):
+        raise TreatmentReservationBusyError("reservation busy") from _SQLiteBusyCause()
+
+    def test_mutex_precedes_course_and_capacity_locks_and_course_two_stays_isolated(self):
+        with patch(
+            "rtms_app.services.inpatient_planning.create_or_replace_rtms_treatment_reservation",
+            return_value=None,
+        ), CaptureQueriesContext(connection) as captured:
+            self._confirm(self.course_two)
+
+        statements = [query["sql"].upper() for query in captured.captured_queries]
+        patient_mutex = next(
+            index for index, sql in enumerate(statements)
+            if sql.lstrip().startswith("UPDATE") and "RTMS_APP_PATIENT" in sql
+        )
+        course_lock = next(
+            index for index, sql in enumerate(statements)
+            if sql.lstrip().startswith("SELECT") and "RTMS_APP_TREATMENTCOURSE" in sql
+        )
+        capacity_lock = next(
+            index for index, sql in enumerate(statements)
+            if sql.lstrip().startswith("UPDATE") and "RTMS_APP_RTMSADMISSIONCAPACITY" in sql
+        )
+        self.assertLess(patient_mutex, course_lock)
+        self.assertLess(course_lock, capacity_lock)
+        self.assertFalse(InpatientPlan.objects.filter(treatment_course=self.course_one).exists())
+        self.assertTrue(InpatientPlan.objects.filter(treatment_course=self.course_two).exists())
+        self.course_one.refresh_from_db()
+        self.course_two.refresh_from_db()
+        self.assertIsNone(self.course_one.admission_date)
+        self.assertEqual(self.course_two.admission_date, self.admission_date)
+
+    def test_reservation_busy_rolls_back_before_retrying_whole_confirmation(self):
+        attempts = []
+
+        def fail_once_then_continue(**kwargs):
+            attempts.append(None)
+            if len(attempts) == 1:
+                self._raise_busy_reservation_error()
+            return None
+
+        def assert_first_attempt_was_rolled_back(retry_number):
+            self.assertEqual(retry_number, 1)
+            self.assertFalse(InpatientPlan.objects.filter(treatment_course=self.course_one).exists())
+            self.assertFalse(ResourceAssignment.objects.filter(treatment_course=self.course_one).exists())
+            self.course_one.refresh_from_db()
+            self.assertIsNone(self.course_one.admission_date)
+
+        with patch(
+            "rtms_app.services.inpatient_planning.create_or_replace_rtms_treatment_reservation",
+            side_effect=fail_once_then_continue,
+        ), patch(
+            "rtms_app.services.inpatient_planning._sleep_before_confirmation_retry",
+            side_effect=assert_first_attempt_was_rolled_back,
+        ) as retry_sleep:
+            result = self._confirm(self.course_one)
+
+        self.assertEqual(len(attempts), 2)
+        retry_sleep.assert_called_once_with(1)
+        self.assertEqual(result["plan"].status, "scheduled")
+        self.assertTrue(InpatientPlan.objects.filter(treatment_course=self.course_one).exists())
+
+    def test_retry_exhaustion_is_a_controlled_view_error_without_partial_writes(self):
+        self.client.force_login(self.user)
+        with patch(
+            "rtms_app.services.inpatient_planning.create_or_replace_rtms_treatment_reservation",
+            side_effect=lambda **kwargs: self._raise_busy_reservation_error(),
+        ), patch(
+            "rtms_app.services.inpatient_planning._sleep_before_confirmation_retry",
+        ) as retry_sleep:
+            response = self.client.post(
+                reverse("rtms_app:inpatient_schedule", args=[self.patient.pk]),
+                {
+                    "course_number": "1",
+                    "admission_date": "2026-10-05",
+                    "treatment_start_date": "2026-10-06",
+                    "room_start_date": "2026-10-05",
+                    "room_end_date": "2026-10-15",
+                    "certainty": "confirmed",
+                    "resource_pool": str(self.pool.pk),
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            "同時処理のため確定処理を完了できませんでした。もう一度お試しください。",
+            list(response.context["form"].non_field_errors()),
+        )
+        self.assertEqual(retry_sleep.call_count, 2)
+        self.assertFalse(InpatientPlan.objects.filter(treatment_course=self.course_one).exists())
+        self.assertFalse(ResourceAssignment.objects.filter(treatment_course=self.course_one).exists())
+        self.course_one.refresh_from_db()
+        self.assertIsNone(self.course_one.admission_date)
 
 
 class AdmissionCapacityConcurrencyTests(TransactionTestCase):

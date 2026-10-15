@@ -12,6 +12,7 @@ from rtms_app.models import (
     MappingSchedule,
     MappingSession,
     Patient,
+    RtmSTreatmentReservation,
     TreatmentCourse,
     TreatmentSession,
 )
@@ -20,6 +21,7 @@ from rtms_app.services.session_writes import (
     PatientCourseWriteError,
     patient_course_writer,
 )
+from rtms_app.services.schedule import reschedule_planned_session
 from rtms_app.signals import audit_log_user_save
 
 
@@ -236,3 +238,108 @@ class SessionWriterViewTests(TransactionTestCase):
             MappingSession.objects.filter(treatment_course=self.course_one).count(),
             1,
         )
+
+    def test_treatment_add_course_two_does_not_update_course_one_session(self):
+        course_one_session = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_one,
+            course_number=1,
+            session_date=date(2026, 10, 5),
+        )
+
+        response = self.client.post(
+            reverse("rtms_app:treatment_add", args=[self.patient.pk]),
+            {
+                "course_number": "2",
+                "treatment_date": "2026-10-05",
+                "treatment_time": "09:00",
+                "mt_percent": "120",
+                "intensity_percent": "60",
+                "frequency_hz": "18.0",
+                "train_seconds": "2.0",
+                "intertrain_seconds": "20.0",
+                "train_count": "55",
+                "total_pulses": "1980",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        course_one_session.refresh_from_db()
+        self.assertEqual(course_one_session.treatment_course_id, self.course_one.pk)
+        self.assertEqual(course_one_session.session_date, date(2026, 10, 5))
+        self.assertTrue(TreatmentSession.objects.filter(
+            treatment_course=self.course_two,
+            session_date=date(2026, 10, 5),
+        ).exists())
+
+    def test_reservation_sync_failure_rolls_back_session_and_reservation_writes(self):
+        moved = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_one,
+            course_number=1,
+            session_date=date(2026, 9, 7),
+        )
+        future = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_one,
+            course_number=1,
+            session_date=date(2026, 9, 8),
+        )
+        mapping_schedule = MappingSchedule.objects.create(
+            patient=self.patient,
+            treatment_course=self.course_one,
+            course_number=1,
+            week_number=1,
+            planned_date=date(2026, 9, 7),
+        )
+        reservation = RtmSTreatmentReservation.objects.create(
+            treatment_course=self.course_one,
+            sequence_number=1,
+            treatment_date=date(2026, 9, 7),
+            capacity_type="rTMS_private",
+        )
+
+        state_at_failure = {}
+
+        def update_then_fail(*, treatment_course, **kwargs):
+            RtmSTreatmentReservation.objects.filter(pk=reservation.pk).update(
+                treatment_date=date(2026, 9, 12),
+            )
+            state_at_failure["session_dates"] = list(
+                TreatmentSession.objects.filter(treatment_course=self.course_one)
+                .order_by("session_date")
+                .values_list("session_date", flat=True)
+            )
+            state_at_failure["mapping_date"] = MappingSchedule.objects.get(
+                pk=mapping_schedule.pk,
+            ).planned_date
+            state_at_failure["reservation_date"] = RtmSTreatmentReservation.objects.get(
+                pk=reservation.pk,
+            ).treatment_date
+            raise RuntimeError("forced reservation sync failure")
+
+        with patch(
+            "rtms_app.services.rtms_treatment_reservations.sync_rtms_treatment_reservation_from_sessions",
+            side_effect=update_then_fail,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "forced reservation sync failure"):
+                reschedule_planned_session(
+                    self.patient,
+                    moved,
+                    date(2026, 9, 9),
+                )
+
+        moved.refresh_from_db()
+        future.refresh_from_db()
+        mapping_schedule.refresh_from_db()
+        reservation.refresh_from_db()
+        self.assertEqual(moved.session_date, date(2026, 9, 7))
+        self.assertEqual(future.session_date, date(2026, 9, 8))
+        self.assertEqual(mapping_schedule.planned_date, date(2026, 9, 7))
+        self.assertEqual(reservation.treatment_date, date(2026, 9, 7))
+        self.assertEqual(
+            state_at_failure["session_dates"],
+            [date(2026, 9, 9), date(2026, 9, 10)],
+        )
+        self.assertEqual(state_at_failure["mapping_date"], date(2026, 9, 9))
+        self.assertEqual(state_at_failure["reservation_date"], date(2026, 9, 12))

@@ -649,6 +649,14 @@ def sync_rtms_treatment_reservation_from_sessions(
             TreatmentSession.objects.select_for_update().filter(treatment_course=course)
             .order_by("session_date", "pk")[:30]
         )
+        if any(
+            session.patient_id != course.patient_id
+            or session.course_number != course.course_number
+            for session in sessions
+        ):
+            raise InvalidTreatmentReservationError(
+                "SessionのPatient/Course所有関係が治療予約と一致しません。"
+            )
         invalid_statuses = {session.status for session in sessions} - {"planned", "done", "skipped"}
         if invalid_statuses:
             raise InvalidTreatmentReservationError("Session状態が治療予約へ同期できません。")

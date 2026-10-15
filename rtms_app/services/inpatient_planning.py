@@ -25,9 +25,11 @@ from rtms_app.services.resource_capacity import (
     reserve_sqlite_writer_for_capacity,
 )
 from rtms_app.services.rtms_treatment_reservations import (
+    TreatmentReservationBusyError,
     create_or_replace_rtms_treatment_reservation,
 )
 from rtms_app.services.rtms_schedule import generate_treatment_dates, get_japanese_holidays
+from rtms_app.services.session_writes import patient_course_writer
 
 
 class ActualAdmissionError(ValueError):
@@ -560,9 +562,15 @@ def _retry_sqlite_busy_confirmation(function):
         for attempt in range(CONFIRM_SQLITE_BUSY_RETRIES + 1):
             try:
                 with transaction.atomic():
-                    reserve_sqlite_writer_for_capacity(kwargs["admission_date"])
-                    return function(*args, **kwargs)
-            except OperationalError as exc:
+                    treatment_course = kwargs["treatment_course"]
+                    with patient_course_writer(
+                        treatment_course.patient_id,
+                        treatment_course.course_number,
+                        expected_course_id=treatment_course.pk,
+                        require_course=True,
+                    ):
+                        return function(*args, **kwargs)
+            except (OperationalError, TreatmentReservationBusyError) as exc:
                 if not _is_sqlite_busy_error(exc):
                     raise
                 if not can_retry_whole_transaction or attempt == CONFIRM_SQLITE_BUSY_RETRIES:
@@ -812,6 +820,7 @@ def confirm_inpatient_schedule(
 ):
     """Confirm plan and room allocation without implicit TreatmentSession coupling."""
     locked_course = TreatmentCourse.objects.select_for_update().get(pk=treatment_course.pk)
+    reserve_sqlite_writer_for_capacity(admission_date)
     locked_waitlist_entry = None
     if waitlist_entry is not None:
         locked_waitlist_entry = RtmSWaitlistEntry.objects.select_for_update().get(pk=waitlist_entry.pk)

@@ -12,6 +12,10 @@ from rtms_app.services.strict_writes import (
     update_or_create_mapping_schedule_legacy,
     update_or_create_mapping_schedule_strict,
 )
+from rtms_app.services.session_writes import (
+    patient_course_writer,
+    validate_session_course,
+)
 MAX_TREATMENT_SESSIONS = 30
 
 try:
@@ -65,6 +69,21 @@ def _shift_discharge_date(patient, treatment_course, source_date, delta):
     patient.save(update_fields=['discharge_date'])
 
 
+def _sync_treatment_reservations(patient, course_number, *, allow_canonical_fallback=False):
+    treatment_course = TreatmentCourse.objects.filter(
+        patient=patient, course_number=course_number,
+    ).first()
+    if treatment_course is None:
+        return
+    from rtms_app.services.rtms_treatment_reservations import (
+        sync_rtms_treatment_reservation_from_sessions,
+    )
+    sync_rtms_treatment_reservation_from_sessions(
+        treatment_course=treatment_course,
+        allow_canonical_fallback=allow_canonical_fallback,
+    )
+
+
 def _sync_mapping_schedules_to_treatment_weeks(patient, course_number, *, from_date):
     """Align unfinished weekly MT slots with current treatment week starts."""
     treatment_course = TreatmentCourse.objects.filter(
@@ -83,9 +102,14 @@ def _sync_mapping_schedules_to_treatment_weeks(patient, course_number, *, from_d
         TreatmentSession.objects.filter(**scope)
         .order_by('session_date', 'id')[:MAX_TREATMENT_SESSIONS]
     )
-    completed_weeks = set(
-        MappingSession.objects.filter(**scope).values_list('week_number', flat=True)
+    mapping_sessions = list(
+        MappingSession.objects.select_for_update().filter(**scope)
     )
+    for mapping_session in mapping_sessions:
+        validate_session_course(
+            mapping_session, patient, course_number, treatment_course,
+        )
+    completed_weeks = {mapping_session.week_number for mapping_session in mapping_sessions}
     sessions_by_week = {}
     for session in sessions:
         week_number = ((session.session_date - calendar_start).days // 7) + 1
@@ -238,6 +262,12 @@ def _reflow_sessions(patient: Patient, course_number: int, source_date: date, ta
     Must be called within a transaction.
     """
     session_scope = _session_scope(patient, course_number, moved_session)
+    scope_course = session_scope.get('treatment_course')
+    scoped_sessions = TreatmentSession.objects.select_for_update().filter(**session_scope)
+    for scoped_session in scoped_sessions:
+        validate_session_course(
+            scoped_session, patient, course_number, scope_course,
+        )
     if moved_session is not None:
         pivot_date = min(source_date, target_date)
         others_qs = (
@@ -275,9 +305,16 @@ def _reflow_sessions(patient: Patient, course_number: int, source_date: date, ta
                 cursor = next_treatment_day(cursor + timedelta(days=1))
             assignments.append((o, o.session_date, cursor))
     else:
+        blocked_dates = set(
+            TreatmentSession.objects.filter(
+                **session_scope, status__in=['done', 'skipped'],
+            ).values_list('session_date', flat=True)
+        )
         cursor = source_date
         for o in others:
             cursor = next_treatment_day(cursor + timedelta(days=1))
+            while cursor in blocked_dates:
+                cursor = next_treatment_day(cursor + timedelta(days=1))
             assignments.append((o, o.session_date, cursor))
 
     new_last = max((new for _, _, new in assignments), default=original_last)
@@ -305,13 +342,6 @@ def _reflow_sessions(patient: Patient, course_number: int, source_date: date, ta
         treatment_course = TreatmentCourse.objects.filter(
             patient=patient, course_number=course_number,
         ).first()
-    if treatment_course is not None:
-        from rtms_app.services.rtms_treatment_reservations import (
-            sync_rtms_treatment_reservation_from_sessions,
-        )
-        sync_rtms_treatment_reservation_from_sessions(
-            treatment_course=treatment_course,
-        )
     delta = new_last - original_last
     _shift_discharge_date(patient, treatment_course, source_date, delta)
 
@@ -328,11 +358,15 @@ def shift_future_sessions(patient: Patient, from_date: date, course_number: int)
     """
     if not patient:
         return
-    with transaction.atomic():
-        _reflow_sessions(patient, course_number, from_date, target_date=None, moved_session=None)
-        _sync_mapping_schedules_to_treatment_weeks(
-            patient, course_number, from_date=from_date,
+    with patient_course_writer(patient.pk, course_number) as writer:
+        _reflow_sessions(
+            writer.patient, writer.course_number, from_date,
+            target_date=None, moved_session=None,
         )
+        _sync_mapping_schedules_to_treatment_weeks(
+            writer.patient, writer.course_number, from_date=from_date,
+        )
+        _sync_treatment_reservations(writer.patient, writer.course_number)
 
 
 def reschedule_planned_session(
@@ -355,32 +389,81 @@ def reschedule_planned_session(
     Raises ValueError if `session.status != 'planned'`, `target_date` is not a treatment day,
     or `target_date` is the same as the session's current `session_date`.
     """
-    if session.status != 'planned':
-        raise ValueError("実施済み・スキップ済みの予定はこの方法では移動できません")
-    if not allow_exceptional_day and not is_treatment_day(target_date):
-        raise ValueError("土日祝日には治療予定を設定できません")
+    session_id = session.pk
+    course_number = session.course_number
+    expected_course_id = session.treatment_course_id
+    with patient_course_writer(
+        patient.pk,
+        course_number,
+        expected_course_id=expected_course_id,
+        require_course=expected_course_id is not None,
+    ) as writer:
+        session_scope = writer.session_filter
+        locked_session = TreatmentSession.objects.select_for_update().filter(
+            **session_scope, pk=session_id,
+        ).first()
+        if locked_session is None:
+            raise ValueError("移動対象の治療予定が同じPatient/Courseに存在しません")
+        validate_session_course(
+            locked_session,
+            writer.patient,
+            writer.course_number,
+            writer.treatment_course,
+        )
+        if locked_session.status != 'planned':
+            raise ValueError("実施済み・スキップ済みの予定はこの方法では移動できません")
+        if not allow_exceptional_day and not is_treatment_day(target_date):
+            raise ValueError("土日祝日には治療予定を設定できません")
 
-    source_date = session.session_date
-    if target_date == source_date:
-        raise ValueError("移動先は現在の日付と異なる治療日を指定してください")
+        source_date = locked_session.session_date
+        if target_date == source_date:
+            raise ValueError("移動先は現在の日付と異なる治療日を指定してください")
 
-    session_scope = _session_scope(patient, session.course_number, session)
-    conflict = TreatmentSession.objects.filter(
-        **session_scope, session_date=target_date, status__in=['done', 'skipped'],
-    ).exclude(pk=session.pk).exists()
-    if conflict:
-        raise ValueError("移動先には実施済みまたはスキップ済みの治療があります")
+        conflict = TreatmentSession.objects.filter(
+            **session_scope,
+            session_date=target_date,
+            status__in=['done', 'skipped'],
+        ).exclude(pk=locked_session.pk).exists()
+        if conflict:
+            raise ValueError("移動先には実施済みまたはスキップ済みの治療があります")
 
-    with transaction.atomic():
-        result = _reflow_sessions(patient, session.course_number, source_date, target_date, moved_session=session)
-    _sync_mapping_schedules_to_treatment_weeks(
-        patient, session.course_number, from_date=min(source_date, target_date),
-    )
+        result = _reflow_sessions(
+            writer.patient, writer.course_number, source_date, target_date,
+            moved_session=locked_session,
+        )
+        _sync_mapping_schedules_to_treatment_weeks(
+            writer.patient,
+            writer.course_number,
+            from_date=min(source_date, target_date),
+        )
+        _sync_treatment_reservations(writer.patient, writer.course_number)
 
-    return {'moved_session_id': session.id, **result}
+        return {'moved_session_id': locked_session.pk, **result}
 
 
 def reschedule_treatment_start_date(
+    patient: Patient,
+    new_start_date: date,
+    *,
+    course_number=None,
+    holidays=None,
+    mapping_weeks=8,
+    allow_exceptional_day=False,
+    sync_reservations=True,
+):
+    with patient_course_writer(patient.pk, course_number) as writer:
+        return _reschedule_treatment_start_date_locked(
+            writer.patient,
+            new_start_date,
+            course_number=writer.course_number,
+            holidays=holidays,
+            mapping_weeks=mapping_weeks,
+            allow_exceptional_day=allow_exceptional_day,
+            sync_reservations=sync_reservations,
+        )
+
+
+def _reschedule_treatment_start_date_locked(
     patient: Patient,
     new_start_date: date,
     *,
@@ -434,6 +517,10 @@ def reschedule_treatment_start_date(
                 **_session_scope(locked_patient, course_number),
             ).order_by('session_date', 'id')
         )
+        for session in sessions:
+            validate_session_course(
+                session, locked_patient, course_number, treatment_course,
+            )
         regular_sessions = sessions[:MAX_TREATMENT_SESSIONS]
 
         first_session = regular_sessions[0] if regular_sessions else None
@@ -484,14 +571,6 @@ def reschedule_treatment_start_date(
             treatment_course.first_treatment_date = new_start_date
             treatment_course.mapping_date = new_start_date
             treatment_course.save(update_fields=['first_treatment_date', 'mapping_date'])
-            if sync_reservations:
-                from rtms_app.services.rtms_treatment_reservations import (
-                    sync_rtms_treatment_reservation_from_sessions,
-                )
-                sync_rtms_treatment_reservation_from_sessions(
-                    treatment_course=treatment_course,
-                    allow_canonical_fallback=True,
-                )
 
         if treatment_course is None or treatment_course.course_number == 1:
             locked_patient.first_treatment_date = new_start_date
@@ -505,6 +584,14 @@ def reschedule_treatment_start_date(
         _sync_mapping_schedules_to_treatment_weeks(
             locked_patient, course_number, from_date=new_start_date,
         )
+        if sync_reservations and treatment_course is not None:
+            from rtms_app.services.rtms_treatment_reservations import (
+                sync_rtms_treatment_reservation_from_sessions,
+            )
+            sync_rtms_treatment_reservation_from_sessions(
+                treatment_course=treatment_course,
+                allow_canonical_fallback=True,
+            )
 
     return {
         'old_start_date': old_start_date,
