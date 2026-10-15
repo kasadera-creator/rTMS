@@ -23,39 +23,45 @@ class RequestMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        # 既存のthread local設定
+        had_previous_request = hasattr(_thread_locals, 'request')
+        previous_request = getattr(_thread_locals, 'request', None)
         _thread_locals.request = request
-        
-        # リクエストIDを生成・付与
-        request.request_id = str(uuid.uuid4())[:8]
-        request.META['HTTP_X_REQUEST_ID'] = request.request_id
-        
-        # ログに記録
-        logger.debug(
-            f"[{request.request_id}] {request.method} {request.path} "
-            f"user={getattr(request.user, 'username', 'anonymous')}"
-        )
-        
         try:
-            response = self.get_response(request)
-            # レスポンスヘッダーにもIDを含める
-            response['X-Request-ID'] = request.request_id
-            return response
-        except Exception as e:
-            # 例外発生時に詳細ログ
-            logger.error(
-                f"[{request.request_id}] Exception in {request.path}: "
-                f"{e.__class__.__name__}: {str(e)}",
-                extra={
-                    'request_id': request.request_id,
-                    'user': getattr(request.user, 'username', 'anonymous'),
-                    'path': request.path,
-                    'method': request.method,
-                    'query_string': request.META.get('QUERY_STRING', ''),
-                },
-                exc_info=True
+            # リクエストIDを生成・付与
+            request.request_id = str(uuid.uuid4())[:8]
+            request.META['HTTP_X_REQUEST_ID'] = request.request_id
+
+            # ログに記録
+            logger.debug(
+                f"[{request.request_id}] {request.method} {request.path} "
+                f"user={getattr(request.user, 'username', 'anonymous')}"
             )
-            raise
+
+            try:
+                response = self.get_response(request)
+                # レスポンスヘッダーにもIDを含める
+                response['X-Request-ID'] = request.request_id
+                return response
+            except Exception as e:
+                # 例外発生時に詳細ログ
+                logger.error(
+                    f"[{request.request_id}] Exception in {request.path}: "
+                    f"{e.__class__.__name__}: {str(e)}",
+                    extra={
+                        'request_id': request.request_id,
+                        'user': getattr(request.user, 'username', 'anonymous'),
+                        'path': request.path,
+                        'method': request.method,
+                        'query_string': request.META.get('QUERY_STRING', ''),
+                    },
+                    exc_info=True
+                )
+                raise
+        finally:
+            if had_previous_request:
+                _thread_locals.request = previous_request
+            else:
+                delattr(_thread_locals, 'request')
 
 
 class PatientAccessMiddleware:

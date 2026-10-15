@@ -129,6 +129,11 @@ from .services.patient_registration import (
     register_additional_treatment_course,
     register_patient_with_initial_course,
 )
+from .services.session_writes import (
+    PatientCourseWriteError,
+    patient_course_writer,
+    validate_session_course,
+)
 
 # ==========================================
 # 祝日定義 (2024-2030) + 年末年始 (12/29-1/3)
@@ -1260,25 +1265,75 @@ def mapping_add(request, patient_id):
         form = MappingForm(request.POST)
         if form.is_valid():
             inst = form.save(commit=False)
-            if treatment_course is not None:
-                save_mapping_session_strict(
-                    inst, patient, treatment_course, course_number=course_number,
-                )
+            try:
+                with patient_course_writer(
+                    patient.pk,
+                    course_number if requested_course_number else None,
+                    expected_course_id=(
+                        treatment_course.pk if treatment_course is not None else None
+                    ),
+                    require_course=bool(requested_course_number),
+                ) as writer:
+                    duplicate_rows = list(
+                        MappingSession.objects.select_for_update().filter(
+                            patient=writer.patient,
+                            course_number=writer.course_number,
+                            date=inst.date,
+                            stimulation_site=inst.stimulation_site,
+                        ).order_by('pk')[:2]
+                    )
+                    if len(duplicate_rows) > 1:
+                        raise PatientCourseWriteError(
+                            '同じPatient/Course/日付のMT測定記録が複数あるため保存できません。'
+                        )
+
+                    mapping_session = duplicate_rows[0] if duplicate_rows else inst
+                    if duplicate_rows:
+                        validate_session_course(
+                            mapping_session,
+                            writer.patient,
+                            writer.course_number,
+                            writer.treatment_course,
+                        )
+                        for field_name in (
+                            'date', 'week_number', 'resting_mt',
+                            'helmet_position_a_x', 'helmet_position_a_y',
+                            'helmet_position_b_x', 'helmet_position_b_y', 'notes',
+                        ):
+                            setattr(
+                                mapping_session,
+                                field_name,
+                                form.cleaned_data[field_name],
+                            )
+
+                    if writer.treatment_course is not None:
+                        save_mapping_session_strict(
+                            mapping_session,
+                            writer.patient,
+                            writer.treatment_course,
+                            course_number=writer.course_number,
+                        )
+                    else:
+                        save_mapping_session_legacy(
+                            mapping_session, writer.patient, writer.course_number,
+                        )
+                    key_date = mapping_session.date
+                    course_number = writer.course_number
+            except (IntegrityError, PatientCourseWriteError) as exc:
+                form.add_error('date', str(exc))
             else:
-                save_mapping_session_legacy(inst, patient, course_number)
-            key_date = inst.date
-            action = request.POST.get('action', '')
-            if action == 'to_treatment':
-                query_params = {
-                    'date': key_date.strftime('%Y-%m-%d'),
-                    'course_number': course_number,
-                }
+                action = request.POST.get('action', '')
+                if action == 'to_treatment':
+                    query_params = {
+                        'date': key_date.strftime('%Y-%m-%d'),
+                        'course_number': course_number,
+                    }
+                    if dashboard_date:
+                        query_params['dashboard_date'] = dashboard_date
+                    return redirect(build_url('treatment_add', args=[patient.id], query=query_params))
                 if dashboard_date:
-                    query_params['dashboard_date'] = dashboard_date
-                return redirect(build_url('treatment_add', args=[patient.id], query=query_params))
-            if dashboard_date:
-                return redirect(f"/app/dashboard/?date={dashboard_date}")
-            return redirect('rtms_app:dashboard')
+                    return redirect(f"/app/dashboard/?date={dashboard_date}")
+                return redirect('rtms_app:dashboard')
     else:
         form = MappingForm(instance=existing_session) if existing_session else MappingForm(initial={
             'date': initial_date,

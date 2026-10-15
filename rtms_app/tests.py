@@ -1,4 +1,4 @@
-from django.test import TestCase, Client, RequestFactory
+from django.test import TestCase, TransactionTestCase, Client, RequestFactory
 from django.apps import apps as django_apps
 from django.urls import reverse
 from django.contrib.auth import get_user_model
@@ -5406,6 +5406,144 @@ class TestClinicalPathReschedule(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 30)
 
+    def test_api_get_session_rejects_get_without_changing_session_or_reservation_state(self):
+        from rtms_app.models import RtmSTreatmentReservation
+
+        course = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=2,
+            first_treatment_date=date(2026, 8, 24),
+        )
+        RtmSTreatmentReservation.objects.create(
+            treatment_course=course,
+            treatment_date=date(2026, 8, 25),
+            sequence_number=1,
+            status='provisional',
+            capacity_type='general_ward',
+        )
+        sessions_before = list(
+            TreatmentSession.objects.filter(patient=self.patient)
+            .order_by('pk')
+            .values_list('pk', 'treatment_course_id', 'course_number', 'session_date', 'slot', 'status')
+        )
+        reservations_before = list(
+            RtmSTreatmentReservation.objects.filter(treatment_course__patient=self.patient)
+            .order_by('pk')
+            .values_list('pk', 'treatment_course_id', 'treatment_date', 'sequence_number', 'status', 'capacity_type')
+        )
+
+        response = self.client.get(
+            f'/app/patient/{self.patient.pk}/print/api/get-session/',
+            {'course_number': 2, 'session_date': '2026-08-24'},
+        )
+
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(
+            list(
+                TreatmentSession.objects.filter(patient=self.patient)
+                .order_by('pk')
+                .values_list('pk', 'treatment_course_id', 'course_number', 'session_date', 'slot', 'status')
+            ),
+            sessions_before,
+        )
+        self.assertEqual(
+            list(
+                RtmSTreatmentReservation.objects.filter(treatment_course__patient=self.patient)
+                .order_by('pk')
+                .values_list('pk', 'treatment_course_id', 'treatment_date', 'sequence_number', 'status', 'capacity_type')
+            ),
+            reservations_before,
+        )
+
+    def test_api_get_session_still_requires_login(self):
+        response = Client().get(
+            f'/app/patient/{self.patient.pk}/print/api/get-session/',
+            {'course_number': 1, 'session_date': '2026-08-24'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+    def test_api_get_session_accepts_json_and_keeps_patient_course_scope(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+        )
+        other_patient = Patient.objects.create(
+            card_id='PATH2', name='Other Path Test', birth_date=date(1981, 1, 1),
+        )
+        other_course = TreatmentCourse.objects.create(
+            patient=other_patient, course_number=2,
+        )
+        course_one_session = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=course_one, course_number=1,
+            session_date=date(2026, 8, 24),
+        )
+        other_session = TreatmentSession.objects.create(
+            patient=other_patient, treatment_course=other_course, course_number=2,
+            session_date=date(2026, 8, 24),
+        )
+
+        response = self.client.post(
+            f'/app/patient/{self.patient.pk}/print/api/get-session/',
+            data=json.dumps({
+                'course_number': 2,
+                'session_date': '2026-08-24',
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['created'])
+        self.assertEqual(response.json()['course_number'], 2)
+        created_session = TreatmentSession.objects.get(pk=response.json()['session_id'])
+        self.assertEqual(created_session.patient_id, self.patient.pk)
+        self.assertEqual(created_session.treatment_course_id, course_two.pk)
+        self.assertEqual(TreatmentSession.objects.filter(treatment_course=course_one).count(), 1)
+        self.assertEqual(TreatmentSession.objects.filter(treatment_course=other_course).count(), 1)
+        course_one_session.refresh_from_db()
+        other_session.refresh_from_db()
+        self.assertEqual(course_one_session.session_date, date(2026, 8, 24))
+        self.assertEqual(other_session.session_date, date(2026, 8, 24))
+
+    def test_api_get_session_fails_closed_on_legacy_course_ownership_mismatch(self):
+        TreatmentCourse.objects.create(patient=self.patient, course_number=2)
+        legacy_session = TreatmentSession.objects.create(
+            patient=self.patient,
+            course_number=2,
+            treatment_course=None,
+            session_date=date(2026, 8, 24),
+        )
+
+        response = self.client.post(
+            f'/app/patient/{self.patient.pk}/print/api/get-session/',
+            {'course_number': 2, 'session_date': '2026-08-24'},
+        )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            list(TreatmentSession.objects.filter(patient=self.patient).values_list('pk', flat=True)),
+            [legacy_session.pk],
+        )
+
+    def test_api_get_session_rejects_explicit_null_course_without_retry(self):
+        from unittest.mock import patch
+
+        with patch('rtms_app.print_views._run_with_sqlite_busy_retry') as retry_operation:
+            response = self.client.post(
+                f'/app/patient/{self.patient.pk}/print/api/get-session/',
+                data=json.dumps({
+                    'course_number': None,
+                    'session_date': '2026-08-24',
+                }),
+                content_type='application/json',
+            )
+
+        self.assertEqual(response.status_code, 500)
+        retry_operation.assert_not_called()
+        self.assertFalse(TreatmentSession.objects.filter(patient=self.patient).exists())
+
     def test_initial_session_creation_uses_holiday_aware_canonical_dates(self):
         from rtms_app.services.rtms_schedule import generate_treatment_dates
 
@@ -5787,6 +5925,244 @@ class TestClinicalPathReschedule(TestCase):
         self.patient.refresh_from_db()
         self.assertEqual(course_one.admission_date, date(2026, 8, 21))
         self.assertEqual(self.patient.admission_date, date(2026, 8, 21))
+
+
+class SessionCreationApiSqliteRetryTests(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        from django.db import connections
+
+        if connections['default'].vendor != 'sqlite':
+            self.skipTest('SQLite contention coverage requires SQLite')
+        database = connections['default']
+        database.ensure_connection()
+        database.connection.execute('PRAGMA busy_timeout = 50')
+        database_name = str(database.settings_dict['NAME'])
+        self.assertTrue(
+            database_name == ':memory:' or 'mode=memory' in database_name,
+            f'Expected in-memory SQLite test database, got {database_name!r}',
+        )
+
+        self.user = get_user_model().objects.create_user(username='session-api-retry')
+        self.patient = Patient.objects.create(
+            card_id='R8B01', name='Session API Retry', birth_date=date(1980, 1, 1),
+        )
+        self.course = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=1,
+            first_treatment_date=date(2026, 8, 24),
+        )
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.url = f'/app/patient/{self.patient.pk}/print/api/get-session/'
+
+    @staticmethod
+    def _configure_thread_connection():
+        from django.db import connections
+
+        connections.close_all()
+        database = connections['default']
+        database.ensure_connection()
+        database.connection.execute('PRAGMA busy_timeout = 50')
+
+    def _start_patient_mutex_holder(self):
+        from threading import Event, Thread
+        from django.db import connections, transaction
+        from rtms_app.services.patient_mutex import acquire_patient_mutex
+
+        acquired, release, finished = Event(), Event(), Event()
+        errors = []
+
+        def hold_mutex():
+            try:
+                self._configure_thread_connection()
+                with transaction.atomic():
+                    acquire_patient_mutex(self.patient.pk)
+                    acquired.set()
+                    if not release.wait(timeout=5):
+                        raise TimeoutError('test mutex holder was not released')
+            except BaseException as error:
+                errors.append(error)
+            finally:
+                connections.close_all()
+                finished.set()
+
+        thread = Thread(target=hold_mutex, daemon=True)
+        thread.start()
+        self.assertTrue(acquired.wait(timeout=5), 'SQLite Patient mutex was not acquired')
+        return thread, release, finished, errors
+
+    def _post_json(self):
+        return self.client.post(
+            self.url,
+            data=json.dumps({
+                'course_number': 1,
+                'session_date': '2026-08-24',
+            }),
+            content_type='application/json',
+        )
+
+    def test_concurrent_posts_do_not_exceed_thirty_sessions(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        from django.conf import settings
+        from django.db import connections
+
+        self.course.first_treatment_date = None
+        self.course.save(update_fields=['first_treatment_date'])
+        for index in range(29):
+            TreatmentSession.objects.create(
+                patient=self.patient,
+                treatment_course=self.course,
+                course_number=1,
+                session_date=date(2026, 1, 1) + timedelta(days=index),
+            )
+        barrier = Barrier(2)
+        treatment_dates = (date(2026, 8, 24), date(2026, 8, 25))
+
+        def post_from_thread(session_date):
+            self._configure_thread_connection()
+            client = Client()
+            client.cookies[settings.SESSION_COOKIE_NAME] = self.client.cookies[
+                settings.SESSION_COOKIE_NAME
+            ].value
+            try:
+                barrier.wait(timeout=5)
+                response = client.post(
+                    self.url,
+                    data=json.dumps({
+                        'course_number': 1,
+                        'session_date': session_date.isoformat(),
+                    }),
+                    content_type='application/json',
+                )
+                return response.status_code
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            responses = list(executor.map(post_from_thread, treatment_dates))
+
+        self.assertEqual(sorted(responses), [200, 400])
+        self.assertEqual(
+            TreatmentSession.objects.filter(
+                patient=self.patient,
+                treatment_course=self.course,
+                course_number=1,
+            ).count(),
+            30,
+        )
+
+    def test_real_sqlite_busy_retries_whole_session_request(self):
+        from unittest.mock import patch
+
+        thread, release, finished, errors = self._start_patient_mutex_holder()
+
+        def release_on_retry(_delay):
+            release.set()
+            if not finished.wait(timeout=5):
+                raise TimeoutError('SQLite mutex holder did not finish after retry')
+
+        try:
+            with patch(
+                'rtms_app.services.rtms_treatment_reservations.time.sleep',
+                side_effect=release_on_retry,
+            ) as retry_sleep:
+                response = self._post_json()
+        finally:
+            release.set()
+            thread.join(timeout=5)
+
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(response.status_code, 200, response.content.decode())
+        self.assertTrue(response.json()['created'])
+        retry_sleep.assert_called_once()
+        self.assertEqual(
+            TreatmentSession.objects.filter(patient=self.patient, course_number=1).count(),
+            1,
+        )
+
+    def test_busy_after_insert_rolls_back_before_retrying(self):
+        import sqlite3
+        from unittest.mock import patch
+
+        from django.db import OperationalError
+        from rtms_app import print_views
+        from rtms_app.services import session_writes
+
+        create_session = print_views.get_or_create_treatment_session_strict
+        acquire_mutex = session_writes.acquire_patient_mutex
+        attempts = 0
+
+        def create_then_raise_busy(*args, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 2:
+                self.assertEqual(
+                    TreatmentSession.objects.filter(patient=self.patient).count(),
+                    0,
+                    'the first attempt must be rolled back before retry begins',
+                )
+            session, created = create_session(*args, **kwargs)
+            if attempts == 1:
+                error = OperationalError('database is locked')
+                error.sqlite_errorcode = sqlite3.SQLITE_BUSY
+                error.sqlite_errorname = 'SQLITE_BUSY'
+                raise error
+            return session, created
+
+        with patch(
+            'rtms_app.print_views.get_or_create_treatment_session_strict',
+            side_effect=create_then_raise_busy,
+        ), patch.object(
+            session_writes, 'acquire_patient_mutex', wraps=acquire_mutex,
+        ) as acquire_patient, patch(
+            'rtms_app.services.rtms_treatment_reservations.time.sleep',
+        ) as retry_sleep:
+            response = self._post_json()
+
+        self.assertEqual(response.status_code, 200, response.content.decode())
+        self.assertEqual(attempts, 2)
+        self.assertEqual(acquire_patient.call_count, 2)
+        retry_sleep.assert_called_once()
+        self.assertEqual(TreatmentSession.objects.filter(patient=self.patient).count(), 1)
+
+    def test_real_sqlite_busy_retry_exhaustion_returns_503_without_session(self):
+        from unittest.mock import patch
+
+        thread, release, _finished, errors = self._start_patient_mutex_holder()
+        try:
+            with patch('rtms_app.services.rtms_treatment_reservations.time.sleep') as retry_sleep:
+                response = self._post_json()
+        finally:
+            release.set()
+            thread.join(timeout=5)
+
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(response.status_code, 503)
+        self.assertGreaterEqual(retry_sleep.call_count, 1)
+        self.assertFalse(TreatmentSession.objects.filter(patient=self.patient).exists())
+
+    def test_integrity_error_is_not_retried(self):
+        from unittest.mock import patch
+
+        from django.db import IntegrityError
+
+        with patch(
+            'rtms_app.print_views.get_or_create_treatment_session_strict',
+            side_effect=IntegrityError('injected constraint failure'),
+        ) as create_session, patch(
+            'rtms_app.services.rtms_treatment_reservations.time.sleep',
+        ) as retry_sleep:
+            response = self._post_json()
+
+        self.assertEqual(response.status_code, 500)
+        create_session.assert_called_once()
+        retry_sleep.assert_not_called()
+        self.assertFalse(TreatmentSession.objects.filter(patient=self.patient).exists())
 
 class TestPatientSurveyFlow(TestCase):
     def setUp(self):

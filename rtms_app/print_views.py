@@ -1,6 +1,7 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.http import Http404, HttpResponse, HttpResponseNotAllowed
 from django.db import transaction
@@ -15,6 +16,11 @@ from .queries.assessment_queries import get_baseline_assessments_ordered, resolv
 from .services.strict_writes import (
 	get_or_create_treatment_session_legacy,
 	get_or_create_treatment_session_strict,
+)
+from .services.session_writes import patient_course_writer, validate_session_course
+from .services.rtms_treatment_reservations import (
+	_run_with_sqlite_busy_retry,
+	TreatmentReservationBusyError,
 )
 from django.template.loader import render_to_string
 from django.http import HttpResponse
@@ -576,6 +582,7 @@ def print_side_effect_check_pdf(request, patient_id, session_id):
 
 
 @login_required
+@require_POST
 def api_get_or_create_session(request, patient_id):
 	"""
 	API endpoint to get or create a TreatmentSession based on patient_id, course_number, and session_date.
@@ -589,26 +596,14 @@ def api_get_or_create_session(request, patient_id):
 	"""
 	import json
 	from django.http import JsonResponse
-	from django.views.decorators.http import require_http_methods
-	
-	if request.method == 'POST':
-		try:
-			data = json.loads(request.body)
-		except:
-			data = request.POST
-	else:
-		data = request.GET
+	try:
+		data = json.loads(request.body)
+	except:
+		data = request.POST
 	
 	try:
-		patient = get_object_or_404(Patient, pk=patient_id)
-		course_number = int(data.get('course_number', patient.course_number or 1))
-		treatment_course = TreatmentCourse.objects.filter(
-			patient=patient,
-			course_number=course_number,
-		).first()
-		session_scope = {'treatment_course': treatment_course} if treatment_course else {
-			'patient': patient, 'course_number': course_number,
-		}
+		requested_course_number = data.get('course_number')
+		course_number = int(requested_course_number) if 'course_number' in data else None
 		session_date_str = data.get('session_date')
 		
 		if not session_date_str:
@@ -620,77 +615,79 @@ def api_get_or_create_session(request, patient_id):
 		if not session_date:
 			return JsonResponse({'error': f'Invalid session_date format: {session_date_str}'}, status=400)
 
-		# This endpoint is used to create a normal treatment record from the
-		# treatment screen.  Keep it aligned with the canonical course schedule:
-		# weekends, Japanese holidays, year-end closures, and dates outside the
-		# 30-session course are not normal planned dates.  A holiday exception is
-		# deliberately handled only by the clinical-path drag/drop flow.
-		existing_session = TreatmentSession.objects.filter(
-			**session_scope,
-			session_date=session_date,
-			slot='',
-		).first()
-		course_first_treatment_date = (
-			treatment_course.first_treatment_date
-			if treatment_course is not None
-			else patient.first_treatment_date
-		)
-		if existing_session is None and course_first_treatment_date:
-			canonical_dates = generate_treatment_dates(
-				course_first_treatment_date,
-				total=30,
-				holidays=JP_HOLIDAYS,
-			)
-			if session_date not in canonical_dates:
-				return JsonResponse(
-					{'error': '通常の治療予定日ではありません。スケジュール画面から例外日として設定してください'},
-					status=400,
-				)
-		
-		# Get or create session with empty slot. The capacity check and insert
-		# are kept in one transaction so a new row cannot bypass the limit.
-		with transaction.atomic():
-			Patient.objects.select_for_update().get(pk=patient.pk)
-			existing_session = TreatmentSession.objects.filter(
-				**session_scope,
-				session_date=session_date,
-				slot='',
-			).first()
-			if existing_session is None and not can_create_treatment_session(patient, course_number):
-				return JsonResponse({'error': 'この患者・コースは治療予定が30回以上あるため、新規作成できません'}, status=400)
-			if treatment_course is not None:
-				session, created = get_or_create_treatment_session_strict(
-				patient,
-				treatment_course,
-				course_number=course_number,
-				session_date=session_date,
-				slot='',
-				defaults={
-					'date': timezone.make_aware(timezone.datetime.combine(session_date, timezone.datetime.min.time())),
-					'performer': request.user,
-				},
-			)
-			else:
-				session, created = get_or_create_treatment_session_legacy(
-				patient,
-				course_number,
-				session_date=session_date,
-				slot='',
-				defaults={
-					'date': timezone.make_aware(timezone.datetime.combine(session_date, timezone.datetime.min.time())),
-					'performer': request.user,
-				},
-			)
-		
-		return JsonResponse({
-			'session_id': session.id,
-			'created': created,
-			'patient_id': patient.id,
-			'course_number': course_number,
-			'session_date': session_date_str,
-		})
+		def create_session():
+			with patient_course_writer(patient_id, course_number) as writer:
+				patient = writer.patient
+				treatment_course = writer.treatment_course
+				existing_session = TreatmentSession.objects.select_for_update().filter(
+					**writer.session_filter,
+					session_date=session_date,
+					slot='',
+				).first()
+				if existing_session is not None:
+					validate_session_course(
+						existing_session,
+						patient,
+						writer.course_number,
+						treatment_course,
+					)
+					session, created = existing_session, False
+				else:
+					# Keep new records aligned with the selected Course's canonical dates.
+					course_first_treatment_date = (
+						treatment_course.first_treatment_date
+						if treatment_course is not None
+						else patient.first_treatment_date
+					)
+					if course_first_treatment_date:
+						canonical_dates = generate_treatment_dates(
+							course_first_treatment_date,
+							total=30,
+							holidays=JP_HOLIDAYS,
+						)
+						if session_date not in canonical_dates:
+							return JsonResponse(
+								{'error': '通常の治療予定日ではありません。スケジュール画面から例外日として設定してください'},
+								status=400,
+							)
+					if not can_create_treatment_session(patient, writer.course_number):
+						return JsonResponse({'error': 'この患者・コースは治療予定が30回以上あるため、新規作成できません'}, status=400)
+
+					defaults = {
+						'date': timezone.make_aware(timezone.datetime.combine(session_date, timezone.datetime.min.time())),
+						'performer': request.user,
+					}
+					if treatment_course is not None:
+						session, created = get_or_create_treatment_session_strict(
+							patient,
+							treatment_course,
+							course_number=writer.course_number,
+							session_date=session_date,
+							slot='',
+							defaults=defaults,
+						)
+					else:
+						session, created = get_or_create_treatment_session_legacy(
+							patient,
+							writer.course_number,
+							session_date=session_date,
+							slot='',
+							defaults=defaults,
+						)
+
+				return JsonResponse({
+					'session_id': session.id,
+					'created': created,
+					'patient_id': patient.id,
+					'course_number': writer.course_number,
+					'session_date': session_date_str,
+				})
+
+		return _run_with_sqlite_busy_retry(create_session)
 	
 	except Patient.DoesNotExist:
 		return JsonResponse({'error': f'Patient {patient_id} not found'}, status=404)
+	except TreatmentReservationBusyError:
+		return JsonResponse({'error': '同時処理のため治療予定を保存できませんでした。もう一度お試しください。'}, status=503)
 	except Exception as e:
 		return JsonResponse({'error': str(e)}, status=500)
