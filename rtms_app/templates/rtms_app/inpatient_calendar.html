@@ -12,6 +12,11 @@
       <div>
         <h1 class="h4 mb-1"><i class="fas fa-calendar-check me-2" aria-hidden="true"></i>rTMS日程調整</h1>
         <div class="small text-muted">{{ period_start|date:"Y/m/d" }}〜{{ period_end|date:"Y/m/d" }} / {{ week_count }}週間</div>
+        {% if treatment_course %}
+          <div class="small text-primary mt-1" aria-label="選択中のCourse">
+            選択中: {{ patient.name }} <span class="text-muted">Patient ID {{ patient.card_id }} / Course #{{ treatment_course.course_number }}</span>
+          </div>
+        {% endif %}
       </div>
       <div class="d-flex flex-wrap align-items-center gap-2">
         <a class="btn btn-outline-secondary btn-sm" href="{{ previous_range_url }}" aria-label="前の{{ week_count }}週間"><i class="fas fa-chevron-left" aria-hidden="true"></i><span class="ms-1">前の{{ week_count }}週</span></a>
@@ -44,7 +49,7 @@
         {% for entry in waitlist_entries %}
           <div class="waitlist-compact-entry">
             <div class="waitlist-compact-row">
-              <strong>{{ entry.treatment_course.patient.name }} <span class="text-muted">Course #{{ entry.treatment_course.course_number }}</span></strong>
+              <strong><a class="text-decoration-none" href="{% url 'rtms_app:patient_first_visit' entry.treatment_course.patient_id %}?course_number={{ entry.treatment_course.course_number }}">{{ entry.treatment_course.patient.name }}</a> <span class="text-muted">Course #{{ entry.treatment_course.course_number }}</span></strong>
               <span>希望: {{ entry.preferred_start_note|default:"未指定" }}</span>
               {% if entry.comment %}<span class="text-muted">{{ entry.comment }}</span>{% endif %}
               {% if entry.status == 'requested' or entry.status == 'waiting' %}<button type="button" class="btn btn-outline-primary btn-sm" aria-label="日程設定: {{ entry.treatment_course.patient.name }} / Course #{{ entry.treatment_course.course_number }}" aria-controls="reservationForm" aria-expanded="false" data-booking-open data-idle-label="日程設定" data-course-id="{{ entry.treatment_course_id }}" data-course-number="{{ entry.treatment_course.course_number }}" data-patient-name="{{ entry.treatment_course.patient.name }}" data-waitlist-id="{{ entry.pk }}" data-preferred-start-note="{{ entry.preferred_start_note }}" data-is-all-case-survey="{{ entry.treatment_course.is_all_case_survey|yesno:'true,false' }}">日程設定</button>{% endif %}

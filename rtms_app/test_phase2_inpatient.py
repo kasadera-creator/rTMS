@@ -6,6 +6,7 @@ import os
 import re
 import sqlite3
 import tempfile
+from unittest import skipUnless
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -40,6 +41,7 @@ from rtms_app.services.inpatient_planning import (
     ActualDischargeError,
     confirm_inpatient_schedule,
     InvalidWaitlistEntryError,
+    ProvisionalRollbackError,
     ScheduleConfirmationBusyError,
     record_actual_admission,
     record_actual_discharge,
@@ -128,6 +130,63 @@ class Phase2InpatientTests(TestCase):
             {"course_id": str(course.pk), "waitlist_entry_id": str(entry.pk)},
         )
 
+    def _model_rows(self, model, queryset):
+        fields = [field.attname for field in model._meta.concrete_fields]
+        return list(queryset.order_by("pk").values(*fields))
+
+    def _rollback_snapshot(self, patient_id):
+        course_scope = TreatmentCourse.objects.filter(patient_id=patient_id)
+        return {
+            "patient": self._model_rows(Patient, Patient.objects.filter(pk=patient_id)),
+            "courses": self._model_rows(TreatmentCourse, course_scope),
+            "plans": self._model_rows(
+                InpatientPlan, InpatientPlan.objects.filter(treatment_course__patient_id=patient_id),
+            ),
+            "entries": self._model_rows(
+                RtmSWaitlistEntry,
+                RtmSWaitlistEntry.objects.filter(treatment_course__patient_id=patient_id),
+            ),
+            "reservations": self._model_rows(
+                RtmSTreatmentReservation,
+                RtmSTreatmentReservation.objects.filter(treatment_course__patient_id=patient_id),
+            ),
+            "resource_assignments": self._model_rows(
+                ResourceAssignment,
+                ResourceAssignment.objects.filter(treatment_course__patient_id=patient_id),
+            ),
+            "treatment_sessions": self._model_rows(
+                TreatmentSession, TreatmentSession.objects.filter(patient_id=patient_id),
+            ),
+            "mapping_sessions": self._model_rows(
+                MappingSession, MappingSession.objects.filter(patient_id=patient_id),
+            ),
+            "mapping_schedules": self._model_rows(
+                MappingSchedule, MappingSchedule.objects.filter(patient_id=patient_id),
+            ),
+            "audit_logs": self._model_rows(
+                AuditLog, AuditLog.objects.filter(patient_id=patient_id),
+            ),
+        }
+
+    def assert_rollback_refused_without_changes(
+        self, course, entry, *, patient_id=None, additional_patient_ids=(),
+    ):
+        patient_id = patient_id or course.patient_id
+        patient_ids = sorted({
+            value for value in (course.patient_id, patient_id, *additional_patient_ids)
+            if value is not None
+        })
+        before = {pk: self._rollback_snapshot(pk) for pk in patient_ids}
+        with self.assertRaises(ProvisionalRollbackError):
+            rollback_provisional_schedule(
+                patient_id=patient_id,
+                treatment_course=course,
+                waitlist_entry=entry,
+                user=self.user,
+            )
+        after = {pk: self._rollback_snapshot(pk) for pk in patient_ids}
+        self.assertEqual(after, before)
+
     def test_clean_provisional_can_return_to_waiting_and_reappear_in_waitlist(self):
         self.course_one.is_all_case_survey = True
         self.course_one.private_room_planned = True
@@ -195,6 +254,298 @@ class Phase2InpatientTests(TestCase):
             0,
         )
         self.assertEqual(displayed.context["treatment_calendar_rows"], [])
+
+    @skipUnless(connection.vendor == "sqlite", "requires a real SQLite test database")
+    def test_rollback_locks_patient_before_loading_deferred_course(self):
+        entry = self.make_provisional_schedule(self.course_one)
+        deferred_course = TreatmentCourse.objects.only("pk").get(pk=self.course_one.pk)
+        deferred_entry = RtmSWaitlistEntry.objects.only("pk").get(pk=entry.pk)
+
+        with CaptureQueriesContext(connection) as captured:
+            rollback_provisional_schedule(
+                patient_id=self.patient.pk,
+                treatment_course=deferred_course,
+                waitlist_entry=deferred_entry,
+                user=self.user,
+            )
+
+        statements = [
+            item["sql"].lstrip().upper()
+            for item in captured.captured_queries
+            if not item["sql"].lstrip().upper().startswith(("SAVEPOINT", "RELEASE SAVEPOINT"))
+        ]
+        self.assertTrue(statements)
+        self.assertTrue(statements[0].startswith('UPDATE "RTMS_APP_PATIENT"'))
+
+    def test_rollback_reloads_course_and_entry_and_checks_patient_owner(self):
+        entry = self.make_provisional_schedule(self.course_one)
+        stale_course = TreatmentCourse(
+            pk=self.course_one.pk,
+            patient_id=999999,
+            course_number=999,
+        )
+        stale_entry = RtmSWaitlistEntry(
+            pk=entry.pk,
+            treatment_course_id=self.course_two.pk,
+        )
+
+        result = rollback_provisional_schedule(
+            patient_id=self.patient.pk,
+            treatment_course=stale_course,
+            waitlist_entry=stale_entry,
+            user=self.user,
+        )
+
+        self.assertEqual(result["course"].pk, self.course_one.pk)
+        self.assertEqual(result["waitlist_entry"].treatment_course_id, self.course_one.pk)
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, "waiting")
+
+    def test_rollback_rejects_wrong_patient_course_and_entry_without_changes(self):
+        entry = self.make_provisional_schedule(self.course_one)
+        other_patient = Patient.objects.create(
+            card_id="82009", name="Wrong Owner", birth_date=date(1981, 1, 1),
+        )
+        self.assert_rollback_refused_without_changes(
+            self.course_one,
+            entry,
+            patient_id=other_patient.pk,
+            additional_patient_ids=(other_patient.pk,),
+        )
+        self.assert_rollback_refused_without_changes(
+            TreatmentCourse(pk=999999),
+            entry,
+            patient_id=self.patient.pk,
+        )
+
+        other_entry = self.make_provisional_schedule(self.course_two)
+        self.assert_rollback_refused_without_changes(self.course_one, other_entry)
+
+    def test_rollback_rejects_treatment_and_mapping_sessions_without_changes(self):
+        for index, record_type in enumerate(("treatment", "mapping")):
+            with self.subTest(record_type=record_type):
+                course = TreatmentCourse.objects.create(
+                    patient=self.patient, course_number=20 + index,
+                )
+                entry = self.make_provisional_schedule(course)
+                if record_type == "treatment":
+                    TreatmentSession.objects.create(
+                        patient=self.patient,
+                        treatment_course=course,
+                        course_number=course.course_number,
+                        session_date=date(2026, 11, 2),
+                    )
+                else:
+                    MappingSession.objects.create(
+                        patient=self.patient,
+                        treatment_course=course,
+                        course_number=course.course_number,
+                        date=date(2026, 11, 2),
+                        resting_mt=50,
+                    )
+                self.assert_rollback_refused_without_changes(course, entry)
+
+    def test_rollback_rejects_admission_confirmed_reservation_and_active_assignment(self):
+        for index, reason in enumerate(("admission", "confirmed", "assignment")):
+            with self.subTest(reason=reason):
+                course = TreatmentCourse.objects.create(
+                    patient=self.patient, course_number=30 + index,
+                )
+                entry = self.make_provisional_schedule(course)
+                if reason == "admission":
+                    plan = InpatientPlan.objects.get(treatment_course=course)
+                    plan.status = "admitted"
+                    plan.actual_admission_at = django_timezone.now()
+                    plan.save(update_fields=["status", "actual_admission_at", "updated_at"])
+                elif reason == "confirmed":
+                    RtmSTreatmentReservation.objects.filter(
+                        treatment_course=course, sequence_number=1,
+                    ).update(status="confirmed")
+                else:
+                    ResourceAssignment.objects.create(
+                        treatment_course=course,
+                        resource_pool=self.pool,
+                        planned_start_date=date(2026, 10, 2),
+                        status="active",
+                    )
+                self.assert_rollback_refused_without_changes(course, entry)
+
+    def test_rollback_rejects_missing_malformed_and_mismatched_baselines_without_changes(self):
+        for index, issue in enumerate((
+            "missing", "malformed", "mismatched", "patient_baseline", "reservation_baseline",
+        )):
+            with self.subTest(issue=issue):
+                course = TreatmentCourse.objects.create(
+                    patient=self.patient, course_number=40 + index,
+                )
+                entry = self.make_provisional_schedule(course)
+                baseline = AuditLog.objects.filter(
+                    target_model="RtmSWaitlistEntry",
+                    target_pk=str(entry.pk),
+                ).order_by("-pk").first()
+                if issue == "missing":
+                    baseline.delete()
+                elif issue == "malformed":
+                    AuditLog.objects.filter(pk=baseline.pk).update(meta=[])
+                elif issue == "mismatched":
+                    metadata = dict(baseline.meta)
+                    metadata["course_id"] = course.pk + 1000
+                    AuditLog.objects.filter(pk=baseline.pk).update(meta=metadata)
+                elif issue == "patient_baseline":
+                    metadata = dict(baseline.meta)
+                    metadata["patient_before"] = {}
+                    AuditLog.objects.filter(pk=baseline.pk).update(meta=metadata)
+                else:
+                    metadata = dict(baseline.meta)
+                    provisional_values = dict(metadata["provisional_values"])
+                    provisional_values.pop("reservations", None)
+                    metadata["provisional_values"] = provisional_values
+                    AuditLog.objects.filter(pk=baseline.pk).update(meta=metadata)
+                self.assert_rollback_refused_without_changes(course, entry)
+
+    def test_rollback_rejects_course_entry_and_plan_snapshot_changes_without_changes(self):
+        for index, field in enumerate(("course", "entry", "plan")):
+            with self.subTest(field=field):
+                course = TreatmentCourse.objects.create(
+                    patient=self.patient, course_number=50 + index,
+                )
+                entry = self.make_provisional_schedule(course)
+                plan = InpatientPlan.objects.get(treatment_course=course)
+                if field == "course":
+                    course.is_all_case_survey = True
+                    course.save(update_fields=["is_all_case_survey", "updated_at"])
+                elif field == "entry":
+                    entry.scheduled_at = django_timezone.now()
+                    entry.save(update_fields=["scheduled_at", "updated_at"])
+                else:
+                    plan.uncertainty = "unknown"
+                    plan.save(update_fields=["uncertainty", "updated_at"])
+                self.assert_rollback_refused_without_changes(course, entry)
+
+    def test_rollback_rejects_patient_mirror_changes_without_changes(self):
+        entry = self.make_provisional_schedule(self.course_one)
+        self.patient.mapping_date = date(2026, 10, 4)
+        self.patient.save(update_fields=["mapping_date"])
+        self.assert_rollback_refused_without_changes(self.course_one, entry)
+
+    def test_rollback_rejects_reservation_changes_without_changes(self):
+        mutations = ("status", "date", "capacity", "sequence", "owner")
+        for index, mutation in enumerate(mutations):
+            with self.subTest(mutation=mutation):
+                course = TreatmentCourse.objects.create(
+                    patient=self.patient, course_number=60 + index,
+                )
+                entry = self.make_provisional_schedule(course)
+                rows = list(RtmSTreatmentReservation.objects.filter(
+                    treatment_course=course,
+                ).order_by("sequence_number"))
+                first = rows[0]
+                if mutation == "status":
+                    RtmSTreatmentReservation.objects.filter(pk=first.pk).update(status="cancelled")
+                elif mutation == "date":
+                    RtmSTreatmentReservation.objects.filter(pk=first.pk).update(
+                        treatment_date=date(2030, 1, 2),
+                    )
+                elif mutation == "capacity":
+                    other_capacity_type = next(
+                        value for value, _label in RtmSTreatmentReservation.CAPACITY_TYPE_CHOICES
+                        if value != first.capacity_type
+                    )
+                    RtmSTreatmentReservation.objects.filter(pk=first.pk).update(
+                        capacity_type=other_capacity_type,
+                    )
+                elif mutation == "sequence":
+                    last = rows[-1]
+                    last.delete()
+                    RtmSTreatmentReservation.objects.filter(pk=first.pk).update(sequence_number=30)
+                    RtmSTreatmentReservation.objects.create(
+                        treatment_course=course,
+                        treatment_date=date(2030, 1, 3),
+                        sequence_number=1,
+                        status="provisional",
+                        capacity_type=first.capacity_type,
+                    )
+                else:
+                    RtmSTreatmentReservation.objects.filter(pk=first.pk).update(
+                        treatment_course_id=self.course_two.pk,
+                    )
+                self.assert_rollback_refused_without_changes(course, entry)
+
+    def test_rollback_rejects_plan_and_reservation_owner_changes_without_changes(self):
+        course = TreatmentCourse.objects.create(patient=self.patient, course_number=70)
+        entry = self.make_provisional_schedule(course)
+        plan = InpatientPlan.objects.get(treatment_course=course)
+        InpatientPlan.objects.filter(pk=plan.pk).update(treatment_course_id=self.course_two.pk)
+        self.assert_rollback_refused_without_changes(course, entry)
+
+        course = TreatmentCourse.objects.create(patient=self.patient, course_number=71)
+        entry = self.make_provisional_schedule(course)
+        reservation = RtmSTreatmentReservation.objects.filter(
+            treatment_course=course,
+        ).order_by("sequence_number").first()
+        RtmSTreatmentReservation.objects.filter(pk=reservation.pk).update(
+            treatment_course_id=self.course_two.pk,
+        )
+        self.assert_rollback_refused_without_changes(course, entry)
+
+    def test_successful_course_one_rollback_preserves_patient_and_course_two_snapshot(self):
+        self.patient.first_treatment_date = date(2026, 8, 3)
+        self.patient.mapping_date = date(2026, 8, 4)
+        self.patient.save(update_fields=["first_treatment_date", "mapping_date"])
+        entry = self.make_provisional_schedule(self.course_one)
+        other_entry = self.make_provisional_schedule(self.course_two)
+        before = self._rollback_snapshot(self.patient.pk)
+        baseline = AuditLog.objects.filter(
+            target_model="RtmSWaitlistEntry",
+            target_pk=str(entry.pk),
+        ).order_by("-pk").first()
+
+        rollback_provisional_schedule(
+            patient_id=self.patient.pk,
+            treatment_course=self.course_one,
+            waitlist_entry=entry,
+            user=self.user,
+        )
+
+        after = self._rollback_snapshot(self.patient.pk)
+        self.assertEqual(after["patient"], before["patient"])
+        self.assertEqual(
+            [row for row in after["courses"] if row["id"] == self.course_two.pk],
+            [row for row in before["courses"] if row["id"] == self.course_two.pk],
+        )
+        for collection in (
+            "plans", "entries", "reservations", "resource_assignments",
+            "treatment_sessions", "mapping_sessions", "mapping_schedules",
+        ):
+            self.assertEqual(
+                [row for row in after[collection] if row.get("treatment_course_id") == self.course_two.pk],
+                [row for row in before[collection] if row.get("treatment_course_id") == self.course_two.pk],
+                collection,
+            )
+        course_after = next(row for row in after["courses"] if row["id"] == self.course_one.pk)
+        self.assertIsNone(course_after["admission_date"])
+        self.assertIsNone(course_after["first_treatment_date"])
+        self.assertIsNone(course_after["mapping_date"])
+        entry_after = next(row for row in after["entries"] if row["id"] == entry.pk)
+        self.assertEqual(entry_after["status"], "waiting")
+        plan_after = next(row for row in after["plans"] if row["treatment_course_id"] == self.course_one.pk)
+        self.assertEqual(plan_after["status"], "draft")
+        self.assertIsNone(plan_after["planned_admission_date"])
+        reservations_after = [
+            row for row in after["reservations"]
+            if row["treatment_course_id"] == self.course_one.pk
+        ]
+        self.assertEqual(len(reservations_after), 30)
+        self.assertTrue(all(row["status"] == "cancelled" for row in reservations_after))
+        rollback_logs = [
+            row for row in after["audit_logs"]
+            if row["target_model"] == "RtmSWaitlistEntry"
+            and row["target_pk"] == str(entry.pk)
+            and row["meta"].get("event") == "provisional_schedule_rollback"
+        ]
+        self.assertEqual(len(rollback_logs), 1)
+        self.assertEqual(rollback_logs[0]["meta"]["baseline_audit_id"], baseline.pk)
+        self.assertEqual(other_entry.status, "provisional")
 
     def test_rollback_requires_provisional_state_and_matching_course(self):
         entry = self.make_provisional_schedule()
@@ -459,6 +810,22 @@ class Phase2InpatientTests(TestCase):
                 self.assertEqual(entry.status, "provisional")
                 self.assertEqual(mapping_schedule.planned_date, date(2026, 10, 6))
 
+    def test_rollback_rejects_mapping_schedules_without_any_related_changes(self):
+        for index, legacy in enumerate((False, True)):
+            with self.subTest(legacy=legacy):
+                course = TreatmentCourse.objects.create(
+                    patient=self.patient, course_number=75 + index,
+                )
+                entry = self.make_provisional_schedule(course)
+                MappingSchedule.objects.create(
+                    patient=self.patient,
+                    treatment_course=None if legacy else course,
+                    course_number=course.course_number,
+                    week_number=1,
+                    planned_date=date(2026, 10, 6),
+                )
+                self.assert_rollback_refused_without_changes(course, entry)
+
     def test_rollback_rejects_actual_admission(self):
         entry = self.make_provisional_schedule()
         plan = InpatientPlan.objects.get(treatment_course=self.course_one)
@@ -574,10 +941,12 @@ class Phase2InpatientTests(TestCase):
     def test_rollback_audit_failure_rolls_back_all_course_state(self):
         entry = self.make_provisional_schedule()
         plan = InpatientPlan.objects.get(treatment_course=self.course_one)
+        before = self._rollback_snapshot(self.patient.pk)
 
         with patch.object(AuditLog.objects, "create", side_effect=RuntimeError("audit unavailable")):
             with self.assertRaises(RuntimeError):
                 rollback_provisional_schedule(
+                    patient_id=self.patient.pk,
                     treatment_course=self.course_one,
                     waitlist_entry=entry,
                     user=self.user,
@@ -589,6 +958,7 @@ class Phase2InpatientTests(TestCase):
         self.assertEqual(entry.status, "provisional")
         self.assertEqual(plan.status, "provisional")
         self.assertEqual(self.course_one.first_treatment_date, date(2026, 10, 5))
+        self.assertEqual(self._rollback_snapshot(self.patient.pk), before)
 
     def test_independent_capacity_values_and_operational_warning(self):
         self.assertEqual(self.pool.physical_capacity, 5)
@@ -2507,7 +2877,15 @@ class Phase2InpatientTests(TestCase):
             if row["treatment_course_id"] == self.course_one.pk
         )
         self.assertEqual(row["schedule_status"], "waiting")
-        self.assertContains(
+        self.assertEqual(response.context["waitlist_entries"], [])
+        self.assertNotIn(
+            self.course_one.pk,
+            {
+                row["treatment_course_id"]
+                for row in response.context["treatment_calendar_rows"]
+            },
+        )
+        self.assertNotContains(
             response,
             'class="schedule-status schedule-status--waiting">待機</span>',
         )
@@ -3362,7 +3740,18 @@ class Phase2InpatientTests(TestCase):
         self.assertEqual(calendar_response.status_code, 200)
         self.assertEqual(waitlist_response.status_code, 200)
         self.assertContains(calendar_response, "選択中: Phase Two")
+        self.assertContains(calendar_response, f"Patient ID {self.patient.card_id}")
+        self.assertContains(calendar_response, "Course #1")
         self.assertContains(waitlist_response, "rTMS待機リスト")
+
+        course_two_response = self.client.get(
+            reverse("rtms_app:inpatient_calendar"),
+            {"patient_id": self.patient.pk, "course_number": self.course_two.course_number},
+        )
+        self.assertContains(course_two_response, "Course #2")
+
+        regular_calendar_response = self.client.get(reverse("rtms_app:inpatient_calendar"))
+        self.assertNotContains(regular_calendar_response, "選択中:")
 
     def test_calendar_reorganizes_global_view_with_waitlist_and_course_filter(self):
         InpatientPlan.objects.create(
@@ -3694,29 +4083,33 @@ class Phase2InpatientTests(TestCase):
         self.assertContains(response, "現在、rTMS待機者はいません。")
 
     def test_calendar_waitlist_rows_preserve_each_course(self):
-        self.course_one.admission_date = date(2026, 10, 1)
-        self.course_two.admission_date = date(2026, 10, 8)
-        self.course_one.save(update_fields=["admission_date", "updated_at"])
-        self.course_two.save(update_fields=["admission_date", "updated_at"])
-        RtmSWaitlistEntry.objects.create(
+        first_entry = RtmSWaitlistEntry.objects.create(
             treatment_course=self.course_one,
             status="waiting",
         )
-        RtmSWaitlistEntry.objects.create(
+        second_entry = RtmSWaitlistEntry.objects.create(
             treatment_course=self.course_two,
-            status="waiting",
+            status="requested",
         )
 
         response = self.client.get(reverse("rtms_app:inpatient_calendar"))
 
+        self.assertCountEqual(response.context["waitlist_entries"], [first_entry, second_entry])
+        self.assertEqual(response.context["waitlist_display_count"], 2)
+        self.assertEqual(response.context["treatment_calendar_rows"], [])
         self.assertContains(
             response,
-            f"{reverse('rtms_app:patient_first_visit', args=[self.patient.pk])}?course_number=1",
+            f'href="{reverse("rtms_app:patient_first_visit", args=[self.patient.pk])}?course_number=1"',
         )
         self.assertContains(
             response,
-            f"{reverse('rtms_app:patient_first_visit', args=[self.patient.pk])}?course_number=2",
+            f'href="{reverse("rtms_app:patient_first_visit", args=[self.patient.pk])}?course_number=2"',
         )
+        self.assertContains(response, self.patient.name)
+        self.assertContains(response, "Course #1")
+        self.assertContains(response, "Course #2")
+        self.assertContains(response, "希望: 未指定")
+        self.assertEqual(response.content.count(b'data-waitlist-id="'), 2)
 
     def test_waitlist_registration_patient_selection_searches_id_and_name(self):
         response = self.client.get(

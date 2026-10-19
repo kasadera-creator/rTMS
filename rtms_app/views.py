@@ -88,6 +88,7 @@ from .services.schedule import (
     get_treatment_sessions,
     get_treatment_virtual_number_map,
     shift_future_sessions,
+    clear_treatment_schedule_dates_locked,
     reschedule_planned_session,
     reschedule_treatment_start_date,
 )
@@ -175,7 +176,6 @@ JP_HOLIDAYS = {
 }
 
 def is_holiday(d):
-    """日付が祝日リストまたは年末年始に含まれるか"""
     if d in JP_HOLIDAYS: return True
     if d.month == 12 and d.day >= 29: return True
     if d.month == 1 and d.day <= 3: return True
@@ -183,14 +183,10 @@ def is_holiday(d):
 
 
 def is_treatment_day(d):
-    """治療実施日か判定（平日かつ祝日でない）"""
     return d.weekday() < 5 and not is_holiday(d)
 
 
-# Assessment window helpers
-# =========================
 def _first_last_treatment_day_in_range(start_d, end_d):
-    """start_d〜end_d の範囲で、治療日(is_treatment_day)の最初と最後を返す。無ければ (None, None)"""
     cur = start_d
     first = None
     last = None
@@ -203,22 +199,13 @@ def _first_last_treatment_day_in_range(start_d, end_d):
     return first, last
 
 
-
-
 def get_assessment_window(patient, timing, treatment_course=None):
-    """
-    評価予定日レンジ(window)を返す: (window_start, window_end)
-    baseline: 初診日(created_at)〜初回治療日
-    week3: 第3週(14-20日後)の治療日(平日・祝日除外)の最初〜最後
-    week6: 第6週(35-41日後)の治療日(平日・祝日除外)の最初〜最後
-    """
     first_treatment_date = (
         treatment_course.first_treatment_date
         if treatment_course is not None
         else patient.first_treatment_date
     )
 
-    # baseline
     if timing == "baseline":
         ws = get_hamd_baseline_default_date(patient, treatment_course=treatment_course)
         we = first_treatment_date or ws
@@ -1372,11 +1359,12 @@ def mapping_add(request, patient_id):
 def patient_first_visit(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
     dashboard_date = request.GET.get('dashboard_date')
+    requested_course_number = request.GET.get('course_number') or request.POST.get('course_number')
     treatment_course = resolve_treatment_course(
         patient,
-        course_number=request.GET.get('course_number') or request.POST.get('course_number'),
+        course_number=requested_course_number,
     )
-    if (request.GET.get('course_number') or request.POST.get('course_number')) and treatment_course is None:
+    if requested_course_number and treatment_course is None:
         return HttpResponseBadRequest('対象の治療クールが見つかりません')
     course_number = treatment_course.course_number if treatment_course else patient.course_number or 1
     course_discharge_date = (
@@ -1425,6 +1413,11 @@ def patient_first_visit(request, patient_id):
             if treatment_course is not None
             else patient.first_treatment_date
         )
+        old_admission_date = (
+            treatment_course.admission_date
+            if treatment_course is not None
+            else patient.admission_date
+        )
         old_is_all_case_survey = (
             treatment_course.is_all_case_survey
             if treatment_course is not None
@@ -1434,6 +1427,7 @@ def patient_first_visit(request, patient_id):
         form_instance = treatment_course if treatment_course is not None else patient
         form = form_class(post, instance=form_instance, treatment_course=treatment_course)
         action = request.POST.get('action')
+        first_visit_saved_under_mutex = False
         if action == 'save_waitlist_candidate':
             if treatment_course is None:
                 return HttpResponseBadRequest('待機患者の日程候補には対象Courseが必要です')
@@ -1447,6 +1441,11 @@ def patient_first_visit(request, patient_id):
         if form.is_valid():
             p = form.save(commit=False)
             treatment_start_changed = p.first_treatment_date != old_first_treatment_date
+            schedule_dates_cleared = (
+                p.admission_date is None
+                and p.first_treatment_date is None
+                and (old_admission_date is not None or old_first_treatment_date is not None)
+            )
             diag_list = request.POST.getlist('diag_list')
             history_codes = [code for code in request.POST.getlist('psychiatric_history') if code != 'F32']
             history_labels = dict(PatientFirstVisitForm.PSY_HISTORY_CHOICES)
@@ -1458,28 +1457,79 @@ def patient_first_visit(request, patient_id):
                     full_diagnosis += f", その他({diag_other})"
                 p.diagnosis = full_diagnosis
 
-            if treatment_start_changed and p.first_treatment_date is not None:
+            if schedule_dates_cleared:
                 try:
-                    reschedule_treatment_start_date(
-                        patient,
-                        p.first_treatment_date,
-                        course_number=course_number,
-                        holidays=JP_HOLIDAYS,
-                        allow_exceptional_day=bool(
-                            p.first_treatment_date and not is_treatment_day(p.first_treatment_date)
-                        ),
+                    def clear_schedule_and_save_form():
+                        with patient_course_writer(
+                            patient.pk,
+                            course_number if requested_course_number else None,
+                            expected_course_id=(
+                                treatment_course.pk if treatment_course is not None else None
+                            ),
+                            require_course=bool(requested_course_number),
+                        ) as writer:
+                            clear_treatment_schedule_dates_locked(writer)
+                            form.instance = writer.treatment_course or writer.patient
+                            cleared_instance = form.save(commit=False)
+                            cleared_instance.save()
+                            return writer.patient, writer.treatment_course, cleared_instance
+
+                    patient, treatment_course, p = _run_with_sqlite_busy_retry(
+                        clear_schedule_and_save_form,
                     )
-                    # Keep the form instance from restoring the old MT base.
-                    p.mapping_date = p.first_treatment_date
+                    first_visit_saved_under_mutex = True
+                except (ValueError, TreatmentReservationBusyError) as exc:
+                    form.add_error('first_treatment_date', str(exc))
+                    restored_post = post.copy()
+                    restored_post['admission_date'] = (
+                        old_admission_date.isoformat() if old_admission_date else ''
+                    )
+                    restored_post['first_treatment_date'] = (
+                        old_first_treatment_date.isoformat()
+                        if old_first_treatment_date else ''
+                    )
+                    form.data = restored_post
+                    p = None
+
+            elif treatment_start_changed:
+                try:
+                    with patient_course_writer(
+                        patient.pk,
+                        course_number if requested_course_number else None,
+                        expected_course_id=(
+                            treatment_course.pk if treatment_course is not None else None
+                        ),
+                        require_course=bool(requested_course_number),
+                    ) as writer:
+                        patient = writer.patient
+                        treatment_course = writer.treatment_course
+                        reschedule_treatment_start_date(
+                            patient,
+                            p.first_treatment_date,
+                            course_number=writer.course_number,
+                            holidays=JP_HOLIDAYS,
+                            allow_exceptional_day=bool(
+                                p.first_treatment_date
+                                and not is_treatment_day(p.first_treatment_date)
+                            ),
+                        )
+                        if treatment_course is not None:
+                            p.mapping_date = p.first_treatment_date
+                        p.save()
+                        first_visit_saved_under_mutex = True
                 except ValueError as exc:
                     form.add_error('first_treatment_date', str(exc))
                     p = None
 
             if p is not None:
-                if treatment_course is not None:
-                    if treatment_start_changed and p.first_treatment_date is not None:
-                        p.mapping_date = p.first_treatment_date
-                p.save()
+                if (
+                    treatment_course is not None
+                    and treatment_start_changed
+                    and p.first_treatment_date is not None
+                ):
+                    p.mapping_date = p.first_treatment_date
+                if not first_visit_saved_under_mutex:
+                    p.save()
                 if not old_is_all_case_survey and p.is_all_case_survey:
                     hamd_scale = ScaleDefinition.objects.filter(code='hamd').first()
                     if hamd_scale is not None:
@@ -1800,11 +1850,6 @@ def treatment_add(request, patient_id):
 
     if request.method == 'POST' and request.POST.get('action') == 'save_sae_report':
         session_date = parse_date(request.POST.get('treatment_date') or '') or initial_date
-        session = TreatmentSession.objects.filter(
-            **session_scope, session_date=session_date, slot=''
-        ).first()
-        if session is None:
-            return JsonResponse({'error': '対象の治療セッションが見つかりません。'}, status=404)
 
         def report_int(name):
             try:
@@ -1821,52 +1866,101 @@ def treatment_add(request, patient_id):
             'うつ病エピソード': 'depressive_episode',
             '反復性うつ病性障害': 'recurrent_depressive_disorder',
         }.get(diagnosis, 'other')
-        existing_sae = SeriousAdverseEvent.objects.filter(
-            patient=patient, course_number=course_number, session=session
-        ).first()
-        report, _ = AdverseEventReport.objects.update_or_create(
-            session=session,
-            defaults={
-                'event_types': existing_sae.event_types if existing_sae else [],
-                'adverse_event_name': (request.POST.get('event_name') or '').strip(),
-                'onset_date': report_date('onset_date'),
-                'age': report_int('age'),
-                'sex': (request.POST.get('gender') or '').strip(),
-                'initials': (request.POST.get('initials') or '').strip(),
-                'diagnosis_category': diagnosis_category,
-                'diagnosis_other_text': (request.POST.get('diagnosis_other') or '').strip(),
-                'concomitant_meds_text': request.POST.get('concomitant_meds', ''),
-                'substance_intake_text': request.POST.get('substance_use', ''),
-                'seizure_history_flag': request.POST.get('seizure_history') == 'あり',
-                'seizure_history_date_text': request.POST.get('seizure_history_detail', ''),
-                'rmt_value': report_int('rmt'),
-                'intensity_value': report_int('intensity'),
-                'stimulation_site_category': 'other' if request.POST.get('site') == 'その他' else 'left_dlpfc',
-                'stimulation_site_other_text': request.POST.get('site', '') if request.POST.get('site') == 'その他' else '',
-                'treatment_course_number': report_int('treatment_number'),
-                'outcome_flags': [request.POST.get('outcome')] if request.POST.get('outcome') else [],
-                'outcome_date': report_date('outcome_date'),
-                'special_notes': request.POST.get('notes', ''),
-                'physician_comment': request.POST.get('doctor_comment', ''),
-                'prefilled_snapshot': {'source': 'treatment_add', 'session_date': session_date.isoformat()},
-            },
-        )
+        try:
+            with patient_course_writer(
+                patient.pk,
+                course_number if requested_course_number else None,
+                expected_course_id=(
+                    treatment_course.pk if treatment_course is not None else None
+                ),
+                require_course=bool(requested_course_number),
+            ) as writer:
+                session = TreatmentSession.objects.select_for_update().filter(
+                    **writer.session_filter,
+                    session_date=session_date,
+                    slot='',
+                ).first()
+                if session is None:
+                    return JsonResponse({'error': '対象の治療セッションが見つかりません。'}, status=404)
+                validate_session_course(
+                    session,
+                    writer.patient,
+                    writer.course_number,
+                    writer.treatment_course,
+                )
+                existing_saes = list(
+                    SeriousAdverseEvent.objects.select_for_update()
+                    .filter(session=session)
+                    .order_by('pk')[:2]
+                )
+                if len(existing_saes) > 1:
+                    raise PatientCourseWriteError(
+                        '対象Sessionの重篤有害事象を一意に確認できません。'
+                    )
+                existing_sae = existing_saes[0] if existing_saes else None
+                if existing_sae is not None and (
+                    existing_sae.patient_id != writer.patient.pk
+                    or existing_sae.course_number != writer.course_number
+                ):
+                    raise PatientCourseWriteError(
+                        '重篤有害事象のPatient/Course所有関係が一致しません。'
+                    )
+                report, _ = AdverseEventReport.objects.update_or_create(
+                    session=session,
+                    defaults={
+                        'event_types': existing_sae.event_types if existing_sae else [],
+                        'adverse_event_name': (request.POST.get('event_name') or '').strip(),
+                        'onset_date': report_date('onset_date'),
+                        'age': report_int('age'),
+                        'sex': (request.POST.get('gender') or '').strip(),
+                        'initials': (request.POST.get('initials') or '').strip(),
+                        'diagnosis_category': diagnosis_category,
+                        'diagnosis_other_text': (request.POST.get('diagnosis_other') or '').strip(),
+                        'concomitant_meds_text': request.POST.get('concomitant_meds', ''),
+                        'substance_intake_text': request.POST.get('substance_use', ''),
+                        'seizure_history_flag': request.POST.get('seizure_history') == 'あり',
+                        'seizure_history_date_text': request.POST.get('seizure_history_detail', ''),
+                        'rmt_value': report_int('rmt'),
+                        'intensity_value': report_int('intensity'),
+                        'stimulation_site_category': 'other' if request.POST.get('site') == 'その他' else 'left_dlpfc',
+                        'stimulation_site_other_text': request.POST.get('site', '') if request.POST.get('site') == 'その他' else '',
+                        'treatment_course_number': report_int('treatment_number'),
+                        'outcome_flags': [request.POST.get('outcome')] if request.POST.get('outcome') else [],
+                        'outcome_date': report_date('outcome_date'),
+                        'special_notes': request.POST.get('notes', ''),
+                        'physician_comment': request.POST.get('doctor_comment', ''),
+                        'prefilled_snapshot': {'source': 'treatment_add', 'session_date': session_date.isoformat()},
+                    },
+                )
+        except PatientCourseWriteError as exc:
+            return JsonResponse({'error': str(exc)}, status=400)
         return JsonResponse({'status': 'success', 'report_id': report.id})
 
     if request.method == 'POST' and request.POST.get('action') == 'clear_side_effects':
         session_date = parse_date(request.POST.get('treatment_date') or '') or initial_date
-        session = TreatmentSession.objects.filter(
-            **session_scope, session_date=session_date, slot=''
-        ).first()
-        if session is None:
-            return JsonResponse({'error': '対象の治療セッションが見つかりません。'}, status=404)
-        SideEffectCheck.objects.update_or_create(
-            session=session,
-            defaults={'rows': [], 'memo': '副作用なし', 'physician_signature': ''},
-        )
-        SeriousAdverseEvent.objects.filter(session=session).delete()
-        AdverseEventReport.objects.filter(session=session).delete()
+        with patient_course_writer(
+            patient.pk,
+            course_number if requested_course_number else None,
+            expected_course_id=(
+                treatment_course.pk if treatment_course is not None else None
+            ),
+            require_course=bool(requested_course_number),
+        ) as writer:
+            session = TreatmentSession.objects.select_for_update().filter(
+                **writer.session_filter,
+                session_date=session_date,
+                slot='',
+            ).first()
+            if session is None:
+                return JsonResponse({'error': '対象の治療セッションが見つかりません。'}, status=404)
+            SideEffectCheck.objects.update_or_create(
+                session=session,
+                defaults={'rows': [], 'memo': '副作用なし', 'physician_signature': ''},
+            )
+            SeriousAdverseEvent.objects.filter(session=session).delete()
+            AdverseEventReport.objects.filter(session=session).delete()
         return JsonResponse({'status': 'success', 'side_effect_status': '副作用なし'})
+
     # Session number is derived from materialized TreatmentSession order.
     session_num = None
 
@@ -1875,18 +1969,17 @@ def treatment_add(request, patient_id):
     current_week_mapping = None
     mapping_alert = None
 
-    # 上部患者バー右側：モード切替（治療画面専用）
     mode_switch_html = mark_safe(
         """
-        <div class=\"btn-group\" role=\"group\" aria-label=\"mode-switch\">
-            <input type=\"radio\" class=\"btn-check\" name=\"modeSwitch\" id=\"treatModeRecord\" autocomplete=\"off\" checked>
-            <label class=\"btn btn-success btn-sm\" for=\"treatModeRecord\">
-                <i class=\"fas fa-pen me-1\"></i>治療内容記入モード
+        <div class="btn-group" role="group" aria-label="mode-switch">
+            <input type="radio" class="btn-check" name="modeSwitch" id="treatModeRecord" autocomplete="off" checked>
+            <label class="btn btn-success btn-sm" for="treatModeRecord">
+                <i class="fas fa-pen me-1"></i>治療内容記録モード
             </label>
 
-            <input type=\"radio\" class=\"btn-check\" name=\"modeSwitch\" id=\"treatModeWizard\" autocomplete=\"off\">
-            <label class=\"btn btn-outline-success btn-sm\" for=\"treatModeWizard\">
-                <i class=\"fas fa-route me-1\"></i>手順解説モード
+            <input type="radio" class="btn-check" name="modeSwitch" id="treatModeWizard" autocomplete="off">
+            <label class="btn btn-outline-success btn-sm" for="treatModeWizard">
+                <i class="fas fa-route me-1"></i>手順解説モード
             </label>
         </div>
         """
@@ -1914,19 +2007,19 @@ def treatment_add(request, patient_id):
     session_week_num = week_num if session_num else None
     session_day_num = ((session_num - 1) % 5) + 1 if session_num else None
 
-    # Fetch current week mapping: same date first, then same week
     same_date_mapping = MappingSession.objects.filter(**mapping_scope, date=initial_date).first()
     if same_date_mapping:
         current_week_mapping = same_date_mapping
     else:
-        # Try to get mapping for current week_number
         current_week_mapping = MappingSession.objects.filter(
             **mapping_scope, week_number=week_num,
         ).order_by('date', 'id').first()
 
     end_date_est = get_completion_date(course_first_treatment_date)
     hamd_eval = get_week3_hamd17_evaluation(patient, course_number, week_num)
-    alert_msg = ""; instruction_msg = hamd_eval['instruction']; judgment_info = hamd_eval['status']
+    alert_msg = ""
+    instruction_msg = hamd_eval['instruction']
+    judgment_info = hamd_eval['status']
     is_remission = hamd_eval['status'] == '寛解'
     week3_status = hamd_eval['week3_status']
     week3_assessment_url = build_url('assessment_add', args=[patient.id, 'week3'], query={'date': initial_date.isoformat(), 'from': 'treatment'})
@@ -1968,7 +2061,9 @@ def treatment_add(request, patient_id):
     if request.method == 'POST':
         form = TreatmentForm(request.POST)
         if not form.is_valid():
-            logger.warning('Treatment form validation failed: %s', form.errors.as_json())
+            logging.getLogger(__name__).warning(
+                'Treatment form validation failed: %s', form.errors.as_json(),
+            )
         else:
             cleaned = form.cleaned_data
             d = cleaned['treatment_date']; t = cleaned['treatment_time']
@@ -3649,34 +3744,35 @@ def assessment_scale_form(request, patient_id, timing, scale_code):
                 rec_defaults['status_label'] = status
 
             save_record = save_assessment_record if treatment_course is not None else save_assessment_record_legacy
-            new_record, _created = save_record(
-                patient=patient,
-                course_number=course_number,
-                timing=timing,
-                scale=scale,
-                date=assessed_date,
-                scores=scores,
-                note=note,
-                defaults_override={
-                    k: v for k, v in rec_defaults.items()
-                    if k in ['improvement_rate_17', 'status_label']
-                } | {'treatment_course': treatment_course},
-            )
-
-            # Keep legacy table in sync
-            if scale.code == 'hamd':
-                save_hamd = save_assessment_hamd if treatment_course is not None else save_assessment_hamd_legacy
-                legacy_obj, _legacy_created = save_hamd(
+            with transaction.atomic():
+                new_record, _created = save_record(
                     patient=patient,
                     course_number=course_number,
                     timing=timing,
+                    scale=scale,
                     date=assessed_date,
                     scores=scores,
                     note=note,
-                    treatment_course=treatment_course,
+                    defaults_override={
+                        k: v for k, v in rec_defaults.items()
+                        if k in ['improvement_rate_17', 'status_label']
+                    } | {'treatment_course': treatment_course},
                 )
-            else:
-                legacy_obj = None
+
+                # Keep legacy table in sync
+                if scale.code == 'hamd':
+                    save_hamd = save_assessment_hamd if treatment_course is not None else save_assessment_hamd_legacy
+                    legacy_obj, _legacy_created = save_hamd(
+                        patient=patient,
+                        course_number=course_number,
+                        timing=timing,
+                        date=assessed_date,
+                        scores=scores,
+                        note=note,
+                        treatment_course=treatment_course,
+                    )
+                else:
+                    legacy_obj = None
 
             if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                 total_17 = new_record.total_score_17
@@ -3817,25 +3913,39 @@ def patient_summary_view(request, patient_id):
 
         d_date = request.POST.get('discharge_date')
         discharge_date = parse_date(d_date) if d_date else None
-        if treatment_course is not None:
-            treatment_course.summary_text = summary_text_post
-            treatment_course.discharge_prescription = discharge_prescription_post
-            treatment_course.discharge_date = discharge_date
-            treatment_course.save(update_fields=['summary_text', 'discharge_prescription', 'discharge_date'])
-            inpatient_plan = InpatientPlan.objects.filter(
-                treatment_course=treatment_course,
+        expected_course_id = treatment_course.pk if treatment_course is not None else None
+        expected_patient_course_number = patient.course_number or 1
+        with transaction.atomic():
+            patient = acquire_patient_mutex(patient.pk)
+            if not requested_course_number and patient.course_number != expected_patient_course_number:
+                return HttpResponseBadRequest('対象の治療クールが変更されました')
+            treatment_course = TreatmentCourse.objects.select_for_update().filter(
+                patient=patient,
+                course_number=course_number,
             ).first()
-            if inpatient_plan is not None:
-                inpatient_plan.planned_discharge_date = discharge_date
-                inpatient_plan.save(update_fields=['planned_discharge_date', 'updated_at'])
-            if treatment_course.course_number == 1:
+            actual_course_id = treatment_course.pk if treatment_course is not None else None
+            if actual_course_id != expected_course_id:
+                return HttpResponseBadRequest('対象の治療クールが変更されました')
+
+            if treatment_course is not None:
+                treatment_course.summary_text = summary_text_post
+                treatment_course.discharge_prescription = discharge_prescription_post
+                treatment_course.discharge_date = discharge_date
+                treatment_course.save(update_fields=['summary_text', 'discharge_prescription', 'discharge_date'])
+                inpatient_plan = InpatientPlan.objects.select_for_update().filter(
+                    treatment_course=treatment_course,
+                ).first()
+                if inpatient_plan is not None:
+                    inpatient_plan.planned_discharge_date = discharge_date
+                    inpatient_plan.save(update_fields=['planned_discharge_date', 'updated_at'])
+                if treatment_course.course_number == 1:
+                    patient.discharge_date = discharge_date
+            else:
+                patient.summary_text = summary_text_post
+                patient.discharge_prescription = discharge_prescription_post
                 patient.discharge_date = discharge_date
-        else:
-            patient.summary_text = summary_text_post
-            patient.discharge_prescription = discharge_prescription_post
-            patient.discharge_date = discharge_date
-        if treatment_course is None or treatment_course.course_number == 1:
-            patient.save(update_fields=['summary_text', 'discharge_prescription', 'discharge_date'])
+            if treatment_course is None or treatment_course.course_number == 1:
+                patient.save(update_fields=['summary_text', 'discharge_prescription', 'discharge_date'])
 
         action = request.POST.get('action')
 
@@ -4356,12 +4466,24 @@ def clinical_path_reschedule(request, patient_id):
         treatment_course = TreatmentCourse.objects.filter(
             patient=patient, course_number=course_number,
         ).first()
-        if treatment_course is not None:
-            treatment_course.admission_date = target_date
-            treatment_course.save(update_fields=['admission_date'])
-        if treatment_course is None or treatment_course.course_number == 1:
-            patient.admission_date = target_date
-            patient.save(update_fields=['admission_date'])
+        expected_course_id = treatment_course.pk if treatment_course is not None else None
+        expected_patient_course_number = patient.course_number or 1
+        with transaction.atomic():
+            patient = acquire_patient_mutex(patient.pk)
+            if 'course_number' not in payload and patient.course_number != expected_patient_course_number:
+                return JsonResponse({'error': '対象の治療クールが変更されました'}, status=400)
+            treatment_course = TreatmentCourse.objects.select_for_update().filter(
+                patient=patient, course_number=course_number,
+            ).first()
+            actual_course_id = treatment_course.pk if treatment_course is not None else None
+            if actual_course_id != expected_course_id:
+                return JsonResponse({'error': '対象の治療クールが変更されました'}, status=400)
+            if treatment_course is not None:
+                treatment_course.admission_date = target_date
+                treatment_course.save(update_fields=['admission_date'])
+            if treatment_course is None or treatment_course.course_number == 1:
+                patient.admission_date = target_date
+                patient.save(update_fields=['admission_date'])
         return JsonResponse({'status': 'ok'})
 
     if event_type == 'discharge':
@@ -4372,12 +4494,24 @@ def clinical_path_reschedule(request, patient_id):
         treatment_course = TreatmentCourse.objects.filter(
             patient=patient, course_number=course_number,
         ).first()
-        if treatment_course is not None:
-            treatment_course.discharge_date = target_date
-            treatment_course.save(update_fields=['discharge_date'])
-        if treatment_course is None or treatment_course.course_number == 1:
-            patient.discharge_date = target_date
-            patient.save(update_fields=['discharge_date'])
+        expected_course_id = treatment_course.pk if treatment_course is not None else None
+        expected_patient_course_number = patient.course_number or 1
+        with transaction.atomic():
+            patient = acquire_patient_mutex(patient.pk)
+            if 'course_number' not in payload and patient.course_number != expected_patient_course_number:
+                return JsonResponse({'error': '対象の治療クールが変更されました'}, status=400)
+            treatment_course = TreatmentCourse.objects.select_for_update().filter(
+                patient=patient, course_number=course_number,
+            ).first()
+            actual_course_id = treatment_course.pk if treatment_course is not None else None
+            if actual_course_id != expected_course_id:
+                return JsonResponse({'error': '対象の治療クールが変更されました'}, status=400)
+            if treatment_course is not None:
+                treatment_course.discharge_date = target_date
+                treatment_course.save(update_fields=['discharge_date'])
+            if treatment_course is None or treatment_course.course_number == 1:
+                patient.discharge_date = target_date
+                patient.save(update_fields=['discharge_date'])
         return JsonResponse({'status': 'ok'})
 
     if event_type == 'treatment':
@@ -4385,10 +4519,18 @@ def clinical_path_reschedule(request, patient_id):
 
         status = payload.get('status')
         session_id = payload.get('session_id')
+        requested_course_number = payload.get('course_number')
         try:
-            course_number = int(payload.get('course_number', patient.course_number or 1))
+            requested_course_number = (
+                int(requested_course_number)
+                if requested_course_number not in (None, '') else None
+            )
         except (TypeError, ValueError):
             return JsonResponse({'error': 'クール番号が不正です'}, status=400)
+        course_number = (
+            requested_course_number
+            if requested_course_number is not None else patient.course_number or 1
+        )
         treatment_course = TreatmentCourse.objects.filter(
             patient=patient, course_number=course_number,
         ).first()
@@ -4403,37 +4545,58 @@ def clinical_path_reschedule(request, patient_id):
             course_discharge_date = patient.discharge_date
 
         if status == 'done':
-            session = TreatmentSession.objects.filter(
-                **session_scope, pk=session_id, status='done',
-            ).first()
-            if not session:
-                return JsonResponse({'error': '対象の実施記録が見つかりません'}, status=404)
-            if session.session_date != source_date:
-                return JsonResponse({'error': '移動元の日付と実施記録が一致しません'}, status=400)
-            conflict = TreatmentSession.objects.filter(
-                **session_scope, session_date=target_date,
-            ).exclude(pk=session.pk).exists()
-            if conflict:
-                return JsonResponse({'error': 'その日には既に予定・実施記録があります'}, status=400)
-            delta = target_date - session.session_date
             try:
-                with transaction.atomic():
-                    if session.date:
-                        session.date = session.date + delta
-                    session.session_date = target_date
-                    if treatment_course is not None:
-                        save_treatment_session_strict(
-                            session, patient, treatment_course, course_number=course_number,
+                def move_done_session():
+                    with patient_course_writer(patient.pk, requested_course_number) as writer:
+                        session_scope = writer.session_filter
+                        session = TreatmentSession.objects.select_for_update().filter(
+                            **session_scope, pk=session_id, status='done',
+                        ).first()
+                        if not session:
+                            return JsonResponse({'error': '対象の実施記録が見つかりません'}, status=404)
+                        validate_session_course(
+                            session, writer.patient, writer.course_number,
+                            writer.treatment_course,
                         )
-                        from rtms_app.services.rtms_treatment_reservations import (
-                            sync_rtms_treatment_reservation_from_sessions,
-                        )
-                        sync_rtms_treatment_reservation_from_sessions(
-                            treatment_course=treatment_course,
-                            user=request.user,
-                        )
-                    else:
-                        save_treatment_session_legacy(session, patient, course_number)
+                        if session.session_date != source_date:
+                            return JsonResponse({'error': '移動元の日付と実施記録が一致しません'}, status=400)
+                        conflict = TreatmentSession.objects.filter(
+                            **session_scope, session_date=target_date,
+                        ).exclude(pk=session.pk).exists()
+                        if conflict:
+                            return JsonResponse({'error': 'その日には既に予定・実施記録があります'}, status=400)
+                        delta = target_date - session.session_date
+                        if session.date:
+                            session.date = session.date + delta
+                        session.session_date = target_date
+                        if writer.treatment_course is not None:
+                            save_treatment_session_strict(
+                                session,
+                                writer.patient,
+                                writer.treatment_course,
+                                course_number=writer.course_number,
+                            )
+                            from rtms_app.services.rtms_treatment_reservations import (
+                                sync_rtms_treatment_reservation_from_sessions,
+                            )
+                            sync_rtms_treatment_reservation_from_sessions(
+                                treatment_course=writer.treatment_course,
+                                user=request.user,
+                            )
+                        else:
+                            save_treatment_session_legacy(
+                                session, writer.patient, writer.course_number,
+                            )
+
+                result = _run_with_cancellation_busy_retry(
+                    move_done_session,
+                    operation_owns_atomic=True,
+                    error_message="同時処理のため実施記録を移動できませんでした。もう一度お試しください。",
+                )
+                if result is not None:
+                    return result
+            except TreatmentReservationBusyError as error:
+                return JsonResponse({'error': str(error)}, status=503)
             except (IntegrityError, ValueError) as error:
                 return JsonResponse({'error': str(error)}, status=400)
             return JsonResponse({'status': 'ok'})
@@ -4497,9 +4660,66 @@ def clinical_path_reschedule(request, patient_id):
             return JsonResponse({'error': '移動先には実施済みまたはスキップ済みの治療があります'}, status=400)
 
         try:
-            with transaction.atomic():
+            with patient_course_writer(patient.pk, requested_course_number) as writer:
+                patient = writer.patient
+                treatment_course = writer.treatment_course
+                course_number = writer.course_number
+                session_scope = writer.session_filter
+                course_first_treatment_date = (
+                    treatment_course.first_treatment_date
+                    if treatment_course is not None else patient.first_treatment_date
+                )
+                course_discharge_date = (
+                    treatment_course.discharge_date
+                    if treatment_course is not None else patient.discharge_date
+                )
+                if not course_first_treatment_date:
+                    raise ValueError('初回治療日が未設定です')
+                treat_dates = generate_treatment_dates(
+                    course_first_treatment_date, total=30, holidays=JP_HOLIDAYS,
+                )
+                if course_discharge_date:
+                    treat_dates = [d for d in treat_dates if d < course_discharge_date]
+
+                if session_id not in (None, ''):
+                    existing_session = TreatmentSession.objects.select_for_update().filter(
+                        **session_scope, pk=session_pk,
+                    ).first()
+                else:
+                    existing_session = TreatmentSession.objects.select_for_update().filter(
+                        **session_scope, session_date=source_date,
+                    ).first()
+                if existing_session and existing_session.session_date != source_date:
+                    raise ValueError('移動元の日付と治療予定が一致しません')
+                if existing_session is not None:
+                    validate_session_course(
+                        existing_session,
+                        patient,
+                        course_number,
+                        treatment_course,
+                    )
+                if existing_session and existing_session.status != 'planned':
+                    raise ValueError('実施済みまたはスキップ済みの治療は移動できません')
+                if not existing_session and source_date not in treat_dates:
+                    raise ValueError('移動元の日付に予定された治療がありません')
+                if target_date == source_date:
+                    raise ValueError('移動先は現在の日付と異なる治療日を指定してください')
+                if TreatmentSession.objects.filter(
+                    **session_scope,
+                    session_date=target_date,
+                    status__in=['done', 'skipped'],
+                ).exclude(pk=existing_session.pk if existing_session else None).exists():
+                    raise ValueError('移動先には実施済みまたはスキップ済みの治療があります')
+
+                first_session = TreatmentSession.objects.filter(
+                    **session_scope,
+                ).order_by('session_date', 'id').first()
+                is_first_treatment = bool(
+                    (existing_session and first_session and existing_session.pk == first_session.pk)
+                    or (existing_session is None and source_date == course_first_treatment_date)
+                )
+
                 if existing_session is None:
-                    Patient.objects.select_for_update().get(pk=patient.pk)
                     if not can_create_treatment_session(patient, course_number):
                         raise ValueError('この患者・コースは治療予定が30回以上あるため、新規予定を追加できません')
                     existing_dates = set(
@@ -4576,10 +4796,18 @@ def clinical_path_reschedule(request, patient_id):
             return JsonResponse({'error': '土日祝日にはMT測定を予定できません'}, status=400)
 
         status = payload.get('status')
+        requested_course_number = payload.get('course_number')
         try:
-            course_number = int(payload.get('course_number', patient.course_number or 1))
+            requested_course_number = (
+                int(requested_course_number)
+                if requested_course_number not in (None, '') else None
+            )
         except (TypeError, ValueError):
             return JsonResponse({'error': 'クール番号が不正です'}, status=400)
+        course_number = (
+            requested_course_number
+            if requested_course_number is not None else patient.course_number or 1
+        )
         treatment_course = TreatmentCourse.objects.filter(
             patient=patient, course_number=course_number,
         ).first()
@@ -4589,26 +4817,43 @@ def clinical_path_reschedule(request, patient_id):
 
         if status == 'done':
             session_id = payload.get('session_id')
-            mapping_session = MappingSession.objects.filter(
-                **mapping_scope, pk=session_id,
-            ).first()
-            if not mapping_session:
-                return JsonResponse({'error': '対象のMT測定記録が見つかりません'}, status=404)
-            if mapping_session.date != source_date:
-                return JsonResponse({'error': '移動元の日付とMT測定記録が一致しません'}, status=400)
-            conflict = MappingSession.objects.filter(
-                **mapping_scope, date=target_date,
-                stimulation_site=mapping_session.stimulation_site,
-            ).exclude(pk=mapping_session.pk).exists()
-            if conflict:
-                return JsonResponse({'error': 'その日には既にMT測定記録があります'}, status=400)
-            mapping_session.date = target_date
-            if treatment_course is not None:
-                save_mapping_session_strict(
-                    mapping_session, patient, treatment_course, course_number=course_number,
-                )
-            else:
-                save_mapping_session_legacy(mapping_session, patient, course_number)
+            try:
+                with patient_course_writer(patient.pk, requested_course_number) as writer:
+                    mapping_scope = writer.session_filter
+                    mapping_session = MappingSession.objects.select_for_update().filter(
+                        **mapping_scope, pk=session_id,
+                    ).first()
+                    if not mapping_session:
+                        return JsonResponse({'error': '対象のMT測定記録が見つかりません'}, status=404)
+                    validate_session_course(
+                        mapping_session,
+                        writer.patient,
+                        writer.course_number,
+                        writer.treatment_course,
+                    )
+                    if mapping_session.date != source_date:
+                        return JsonResponse({'error': '移動元の日付とMT測定記録が一致しません'}, status=400)
+                    conflict = MappingSession.objects.filter(
+                        **mapping_scope,
+                        date=target_date,
+                        stimulation_site=mapping_session.stimulation_site,
+                    ).exclude(pk=mapping_session.pk).exists()
+                    if conflict:
+                        return JsonResponse({'error': 'その日には既にMT測定記録があります'}, status=400)
+                    mapping_session.date = target_date
+                    if writer.treatment_course is not None:
+                        save_mapping_session_strict(
+                            mapping_session,
+                            writer.patient,
+                            writer.treatment_course,
+                            course_number=writer.course_number,
+                        )
+                    else:
+                        save_mapping_session_legacy(
+                            mapping_session, writer.patient, writer.course_number,
+                        )
+            except (IntegrityError, ValueError) as error:
+                return JsonResponse({'error': str(error)}, status=400)
             return JsonResponse({'status': 'ok'})
 
         if status not in (None, 'planned'):
@@ -4622,57 +4867,64 @@ def clinical_path_reschedule(request, patient_id):
         if week_number not in dict(MappingSession.WEEK_CHOICES):
             return JsonResponse({'error': '対象の週が不正です'}, status=400)
 
-        course_mapping_date = getattr(treatment_course, 'mapping_date', None)
-        course_first_treatment_date = getattr(treatment_course, 'first_treatment_date', None)
-        mapping_base = (
-            course_mapping_date
-            or (patient.mapping_date if treatment_course is None else None)
-            or course_first_treatment_date
-            or (patient.first_treatment_date if treatment_course is None else None)
-        )
-        if mapping_base is None:
-            return JsonResponse({'error': 'MT測定の基準日が未設定です'}, status=400)
-        override = MappingSchedule.objects.filter(
-            **mapping_scope, week_number=week_number,
-        ).first()
-        if override is not None:
-            current_planned_date = override.planned_date
-        else:
-            generated = generate_mapping_dates(mapping_base, weeks=8, holidays=JP_HOLIDAYS)
-            current_planned_date = next(
-                (item['actual'] for item in generated if item['week_no'] == week_number),
-                None,
-            )
-        if current_planned_date != source_date:
-            return JsonResponse({'error': '移動元の日付に該当するMT測定予定がありません'}, status=404)
-
-        schedule_conflict = MappingSchedule.objects.filter(
-            **mapping_scope,
-            planned_date=target_date,
-        ).exclude(week_number=week_number).exists()
-        actual_conflict = MappingSession.objects.filter(
-            **mapping_scope,
-            date=target_date,
-        ).exists()
-        if schedule_conflict or actual_conflict:
-            return JsonResponse({'error': '移動先には別のMT測定予定または実績があります'}, status=400)
-
-        with transaction.atomic():
-            if treatment_course is not None:
-                update_or_create_mapping_schedule_strict(
-                    patient,
-                    treatment_course,
-                    week_number=week_number,
-                    planned_date=target_date,
-                    course_number=course_number,
+        try:
+            with patient_course_writer(patient.pk, requested_course_number) as writer:
+                treatment_course = writer.treatment_course
+                patient = writer.patient
+                course_number = writer.course_number
+                mapping_scope = writer.session_filter
+                course_mapping_date = getattr(treatment_course, 'mapping_date', None)
+                course_first_treatment_date = getattr(treatment_course, 'first_treatment_date', None)
+                mapping_base = (
+                    course_mapping_date
+                    or (patient.mapping_date if treatment_course is None else None)
+                    or course_first_treatment_date
+                    or (patient.first_treatment_date if treatment_course is None else None)
                 )
-            else:
-                update_or_create_mapping_schedule_legacy(
-                    patient,
-                    course_number,
-                    week_number=week_number,
+                if mapping_base is None:
+                    return JsonResponse({'error': 'MT測定の基準日が未設定です'}, status=400)
+                override = MappingSchedule.objects.select_for_update().filter(
+                    **mapping_scope, week_number=week_number,
+                ).first()
+                if override is not None:
+                    current_planned_date = override.planned_date
+                else:
+                    generated = generate_mapping_dates(mapping_base, weeks=8, holidays=JP_HOLIDAYS)
+                    current_planned_date = next(
+                        (item['actual'] for item in generated if item['week_no'] == week_number),
+                        None,
+                    )
+                if current_planned_date != source_date:
+                    return JsonResponse({'error': '移動元の日付に該当するMT測定予定がありません'}, status=404)
+
+                schedule_conflict = MappingSchedule.objects.select_for_update().filter(
+                    **mapping_scope,
                     planned_date=target_date,
-                )
+                ).exclude(week_number=week_number).exists()
+                actual_conflict = MappingSession.objects.select_for_update().filter(
+                    **mapping_scope,
+                    date=target_date,
+                ).exists()
+                if schedule_conflict or actual_conflict:
+                    return JsonResponse({'error': '移動先には別のMT測定予定または実績があります'}, status=400)
+
+                if treatment_course is not None:
+                    update_or_create_mapping_schedule_strict(
+                        patient,
+                        treatment_course,
+                        week_number=week_number,
+                        planned_date=target_date,
+                        course_number=course_number,
+                    )
+                else:
+                    update_or_create_mapping_schedule_legacy(
+                        patient,
+                        course_number,
+                        week_number=week_number,
+                        planned_date=target_date,
+                    )
+        except (IntegrityError, ValueError) as error:
+            return JsonResponse({'error': str(error)}, status=400)
         return JsonResponse({'status': 'ok'})
 
     if event_type == 'assessment':

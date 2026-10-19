@@ -1,11 +1,18 @@
 from datetime import timedelta, date
 
-from django.db import transaction
+from django.db import connection, transaction
+from django.db.models import Q
 
 from rtms_app.models import (
-    TreatmentSession, TreatmentCourse, Patient, MappingSchedule, MappingSession,
+    InpatientPlan, MappingSchedule, MappingSession, Patient, ResourceAssignment,
+    RtmSTreatmentReservation, RtmSWaitlistEntry, TreatmentCourse, TreatmentSession,
 )
-from rtms_app.services.rtms_schedule import generate_treatment_dates, generate_mapping_dates
+from rtms_app.services.rtms_treatment_reservations import ACTIVE_RESERVATION_STATUSES
+from rtms_app.services.rtms_schedule import (
+    generate_treatment_dates,
+    generate_mapping_dates,
+    is_year_end_closed,
+)
 from rtms_app.services.strict_writes import (
     save_treatment_session_legacy,
     save_treatment_session_strict,
@@ -17,6 +24,10 @@ from rtms_app.services.session_writes import (
     validate_session_course,
 )
 MAX_TREATMENT_SESSIONS = 30
+
+
+class TreatmentScheduleClearError(ValueError):
+    """Raised when existing Course state makes date clearing unsafe."""
 
 try:
     import holidays as pyholidays
@@ -180,6 +191,157 @@ def get_treatment_virtual_number_map(patient, canonical_dates, course_number=Non
     }
 
 
+def clear_treatment_schedule_dates_locked(writer):
+    """Clear date fields only when the selected Course has no dependent schedule."""
+    if not connection.in_atomic_block:
+        raise RuntimeError("Schedule date clearing requires an active transaction")
+
+    patient = writer.patient
+    course = writer.treatment_course
+    course_number = writer.course_number
+
+    if course is not None:
+        if course.patient_id != patient.pk or course.course_number != course_number:
+            raise TreatmentScheduleClearError("対象CourseとPatientの所有関係が一致しません。")
+        if course.course_status not in {"waiting_admission", "on_hold"}:
+            raise TreatmentScheduleClearError("治療Courseに進行中または終了履歴があるため日程をクリアできません。")
+        if (
+            course.is_admission_procedure_done
+            or course.course_end_reason
+            or course.discharge_date is not None
+            or course.completed_at is not None
+            or course.discharged_at is not None
+        ):
+            raise TreatmentScheduleClearError("治療または入院の履歴があるため日程をクリアできません。")
+        if course.course_number == 1:
+            mirror_fields = ("admission_date", "first_treatment_date", "mapping_date")
+            if any(
+                getattr(patient, field_name) != getattr(course, field_name)
+                for field_name in mirror_fields
+            ):
+                raise TreatmentScheduleClearError(
+                    "Course 1とPatientの日付mirrorが一致しないため、先に不整合を確認してください。"
+                )
+    elif TreatmentCourse.objects.select_for_update().filter(
+        patient=patient,
+        course_number=course_number,
+    ).exists():
+        raise TreatmentScheduleClearError("対象Courseの再読込で所有関係を確認できません。")
+
+    if (
+        patient.status != "waiting"
+        or patient.is_admission_procedure_done
+        or patient.discharge_date is not None
+    ):
+        raise TreatmentScheduleClearError("Patientに入院または退院履歴があるため日程をクリアできません。")
+
+    sessions = list(
+        TreatmentSession.objects.select_for_update()
+        .filter(**writer.session_filter)
+        .order_by("session_date", "pk")
+    )
+    if sessions:
+        if any(session.status in {"done", "skipped"} for session in sessions):
+            raise TreatmentScheduleClearError("実施またはskip済みSessionがあるため日程をクリアできません。")
+        raise TreatmentScheduleClearError("未実施Sessionの日程が残っているため、先に日程を整理してください。")
+
+    mapping_sessions = list(
+        MappingSession.objects.select_for_update()
+        .filter(**writer.session_filter)
+        .order_by("pk")
+    )
+    if mapping_sessions:
+        raise TreatmentScheduleClearError("位置決めSessionがあるため日程をクリアできません。")
+
+    waitlist_entries = []
+    plan = None
+    reservations = []
+    assignments = []
+    if course is not None:
+        waitlist_entries = list(
+            RtmSWaitlistEntry.objects.select_for_update()
+            .filter(treatment_course=course)
+            .order_by("pk")
+        )
+        plan = InpatientPlan.objects.select_for_update().filter(
+            treatment_course=course,
+        ).first()
+        if plan is not None:
+            if (
+                plan.status != "draft"
+                or plan.actual_admission_at is not None
+                or plan.actual_discharge_at is not None
+                or plan.planned_discharge_date is not None
+                or plan.estimated_discharge_date is not None
+                or plan.planned_admission_date not in {None, course.admission_date}
+            ):
+                raise TreatmentScheduleClearError("仮予定・確定・入院履歴のあるInpatientPlanがあるため日程をクリアできません。")
+        for entry in waitlist_entries:
+            if entry.status in {"provisional", "scheduled"}:
+                raise TreatmentScheduleClearError("仮予定または確定日程に結びつくWaitlistEntryがあるためクリアできません。")
+            if entry.status not in {"requested", "waiting", "cancelled", "withdrawn"}:
+                raise TreatmentScheduleClearError("WaitlistEntryの状態を確認できないため日程をクリアできません。")
+            if entry.inpatient_plan_id is not None and (
+                plan is None or entry.inpatient_plan_id != plan.pk
+            ):
+                raise TreatmentScheduleClearError("WaitlistEntryとInpatientPlanの所有関係が一致しません。")
+
+        reservations = list(
+            RtmSTreatmentReservation.objects.select_for_update()
+            .filter(treatment_course=course)
+            .order_by("sequence_number", "pk")
+        )
+        if any(item.status in ACTIVE_RESERVATION_STATUSES for item in reservations):
+            raise TreatmentScheduleClearError("有効な治療Reservationがあるため日程をクリアできません。")
+        if any(item.status != "cancelled" for item in reservations):
+            raise TreatmentScheduleClearError("Reservationの状態を確認できないため日程をクリアできません。")
+
+        assignments = list(
+            ResourceAssignment.objects.select_for_update()
+            .filter(treatment_course=course)
+            .order_by("pk")
+        )
+        if any(item.status in {"planned", "active"} for item in assignments):
+            raise TreatmentScheduleClearError("予定または使用中のResourceAssignmentがあるため日程をクリアできません。")
+        if any(item.status not in {"completed", "cancelled"} for item in assignments):
+            raise TreatmentScheduleClearError("ResourceAssignmentの状態を確認できないため日程をクリアできません。")
+
+    mapping_filter = Q(patient=patient, course_number=course_number)
+    if course is not None:
+        mapping_filter |= Q(treatment_course=course)
+    mapping_schedules = list(
+        MappingSchedule.objects.select_for_update()
+        .filter(mapping_filter)
+        .order_by("pk")
+    )
+    for schedule in mapping_schedules:
+        if (
+            schedule.patient_id != patient.pk
+            or schedule.course_number != course_number
+            or schedule.treatment_course_id != (course.pk if course is not None else None)
+        ):
+            raise TreatmentScheduleClearError("MappingScheduleのPatient/Course所有関係が一致しません。")
+    if mapping_schedules:
+        raise TreatmentScheduleClearError("MappingScheduleがあるため日程をクリアできません。")
+
+    date_fields = ("admission_date", "first_treatment_date", "mapping_date")
+    if course is not None:
+        for field_name in date_fields:
+            setattr(course, field_name, None)
+        course.save(update_fields=[*date_fields, "updated_at"])
+        if course.course_number == 1:
+            for field_name in date_fields:
+                setattr(patient, field_name, None)
+            patient.save(update_fields=list(date_fields))
+        if plan is not None and plan.planned_admission_date is not None:
+            plan.planned_admission_date = None
+            plan.save(update_fields=["planned_admission_date", "updated_at"])
+    else:
+        for field_name in date_fields:
+            setattr(patient, field_name, None)
+        patient.save(update_fields=list(date_fields))
+
+
 def get_treatment_overflow_info(patient, course_number=None):
     """Describe legacy rows beyond the 30-session treatment limit."""
     sessions = get_treatment_sessions(patient, course_number)
@@ -235,10 +397,14 @@ def is_treatment_day(d: date) -> bool:
     return not _is_holiday(d)
 
 
-def next_treatment_day(d: date) -> date:
+def next_treatment_day(d: date, holidays=None) -> date:
     """Return the next date >= d that is a treatment day."""
     cur = d
-    while not is_treatment_day(cur):
+    while (
+        not is_treatment_day(cur)
+        or is_year_end_closed(cur)
+        or (holidays is not None and cur in holidays)
+    ):
         cur = cur + timedelta(days=1)
     return cur
 
@@ -544,7 +710,7 @@ def _reschedule_treatment_start_date_locked(
         planned_dates = [d for d in generated_treatments if d not in blocked_dates]
         cursor = generated_treatments[-1] if generated_treatments else new_start_date
         while len(planned_dates) < len(planned_sessions):
-            cursor = next_treatment_day(cursor + timedelta(days=1))
+            cursor = next_treatment_day(cursor + timedelta(days=1), holidays)
             if cursor not in blocked_dates:
                 planned_dates.append(cursor)
         if len(planned_dates) < len(planned_sessions):

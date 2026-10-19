@@ -251,6 +251,7 @@ def rollback_provisional_waitlist_view(request):
     entry = get_object_or_404(RtmSWaitlistEntry, pk=entry_id)
     try:
         rollback_provisional_schedule(
+            patient_id=course.patient_id,
             treatment_course=course,
             waitlist_entry=entry,
             user=request.user,

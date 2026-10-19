@@ -5,20 +5,24 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.http import HttpResponse
 from django.utils import timezone
-from django.db import transaction
+from django.db import connection, transaction
 from django.db import IntegrityError
 from django.core.exceptions import ValidationError
+from unittest import SkipTest
 from unittest.mock import patch
 from copy import deepcopy
 import csv
 import io
 import json
+import sqlite3
 from importlib import import_module
 
 from rtms_app import assessment_rules
 from rtms_app.models import (
     Patient, TreatmentCourse, InpatientPlan, Assessment, AssessmentRecord, TreatmentSession,
     MappingSession, MappingSchedule, AssessmentSchedule, ScaleDefinition, TreatmentSkip,
+    RtmSWaitlistEntry,
+    RtmSTreatmentReservation,
     SideEffectCheck, PatientSurveySession, SeriousAdverseEvent, AdverseEventReport, TimingScaleConfig,
 )
 import datetime
@@ -29,6 +33,18 @@ from rtms_app.surveys import INSTRUMENT_ORDER, get_instrument
 from rtms_app.services.patient_accounts import ensure_patient_group
 from rtms_app.views import get_patient_admission_status
 from rtms_app.forms import TreatmentCourseFirstVisitForm
+
+
+def _install_sqlite_update_failure(model, trigger_name, field_name):
+    if connection.vendor != 'sqlite':
+        raise SkipTest('SQLite trigger failure injection requires SQLite')
+    quote_name = connection.ops.quote_name
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"CREATE TRIGGER {quote_name(trigger_name)} BEFORE UPDATE OF "
+            f"{quote_name(field_name)} ON {quote_name(model._meta.db_table)} "
+            "BEGIN SELECT RAISE(ABORT, 'injected database write failure'); END"
+        )
 
 
 class TestDashboardCourseIsolation(TestCase):
@@ -3024,6 +3040,112 @@ class TestStage7AssessmentEntry(TestCase):
             card_id='STAGE7', name='Stage 7 Test', birth_date=date(1980, 1, 1), course_number=1,
         )
 
+    def _post_hamd(self, *, course_number=None, q1='1', note='HAM-D note', assessed_date='2026-08-01'):
+        data = {'date': assessed_date, 'q1': q1, 'note': note}
+        if course_number is not None:
+            data['course_number'] = course_number
+        return self.client.post(
+            reverse('rtms_app:assessment_scale', args=[self.patient.pk, 'baseline', 'hamd']),
+            data,
+        )
+
+    def test_hamd_request_creates_and_updates_both_assessment_tables(self):
+        response = self._post_hamd(q1='2', note='Initial HAM-D')
+
+        self.assertEqual(response.status_code, 302)
+        record = AssessmentRecord.objects.get(patient=self.patient, timing='baseline', scale__code='hamd')
+        assessment = Assessment.objects.get(patient=self.patient, timing='baseline', type='HAM-D')
+        self.assertEqual(record.scores, assessment.scores)
+        self.assertEqual(record.date, assessment.date)
+        self.assertEqual(record.note, assessment.note)
+        self.assertEqual(record.total_score_17, assessment.total_score_17)
+        self.assertEqual(record.note, 'Initial HAM-D')
+
+        response = self._post_hamd(q1='5', note='Updated HAM-D', assessed_date='2026-08-02')
+
+        self.assertEqual(response.status_code, 302)
+        record.refresh_from_db()
+        assessment.refresh_from_db()
+        self.assertEqual(record.scores, assessment.scores)
+        self.assertEqual(record.date, assessment.date)
+        self.assertEqual(record.note, assessment.note)
+        self.assertEqual(record.total_score_17, assessment.total_score_17)
+        self.assertEqual(record.note, 'Updated HAM-D')
+        self.assertEqual(AssessmentRecord.objects.filter(patient=self.patient, timing='baseline', scale__code='hamd').count(), 1)
+        self.assertEqual(Assessment.objects.filter(patient=self.patient, timing='baseline', type='HAM-D').count(), 1)
+
+    def test_hamd_new_record_rolls_back_when_legacy_insert_hits_unique_constraint(self):
+        Assessment.objects.create(
+            patient=self.patient,
+            course_number=1,
+            timing='baseline',
+            type='HAM-D',
+            date=date(2026, 7, 1),
+            scores={'q1': 3},
+            note='Existing legacy row',
+        )
+        TreatmentCourse.objects.create(patient=self.patient, course_number=1)
+        legacy_before = list(
+            Assessment.objects.filter(patient=self.patient)
+            .values_list('pk', 'date', 'scores', 'note', 'total_score_17')
+        )
+
+        response = self._post_hamd(course_number=1, q1='9', note='Must rollback')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(AssessmentRecord.objects.filter(patient=self.patient, timing='baseline', scale__code='hamd').exists())
+        self.assertEqual(
+            list(
+                Assessment.objects.filter(patient=self.patient)
+                .values_list('pk', 'date', 'scores', 'note', 'total_score_17')
+            ),
+            legacy_before,
+        )
+
+    def test_hamd_existing_record_update_rolls_back_on_legacy_unique_constraint(self):
+        course = TreatmentCourse.objects.create(patient=self.patient, course_number=1)
+        scale = ScaleDefinition.objects.get(code='hamd')
+        record = AssessmentRecord.objects.create(
+            patient=self.patient,
+            treatment_course=course,
+            course_number=1,
+            timing='baseline',
+            scale=scale,
+            date=date(2026, 7, 1),
+            scores={'q1': 3},
+            note='Existing record',
+        )
+        Assessment.objects.create(
+            patient=self.patient,
+            course_number=1,
+            timing='baseline',
+            type='HAM-D',
+            date=date(2026, 7, 1),
+            scores={'q1': 3},
+            note='Existing legacy row',
+        )
+        record_before = (record.date, record.scores, record.note, record.total_score_17)
+        legacy_before = list(
+            Assessment.objects.filter(patient=self.patient)
+            .values_list('pk', 'date', 'scores', 'note', 'total_score_17')
+        )
+
+        response = self._post_hamd(course_number=1, q1='9', note='Must rollback')
+
+        self.assertEqual(response.status_code, 400)
+        record.refresh_from_db()
+        self.assertEqual(
+            (record.date, record.scores, record.note, record.total_score_17),
+            record_before,
+        )
+        self.assertEqual(
+            list(
+                Assessment.objects.filter(patient=self.patient)
+                .values_list('pk', 'date', 'scores', 'note', 'total_score_17')
+            ),
+            legacy_before,
+        )
+
     def test_simple_assessment_baseline_post_update_and_blank(self):
         url = reverse('rtms_app:assessment_hub', args=[self.patient.pk, 'baseline'])
         response = self.client.post(url, {'date': '2026-08-01', 'score_phq9_baseline': '9', 'score_phq9_post': ''})
@@ -3324,6 +3446,185 @@ class TestSideEffectAndAdverseEventFlow(TestCase):
         data.update(extra)
         return self.client.post(reverse('rtms_app:treatment_add', args=[self.patient.pk]), data, **request_headers)
 
+    def _post_regular_save(self, client=None, **extra):
+        data = {
+            'action': 'save',
+            'course_number': '1',
+            'treatment_date': '2026-08-03',
+            'treatment_time': '09:00',
+            'mt_percent': '120',
+            'frequency_hz': '18.0',
+            'train_seconds': '2.0',
+            'intertrain_seconds': '20.0',
+            'train_count': '55',
+            'total_pulses': '1980',
+            'side_effect_rows_json': json.dumps([{'item': '頭痛', 'after': 2}]),
+        }
+        data.update(extra)
+        client = client or self.client
+        return client.post(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+            data,
+        )
+
+    def _make_authentication_fixture(self):
+        from rtms_app.models import RtmSTreatmentReservation
+
+        start_date = date(2026, 8, 3)
+        course = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=1,
+            first_treatment_date=start_date,
+            discharge_date=date(2026, 9, 14),
+        )
+        selected = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=course,
+            course_number=1,
+            session_date=start_date,
+            status='planned',
+        )
+        future = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=course,
+            course_number=1,
+            session_date=date(2026, 8, 4),
+            status='planned',
+        )
+        MappingSchedule.objects.create(
+            patient=self.patient,
+            treatment_course=course,
+            course_number=2,
+            week_number=1,
+            planned_date=start_date,
+        )
+        RtmSTreatmentReservation.objects.create(
+            treatment_course=course,
+            treatment_date=start_date,
+            sequence_number=1,
+            status='provisional',
+            capacity_type='general_ward',
+        )
+        SideEffectCheck.objects.create(
+            session=selected,
+            rows=[{'item': '既存症状', 'after': 1}],
+            memo='既存メモ',
+        )
+        SeriousAdverseEvent.objects.create(
+            patient=self.patient,
+            course_number=1,
+            session=selected,
+            event_types=['seizure'],
+        )
+        AdverseEventReport.objects.create(
+            session=selected,
+            event_types=['seizure'],
+            adverse_event_name='既存報告書',
+        )
+        return course, selected, future
+
+    def _treatment_write_snapshot(self, course):
+        from rtms_app.models import RtmSTreatmentReservation
+
+        return {
+            'patient': Patient.objects.filter(pk=self.patient.pk).values().get(),
+            'course': TreatmentCourse.objects.filter(pk=course.pk).values().get(),
+            'sessions': list(
+                TreatmentSession.objects.filter(treatment_course=course)
+                .order_by('pk').values()
+            ),
+            'skips': list(
+                TreatmentSkip.objects.filter(treatment__treatment_course=course)
+                .order_by('pk').values()
+            ),
+            'reservations': list(
+                RtmSTreatmentReservation.objects.filter(treatment_course=course)
+                .order_by('pk').values()
+            ),
+            'mapping_schedules': list(
+                MappingSchedule.objects.filter(treatment_course=course)
+                .order_by('pk').values()
+            ),
+            'side_effects': list(
+                SideEffectCheck.objects.filter(session__treatment_course=course)
+                .order_by('pk').values()
+            ),
+            'saes': list(
+                SeriousAdverseEvent.objects.filter(session__treatment_course=course)
+                .order_by('pk').values()
+            ),
+            'reports': list(
+                AdverseEventReport.objects.filter(session__treatment_course=course)
+                .order_by('pk').values()
+            ),
+        }
+
+    def _assert_unauthenticated_redirect(self, response):
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith('/admin/login/'), response.url)
+
+    def test_unauthenticated_treatment_get_redirects_to_login(self):
+        self.client.logout()
+
+        response = self.client.get(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+        )
+
+        self._assert_unauthenticated_redirect(response)
+
+    def test_unauthenticated_save_and_skip_preserve_course_state(self):
+        course, selected, _future = self._make_authentication_fixture()
+        self.client.logout()
+        before = self._treatment_write_snapshot(course)
+
+        save_response = self.treatment_post(
+            action='save',
+            side_effect_rows_json=json.dumps([{'item': '未承認変更', 'after': 3}]),
+        )
+        self._assert_unauthenticated_redirect(save_response)
+        self.assertEqual(self._treatment_write_snapshot(course), before)
+
+        skip_response = self.treatment_post(
+            action='skip',
+            treatment_date=selected.session_date.isoformat(),
+        )
+        self._assert_unauthenticated_redirect(skip_response)
+        self.assertEqual(self._treatment_write_snapshot(course), before)
+
+    def test_unauthenticated_clear_preserves_clinical_records(self):
+        course, selected, _future = self._make_authentication_fixture()
+        self.client.logout()
+        before = self._treatment_write_snapshot(course)
+
+        response = self.client.post(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+            {
+                'action': 'clear_side_effects',
+                'treatment_date': selected.session_date.isoformat(),
+            },
+        )
+
+        self._assert_unauthenticated_redirect(response)
+        self.assertEqual(self._treatment_write_snapshot(course), before)
+
+    def test_unauthenticated_sae_report_save_preserves_clinical_records(self):
+        course, selected, _future = self._make_authentication_fixture()
+        self.client.logout()
+        before = self._treatment_write_snapshot(course)
+
+        response = self.client.post(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+            {
+                'action': 'save_sae_report',
+                'treatment_date': selected.session_date.isoformat(),
+                'event_name': '未承認報告書',
+                'sae_syncope': 'on',
+            },
+        )
+
+        self._assert_unauthenticated_redirect(response)
+        self.assertEqual(self._treatment_write_snapshot(course), before)
+
     def test_side_effect_status_and_candidate_are_rendered(self):
         session = TreatmentSession.objects.create(patient=self.patient, session_date=date(2026, 8, 3))
         SideEffectCheck.objects.create(session=session, rows=[], memo='副作用なし')
@@ -3498,6 +3799,190 @@ class TestSideEffectAndAdverseEventFlow(TestCase):
         self.assertEqual(report.event_types, ['seizure'])
         self.assertTrue(SeriousAdverseEvent.objects.get(session=session).event_types == ['seizure'])
 
+    def test_sae_report_save_runs_inside_patient_course_writer(self):
+        from contextlib import contextmanager
+        from rtms_app import views as treatment_views
+        from rtms_app.services import session_writes
+
+        course_one, selected_one, _future = self._make_authentication_fixture()
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=2,
+            first_treatment_date=date(2026, 8, 4),
+        )
+        selected_two = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=course_two,
+            course_number=2,
+            session_date=date(2026, 8, 4),
+        )
+        SeriousAdverseEvent.objects.create(
+            patient=self.patient,
+            course_number=2,
+            session=selected_two,
+            event_types=['syncope'],
+        )
+        report_two = AdverseEventReport.objects.create(
+            session=selected_two,
+            event_types=['syncope'],
+            adverse_event_name='Course 2 report',
+        )
+        report_one = AdverseEventReport.objects.get(session=selected_one)
+        original_writer = treatment_views.patient_course_writer
+        original_report_save = AdverseEventReport.save
+        writer_state = {'depth': 0, 'patient_id': None, 'course_id': None}
+
+        @contextmanager
+        def observed_writer(*args, **kwargs):
+            with original_writer(*args, **kwargs) as writer:
+                writer_state.update(
+                    depth=writer_state['depth'] + 1,
+                    patient_id=writer.patient.pk,
+                    course_id=writer.treatment_course.pk,
+                )
+                try:
+                    yield writer
+                finally:
+                    writer_state['depth'] -= 1
+
+        def report_save_inside_writer(instance, *args, **kwargs):
+            self.assertEqual(writer_state['depth'], 1)
+            self.assertEqual(writer_state['patient_id'], self.patient.pk)
+            self.assertEqual(writer_state['course_id'], course_two.pk)
+            self.assertEqual(instance.session_id, selected_two.pk)
+            return original_report_save(instance, *args, **kwargs)
+
+        with patch(
+            'rtms_app.views.patient_course_writer',
+            new=observed_writer,
+        ), patch.object(
+            session_writes,
+            'acquire_patient_mutex',
+            wraps=session_writes.acquire_patient_mutex,
+        ) as acquire_mutex, patch.object(
+            AdverseEventReport,
+            'save',
+            new=report_save_inside_writer,
+        ):
+            response = self.treatment_post(
+                action='save_sae_report',
+                course_number='2',
+                treatment_date=selected_two.session_date.isoformat(),
+                event_name='Updated Course 2 report',
+                HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['report_id'], report_two.pk)
+        acquire_mutex.assert_called_once_with(self.patient.pk)
+        report_one.refresh_from_db()
+        report_two.refresh_from_db()
+        self.assertEqual(report_one.adverse_event_name, '既存報告書')
+        self.assertEqual(report_one.event_types, ['seizure'])
+        self.assertEqual(report_two.adverse_event_name, 'Updated Course 2 report')
+        self.assertEqual(report_two.event_types, ['syncope'])
+
+    def test_sae_report_save_only_updates_selected_course_and_patient(self):
+        course_one, selected_one, _future = self._make_authentication_fixture()
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=2,
+            first_treatment_date=date(2026, 8, 4),
+        )
+        selected_two = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=course_two,
+            course_number=2,
+            session_date=date(2026, 8, 4),
+        )
+        sae_two = SeriousAdverseEvent.objects.create(
+            patient=self.patient,
+            course_number=2,
+            session=selected_two,
+            event_types=['syncope'],
+        )
+        report_two = AdverseEventReport.objects.create(
+            session=selected_two,
+            event_types=['syncope'],
+            adverse_event_name='Course 2 report',
+        )
+        other_patient = Patient.objects.create(
+            card_id='SIDE3',
+            name='Another Patient',
+            birth_date=date(1982, 1, 1),
+        )
+        other_course = TreatmentCourse.objects.create(
+            patient=other_patient,
+            course_number=1,
+        )
+        other_session = TreatmentSession.objects.create(
+            patient=other_patient,
+            treatment_course=other_course,
+            course_number=1,
+            session_date=selected_two.session_date,
+        )
+        other_sae = SeriousAdverseEvent.objects.create(
+            patient=other_patient,
+            course_number=1,
+            session=other_session,
+            event_types=['mania'],
+        )
+        other_report = AdverseEventReport.objects.create(
+            session=other_session,
+            event_types=['mania'],
+            adverse_event_name='Other patient report',
+        )
+        report_one = AdverseEventReport.objects.get(session=selected_one)
+
+        response = self.treatment_post(
+            action='save_sae_report',
+            course_number='2',
+            treatment_date=selected_two.session_date.isoformat(),
+            event_name='Updated Course 2 report',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['report_id'], report_two.pk)
+        report_one.refresh_from_db()
+        sae_two.refresh_from_db()
+        report_two.refresh_from_db()
+        other_sae.refresh_from_db()
+        other_report.refresh_from_db()
+        self.assertEqual(report_one.adverse_event_name, '既存報告書')
+        self.assertEqual(report_one.event_types, ['seizure'])
+        self.assertEqual(sae_two.event_types, ['syncope'])
+        self.assertEqual(report_two.adverse_event_name, 'Updated Course 2 report')
+        self.assertEqual(report_two.event_types, ['syncope'])
+        self.assertEqual(other_sae.event_types, ['mania'])
+        self.assertEqual(other_report.adverse_event_name, 'Other patient report')
+        self.assertEqual(other_report.event_types, ['mania'])
+
+    def test_sae_report_save_failure_rolls_back_report(self):
+        course, selected, _future = self._make_authentication_fixture()
+        before = self._treatment_write_snapshot(course)
+        original_save = AdverseEventReport.save
+        client = Client(raise_request_exception=False)
+        client.force_login(self.user)
+
+        def save_then_fail(instance, *args, **kwargs):
+            original_save(instance, *args, **kwargs)
+            raise RuntimeError('forced SAE report save failure')
+
+        with patch.object(AdverseEventReport, 'save', new=save_then_fail):
+            response = client.post(
+                reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+                {
+                    'action': 'save_sae_report',
+                    'course_number': str(course.course_number),
+                    'treatment_date': selected.session_date.isoformat(),
+                    'event_name': 'partially updated report',
+                },
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(self._treatment_write_snapshot(course), before)
+
     def test_side_effects_are_saved(self):
         response = self.treatment_post(
             action='save',
@@ -3510,6 +3995,220 @@ class TestSideEffectAndAdverseEventFlow(TestCase):
         check = SideEffectCheck.objects.get(session=session)
         self.assertEqual(check.rows, [{'item': '頭痛', 'after': 1}])
         self.assertEqual(check.memo, '頭痛あり')
+
+    def test_regular_save_clinical_helper_runs_inside_patient_writer(self):
+        self._make_authentication_fixture()
+        from contextlib import contextmanager
+        from rtms_app import views as treatment_views
+
+        original_writer = treatment_views.patient_course_writer
+        original_save_clinical = treatment_views._save_treatment_clinical_records
+        writer_depth = {'value': 0}
+
+        @contextmanager
+        def observed_writer(*args, **kwargs):
+            with original_writer(*args, **kwargs) as writer:
+                writer_depth['value'] += 1
+                try:
+                    yield writer
+                finally:
+                    writer_depth['value'] -= 1
+
+        def save_clinical_inside_writer(*args, **kwargs):
+            self.assertEqual(writer_depth['value'], 1)
+            return original_save_clinical(*args, **kwargs)
+
+        with patch(
+            'rtms_app.views.patient_course_writer',
+            new=observed_writer,
+        ), patch(
+            'rtms_app.views._save_treatment_clinical_records',
+            new=save_clinical_inside_writer,
+        ):
+            response = self._post_regular_save(
+                sae_selection_changed='on',
+                sae_syncope='on',
+            )
+
+        self.assertEqual(response.status_code, 302)
+
+    def _assert_regular_save_rolls_back(self, patcher, **post_data):
+        course, selected, _future = self._make_authentication_fixture()
+        before = self._treatment_write_snapshot(course)
+        client = Client(raise_request_exception=False)
+        client.force_login(self.user)
+
+        with patcher:
+            response = self._post_regular_save(
+                client,
+                treatment_date=selected.session_date.isoformat(),
+                **post_data,
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(self._treatment_write_snapshot(course), before)
+
+    def test_regular_save_side_effect_failure_rolls_back_course_snapshot(self):
+        original_save = SideEffectCheck.save
+
+        def save_then_fail(instance, *args, **kwargs):
+            original_save(instance, *args, **kwargs)
+            raise RuntimeError('forced regular side-effect save failure')
+
+        self._assert_regular_save_rolls_back(
+            patch.object(SideEffectCheck, 'save', new=save_then_fail),
+            sae_selection_changed='on',
+            sae_syncope='on',
+        )
+
+    def test_regular_save_sae_failure_rolls_back_course_snapshot(self):
+        original_save = SeriousAdverseEvent.save
+
+        def save_then_fail(instance, *args, **kwargs):
+            original_save(instance, *args, **kwargs)
+            raise RuntimeError('forced regular SAE save failure')
+
+        self._assert_regular_save_rolls_back(
+            patch.object(SeriousAdverseEvent, 'save', new=save_then_fail),
+            sae_selection_changed='on',
+            sae_syncope='on',
+        )
+
+    def test_regular_save_report_sync_failure_rolls_back_course_snapshot(self):
+        from django.db.models.query import QuerySet
+
+        original_update = QuerySet.update
+
+        def update_then_fail(queryset, **kwargs):
+            result = original_update(queryset, **kwargs)
+            if queryset.model is AdverseEventReport and 'event_types' in kwargs:
+                raise RuntimeError('forced regular report sync failure')
+            return result
+
+        self._assert_regular_save_rolls_back(
+            patch.object(QuerySet, 'update', new=update_then_fail),
+            sae_selection_changed='on',
+            sae_syncope='on',
+        )
+
+    def test_regular_save_without_sae_selection_preserves_existing_sae(self):
+        course, selected, _future = self._make_authentication_fixture()
+        sae = SeriousAdverseEvent.objects.get(session=selected)
+        report = AdverseEventReport.objects.get(session=selected)
+
+        response = self._post_regular_save()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(SeriousAdverseEvent.objects.filter(pk=sae.pk).exists())
+        sae.refresh_from_db()
+        report.refresh_from_db()
+        self.assertEqual(sae.event_types, ['seizure'])
+        self.assertEqual(sae.other_text, '')
+        self.assertEqual(report.event_types, ['seizure'])
+        self.assertEqual(report.adverse_event_name, '既存報告書')
+
+    def test_regular_save_busy_retry_replays_clinical_write_as_one_unit(self):
+        from django.db import OperationalError
+        from rtms_app import views as treatment_views
+
+        _course, selected, _future = self._make_authentication_fixture()
+        original_save = treatment_views._save_treatment_clinical_records
+        attempts = {'count': 0}
+
+        def save_then_busy_once(*args, **kwargs):
+            result = original_save(*args, **kwargs)
+            attempts['count'] += 1
+            if attempts['count'] == 1:
+                raise OperationalError('database is locked')
+            return result
+
+        with patch.object(
+            treatment_views,
+            '_save_treatment_clinical_records',
+            new=save_then_busy_once,
+        ), patch(
+            'rtms_app.services.treatment_cancellation._is_sqlite_busy_error',
+            return_value=True,
+        ), patch('rtms_app.services.treatment_cancellation.time.sleep'):
+            response = self._post_regular_save()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(attempts['count'], 2)
+        self.assertEqual(
+            SideEffectCheck.objects.get(session=selected).rows,
+            [{'item': '頭痛', 'after': 2}],
+        )
+
+    def test_sae_report_busy_retry_replays_report_save_as_one_unit(self):
+        from django.db import OperationalError
+
+        course, selected, _future = self._make_authentication_fixture()
+        original_save = AdverseEventReport.save
+        attempts = {'count': 0}
+
+        def save_then_busy_once(instance, *args, **kwargs):
+            result = original_save(instance, *args, **kwargs)
+            attempts['count'] += 1
+            if attempts['count'] == 1:
+                raise OperationalError('database is locked')
+            return result
+
+        with patch.object(
+            AdverseEventReport,
+            'save',
+            new=save_then_busy_once,
+        ), patch(
+            'rtms_app.services.treatment_cancellation._is_sqlite_busy_error',
+            return_value=True,
+        ), patch('rtms_app.services.treatment_cancellation.time.sleep'):
+            response = self.treatment_post(
+                action='save_sae_report',
+                course_number=str(course.course_number),
+                treatment_date=selected.session_date.isoformat(),
+                event_name='retried report',
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(attempts['count'], 2)
+        self.assertEqual(
+            AdverseEventReport.objects.get(session=selected).adverse_event_name,
+            'retried report',
+        )
+
+    def test_clear_busy_retry_replays_clear_as_one_unit(self):
+        from django.db import OperationalError
+        from django.db.models.query import QuerySet
+
+        course, selected, _future = self._make_authentication_fixture()
+        original_delete = QuerySet.delete
+        attempts = {'count': 0}
+
+        def delete_then_busy_once(queryset):
+            result = original_delete(queryset)
+            if queryset.model is SeriousAdverseEvent:
+                attempts['count'] += 1
+                if attempts['count'] == 1:
+                    raise OperationalError('database is locked')
+            return result
+
+        with patch.object(QuerySet, 'delete', new=delete_then_busy_once), patch(
+            'rtms_app.services.treatment_cancellation._is_sqlite_busy_error',
+            return_value=True,
+        ), patch('rtms_app.services.treatment_cancellation.time.sleep'):
+            response = self.client.post(
+                reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+                {
+                    'action': 'clear_side_effects',
+                    'course_number': str(course.course_number),
+                    'treatment_date': selected.session_date.isoformat(),
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(attempts['count'], 2)
+        self.assertFalse(SeriousAdverseEvent.objects.filter(session=selected).exists())
+        self.assertFalse(AdverseEventReport.objects.filter(session=selected).exists())
+        self.assertEqual(SideEffectCheck.objects.get(session=selected).rows, [])
 
     def test_report_save_does_not_resave_treatment_side_effect_or_sae(self):
         session = TreatmentSession.objects.create(
@@ -3571,6 +4270,173 @@ class TestSideEffectAndAdverseEventFlow(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(SideEffectCheck.objects.get(session=empty_target).memo, '副作用なし')
+
+    def _make_atomic_clear_fixture(self):
+        other_patient = Patient.objects.create(
+            card_id='SIDE2',
+            name='Other Side Effect Patient',
+            birth_date=date(1981, 1, 1),
+        )
+        target_course = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=1,
+        )
+        other_course = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=2,
+        )
+        other_patient_course = TreatmentCourse.objects.create(
+            patient=other_patient,
+            course_number=1,
+        )
+        target = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=target_course,
+            course_number=1,
+            session_date=date(2026, 8, 3),
+            status='planned',
+        )
+        other_course_session = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=other_course,
+            course_number=2,
+            session_date=date(2026, 8, 4),
+            status='planned',
+        )
+        other_patient_session = TreatmentSession.objects.create(
+            patient=other_patient,
+            treatment_course=other_patient_course,
+            course_number=1,
+            session_date=date(2026, 8, 5),
+            status='planned',
+        )
+        for session in (target, other_course_session, other_patient_session):
+            SideEffectCheck.objects.create(
+                session=session,
+                rows=[{'item': '既存症状', 'after': 1}],
+                memo='既存メモ',
+            )
+            SeriousAdverseEvent.objects.create(
+                patient=session.patient,
+                course_number=session.course_number,
+                session=session,
+                event_types=['seizure'],
+            )
+            AdverseEventReport.objects.create(
+                session=session,
+                event_types=['seizure'],
+                adverse_event_name=f'report-{session.pk}',
+            )
+        return target_course, target, other_course_session, other_patient_session
+
+    def _clinical_clear_snapshot(self):
+        return {
+            'side_effects': list(SideEffectCheck.objects.order_by('pk').values()),
+            'saes': list(SeriousAdverseEvent.objects.order_by('pk').values()),
+            'reports': list(AdverseEventReport.objects.order_by('pk').values()),
+        }
+
+    def _post_clear_with_logged_failure(self, course, session):
+        client = Client(raise_request_exception=False)
+        client.force_login(self.user)
+        with self.assertLogs('django.request', level='ERROR') as captured:
+            response = client.post(
+                reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+                {
+                    'action': 'clear_side_effects',
+                    'course_number': str(course.course_number),
+                    'treatment_date': session.session_date.isoformat(),
+                },
+            )
+        self.assertEqual(response.status_code, 500)
+        self.assertIn('RuntimeError', '\n'.join(captured.output))
+
+    def test_clear_side_effects_preserves_other_patient_and_course(self):
+        course, target, other_course_session, other_patient_session = (
+            self._make_atomic_clear_fixture()
+        )
+
+        response = self.client.post(
+            reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+            {
+                'action': 'clear_side_effects',
+                'course_number': str(course.course_number),
+                'treatment_date': target.session_date.isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        target_check = SideEffectCheck.objects.get(session=target)
+        self.assertEqual(target_check.rows, [])
+        self.assertEqual(target_check.memo, '副作用なし')
+        self.assertFalse(SeriousAdverseEvent.objects.filter(session=target).exists())
+        self.assertFalse(AdverseEventReport.objects.filter(session=target).exists())
+        for session in (other_course_session, other_patient_session):
+            self.assertEqual(
+                SideEffectCheck.objects.get(session=session).rows,
+                [{'item': '既存症状', 'after': 1}],
+            )
+            self.assertEqual(
+                SeriousAdverseEvent.objects.get(session=session).event_types,
+                ['seizure'],
+            )
+            self.assertTrue(AdverseEventReport.objects.filter(session=session).exists())
+
+    def test_clear_side_effects_rolls_back_when_side_effect_save_fails(self):
+        course, target, _other_course_session, _other_patient_session = (
+            self._make_atomic_clear_fixture()
+        )
+        before = self._clinical_clear_snapshot()
+        original_save = SideEffectCheck.save
+
+        def save_then_fail(instance, *args, **kwargs):
+            original_save(instance, *args, **kwargs)
+            raise RuntimeError('forced side-effect clear failure')
+
+        with patch.object(SideEffectCheck, 'save', new=save_then_fail):
+            self._post_clear_with_logged_failure(course, target)
+
+        self.assertEqual(self._clinical_clear_snapshot(), before)
+
+    def test_clear_side_effects_rolls_back_when_sae_delete_fails(self):
+        from django.db.models.query import QuerySet
+
+        course, target, _other_course_session, _other_patient_session = (
+            self._make_atomic_clear_fixture()
+        )
+        before = self._clinical_clear_snapshot()
+        original_delete = QuerySet.delete
+
+        def delete_then_fail(queryset):
+            result = original_delete(queryset)
+            if queryset.model is SeriousAdverseEvent:
+                raise RuntimeError('forced SAE delete failure')
+            return result
+
+        with patch.object(QuerySet, 'delete', new=delete_then_fail):
+            self._post_clear_with_logged_failure(course, target)
+
+        self.assertEqual(self._clinical_clear_snapshot(), before)
+
+    def test_clear_side_effects_rolls_back_when_report_delete_fails(self):
+        from django.db.models.query import QuerySet
+
+        course, target, _other_course_session, _other_patient_session = (
+            self._make_atomic_clear_fixture()
+        )
+        before = self._clinical_clear_snapshot()
+        original_delete = QuerySet.delete
+
+        def delete_then_fail(queryset):
+            result = original_delete(queryset)
+            if queryset.model is AdverseEventReport:
+                raise RuntimeError('forced report delete failure')
+            return result
+
+        with patch.object(QuerySet, 'delete', new=delete_then_fail):
+            self._post_clear_with_logged_failure(course, target)
+
+        self.assertEqual(self._clinical_clear_snapshot(), before)
 
     def test_new_report_modal_prefills_from_session_and_sae(self):
         session = TreatmentSession.objects.create(
@@ -3899,6 +4765,117 @@ class TestAdverseEventCourseIsolation(TestCase):
             )
 
 
+class TestTreatmentSavePostCommitAudit(TransactionTestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username='treatment-save-audit-user',
+            password='pw',
+        )
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='SAVECOMMIT',
+            name='Save Commit Patient',
+            birth_date=date(1980, 1, 1),
+        )
+        self.session = TreatmentSession.objects.create(
+            patient=self.patient,
+            session_date=date(2026, 10, 5),
+            status='planned',
+        )
+
+    def test_audit_callback_failure_after_save_commit_is_not_retried(self):
+        from rtms_app import views as treatment_views
+
+        post_data = {
+            'treatment_date': self.session.session_date.isoformat(),
+            'treatment_time': '09:00',
+            'mt_percent': '120',
+            'frequency_hz': '18.0',
+            'train_seconds': '2.0',
+            'intertrain_seconds': '20.0',
+            'train_count': '55',
+            'total_pulses': '1980',
+            'side_effect_rows_json': '[]',
+            'sae_selection_changed': '',
+            'action': 'save',
+        }
+        original_upsert = treatment_views.update_or_create_treatment_session_legacy
+
+        with self.assertLogs('django.db.backends.base', level='ERROR') as captured:
+            with patch(
+                'rtms_app.signals.AuditLog.objects.create',
+                side_effect=RuntimeError('forced audit log failure'),
+            ) as create_audit_log, patch(
+                'rtms_app.views.update_or_create_treatment_session_legacy',
+                wraps=original_upsert,
+            ) as save_session:
+                response = self.client.post(
+                    reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+                    post_data,
+                )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('on_commit()', '\n'.join(captured.output))
+        self.assertEqual(create_audit_log.call_count, 1)
+        self.assertEqual(save_session.call_count, 1)
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.motor_threshold, 120)
+        self.assertTrue(SideEffectCheck.objects.filter(session=self.session).exists())
+
+    def test_sqlite_busy_audit_callback_failure_after_save_is_not_retried(self):
+        import sqlite3
+        from django.db import OperationalError
+        from rtms_app import views as treatment_views
+        from rtms_app.services.rtms_treatment_reservations import _is_sqlite_busy_error
+
+        post_data = {
+            'treatment_date': self.session.session_date.isoformat(),
+            'treatment_time': '09:00',
+            'mt_percent': '120',
+            'frequency_hz': '18.0',
+            'train_seconds': '2.0',
+            'intertrain_seconds': '20.0',
+            'train_count': '55',
+            'total_pulses': '1980',
+            'side_effect_rows_json': '[]',
+            'sae_selection_changed': '',
+            'action': 'save',
+        }
+        busy_error = OperationalError('database is locked')
+        busy_error.sqlite_errorcode = sqlite3.SQLITE_BUSY
+        busy_error.sqlite_errorname = 'SQLITE_BUSY'
+        self.assertTrue(_is_sqlite_busy_error(busy_error))
+
+        original_upsert = treatment_views.update_or_create_treatment_session_legacy
+        with self.assertLogs('django.db.backends.base', level='ERROR') as captured:
+            with patch(
+                'rtms_app.signals.AuditLog.objects.create',
+                side_effect=busy_error,
+            ) as create_audit_log, patch(
+                'rtms_app.views.update_or_create_treatment_session_legacy',
+                wraps=original_upsert,
+            ) as save_session:
+                response = self.client.post(
+                    reverse('rtms_app:treatment_add', args=[self.patient.pk]),
+                    post_data,
+                )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('on_commit()', '\n'.join(captured.output))
+        self.assertEqual(create_audit_log.call_count, 1)
+        self.assertEqual(save_session.call_count, 1)
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.motor_threshold, 120)
+        self.assertEqual(
+            TreatmentSession.objects.filter(
+                patient=self.patient,
+                session_date=self.session.session_date,
+            ).count(),
+            1,
+        )
+        self.assertTrue(SideEffectCheck.objects.filter(session=self.session).exists())
+
+
 class TestSkipSessions(TestCase):
     def setUp(self):
         User = get_user_model()
@@ -3906,6 +4883,14 @@ class TestSkipSessions(TestCase):
         self.client = Client()
         self.client.login(username='skipper', password='pw')
         self.patient = Patient.objects.create(card_id='SKIP1', name='Skip Test', birth_date=datetime.date(1990,1,1))
+
+    def test_invalid_treatment_form_returns_validation_response(self):
+        response = self.client.post(
+            reverse('rtms_app:treatment_add', args=[self.patient.id]),
+            {'treatment_date': 'not-a-date'},
+        )
+
+        self.assertEqual(response.status_code, 200)
 
     def _skip_post(self, treatment_date, course_number=None, **extra):
         post_data = {
@@ -3928,39 +4913,6 @@ class TestSkipSessions(TestCase):
             follow=False,
         )
 
-    def test_skip_history_hides_undo_after_successful_undo(self):
-        selected = TreatmentSession.objects.create(
-            patient=self.patient, session_date=date(2026, 1, 5), status='planned',
-        )
-        TreatmentSession.objects.create(
-            patient=self.patient, session_date=date(2026, 1, 6), status='planned',
-        )
-        response = self._skip_post(selected.session_date)
-        self.assertEqual(response.status_code, 302)
-        skip = TreatmentSkip.objects.get(treatment=selected, action_type='postpone')
-
-        history = self.client.get(
-            reverse('rtms_app:treatment_skip_list', args=[self.patient.pk]),
-        )
-        self.assertTrue(history.context['skips'][0].can_undo)
-        self.assertContains(
-            history,
-            reverse('rtms_app:treatment_skip_undo', args=[skip.pk]),
-        )
-
-        response = self.client.post(
-            reverse('rtms_app:treatment_skip_undo', args=[skip.pk]),
-        )
-
-        self.assertEqual(response.status_code, 302)
-        history = self.client.get(
-            reverse('rtms_app:treatment_skip_list', args=[self.patient.pk]),
-        )
-        self.assertFalse(history.context['skips'][0].can_undo)
-        self.assertNotContains(
-            history,
-            reverse('rtms_app:treatment_skip_undo', args=[skip.pk]),
-        )
     def _create_skip_reservation_fixture(self, *, add_date_collision=False):
         from rtms_app.models import RtmSTreatmentReservation
 
@@ -4009,6 +4961,295 @@ class TestSkipSessions(TestCase):
                 capacity_type='general_ward',
             )
         return course, selected, future, reservations
+
+    def _create_clinical_skip_fixture(self, *, with_sae=False):
+        course, selected, future, reservations = self._create_skip_reservation_fixture()
+        self.patient.discharge_date = date(2026, 1, 31)
+        self.patient.save(update_fields=['discharge_date'])
+        course.discharge_date = date(2026, 1, 31)
+        course.save(update_fields=['discharge_date'])
+        SideEffectCheck.objects.create(
+            session=selected,
+            rows=[{'item': '既存', 'after': 1}],
+            memo='before',
+        )
+        report = AdverseEventReport.objects.create(
+            session=selected,
+            event_types=['syncope'] if with_sae else [],
+            adverse_event_name='existing report',
+        )
+        sae = None
+        if with_sae:
+            sae = SeriousAdverseEvent.objects.create(
+                patient=self.patient,
+                course_number=1,
+                session=selected,
+                event_types=['syncope'],
+                other_text='existing',
+            )
+        return course, selected, future, reservations, sae, report
+
+    def _skip_clinical_state(self, course):
+        from rtms_app.models import RtmSTreatmentReservation
+
+        return {
+            'patient_discharge_date': Patient.objects.filter(pk=self.patient.pk)
+                .values_list('discharge_date', flat=True).get(),
+            'course_discharge_date': TreatmentCourse.objects.filter(pk=course.pk)
+                .values_list('discharge_date', flat=True).get(),
+            'sessions': list(
+                TreatmentSession.objects.filter(treatment_course=course)
+                .order_by('pk').values()
+            ),
+            'skips': list(
+                TreatmentSkip.objects.filter(treatment__patient=self.patient)
+                .order_by('pk').values()
+            ),
+            'reservations': list(
+                RtmSTreatmentReservation.objects.filter(treatment_course=course)
+                .order_by('pk').values()
+            ),
+            'mapping_schedules': list(
+                MappingSchedule.objects.filter(treatment_course=course)
+                .order_by('pk').values()
+            ),
+            'side_effects': list(
+                SideEffectCheck.objects.filter(session__treatment_course=course)
+                .order_by('pk').values()
+            ),
+            'saes': list(
+                SeriousAdverseEvent.objects.filter(session__treatment_course=course)
+                .order_by('pk').values()
+            ),
+            'reports': list(
+                AdverseEventReport.objects.filter(session__treatment_course=course)
+                .order_by('pk').values()
+            ),
+        }
+
+    def _assert_invalid_side_effect_rows_rejected(self, action):
+        course, selected, _future, _reservations, _sae, _report = (
+            self._create_clinical_skip_fixture(with_sae=True)
+        )
+        before = self._skip_clinical_state(course)
+        for payload in ('', 'not-json', '{}', 'null'):
+            with self.subTest(action=action, payload=payload):
+                response = self._skip_post(
+                    selected.session_date,
+                    course_number=1,
+                    action=action,
+                    side_effect_rows_json=payload,
+                )
+
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(self._skip_clinical_state(course), before)
+                self.assertEqual(
+                    SideEffectCheck.objects.get(session=selected).rows,
+                    [{'item': '既存', 'after': 1}],
+                )
+
+    def test_invalid_side_effect_rows_json_is_rejected_for_save(self):
+        self._assert_invalid_side_effect_rows_rejected('save')
+
+    def test_invalid_side_effect_rows_json_is_rejected_for_skip(self):
+        self._assert_invalid_side_effect_rows_rejected('skip')
+
+    def test_skip_saves_clinical_records_with_schedule_changes(self):
+        from rtms_app.models import RtmSTreatmentReservation
+
+        course, selected, future, _reservations, _sae, report = (
+            self._create_clinical_skip_fixture()
+        )
+
+        response = self._skip_post(
+            selected.session_date,
+            course_number=1,
+            side_effect_rows_json=json.dumps([{'item': '頭痛', 'after': 1}]),
+            side_effect_memo='頭痛あり',
+            sae_seizure='on',
+        )
+
+        self.assertEqual(response.status_code, 302)
+        selected.refresh_from_db()
+        future.refresh_from_db()
+        self.patient.refresh_from_db()
+        course.refresh_from_db()
+        report.refresh_from_db()
+        self.assertEqual(selected.status, 'skipped')
+        self.assertEqual(future.session_date, date(2026, 1, 26))
+        self.assertEqual(self.patient.discharge_date, date(2026, 1, 30))
+        self.assertEqual(course.discharge_date, date(2026, 1, 30))
+        self.assertTrue(TreatmentSkip.objects.filter(treatment=selected).exists())
+        self.assertTrue(RtmSTreatmentReservation.objects.filter(
+            treatment_course=course,
+            treatment_date=date(2026, 1, 26),
+        ).exists())
+        self.assertEqual(
+            MappingSchedule.objects.get(treatment_course=course, week_number=2).planned_date,
+            date(2026, 1, 26),
+        )
+        self.assertEqual(
+            SideEffectCheck.objects.get(session=selected).rows,
+            [{'item': '頭痛', 'after': 1}],
+        )
+        sae = SeriousAdverseEvent.objects.get(session=selected)
+        self.assertEqual(sae.event_types, ['seizure'])
+        self.assertEqual(report.event_types, ['seizure'])
+        self.assertEqual(report.adverse_event_name, 'existing report')
+
+    def test_side_effect_save_failure_rolls_back_entire_skip_snapshot(self):
+        course, selected, _future, _reservations, _sae, _report = (
+            self._create_clinical_skip_fixture(with_sae=True)
+        )
+        before = self._skip_clinical_state(course)
+        original_save = SideEffectCheck.save
+
+        def save_then_fail(instance, *args, **kwargs):
+            original_save(instance, *args, **kwargs)
+            raise RuntimeError('forced side-effect save failure')
+
+        with patch.object(SideEffectCheck, 'save', new=save_then_fail):
+            response = self._skip_post(
+                selected.session_date,
+                course_number=1,
+                side_effect_rows_json=json.dumps([{'item': '頭痛', 'after': 2}]),
+                sae_seizure='on',
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self._skip_clinical_state(course), before)
+
+    def test_sae_create_failure_rolls_back_entire_skip_snapshot(self):
+        course, selected, _future, _reservations, _sae, _report = (
+            self._create_clinical_skip_fixture()
+        )
+        before = self._skip_clinical_state(course)
+        original_save = SeriousAdverseEvent.save
+
+        def save_then_fail(instance, *args, **kwargs):
+            original_save(instance, *args, **kwargs)
+            raise RuntimeError('forced SAE create failure')
+
+        with patch.object(SeriousAdverseEvent, 'save', new=save_then_fail):
+            response = self._skip_post(
+                selected.session_date,
+                course_number=1,
+                side_effect_rows_json=json.dumps([{'item': '頭痛', 'after': 2}]),
+                sae_seizure='on',
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self._skip_clinical_state(course), before)
+
+    def test_sae_update_failure_rolls_back_entire_skip_snapshot(self):
+        course, selected, _future, _reservations, _sae, _report = (
+            self._create_clinical_skip_fixture(with_sae=True)
+        )
+        before = self._skip_clinical_state(course)
+        original_save = SeriousAdverseEvent.save
+
+        def save_then_fail(instance, *args, **kwargs):
+            original_save(instance, *args, **kwargs)
+            raise RuntimeError('forced SAE update failure')
+
+        with patch.object(SeriousAdverseEvent, 'save', new=save_then_fail):
+            response = self._skip_post(
+                selected.session_date,
+                course_number=1,
+                side_effect_rows_json=json.dumps([{'item': '頭痛', 'after': 2}]),
+                sae_seizure='on',
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self._skip_clinical_state(course), before)
+
+    def test_sqlite_busy_retry_repeats_skip_and_clinical_writes_as_one_unit(self):
+        from django.db import OperationalError
+        from rtms_app.services import treatment_cancellation
+
+        course, selected, future, _reservations, _sae, _report = (
+            self._create_clinical_skip_fixture()
+        )
+        original_save = SideEffectCheck.save
+        save_attempts = {'count': 0}
+
+        def fail_once_with_busy(instance, *args, **kwargs):
+            save_attempts['count'] += 1
+            original_save(instance, *args, **kwargs)
+            if save_attempts['count'] == 1:
+                raise OperationalError('forced SQLite busy')
+
+        original_create = TreatmentSkip.objects.create
+        with patch.object(SideEffectCheck, 'save', new=fail_once_with_busy), patch(
+            'rtms_app.services.treatment_cancellation._is_sqlite_busy_error',
+            return_value=True,
+        ), patch(
+            'rtms_app.views._is_sqlite_busy_error',
+            return_value=True,
+        ), patch(
+            'rtms_app.services.treatment_cancellation.time.sleep',
+        ), patch.object(
+            TreatmentSkip.objects,
+            'create',
+            wraps=original_create,
+        ) as create_skip:
+            response = self._skip_post(
+                selected.session_date,
+                course_number=1,
+                side_effect_rows_json=json.dumps([{'item': '頭痛', 'after': 2}]),
+                sae_seizure='on',
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(save_attempts['count'], 2)
+        self.assertEqual(create_skip.call_count, 2)
+        selected.refresh_from_db()
+        future.refresh_from_db()
+        self.assertEqual(selected.status, 'skipped')
+        self.assertEqual(future.session_date, date(2026, 1, 26))
+        self.assertEqual(TreatmentSkip.objects.filter(treatment=selected).count(), 1)
+        self.assertEqual(
+            SideEffectCheck.objects.get(session=selected).rows,
+            [{'item': '頭痛', 'after': 2}],
+        )
+        self.assertEqual(
+            SeriousAdverseEvent.objects.get(session=selected).event_types,
+            ['seizure'],
+        )
+
+    def test_skip_history_hides_undo_after_successful_undo(self):
+        selected = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 5), status='planned',
+        )
+        TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 6), status='planned',
+        )
+        response = self._skip_post(selected.session_date)
+        self.assertEqual(response.status_code, 302)
+        skip = TreatmentSkip.objects.get(treatment=selected, action_type='postpone')
+
+        history = self.client.get(
+            reverse('rtms_app:treatment_skip_list', args=[self.patient.pk]),
+        )
+        self.assertTrue(history.context['skips'][0].can_undo)
+        self.assertContains(
+            history,
+            reverse('rtms_app:treatment_skip_undo', args=[skip.pk]),
+        )
+
+        response = self.client.post(
+            reverse('rtms_app:treatment_skip_undo', args=[skip.pk]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        history = self.client.get(
+            reverse('rtms_app:treatment_skip_list', args=[self.patient.pk]),
+        )
+        self.assertFalse(history.context['skips'][0].can_undo)
+        self.assertNotContains(
+            history,
+            reverse('rtms_app:treatment_skip_undo', args=[skip.pk]),
+        )
 
     def test_skip_shifts_future_planned_sessions_and_discharge(self):
         # create three planned sessions: day1, day2, day3
@@ -5409,18 +6650,20 @@ class TestClinicalPathReschedule(TestCase):
         self.assertEqual(response.context['weeks'][0]['start'].weekday(), 0)
 
     def test_first_visit_can_clear_schedule_dates_without_rescheduling_sessions(self):
-        session_date = date(2026, 8, 24)
-        session = TreatmentSession.objects.create(
+        doctor_group, _ = Group.objects.get_or_create(name='医師')
+        self.user.groups.add(doctor_group)
+        course = TreatmentCourse.objects.create(
             patient=self.patient,
             course_number=1,
-            session_date=session_date,
-            status='planned',
+            admission_date=self.patient.admission_date,
+            first_treatment_date=self.patient.first_treatment_date,
+            mapping_date=self.patient.mapping_date,
         )
 
         response = self.client.post(
-            reverse('rtms_app:patient_first_visit', args=[self.patient.pk]),
+            f"{reverse('rtms_app:patient_first_visit', args=[self.patient.pk])}?course_number=1",
             {
-                'card_id': self.patient.card_id,
+                'card_id': '54321',
                 'name': self.patient.name,
                 'birth_date': self.patient.birth_date.isoformat(),
                 'gender': self.patient.gender,
@@ -5434,10 +6677,13 @@ class TestClinicalPathReschedule(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.patient.refresh_from_db()
-        session.refresh_from_db()
+        course.refresh_from_db()
         self.assertIsNone(self.patient.admission_date)
         self.assertIsNone(self.patient.first_treatment_date)
-        self.assertEqual(session.session_date, session_date)
+        self.assertIsNone(self.patient.mapping_date)
+        self.assertIsNone(course.admission_date)
+        self.assertIsNone(course.first_treatment_date)
+        self.assertIsNone(course.mapping_date)
 
     def test_first_visit_post_rebuilds_treatment_calendar_from_changed_start_date(self):
         doctor_group, _ = Group.objects.get_or_create(name='医師')
@@ -6143,6 +7389,118 @@ class TestClinicalPathReschedule(TestCase):
         skipped.refresh_from_db()
         self.assertEqual(skipped.session_date, date(2026, 8, 27))
 
+    def test_done_session_busy_retries_whole_move_and_rolls_back_related_writes(self):
+        from rtms_app.models import RtmSTreatmentReservation
+        from rtms_app.services.rtms_treatment_reservations import TreatmentReservationBusyError
+
+        course = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=1,
+            first_treatment_date=date(2026, 8, 24),
+        )
+        session = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=course,
+            course_number=1,
+            session_date=date(2026, 8, 26),
+            status="done",
+        )
+        mapping_schedule = MappingSchedule.objects.create(
+            patient=self.patient,
+            treatment_course=course,
+            course_number=1,
+            week_number=1,
+            planned_date=date(2026, 8, 26),
+        )
+        reservation = RtmSTreatmentReservation.objects.create(
+            treatment_course=course,
+            sequence_number=1,
+            treatment_date=date(2026, 8, 26),
+            capacity_type="rTMS_private",
+        )
+        attempts = []
+
+        def mutate_then_raise_busy(*, treatment_course, user=None, **kwargs):
+            attempts.append(None)
+            RtmSTreatmentReservation.objects.filter(pk=reservation.pk).update(
+                treatment_date=date(2026, 8, 27),
+            )
+            MappingSchedule.objects.filter(pk=mapping_schedule.pk).update(
+                planned_date=date(2026, 8, 27),
+            )
+            cause = Exception("database is locked")
+            cause.sqlite_errorcode = sqlite3.SQLITE_BUSY
+            cause.sqlite_errorname = "SQLITE_BUSY"
+            raise TreatmentReservationBusyError("reservation busy") from cause
+
+        def assert_rollback_before_retry(_delay):
+            session.refresh_from_db()
+            reservation.refresh_from_db()
+            mapping_schedule.refresh_from_db()
+            self.assertEqual(session.session_date, date(2026, 8, 26))
+            self.assertEqual(reservation.treatment_date, date(2026, 8, 26))
+            self.assertEqual(mapping_schedule.planned_date, date(2026, 8, 26))
+
+        with patch(
+            "rtms_app.services.rtms_treatment_reservations.sync_rtms_treatment_reservation_from_sessions",
+            side_effect=mutate_then_raise_busy,
+        ), patch(
+            "rtms_app.services.treatment_cancellation.time.sleep",
+            side_effect=assert_rollback_before_retry,
+        ):
+            response = self._post({
+                "event_type": "treatment",
+                "status": "done",
+                "course_number": 1,
+                "session_id": session.pk,
+                "source_date": "2026-08-26",
+                "target_date": "2026-08-27",
+            })
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(len(attempts), 3)
+        session.refresh_from_db()
+        reservation.refresh_from_db()
+        mapping_schedule.refresh_from_db()
+        self.assertEqual(session.session_date, date(2026, 8, 26))
+        self.assertEqual(reservation.treatment_date, date(2026, 8, 26))
+        self.assertEqual(mapping_schedule.planned_date, date(2026, 8, 26))
+
+    def test_done_session_move_succeeds_with_reservation_sync(self):
+        course = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=1,
+            first_treatment_date=date(2026, 8, 24),
+        )
+        session = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=course,
+            course_number=1,
+            session_date=date(2026, 8, 26),
+            status="done",
+        )
+
+        with patch(
+            "rtms_app.services.rtms_treatment_reservations.sync_rtms_treatment_reservation_from_sessions",
+            return_value=None,
+        ) as sync_reservations:
+            response = self._post({
+                "event_type": "treatment",
+                "status": "done",
+                "course_number": 1,
+                "session_id": session.pk,
+                "source_date": "2026-08-26",
+                "target_date": "2026-08-27",
+            })
+
+        self.assertEqual(response.status_code, 200)
+        session.refresh_from_db()
+        self.assertEqual(session.session_date, date(2026, 8, 27))
+        sync_reservations.assert_called_once_with(
+            treatment_course=course,
+            user=self.user,
+        )
+
     def test_planned_treatment_cannot_use_done_target(self):
         TreatmentSession.objects.create(patient=self.patient, session_date=date(2026, 8, 26))
         done = TreatmentSession.objects.create(
@@ -6287,6 +7645,28 @@ class TestClinicalPathReschedule(TestCase):
         self.assertEqual(course_one.discharge_date, date(2026, 9, 30))
         self.assertEqual(course_two.discharge_date, date(2026, 11, 5))
 
+    def test_course_two_admission_change_isolated_from_patient_and_course_one(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1, admission_date=date(2026, 8, 20),
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2, admission_date=date(2026, 10, 1),
+        )
+        self.patient.admission_date = date(2026, 8, 20)
+        self.patient.save(update_fields=['admission_date'])
+
+        response = self._post({
+            'event_type': 'admission', 'course_number': 2, 'target_date': '2026-10-05',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        course_one.refresh_from_db()
+        course_two.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(course_one.admission_date, date(2026, 8, 20))
+        self.assertEqual(course_two.admission_date, date(2026, 10, 5))
+        self.assertEqual(self.patient.admission_date, date(2026, 8, 20))
+
     def test_course_one_discharge_change_keeps_patient_compatibility(self):
         course_one = TreatmentCourse.objects.create(
             patient=self.patient, course_number=1, discharge_date=date(2026, 9, 30),
@@ -6370,6 +7750,424 @@ class TestClinicalPathReschedule(TestCase):
         self.patient.refresh_from_db()
         self.assertEqual(course_one.admission_date, date(2026, 8, 21))
         self.assertEqual(self.patient.admission_date, date(2026, 8, 21))
+
+    def test_admission_course_and_patient_updates_roll_back_if_patient_write_fails(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1, admission_date=date(2026, 8, 20),
+        )
+        self.patient.admission_date = date(2026, 8, 20)
+        self.patient.save(update_fields=['admission_date'])
+        _install_sqlite_update_failure(Patient, 'fail_patient_admission_update', 'admission_date')
+        self.client.raise_request_exception = False
+
+        response = self._post({
+            'event_type': 'admission', 'course_number': 1, 'target_date': '2026-08-21',
+        })
+
+        self.assertEqual(response.status_code, 500)
+        course_one.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(course_one.admission_date, date(2026, 8, 20))
+        self.assertEqual(self.patient.admission_date, date(2026, 8, 20))
+
+    def test_admission_revalidates_course_after_patient_mutex(self):
+        from rtms_app.services.patient_mutex import acquire_patient_mutex
+
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1, admission_date=date(2026, 8, 20),
+        )
+        self.patient.admission_date = date(2026, 8, 20)
+        self.patient.save(update_fields=['admission_date'])
+
+        def change_course_after_mutex(patient_id):
+            self.assertTrue(connection.in_atomic_block)
+            locked_patient = acquire_patient_mutex(patient_id)
+            TreatmentCourse.objects.filter(pk=course_one.pk).update(course_number=2)
+            return locked_patient
+
+        with patch('rtms_app.views.acquire_patient_mutex', side_effect=change_course_after_mutex) as mutex:
+            response = self._post({
+                'event_type': 'admission', 'course_number': 1, 'target_date': '2026-08-21',
+            })
+
+        mutex.assert_called_once_with(self.patient.pk)
+        self.assertEqual(response.status_code, 400)
+        course_one.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(course_one.course_number, 2)
+        self.assertEqual(course_one.admission_date, date(2026, 8, 20))
+        self.assertEqual(self.patient.admission_date, date(2026, 8, 20))
+
+    def test_discharge_course_and_patient_updates_roll_back_if_patient_write_fails(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1, discharge_date=date(2026, 9, 30),
+        )
+        self.patient.discharge_date = date(2026, 9, 30)
+        self.patient.save(update_fields=['discharge_date'])
+        _install_sqlite_update_failure(Patient, 'fail_patient_discharge_path_update', 'discharge_date')
+        self.client.raise_request_exception = False
+
+        response = self._post({
+            'event_type': 'discharge', 'course_number': 1, 'target_date': '2026-10-01',
+        })
+
+        self.assertEqual(response.status_code, 500)
+        course_one.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(course_one.discharge_date, date(2026, 9, 30))
+        self.assertEqual(self.patient.discharge_date, date(2026, 9, 30))
+
+class FirstVisitScheduleClearTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username='first-visit-clear-user')
+        doctor_group, _ = Group.objects.get_or_create(name='医師')
+        self.user.groups.add(doctor_group)
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patient = Patient.objects.create(
+            card_id='99001', name='Schedule Clear Patient', birth_date=date(1980, 1, 1),
+            admission_date=date(2026, 8, 20), first_treatment_date=date(2026, 8, 24),
+            mapping_date=date(2026, 8, 25), first_visit_date=date(2026, 8, 20),
+        )
+
+    def _course(self, course_number, *, admission=None, first=None, mapping=None):
+        return TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=course_number,
+            admission_date=admission or date(2026, 8, 20),
+            first_treatment_date=first or date(2026, 8, 24),
+            mapping_date=mapping or date(2026, 8, 25),
+        )
+
+    def _post_clear(self, course_number=None):
+        url = reverse('rtms_app:patient_first_visit', args=[self.patient.pk])
+        if course_number is not None:
+            url = f'{url}?course_number={course_number}'
+        return self.client.post(url, {
+            'card_id': self.patient.card_id,
+            'name': self.patient.name,
+            'birth_date': self.patient.birth_date.isoformat(),
+            'gender': self.patient.gender,
+            'attending_physician': str(self.user.pk),
+            'admission_date': '',
+            'first_visit_date': self.patient.first_visit_date.isoformat(),
+            'first_treatment_date': '',
+            'has_other_psychiatric_history': 'no',
+        })
+
+    def _assert_course_dates(self, course, admission, first, mapping):
+        course.refresh_from_db()
+        self.assertEqual(
+            (course.admission_date, course.first_treatment_date, course.mapping_date),
+            (admission, first, mapping),
+        )
+
+    def test_course_two_clear_leaves_course_one_and_patient_mirrors_unchanged(self):
+        course_one = self._course(1)
+        course_two = self._course(
+            2, admission=date(2026, 10, 1), first=date(2026, 10, 5), mapping=date(2026, 10, 6),
+        )
+        patient_mirrors = (
+            self.patient.admission_date, self.patient.first_treatment_date, self.patient.mapping_date,
+        )
+
+        response = self._post_clear(course_number=2)
+
+        self.assertRedirects(response, reverse('rtms_app:dashboard'))
+        self._assert_course_dates(course_two, None, None, None)
+        self._assert_course_dates(
+            course_one, date(2026, 8, 20), date(2026, 8, 24), date(2026, 8, 25),
+        )
+        self.patient.refresh_from_db()
+        self.assertEqual(
+            (self.patient.admission_date, self.patient.first_treatment_date, self.patient.mapping_date),
+            patient_mirrors,
+        )
+
+    def test_legacy_patient_clear_keeps_legacy_owner_scope(self):
+        response = self._post_clear()
+
+        self.assertRedirects(response, reverse('rtms_app:dashboard'))
+        self.patient.refresh_from_db()
+        self.assertIsNone(self.patient.admission_date)
+        self.assertIsNone(self.patient.first_treatment_date)
+        self.assertIsNone(self.patient.mapping_date)
+        self.assertFalse(TreatmentCourse.objects.filter(patient=self.patient).exists())
+
+    def test_planned_session_blocks_clear_and_preserves_linked_clinical_records(self):
+        from rtms_app.models import AdverseEventReport, AuditLog, SeriousAdverseEvent, SideEffectCheck, TreatmentSkip
+
+        course = self._course(1)
+        session = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=course, course_number=1,
+            session_date=date(2026, 8, 24), status='planned',
+        )
+        skip = TreatmentSkip.objects.create(
+            treatment=session, action_type='postpone', effective_date=session.session_date,
+            snapshot={'note': 'preserve'},
+        )
+        side_effect = SideEffectCheck.objects.create(session=session, rows=[{'item': 'headache'}])
+        sae = SeriousAdverseEvent.objects.create(
+            patient=self.patient, course_number=1, session=session, event_types=['other'],
+        )
+        report = AdverseEventReport.objects.create(session=session, event_types=['other'])
+        audit_count = AuditLog.objects.filter(patient=self.patient).count()
+        session_before = (session.session_date, session.date, session.status)
+
+        response = self._post_clear(course_number=1)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('未実施Session', str(response.context['form'].errors))
+        self.assertEqual(response.context['form']['admission_date'].value(), '2026-08-20')
+        self.assertEqual(response.context['form']['first_treatment_date'].value(), '2026-08-24')
+        self._assert_course_dates(course, date(2026, 8, 20), date(2026, 8, 24), date(2026, 8, 25))
+        session.refresh_from_db()
+        self.assertEqual((session.session_date, session.date, session.status), session_before)
+        self.assertEqual(TreatmentSkip.objects.get(pk=skip.pk).snapshot, {'note': 'preserve'})
+        self.assertEqual(SideEffectCheck.objects.get(pk=side_effect.pk).rows, [{'item': 'headache'}])
+        self.assertEqual(SeriousAdverseEvent.objects.get(pk=sae.pk).event_types, ['other'])
+        self.assertEqual(AdverseEventReport.objects.get(pk=report.pk).event_types, ['other'])
+        self.assertEqual(AuditLog.objects.filter(patient=self.patient).count(), audit_count)
+
+    def test_done_and_skipped_sessions_block_clear(self):
+        course = self._course(1)
+        for status in ('done', 'skipped'):
+            with self.subTest(status=status):
+                session = TreatmentSession.objects.create(
+                    patient=self.patient, treatment_course=course, course_number=1,
+                    session_date=date(2026, 8, 24), status=status,
+                )
+                response = self._post_clear(course_number=1)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn('実施またはskip済みSession', str(response.context['form'].errors))
+                session.refresh_from_db()
+                self.assertEqual((session.status, session.session_date), (status, date(2026, 8, 24)))
+                self._assert_course_dates(course, date(2026, 8, 20), date(2026, 8, 24), date(2026, 8, 25))
+                session.delete()
+
+    def test_active_reservations_block_clear_and_cancelled_reservation_is_preserved(self):
+        course = self._course(1)
+        for status in ('provisional', 'confirmed'):
+            with self.subTest(status=status):
+                reservation = RtmSTreatmentReservation.objects.create(
+                    treatment_course=course, treatment_date=date(2026, 8, 24),
+                    sequence_number=1, status=status, capacity_type='rTMS_private',
+                )
+                before = (reservation.treatment_date, reservation.status, reservation.capacity_type)
+                response = self._post_clear(course_number=1)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn('有効な治療Reservation', str(response.context['form'].errors))
+                reservation.refresh_from_db()
+                self.assertEqual(
+                    (reservation.treatment_date, reservation.status, reservation.capacity_type), before,
+                )
+                reservation.delete()
+
+        cancelled = RtmSTreatmentReservation.objects.create(
+            treatment_course=course, treatment_date=date(2026, 8, 24), sequence_number=1,
+            status='cancelled', capacity_type='rTMS_private',
+        )
+        before = (cancelled.pk, cancelled.treatment_date, cancelled.status, cancelled.updated_at)
+        response = self._post_clear(course_number=1)
+        self.assertRedirects(response, reverse('rtms_app:dashboard'))
+        cancelled.refresh_from_db()
+        self.assertEqual((cancelled.pk, cancelled.treatment_date, cancelled.status, cancelled.updated_at), before)
+
+    def test_mapping_schedule_and_mapping_session_block_clear(self):
+        course = self._course(1)
+        schedule = MappingSchedule.objects.create(
+            patient=self.patient, treatment_course=course, course_number=1,
+            week_number=1, planned_date=date(2026, 8, 25),
+        )
+        response = self._post_clear(course_number=1)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('MappingSchedule', str(response.context['form'].errors))
+        schedule.refresh_from_db()
+        self.assertEqual(schedule.planned_date, date(2026, 8, 25))
+        schedule.delete()
+
+        mapping_session = MappingSession.objects.create(
+            patient=self.patient, treatment_course=course, course_number=1,
+            date=date(2026, 8, 25), week_number=1, resting_mt=60,
+        )
+        response = self._post_clear(course_number=1)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('位置決めSession', str(response.context['form'].errors))
+        mapping_session.refresh_from_db()
+        self.assertEqual(mapping_session.date, date(2026, 8, 25))
+
+    def test_draft_plan_can_clear_but_plan_history_blocks(self):
+        course = self._course(1)
+        plan = InpatientPlan.objects.create(
+            treatment_course=course, status='draft', planned_admission_date=date(2026, 8, 20),
+        )
+        response = self._post_clear(course_number=1)
+        self.assertRedirects(response, reverse('rtms_app:dashboard'))
+        plan.refresh_from_db()
+        self.assertEqual(plan.status, 'draft')
+        self.assertIsNone(plan.planned_admission_date)
+
+        Patient.objects.filter(pk=self.patient.pk).update(
+            admission_date=date(2026, 8, 20), first_treatment_date=date(2026, 8, 24),
+            mapping_date=date(2026, 8, 25),
+        )
+        TreatmentCourse.objects.filter(pk=course.pk).update(
+            admission_date=date(2026, 8, 20), first_treatment_date=date(2026, 8, 24),
+            mapping_date=date(2026, 8, 25),
+        )
+        for status in ('provisional', 'scheduled', 'admitted', 'discharged', 'cancelled'):
+            with self.subTest(status=status):
+                plan.status = status
+                plan.actual_admission_at = timezone.now() if status == 'admitted' else None
+                plan.actual_discharge_at = timezone.now() if status == 'discharged' else None
+                plan.save(update_fields=['status', 'actual_admission_at', 'actual_discharge_at'])
+                response = self._post_clear(course_number=1)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn('InpatientPlan', str(response.context['form'].errors))
+                plan.refresh_from_db()
+                self.assertEqual(plan.status, status)
+                self._assert_course_dates(course, date(2026, 8, 20), date(2026, 8, 24), date(2026, 8, 25))
+
+    def test_waitlist_states_and_history_are_course_scoped(self):
+        course = self._course(1)
+        allowed = {'requested', 'waiting', 'cancelled', 'withdrawn'}
+        for status in ('requested', 'waiting', 'provisional', 'scheduled', 'cancelled', 'withdrawn'):
+            with self.subTest(status=status):
+                TreatmentCourse.objects.filter(pk=course.pk).update(
+                    admission_date=date(2026, 8, 20), first_treatment_date=date(2026, 8, 24),
+                    mapping_date=date(2026, 8, 25),
+                )
+                Patient.objects.filter(pk=self.patient.pk).update(
+                    admission_date=date(2026, 8, 20), first_treatment_date=date(2026, 8, 24),
+                    mapping_date=date(2026, 8, 25),
+                )
+                entry = RtmSWaitlistEntry.objects.create(treatment_course=course, status=status)
+                before = (entry.status, entry.inpatient_plan_id, entry.scheduled_at, entry.closed_at)
+                response = self._post_clear(course_number=1)
+                if status in allowed:
+                    self.assertRedirects(response, reverse('rtms_app:dashboard'))
+                else:
+                    self.assertEqual(response.status_code, 200)
+                    self.assertIn('WaitlistEntry', str(response.context['form'].errors))
+                entry.refresh_from_db()
+                self.assertEqual(
+                    (entry.status, entry.inpatient_plan_id, entry.scheduled_at, entry.closed_at), before,
+                )
+                entry.delete()
+
+    def test_planned_and_active_resource_assignments_block_clear(self):
+        from rtms_app.models import ResourceAssignment, ResourcePool
+
+        course = self._course(1)
+        pool = ResourcePool.objects.create(
+            code='CLEAR_TEST_PRIVATE', name='Clear test room', resource_type='rTMS_private',
+            physical_capacity=1, operational_target=1,
+        )
+        assignment = ResourceAssignment.objects.create(
+            treatment_course=course, resource_pool=pool,
+            planned_start_date=date(2026, 8, 20), status='planned',
+        )
+        for status in ('planned', 'active'):
+            with self.subTest(status=status):
+                assignment.status = status
+                assignment.save(update_fields=['status'])
+                response = self._post_clear(course_number=1)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn('ResourceAssignment', str(response.context['form'].errors))
+                assignment.refresh_from_db()
+                self.assertEqual(assignment.status, status)
+
+    def test_course_history_and_course_one_mirror_mismatch_block_clear(self):
+        course = self._course(1)
+        self.patient.mapping_date = date(2026, 8, 26)
+        self.patient.save(update_fields=['mapping_date'])
+        response = self._post_clear(course_number=1)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('mirror', str(response.context['form'].errors))
+        self._assert_course_dates(course, date(2026, 8, 20), date(2026, 8, 24), date(2026, 8, 25))
+
+        self.patient.mapping_date = date(2026, 8, 25)
+        self.patient.save(update_fields=['mapping_date'])
+        course.course_status = 'treatment_in_progress'
+        course.save(update_fields=['course_status'])
+        response = self._post_clear(course_number=1)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('進行中または終了履歴', str(response.context['form'].errors))
+        self._assert_course_dates(course, date(2026, 8, 20), date(2026, 8, 24), date(2026, 8, 25))
+
+    def test_invalid_session_or_waitlist_plan_ownership_blocks_clear(self):
+        course_one = self._course(1)
+        course_two = self._course(2)
+        session = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=course_one, course_number=1,
+            session_date=date(2026, 8, 24),
+        )
+        TreatmentSession.objects.filter(pk=session.pk).update(treatment_course=course_two)
+        response = self._post_clear(course_number=1)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('所有関係', str(response.context['form'].errors))
+        self._assert_course_dates(course_one, date(2026, 8, 20), date(2026, 8, 24), date(2026, 8, 25))
+        TreatmentSession.objects.filter(pk=session.pk).update(treatment_course=course_one)
+        session.delete()
+
+        other_plan = InpatientPlan.objects.create(treatment_course=course_two, status='draft')
+        entry = RtmSWaitlistEntry.objects.create(treatment_course=course_one, status='waiting')
+        RtmSWaitlistEntry.objects.filter(pk=entry.pk).update(inpatient_plan=other_plan)
+        response = self._post_clear(course_number=1)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('所有関係', str(response.context['form'].errors))
+        entry.refresh_from_db()
+        self.assertEqual(entry.inpatient_plan_id, other_plan.pk)
+
+    def test_write_failure_rolls_back_course_patient_plan_and_history_rows(self):
+        course = self._course(1)
+        plan = InpatientPlan.objects.create(
+            treatment_course=course, status='draft', planned_admission_date=date(2026, 8, 20),
+        )
+        reservation = RtmSTreatmentReservation.objects.create(
+            treatment_course=course, treatment_date=date(2026, 8, 24), sequence_number=1,
+            status='cancelled', capacity_type='rTMS_private',
+        )
+        entry = RtmSWaitlistEntry.objects.create(treatment_course=course, status='cancelled')
+        patient_dates = (
+            self.patient.admission_date, self.patient.first_treatment_date, self.patient.mapping_date,
+        )
+        original_save = Patient.save
+
+        def fail_patient_mirror(instance, *args, **kwargs):
+            if instance.pk == self.patient.pk and set(kwargs.get('update_fields') or ()) == {
+                'admission_date', 'first_treatment_date', 'mapping_date',
+            }:
+                raise RuntimeError('injected mirror write failure')
+            return original_save(instance, *args, **kwargs)
+
+        with patch.object(Patient, 'save', new=fail_patient_mirror):
+            with self.assertRaisesRegex(RuntimeError, 'injected mirror write failure'):
+                self._post_clear(course_number=1)
+
+        self.patient.refresh_from_db()
+        self.assertEqual(
+            (self.patient.admission_date, self.patient.first_treatment_date, self.patient.mapping_date),
+            patient_dates,
+        )
+        self._assert_course_dates(course, date(2026, 8, 20), date(2026, 8, 24), date(2026, 8, 25))
+        plan.refresh_from_db()
+        self.assertEqual(plan.planned_admission_date, date(2026, 8, 20))
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.status, 'cancelled')
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, 'cancelled')
+
+    def test_clear_button_and_confirmation_describe_date_only_operation(self):
+        self._course(1)
+        response = self.client.get(
+            f'{reverse("rtms_app:patient_first_visit", args=[self.patient.pk])}?course_number=1',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="clearRtmsScheduleButton"')
+        self.assertContains(response, '日付欄のみをクリアし、既存の日程は変更しません。続行しますか？')
+        self.assertContains(response, 'data-original-admission-date="2026-08-20"')
 
 
 class SessionCreationApiSqliteRetryTests(TransactionTestCase):
@@ -6608,6 +8406,7 @@ class SessionCreationApiSqliteRetryTests(TransactionTestCase):
         create_session.assert_called_once()
         retry_sleep.assert_not_called()
         self.assertFalse(TreatmentSession.objects.filter(patient=self.patient).exists())
+
 
 class TestPatientSurveyFlow(TestCase):
     def setUp(self):
@@ -7263,6 +9062,14 @@ class TestTreatmentCourseDischargeSummaryIsolation(TestCase):
         self.assertIn('2026年07月05日から全0回', generated_two.context['summary_text'])
 
     def test_summary_post_writes_only_requested_course(self):
+        plan_one = InpatientPlan.objects.create(
+            treatment_course=self.course_one,
+            planned_discharge_date=date(2026, 1, 30),
+        )
+        plan_two = InpatientPlan.objects.create(
+            treatment_course=self.course_two,
+            planned_discharge_date=date(2026, 7, 30),
+        )
         url = self._summary_url(2)
         response = self.client.post(url, {
             'summary_text': 'UPDATED COURSE TWO SUMMARY',
@@ -7273,17 +9080,25 @@ class TestTreatmentCourseDischargeSummaryIsolation(TestCase):
         self.assertEqual(response.status_code, 302)
         self.course_one.refresh_from_db()
         self.course_two.refresh_from_db()
+        plan_one.refresh_from_db()
+        plan_two.refresh_from_db()
         self.patient.refresh_from_db()
         self.assertEqual(self.course_one.summary_text, 'COURSE ONE SUMMARY')
         self.assertEqual(self.course_one.discharge_prescription, 'COURSE ONE PRESCRIPTION')
         self.assertEqual(self.course_two.summary_text, 'UPDATED COURSE TWO SUMMARY')
         self.assertEqual(self.course_two.discharge_prescription, 'UPDATED COURSE TWO PRESCRIPTION')
         self.assertEqual(self.course_two.discharge_date, date(2026, 8, 1))
+        self.assertEqual(plan_one.planned_discharge_date, date(2026, 1, 30))
+        self.assertEqual(plan_two.planned_discharge_date, date(2026, 8, 1))
         self.assertEqual(self.patient.summary_text, 'PATIENT LEGACY SUMMARY')
         self.assertEqual(self.patient.discharge_prescription, 'PATIENT LEGACY PRESCRIPTION')
         self.assertEqual(self.patient.discharge_date, date(2025, 1, 3))
 
     def test_summary_post_course_one_mirrors_patient_discharge_date(self):
+        plan = InpatientPlan.objects.create(
+            treatment_course=self.course_one,
+            planned_discharge_date=date(2026, 1, 30),
+        )
         response = self.client.post(self._summary_url(1), {
             'summary_text': 'UPDATED COURSE ONE SUMMARY',
             'discharge_prescription': 'UPDATED COURSE ONE PRESCRIPTION',
@@ -7294,12 +9109,106 @@ class TestTreatmentCourseDischargeSummaryIsolation(TestCase):
         self.assertEqual(response.status_code, 302)
         self.course_one.refresh_from_db()
         self.course_two.refresh_from_db()
+        plan.refresh_from_db()
         self.patient.refresh_from_db()
         self.assertEqual(self.course_one.discharge_date, date(2026, 2, 1))
+        self.assertEqual(plan.planned_discharge_date, date(2026, 2, 1))
         self.assertEqual(self.patient.discharge_date, date(2026, 2, 1))
         self.assertEqual(self.course_two.discharge_date, date(2026, 7, 31))
         self.assertEqual(self.course_two.summary_text, 'COURSE TWO SUMMARY')
         self.assertEqual(self.course_two.discharge_prescription, 'COURSE TWO PRESCRIPTION')
+
+    def test_summary_rolls_back_course_when_plan_database_update_fails(self):
+        plan = InpatientPlan.objects.create(
+            treatment_course=self.course_one,
+            planned_discharge_date=date(2026, 1, 30),
+        )
+        course_before = (
+            self.course_one.summary_text,
+            self.course_one.discharge_prescription,
+            self.course_one.discharge_date,
+        )
+        plan_before = plan.planned_discharge_date
+        patient_before = (
+            self.patient.summary_text,
+            self.patient.discharge_prescription,
+            self.patient.discharge_date,
+        )
+        _install_sqlite_update_failure(InpatientPlan, 'fail_plan_discharge_update', 'planned_discharge_date')
+        self.client.raise_request_exception = False
+
+        response = self.client.post(self._summary_url(1), {
+            'summary_text': 'SHOULD ROLLBACK',
+            'discharge_prescription': 'SHOULD ROLLBACK',
+            'discharge_date': '2026-02-01',
+            'course_number': '1',
+        })
+
+        self.assertEqual(response.status_code, 500)
+        self.course_one.refresh_from_db()
+        plan.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(
+            (self.course_one.summary_text, self.course_one.discharge_prescription, self.course_one.discharge_date),
+            course_before,
+        )
+        self.assertEqual(plan.planned_discharge_date, plan_before)
+        self.assertEqual(
+            (self.patient.summary_text, self.patient.discharge_prescription, self.patient.discharge_date),
+            patient_before,
+        )
+
+    def test_summary_rolls_back_course_and_plan_when_patient_database_update_fails(self):
+        plan = InpatientPlan.objects.create(
+            treatment_course=self.course_one,
+            planned_discharge_date=date(2026, 1, 30),
+        )
+        course_before = (
+            self.course_one.summary_text,
+            self.course_one.discharge_prescription,
+            self.course_one.discharge_date,
+        )
+        plan_before = plan.planned_discharge_date
+        patient_before = (
+            self.patient.summary_text,
+            self.patient.discharge_prescription,
+            self.patient.discharge_date,
+        )
+        _install_sqlite_update_failure(Patient, 'fail_patient_discharge_update', 'discharge_date')
+        self.client.raise_request_exception = False
+
+        response = self.client.post(self._summary_url(1), {
+            'summary_text': 'SHOULD ROLLBACK',
+            'discharge_prescription': 'SHOULD ROLLBACK',
+            'discharge_date': '2026-02-01',
+            'course_number': '1',
+        })
+
+        self.assertEqual(response.status_code, 500)
+        self.course_one.refresh_from_db()
+        plan.refresh_from_db()
+        self.patient.refresh_from_db()
+        self.assertEqual(
+            (self.course_one.summary_text, self.course_one.discharge_prescription, self.course_one.discharge_date),
+            course_before,
+        )
+        self.assertEqual(plan.planned_discharge_date, plan_before)
+        self.assertEqual(
+            (self.patient.summary_text, self.patient.discharge_prescription, self.patient.discharge_date),
+            patient_before,
+        )
+
+    def test_summary_and_clinical_path_keep_login_required(self):
+        anonymous_client = Client()
+        summary_response = anonymous_client.post(self._summary_url(1), {'summary_text': 'unauthorized'})
+        path_response = anonymous_client.post(
+            reverse('rtms_app:clinical_path_reschedule', args=[self.patient.pk]),
+            data=json.dumps({'event_type': 'discharge', 'target_date': '2026-02-01'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(summary_response.status_code, 302)
+        self.assertEqual(path_response.status_code, 302)
 
     def test_print_views_use_requested_course_content(self):
         for course_number, summary, prescription in (

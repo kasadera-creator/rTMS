@@ -963,6 +963,314 @@ class RtmsTreatmentReservationTests(TestCase):
             30,
         )
 
+    def test_calendar_adjustment_uses_one_holiday_aware_session_and_reservation_sequence(self):
+        course = self.make_course()
+        old_start = date(2026, 8, 24)
+        self.book(course, start_date=old_start)
+        old_dates = generate_treatment_dates(
+            old_start,
+            total=30,
+            holidays=get_japanese_holidays(old_start, old_start + timedelta(days=365)),
+        )
+        TreatmentSession.objects.bulk_create([
+            TreatmentSession(
+                patient=course.patient,
+                treatment_course=course,
+                course_number=course.course_number,
+                session_date=treatment_date,
+                status="planned",
+            )
+            for treatment_date in old_dates
+        ])
+        entry = RtmSWaitlistEntry.objects.create(treatment_course=course, status="waiting")
+        reservation_ids = list(
+            RtmSTreatmentReservation.objects.filter(treatment_course=course)
+            .order_by("sequence_number")
+            .values_list("pk", flat=True)
+        )
+
+        result = update_calendar_course_adjustment(
+            treatment_course=course,
+            admission_date=date(2026, 10, 5),
+            treatment_start_date=date(2026, 10, 5),
+            is_all_case_survey=False,
+            waitlist_entry=entry,
+        )
+
+        holidays = get_japanese_holidays(date(2026, 10, 5), date(2027, 10, 5))
+        expected_dates = generate_treatment_dates(
+            date(2026, 10, 5), total=30, holidays=holidays,
+        )
+        sessions = list(
+            TreatmentSession.objects.filter(treatment_course=course)
+            .order_by("session_date", "pk")
+        )
+        reservations = list(
+            RtmSTreatmentReservation.objects.filter(treatment_course=course)
+            .order_by("sequence_number")
+        )
+        self.assertEqual([item.session_date for item in sessions], expected_dates)
+        self.assertNotIn(date(2026, 10, 12), [item.session_date for item in sessions])
+        self.assertEqual(
+            [item.treatment_date for item in reservations],
+            [item.session_date for item in sessions],
+        )
+        self.assertEqual([item.pk for item in reservations], reservation_ids)
+        self.assertTrue(all(item.status == "provisional" for item in reservations))
+
+    def test_calendar_adjustment_skips_consecutive_weekend_and_holidays(self):
+        course = self.make_course()
+        old_start = date(2026, 8, 24)
+        self.book(course, start_date=old_start)
+        old_dates = generate_treatment_dates(
+            old_start,
+            total=30,
+            holidays=get_japanese_holidays(old_start, old_start + timedelta(days=365)),
+        )
+        TreatmentSession.objects.bulk_create([
+            TreatmentSession(
+                patient=course.patient,
+                treatment_course=course,
+                course_number=course.course_number,
+                session_date=treatment_date,
+                status="planned",
+            )
+            for treatment_date in old_dates
+        ])
+
+        update_calendar_course_adjustment(
+            treatment_course=course,
+            admission_date=date(2026, 9, 18),
+            treatment_start_date=date(2026, 9, 18),
+            is_all_case_survey=False,
+        )
+
+        holidays = get_japanese_holidays(date(2026, 9, 18), date(2027, 9, 18))
+        expected_dates = generate_treatment_dates(
+            date(2026, 9, 18), total=30, holidays=holidays,
+        )
+        sessions = list(
+            TreatmentSession.objects.filter(treatment_course=course)
+            .order_by("session_date", "pk")
+        )
+        reservations = list(
+            RtmSTreatmentReservation.objects.filter(treatment_course=course)
+            .order_by("sequence_number")
+        )
+        self.assertEqual(expected_dates[:5], [
+            date(2026, 9, 18), date(2026, 9, 24), date(2026, 9, 25),
+            date(2026, 9, 28), date(2026, 9, 29),
+        ])
+        self.assertEqual([item.session_date for item in sessions], expected_dates)
+        self.assertEqual(
+            [item.treatment_date for item in reservations],
+            [item.session_date for item in sessions],
+        )
+
+    def test_calendar_adjustment_extension_respects_year_end_and_preserves_overflow(self):
+        course = self.make_course()
+        old_start = date(2026, 8, 24)
+        self.book(course, start_date=old_start)
+        old_dates = generate_treatment_dates(
+            old_start,
+            total=30,
+            holidays=get_japanese_holidays(old_start, old_start + timedelta(days=365)),
+        )
+        TreatmentSession.objects.bulk_create([
+            TreatmentSession(
+                patient=course.patient,
+                treatment_course=course,
+                course_number=course.course_number,
+                session_date=treatment_date,
+                status="planned",
+            )
+            for treatment_date in old_dates
+        ])
+        target_start = date(2026, 11, 16)
+        target_holidays = get_japanese_holidays(
+            target_start, target_start + timedelta(days=365),
+        )
+        canonical_dates = generate_treatment_dates(
+            target_start, total=30, holidays=target_holidays,
+        )
+        overflow = TreatmentSession.objects.create(
+            patient=course.patient,
+            treatment_course=course,
+            course_number=course.course_number,
+            session_date=canonical_dates[-1],
+            status="planned",
+        )
+        overflow_before = (overflow.pk, overflow.session_date, overflow.status)
+
+        update_calendar_course_adjustment(
+            treatment_course=course,
+            admission_date=target_start,
+            treatment_start_date=target_start,
+            is_all_case_survey=False,
+        )
+
+        overflow.refresh_from_db()
+        self.assertEqual(
+            (overflow.pk, overflow.session_date, overflow.status),
+            overflow_before,
+        )
+        sessions = list(
+            TreatmentSession.objects.filter(treatment_course=course)
+            .order_by("session_date", "pk")
+        )
+        reservations = list(
+            RtmSTreatmentReservation.objects.filter(treatment_course=course)
+            .order_by("sequence_number")
+        )
+        self.assertIn(date(2027, 1, 4), [item.session_date for item in sessions])
+        self.assertFalse(any(
+            date(2026, 12, 29) <= item.session_date <= date(2027, 1, 3)
+            for item in sessions
+        ))
+        self.assertEqual(
+            [item.treatment_date for item in reservations],
+            [item.session_date for item in sessions[:30]],
+        )
+
+    def test_calendar_adjustment_preserves_fixed_sessions_and_cancels_only_skipped_reservation(self):
+        course = self.make_course()
+        old_start = date(2026, 8, 24)
+        self.book(course, start_date=old_start)
+        old_dates = generate_treatment_dates(
+            old_start,
+            total=30,
+            holidays=get_japanese_holidays(old_start, old_start + timedelta(days=365)),
+        )
+        TreatmentSession.objects.bulk_create([
+            TreatmentSession(
+                patient=course.patient,
+                treatment_course=course,
+                course_number=course.course_number,
+                session_date=treatment_date,
+                status="planned",
+            )
+            for treatment_date in old_dates
+        ])
+        done_session = TreatmentSession.objects.get(
+            treatment_course=course, session_date=old_dates[10],
+        )
+        done_session.session_date = date(2027, 1, 15)
+        done_session.status = "done"
+        done_session.save(update_fields=["session_date", "status"])
+        skipped_session = TreatmentSession.objects.get(
+            treatment_course=course, session_date=old_dates[11],
+        )
+        skipped_session.session_date = date(2027, 1, 18)
+        skipped_session.status = "skipped"
+        skipped_session.save(update_fields=["session_date", "status"])
+        reservation_ids = list(
+            RtmSTreatmentReservation.objects.filter(treatment_course=course)
+            .order_by("sequence_number")
+            .values_list("pk", flat=True)
+        )
+
+        result = update_calendar_course_adjustment(
+            treatment_course=course,
+            admission_date=date(2026, 10, 5),
+            treatment_start_date=date(2026, 10, 5),
+            is_all_case_survey=False,
+        )
+
+        done_session.refresh_from_db()
+        skipped_session.refresh_from_db()
+        self.assertEqual((done_session.session_date, done_session.status), (date(2027, 1, 15), "done"))
+        self.assertEqual((skipped_session.session_date, skipped_session.status), (date(2027, 1, 18), "skipped"))
+        actual_sessions = list(
+            TreatmentSession.objects.filter(treatment_course=course)
+            .order_by("session_date", "pk")[:30]
+        )
+        reservations = list(
+            RtmSTreatmentReservation.objects.filter(treatment_course=course)
+            .order_by("sequence_number")
+        )
+        self.assertEqual([item.pk for item in reservations], reservation_ids)
+        self.assertEqual(
+            [item.treatment_date for item in reservations],
+            [item.session_date for item in actual_sessions],
+        )
+        self.assertEqual(
+            [item.treatment_date for item in result["reservation"]["reservations"]],
+            [item.session_date for item in actual_sessions],
+        )
+        self.assertEqual(reservations[-2].status, "provisional")
+        self.assertEqual(reservations[-1].status, "cancelled")
+        self.assertTrue(all(item.status == "provisional" for item in reservations[:-1]))
+
+    def test_calendar_adjustment_preserves_zero_partial_full_and_overflow_contracts(self):
+        new_start = date(2026, 10, 5)
+        for session_count in (0, 12, 30, 31):
+            with self.subTest(session_count=session_count):
+                course = self.make_course()
+                old_start = date(2026, 8, 24)
+                self.book(course, start_date=old_start)
+                old_dates = generate_treatment_dates(
+                    old_start,
+                    total=30,
+                    holidays=get_japanese_holidays(old_start, old_start + timedelta(days=365)),
+                )
+                TreatmentSession.objects.bulk_create([
+                    TreatmentSession(
+                        patient=course.patient,
+                        treatment_course=course,
+                        course_number=course.course_number,
+                        session_date=treatment_date,
+                        status="planned",
+                    )
+                    for treatment_date in old_dates[:min(session_count, 30)]
+                ])
+                overflow = None
+                if session_count > 30:
+                    overflow = TreatmentSession.objects.create(
+                        patient=course.patient,
+                        treatment_course=course,
+                        course_number=course.course_number,
+                        session_date=date(2030, 1, 4),
+                        status="planned",
+                    )
+                reservation_ids = list(
+                    RtmSTreatmentReservation.objects.filter(treatment_course=course)
+                    .order_by("sequence_number")
+                    .values_list("pk", flat=True)
+                )
+
+                update_calendar_course_adjustment(
+                    treatment_course=course,
+                    admission_date=new_start,
+                    treatment_start_date=new_start,
+                    is_all_case_survey=False,
+                )
+
+                sessions = list(
+                    TreatmentSession.objects.filter(treatment_course=course)
+                    .order_by("session_date", "pk")
+                )
+                reservations = list(
+                    RtmSTreatmentReservation.objects.filter(treatment_course=course)
+                    .order_by("sequence_number")
+                )
+                expected_dates = generate_treatment_dates(
+                    new_start,
+                    total=30,
+                    holidays=get_japanese_holidays(new_start, new_start + timedelta(days=365)),
+                )
+                self.assertEqual(len(reservations), 30)
+                self.assertEqual([item.pk for item in reservations], reservation_ids)
+                if session_count == 0:
+                    self.assertEqual([item.treatment_date for item in reservations], expected_dates)
+                else:
+                    self.assertEqual(
+                        [item.treatment_date for item in reservations[:min(session_count, 30)]],
+                        [item.session_date for item in sessions[:min(session_count, 30)]],
+                    )
+                if overflow is not None:
+                    overflow.refresh_from_db()
+                    self.assertEqual((overflow.session_date, overflow.status), (date(2030, 1, 4), "planned"))
+
     def test_inpatient_confirmation_creates_confirmed_reservations(self):
         course = self.make_course()
         pool = ResourcePool.objects.create(
@@ -1353,6 +1661,38 @@ class RtmsTreatmentReservationTests(TestCase):
             treatment_capacity_snapshot(dates[0])["total_occupied"],
             1,
         )
+
+    def test_skip_reflow_skips_year_end_closure(self):
+        course = self.make_course()
+        skipped_session = TreatmentSession.objects.create(
+            patient=course.patient,
+            treatment_course=course,
+            course_number=course.course_number,
+            session_date=date(2026, 12, 28),
+            status="skipped",
+        )
+        future_sessions = [
+            TreatmentSession.objects.create(
+                patient=course.patient,
+                treatment_course=course,
+                course_number=course.course_number,
+                session_date=source_date,
+                status="planned",
+            )
+            for source_date in (date(2026, 12, 29), date(2026, 12, 30))
+        ]
+
+        shift_future_sessions(
+            course.patient,
+            skipped_session.session_date,
+            course.course_number,
+        )
+
+        for session, expected_date in zip(
+            future_sessions, (date(2027, 1, 4), date(2027, 1, 5)),
+        ):
+            session.refresh_from_db()
+            self.assertEqual(session.session_date, expected_date)
         self.assertFalse(InpatientPlan.objects.filter(treatment_course=course).exists())
 
     def test_skipping_final_session_still_syncs_reservation(self):

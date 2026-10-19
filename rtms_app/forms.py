@@ -261,7 +261,7 @@ class TreatmentCourseFirstVisitForm(PatientFirstVisitForm):
             'weight_kg', 'is_weight_unknown',
             'has_other_psychiatric_history', 'psychiatric_history',
             'psychiatric_history_other_text',
-            'first_visit_date', 'admission_date', 'first_treatment_date', 'mapping_date',
+            'first_visit_date', 'admission_date', 'first_treatment_date',
             'private_room_planned',
         ]
         widgets = {

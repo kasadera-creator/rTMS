@@ -27,8 +27,10 @@ from rtms_app.services.resource_capacity import (
 from rtms_app.services.rtms_treatment_reservations import (
     TreatmentReservationBusyError,
     create_or_replace_rtms_treatment_reservation,
+    sync_rtms_treatment_reservation_from_sessions,
 )
 from rtms_app.services.rtms_schedule import generate_treatment_dates, get_japanese_holidays
+from rtms_app.services.patient_mutex import acquire_patient_mutex
 from rtms_app.services.session_writes import patient_course_writer
 
 
@@ -89,6 +91,36 @@ def _provisional_schedule_baseline(entry, *, for_update=False):
 
 def _iso_value(value):
     return value.isoformat() if value is not None else None
+
+
+ROLLBACK_PATIENT_MIRROR_FIELDS = (
+    "admission_date", "first_treatment_date", "mapping_date", "is_all_case_survey",
+)
+
+
+def _patient_mirror_snapshot(patient):
+    return {
+        field: _iso_value(getattr(patient, field))
+        if field in {"admission_date", "first_treatment_date", "mapping_date"}
+        else getattr(patient, field)
+        for field in ROLLBACK_PATIENT_MIRROR_FIELDS
+    }
+
+
+def _reservation_snapshot(reservations):
+    return [
+        {
+            "id": reservation.pk,
+            "treatment_course_id": reservation.treatment_course_id,
+            "sequence_number": reservation.sequence_number,
+            "treatment_date": _iso_value(reservation.treatment_date),
+            "status": reservation.status,
+            "capacity_type": reservation.capacity_type,
+            "created_at": _iso_value(reservation.created_at),
+            "updated_at": _iso_value(reservation.updated_at),
+        }
+        for reservation in reservations
+    ]
 
 
 def _require_baseline_object(value, field_name):
@@ -160,16 +192,23 @@ def _require_baseline_datetime(value, field_name, *, nullable=False):
         )
 
 
-def _validate_provisional_schedule_rollback(course, entry, *, lock_baseline=False):
+def _validate_provisional_schedule_rollback(
+    course, entry, *, patient=None, locked_plan=None,
+    locked_reservations=None, lock_baseline=False,
+):
     if entry.status != "provisional":
         raise ProvisionalRollbackError(
             "この患者は現在「日程調整中」ではないため、待機状態へ戻せません。"
         )
     if entry.treatment_course_id != course.pk:
         raise ProvisionalRollbackError("待機リストと対象Courseが一致しません。")
-    plan = InpatientPlan.objects.filter(treatment_course=course).first()
+    plan = locked_plan
+    if plan is None:
+        plan = InpatientPlan.objects.filter(treatment_course=course).first()
     if plan is None:
         raise ProvisionalRollbackError("対象Courseに紐づく入院Planを確認できません。")
+    if plan.treatment_course_id != course.pk:
+        raise ProvisionalRollbackError("入院Planと対象Courseが一致しません。")
     baseline_log = _provisional_schedule_baseline(entry, for_update=lock_baseline)
     if baseline_log is None:
         raise ProvisionalRollbackError(
@@ -179,7 +218,7 @@ def _validate_provisional_schedule_rollback(course, entry, *, lock_baseline=Fals
     _require_baseline_keys(
         baseline,
         ("event", "course_id", "course_number", "waitlist_entry_id", "entry_before",
-         "course_before", "plan_before", "provisional_values"),
+         "course_before", "patient_before", "plan_before", "provisional_values"),
         "root",
     )
     if baseline.get("event") != PROVISIONAL_SCHEDULE_BASELINE_EVENT:
@@ -199,6 +238,7 @@ def _validate_provisional_schedule_rollback(course, entry, *, lock_baseline=Fals
 
     entry_before = _require_baseline_object(baseline.get("entry_before"), "entry_before")
     course_before = _require_baseline_object(baseline.get("course_before"), "course_before")
+    patient_before = _require_baseline_object(baseline.get("patient_before"), "patient_before")
     plan_before = baseline.get("plan_before")
     provisional_values = _require_baseline_object(
         baseline.get("provisional_values"), "provisional_values",
@@ -212,6 +252,10 @@ def _validate_provisional_schedule_rollback(course, entry, *, lock_baseline=Fals
     provisional_entry = _require_baseline_object(
         provisional_values.get("entry"), "provisional_values.entry",
     )
+    provisional_patient = _require_baseline_object(
+        provisional_values.get("patient"), "provisional_values.patient",
+    )
+    provisional_reservations = provisional_values.get("reservations")
     _require_baseline_keys(
         entry_before, ("status", "inpatient_plan_id", "scheduled_at"), "entry_before",
     )
@@ -220,6 +264,9 @@ def _validate_provisional_schedule_rollback(course, entry, *, lock_baseline=Fals
         ("admission_date", "first_treatment_date", "mapping_date", "is_all_case_survey",
          "private_room_planned", "planned_treatment_sessions"),
         "course_before",
+    )
+    _require_baseline_keys(
+        patient_before, ROLLBACK_PATIENT_MIRROR_FIELDS, "patient_before",
     )
     _require_baseline_keys(
         provisional_values, ("course", "plan", "entry"), "provisional_values",
@@ -240,6 +287,12 @@ def _validate_provisional_schedule_rollback(course, entry, *, lock_baseline=Fals
         provisional_entry, ("status", "inpatient_plan_id", "scheduled_at"),
         "provisional_values.entry",
     )
+    _require_baseline_keys(
+        provisional_patient, ROLLBACK_PATIENT_MIRROR_FIELDS,
+        "provisional_values.patient",
+    )
+    if not isinstance(provisional_reservations, list):
+        raise ProvisionalRollbackError("仮予定の治療予約を確認できません。")
 
     if (
         not isinstance(entry_before["status"], str)
@@ -270,6 +323,9 @@ def _validate_provisional_schedule_rollback(course, entry, *, lock_baseline=Fals
         raise ProvisionalRollbackError(
             "既存の治療スケジュール情報があるため、自動では待機状態へ戻せません。"
         )
+    for field in ("admission_date", "first_treatment_date", "mapping_date"):
+        _require_baseline_date(patient_before.get(field), f"patient_before.{field}", nullable=True)
+    _require_baseline_boolean(patient_before.get("is_all_case_survey"), "patient_before.is_all_case_survey")
     if plan_before is not None:
         plan_before = _require_baseline_object(plan_before, "plan_before")
         _require_baseline_keys(
@@ -389,6 +445,26 @@ def _validate_provisional_schedule_rollback(course, entry, *, lock_baseline=Fals
     if entry.inpatient_plan_id != plan.pk or plan.treatment_course_id != course.pk:
         raise ProvisionalRollbackError("仮予定のPlanが対象Courseに属することを確認できません。")
 
+    if patient is None:
+        patient = Patient.objects.get(pk=course.patient_id)
+    current_patient_mirrors = _patient_mirror_snapshot(patient)
+    for field in ("admission_date", "first_treatment_date", "mapping_date"):
+        _require_baseline_date(
+            provisional_patient.get(field), f"provisional_values.patient.{field}", nullable=True,
+        )
+    _require_baseline_boolean(
+        provisional_patient.get("is_all_case_survey"),
+        "provisional_values.patient.is_all_case_survey",
+    )
+    if current_patient_mirrors != provisional_patient:
+        raise ProvisionalRollbackError(
+            "Patientの関連日程情報が仮予定保存後に変更されているため、待機状態へ戻せません。"
+        )
+    if patient_before != provisional_patient:
+        raise ProvisionalRollbackError(
+            "Patient mirrorの仮予定前後の状態が一致しないため、自動では待機状態へ戻せません。"
+        )
+
     if TreatmentSession.objects.filter(
         Q(treatment_course=course)
         | Q(
@@ -426,10 +502,13 @@ def _validate_provisional_schedule_rollback(course, entry, *, lock_baseline=Fals
         raise ProvisionalRollbackError(
             "位置決め予定が残っているため、この画面から待機状態へ戻せません。"
         )
-    reservations = list(
-        RtmSTreatmentReservation.objects.filter(treatment_course=course)
-        .order_by("sequence_number")
-    )
+    if locked_reservations is None:
+        reservations = list(
+            RtmSTreatmentReservation.objects.filter(treatment_course=course)
+            .order_by("sequence_number")
+        )
+    else:
+        reservations = locked_reservations
     if any(reservation.status == "confirmed" for reservation in reservations):
         raise ProvisionalRollbackError(
             "確定済みの治療予約があるため、この画面から待機状態へ戻せません。"
@@ -441,6 +520,37 @@ def _validate_provisional_schedule_rollback(course, entry, *, lock_baseline=Fals
     ):
         raise ProvisionalRollbackError(
             "仮予定の治療予約を安全に確認できないため、待機状態へ戻せません。"
+        )
+    for reservation in provisional_reservations:
+        if not isinstance(reservation, dict):
+            raise ProvisionalRollbackError("仮予定の治療予約情報が破損しています。")
+        _require_baseline_keys(
+            reservation,
+            ("id", "treatment_course_id", "sequence_number", "treatment_date",
+             "status", "capacity_type", "created_at", "updated_at"),
+            "provisional_values.reservations[]",
+        )
+        for field in ("id", "treatment_course_id", "sequence_number"):
+            _require_baseline_integer(
+                reservation.get(field), f"provisional_values.reservations[].{field}",
+            )
+        _require_baseline_date(
+            reservation.get("treatment_date"),
+            "provisional_values.reservations[].treatment_date",
+        )
+        for field in ("created_at", "updated_at"):
+            _require_baseline_datetime(
+                reservation.get(field), f"provisional_values.reservations[].{field}",
+            )
+        if (
+            reservation.get("treatment_course_id") != course.pk
+            or reservation.get("status") != "provisional"
+            or not isinstance(reservation.get("capacity_type"), str)
+        ):
+            raise ProvisionalRollbackError("仮予定の治療予約情報が対象Courseと一致しません。")
+    if _reservation_snapshot(reservations) != provisional_reservations:
+        raise ProvisionalRollbackError(
+            "治療予約が仮予定保存後に変更されているため、待機状態へ戻せません。"
         )
     if plan.actual_admission_at is not None or plan.status == "admitted":
         raise ProvisionalRollbackError(
@@ -460,12 +570,28 @@ def can_rollback_provisional_schedule(*, treatment_course, waitlist_entry):
 
 @transaction.atomic
 def rollback_provisional_schedule(
-    *, treatment_course, waitlist_entry, user=None, ip=None, user_agent="",
+    *, patient_id, treatment_course, waitlist_entry, user=None, ip=None, user_agent="",
 ):
     """Atomically return one clean Course and its waitlist entry to waiting."""
-    course = TreatmentCourse.objects.select_for_update().get(pk=treatment_course.pk)
-    entry = RtmSWaitlistEntry.objects.select_for_update().get(pk=waitlist_entry.pk)
-    if entry.treatment_course_id != course.pk:
+    course_id = treatment_course.pk
+    entry_id = waitlist_entry.pk
+    try:
+        locked_patient = acquire_patient_mutex(patient_id)
+    except Patient.DoesNotExist as exc:
+        raise ProvisionalRollbackError("対象Patientを確認できません。") from exc
+    try:
+        course = TreatmentCourse.objects.select_for_update().get(
+            pk=course_id,
+            patient_id=locked_patient.pk,
+        )
+    except TreatmentCourse.DoesNotExist as exc:
+        raise ProvisionalRollbackError("対象CourseがPatientと一致しません。") from exc
+    try:
+        entry = RtmSWaitlistEntry.objects.select_for_update().get(
+            pk=entry_id,
+            treatment_course_id=course.pk,
+        )
+    except RtmSWaitlistEntry.DoesNotExist as exc:
         raise ProvisionalRollbackError("待機リストと対象Courseが一致しません。")
     plan = InpatientPlan.objects.select_for_update().filter(
         treatment_course=course,
@@ -478,7 +604,12 @@ def rollback_provisional_schedule(
         .order_by("sequence_number")
     )
     baseline_log, baseline, plan, reservations = _validate_provisional_schedule_rollback(
-        course, entry, lock_baseline=True,
+        course,
+        entry,
+        patient=locked_patient,
+        locked_plan=plan,
+        locked_reservations=reservations,
+        lock_baseline=True,
     )
     course_before = baseline["course_before"]
 
@@ -498,6 +629,18 @@ def rollback_provisional_schedule(
     plan.planned_admission_date = None
     plan.updated_by = user
     plan.save(update_fields=["status", "planned_admission_date", "updated_by", "updated_at"])
+
+    patient_update_fields = []
+    patient_before = baseline["patient_before"]
+    for field in ROLLBACK_PATIENT_MIRROR_FIELDS:
+        value = patient_before[field]
+        if field in {"admission_date", "first_treatment_date", "mapping_date"}:
+            value = date.fromisoformat(value) if value is not None else None
+        if getattr(locked_patient, field) != value:
+            setattr(locked_patient, field, value)
+            patient_update_fields.append(field)
+    if patient_update_fields:
+        locked_patient.save(update_fields=[*patient_update_fields, "updated_at"])
 
     RtmSTreatmentReservation.objects.filter(
         treatment_course=course,
@@ -651,18 +794,38 @@ def get_or_create_inpatient_plan(*, treatment_course: TreatmentCourse, user=None
     return plan
 
 
-@transaction.atomic
 def update_calendar_course_adjustment(
     *, treatment_course: TreatmentCourse, admission_date, treatment_start_date,
     is_all_case_survey, private_room_planned=None, planned_treatment_sessions=30,
     waitlist_entry=None, user=None,
 ):
+    with patient_course_writer(
+        treatment_course.patient_id,
+        treatment_course.course_number,
+        expected_course_id=treatment_course.pk,
+        require_course=True,
+    ) as writer:
+        return _update_calendar_course_adjustment_locked(
+            patient=writer.patient,
+            treatment_course=writer.treatment_course,
+            admission_date=admission_date,
+            treatment_start_date=treatment_start_date,
+            is_all_case_survey=is_all_case_survey,
+            private_room_planned=private_room_planned,
+            planned_treatment_sessions=planned_treatment_sessions,
+            waitlist_entry=waitlist_entry,
+            user=user,
+        )
+
+
+def _update_calendar_course_adjustment_locked(
+    *, patient, treatment_course, admission_date, treatment_start_date,
+    is_all_case_survey, private_room_planned=None, planned_treatment_sessions=30,
+    waitlist_entry=None, user=None,
+):
     """Persist calendar controls through the Course and its existing plan."""
-    locked_patient = Patient.objects.select_for_update().get(pk=treatment_course.patient_id)
-    locked_course = TreatmentCourse.objects.select_for_update().get(
-        pk=treatment_course.pk,
-        patient=locked_patient,
-    )
+    locked_patient = patient
+    locked_course = treatment_course
     locked_entry = None
     baseline_log = None
     if waitlist_entry is not None:
@@ -672,6 +835,7 @@ def update_calendar_course_adjustment(
         if locked_entry.status not in {"requested", "waiting", "provisional"}:
             raise InvalidWaitlistEntryError("この状態の待機リストは仮予定にできません。")
         if locked_entry.status in {"requested", "waiting"}:
+            patient_before = _patient_mirror_snapshot(locked_patient)
             previous_plan = InpatientPlan.objects.select_for_update().filter(
                 treatment_course=locked_course,
             ).first()
@@ -700,6 +864,7 @@ def update_calendar_course_adjustment(
                         "private_room_planned": locked_course.private_room_planned,
                         "planned_treatment_sessions": locked_course.planned_treatment_sessions,
                     },
+                    "patient_before": patient_before,
                     "plan_before": None if previous_plan is None else {
                         "id": previous_plan.pk,
                         "status": previous_plan.status,
@@ -713,6 +878,15 @@ def update_calendar_course_adjustment(
         else:
             baseline_log = _provisional_schedule_baseline(locked_entry)
     has_sessions = TreatmentSession.objects.filter(treatment_course=locked_course).exists()
+    holidays = get_japanese_holidays(
+        treatment_start_date,
+        treatment_start_date + timedelta(days=365),
+    )
+    treatment_dates = generate_treatment_dates(
+        treatment_start_date,
+        total=30,
+        holidays=holidays,
+    )
     if has_sessions and locked_course.first_treatment_date != treatment_start_date:
         from rtms_app.services.schedule import reschedule_treatment_start_date
 
@@ -720,6 +894,7 @@ def update_calendar_course_adjustment(
             locked_patient,
             treatment_start_date,
             course_number=locked_course.course_number,
+            holidays=holidays,
             sync_reservations=False,
         )
     locked_course.admission_date = admission_date
@@ -738,20 +913,9 @@ def update_calendar_course_adjustment(
     if private_room_planned is not None:
         update_fields.append("private_room_planned")
     locked_course.save(update_fields=update_fields)
-    treatment_dates = None
     cancelled_treatment_dates = None
     if has_sessions:
-        holidays = get_japanese_holidays(
-            treatment_start_date, treatment_start_date + timedelta(days=365),
-        )
-        treatment_dates = generate_treatment_dates(
-            treatment_start_date,
-            total=30,
-            holidays=holidays,
-        )
-        if len(treatment_dates) != 30 or treatment_dates[0] != treatment_start_date:
-            treatment_dates = None
-        else:
+        if len(treatment_dates) == 30 and treatment_dates[0] == treatment_start_date:
             cancelled_treatment_dates = list(
                 TreatmentSession.objects.filter(
                     treatment_course=locked_course,
@@ -769,13 +933,26 @@ def update_calendar_course_adjustment(
         waitlist_entry=locked_entry,
         user=user,
     )
+    if has_sessions:
+        synced_reservation = sync_rtms_treatment_reservation_from_sessions(
+            treatment_course=locked_course,
+            user=user,
+        )
+        if synced_reservation is not None:
+            reservation.update(synced_reservation)
     plan = get_or_create_inpatient_plan(treatment_course=locked_course, user=user)
     plan.planned_admission_date = admission_date
     plan.updated_by = user
     plan.save(update_fields=["planned_admission_date", "updated_by", "updated_at"])
     if baseline_log is not None:
         locked_entry.refresh_from_db()
+        locked_patient.refresh_from_db(fields=ROLLBACK_PATIENT_MIRROR_FIELDS)
         plan.refresh_from_db()
+        provisional_reservations = list(
+            RtmSTreatmentReservation.objects.select_for_update()
+            .filter(treatment_course=locked_course)
+            .order_by("sequence_number")
+        )
         baseline_log.meta["provisional_values"] = {
             "course": {
                 "admission_date": _iso_value(locked_course.admission_date),
@@ -798,6 +975,8 @@ def update_calendar_course_adjustment(
                 "inpatient_plan_id": locked_entry.inpatient_plan_id,
                 "scheduled_at": _iso_value(locked_entry.scheduled_at),
             },
+            "patient": _patient_mirror_snapshot(locked_patient),
+            "reservations": _reservation_snapshot(provisional_reservations),
         }
         baseline_log.save(update_fields=["meta"])
     return {"course": locked_course, "plan": plan, "reservation": reservation}

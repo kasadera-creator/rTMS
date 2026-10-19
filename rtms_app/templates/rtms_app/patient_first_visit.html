@@ -62,7 +62,7 @@
 {% block content %}
   <div class="stack-md">
     {% include "rtms_app/partials/patient_inline_bar.html" with page_title="初診・基本情報入力" title_icon="fa-file-medical" patient=patient %}
-    <form method="post" id="mainForm" class="form-rtms" data-original-first-treatment-date="{{ course_first_treatment_date|date:'Y-m-d' }}">
+    <form method="post" id="mainForm" class="form-rtms" data-original-admission-date="{{ course_admission_date|date:'Y-m-d' }}" data-original-first-treatment-date="{{ course_first_treatment_date|date:'Y-m-d' }}">
       {% csrf_token %}
       {# Hidden backing fields moved here after removing reference card #}
       <input type="hidden" name="card_id" value="{{ patient.card_id }}">
@@ -441,14 +441,18 @@
       <script>
         (function () {
           const form = document.getElementById('mainForm');
+          const admissionInput = document.getElementById('id_admission_date');
           const input = document.getElementById('id_first_treatment_date');
-          if (!form || !input) return;
+          if (!form || !admissionInput || !input) return;
           form.addEventListener('submit', function (event) {
             const original = form.dataset.originalFirstTreatmentDate || '';
             if (input.value !== original) {
-              const confirmed = window.confirm(
-                '初回治療日を変更すると、現在の治療予定を新しい初回治療日を基準に再構成します。よろしいですか？'
-              );
+              const isClearing = !admissionInput.value && !input.value
+                && (form.dataset.originalAdmissionDate || original);
+              const message = isClearing
+                ? '日付欄のみをクリアし、既存の日程は変更しません。続行しますか？'
+                : '初回治療日を変更すると、現在の治療予定を新しい初回治療日を基準に再構成します。よろしいですか？';
+              const confirmed = window.confirm(message);
               if (!confirmed) event.preventDefault();
             }
           });

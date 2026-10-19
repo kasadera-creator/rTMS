@@ -96,7 +96,7 @@ def audit_log_user_save(sender, instance, created, **kwargs):
             user_agent=user_agent,
         )
 
-    transaction.on_commit(_create_user_log)
+    transaction.on_commit(_create_user_log, robust=True)
 
 
 @receiver(post_save, sender=Patient)
@@ -144,7 +144,7 @@ def audit_log_user_delete(sender, instance, **kwargs):
             user_agent=user_agent,
         )
 
-    transaction.on_commit(_create_user_delete_log)
+    transaction.on_commit(_create_user_delete_log, robust=True)
 
 
 @receiver(post_save, sender=Patient)
