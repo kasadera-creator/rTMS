@@ -27,14 +27,19 @@
             <tr>
               <td>{{ s.created_at }}</td>
               <td>{{ s.effective_date }}</td>
-              <td>{{ s.get_action_type_display }}</td>
+              <td>
+                {{ s.get_action_type_display }}
+                {% if s.is_cancel_batch %}<span class="text-muted">（{{ s.batch_count }}件）</span>{% endif %}
+              </td>
               <td>{{ s.performed_by.get_full_name|default:s.performed_by.username }}</td>
               <td>{{ s.reason|default:'-' }}</td>
               <td>
-                <form method="post" action="{% url 'rtms_app:treatment_skip_undo' s.id %}" style="display:inline">
-                  {% csrf_token %}
-                  <button class="btn btn-sm btn-outline-secondary" type="submit">復元</button>
-                </form>
+                {% if s.can_undo %}
+                  <form method="post" action="{% url 'rtms_app:treatment_skip_undo' s.id %}" style="display:inline">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">復元</button>
+                  </form>
+                {% endif %}
               </td>
             </tr>
             {% endfor %}

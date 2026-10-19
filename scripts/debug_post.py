@@ -57,8 +57,3 @@ try:
     print(open('/tmp/rtms_skip_debug.log').read())
 except Exception as e:
     print('no /tmp log', e)
-try:
-    print('TREATMENTSKIP SAVE LOG:')
-    print(open('/tmp/rtms_treatmentskip.log').read())
-except Exception as e:
-    print('no /tmp treatmentskip log', e)

@@ -100,6 +100,7 @@
     <form method="post" id="treatmentForm">
       {% csrf_token %}
       <input type="hidden" name="skip_reason" id="id_skip_reason" value="">
+      <input type="hidden" name="sae_selection_changed" id="saeSelectionChanged" value="">
       <div class="row g-3 mt-1">
         <div class="col-12 col-lg-4">
           <div class="card shadow-sm mt-3">
@@ -919,7 +920,7 @@
               <strong><i class="fas fa-stop me-1"></i>治療を中止</strong>
             </div>
             <div class="card-body">
-              <p class="card-text">本日から治療を中止し、以降の予定を削除します。</p>
+              <p class="card-text">選択日以降の未実施予定を中止します。治療記録は保持されます。</p>
               <p class="text-muted small">退院準備の予定日を本日に設定します。</p>
               <div class="mb-2">
                 <label class="form-label small">理由（任意）</label>
@@ -1056,7 +1057,7 @@
     // Cancel button handler
     if (confirmCancel) {
       confirmCancel.addEventListener('click', () => {
-        if (!confirm('治療を中止します。以降の治療予定が全て削除されます。よろしいですか？')) {
+        if (!confirm('選択日以降の未実施予定を中止します。治療記録は保持されます。よろしいですか？')) {
           return;
         }
         const reason = document.getElementById('cancelReasonText')?.value || '';
@@ -1324,6 +1325,10 @@
   }
   const adverseReportAction = document.getElementById('adverseReportAction');
   const candidateOverrides = new Set();
+  const saeSelectionChanged = document.getElementById('saeSelectionChanged');
+  function markSaeSelectionChanged() {
+    if (saeSelectionChanged) saeSelectionChanged.value = 'on';
+  }
   let candidateDefaultsApplied = document.getElementById('reportAsAdverseEvent')?.checked || false;
   document.getElementById('openAdverseReportBtn')?.addEventListener('click', () => {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('saeModal'))?.show();
@@ -1349,15 +1354,6 @@
     });
     if (!candidates.size) {
       panel.classList.add('d-none');
-      const reportCheckbox = document.getElementById('reportAsAdverseEvent');
-      if (reportCheckbox) reportCheckbox.checked = false;
-      document.getElementById('candidateEventTypes')?.classList.add('d-none');
-      document.querySelectorAll('.candidate-event-type').forEach(input => {
-        input.checked = false;
-        const target = document.getElementById(input.dataset.target);
-        if (target) target.checked = false;
-      });
-      resetAdverseEventUi();
       return;
     }
     panel.classList.remove('d-none');
@@ -1411,6 +1407,7 @@
     saveTreatmentForm('clear_side_effects');
   });
   document.getElementById('reportAsAdverseEvent')?.addEventListener('change', event => {
+    markSaeSelectionChanged();
     document.getElementById('candidateEventTypes')?.classList.toggle('d-none', !event.target.checked);
     updateSideEffectCandidates();
     if (event.target.checked) applyCandidateDefaults();
@@ -1424,9 +1421,14 @@
     }
   });
   document.querySelectorAll('.candidate-event-type').forEach(input => input.addEventListener('change', () => {
+    markSaeSelectionChanged();
     candidateOverrides.add(input.dataset.target);
     syncCandidateEventTypes();
   }));
+  document.querySelectorAll('.candidate-event-type').forEach(input => {
+    const target = document.getElementById(input.dataset.target);
+    if (target) input.checked = target.checked;
+  });
   document.getElementById('sideEffectWidget')?.addEventListener('sideeffect:updated', updateSideEffectCandidates);
   document.getElementById('sideEffectWidget')?.addEventListener('input', updateSideEffectCandidates);
   document.addEventListener('click', event => {

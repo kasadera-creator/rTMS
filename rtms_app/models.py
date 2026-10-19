@@ -877,6 +877,7 @@ class TreatmentSkip(models.Model):
 
     treatment = models.ForeignKey(TreatmentSession, on_delete=models.CASCADE, related_name='skips')
     action_type = models.CharField('種別', max_length=16, choices=ACTION_CHOICES)
+    batch_id = models.UUIDField('中止バッチID', null=True, blank=True, db_index=True)
     effective_date = models.DateField('対象実施日', null=True, blank=True)
     reason = models.TextField('理由', blank=True, default='')
     performed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
@@ -893,22 +894,6 @@ class TreatmentSkip(models.Model):
 
     def __str__(self):
         return f"TreatmentSkip({self.treatment_id} {self.action_type} by {self.performed_by})"
-
-
-# Debugging aid: log when TreatmentSkip rows are saved
-try:
-    from django.db.models.signals import post_save
-    from django.dispatch import receiver
-
-    @receiver(post_save, sender=TreatmentSkip)
-    def _log_treatmentskip_save(sender, instance, created, **kwargs):
-        try:
-            with open('/tmp/rtms_treatmentskip.log', 'a') as f:
-                f.write(f"TREATMENTSKIP_SAVE created={created} id={getattr(instance,'id',None)} treatment_id={getattr(instance,'treatment_id',None)} performed_by={getattr(instance,'performed_by_id',None)}\n")
-        except Exception:
-            pass
-except Exception:
-    pass
 
 
 class SideEffectCheck(models.Model):

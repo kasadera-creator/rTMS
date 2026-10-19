@@ -42,7 +42,7 @@ def create_audit_log(instance, action, summary='', meta=None):
             user_agent=user_agent,
         )
     
-    transaction.on_commit(_create_log)
+    transaction.on_commit(_create_log, robust=True)
 
 @receiver(post_save)
 def audit_log_save(sender, instance, created, **kwargs):

@@ -17,6 +17,7 @@ import csv
 import json
 import logging
 import calendar as pycalendar
+from functools import wraps
 from urllib.parse import urlencode
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -90,6 +91,7 @@ from .services.schedule import (
     reschedule_planned_session,
     reschedule_treatment_start_date,
 )
+from .services.rtms_treatment_reservations import _run_with_sqlite_busy_retry
 from .view_helpers import extract_back_url, get_dashboard_date, build_common_context, get_course_number
 from .queries.assessment_queries import (
     get_assessments_ordered,
@@ -133,6 +135,21 @@ from .services.session_writes import (
     PatientCourseWriteError,
     patient_course_writer,
     validate_session_course,
+)
+from .services.patient_mutex import acquire_patient_mutex
+from .services.treatment_cancellation import (
+    TreatmentCancellationError,
+    TreatmentReservationBusyError,
+    _is_sqlite_busy_error,
+    _run_with_cancellation_busy_retry,
+    cancel_treatment_sessions,
+    undo_treatment_cancellation,
+)
+from .services.treatment_skip_undo import (
+    TreatmentSkipUndoError,
+    capture_skip_undo_after,
+    capture_skip_undo_before,
+    undo_treatment_skip,
 )
 
 # ==========================================
@@ -1663,7 +1680,99 @@ def questionnaire_edit(request, patient_id):
         'modal_mode': modal_mode,
     })
 
+class InvalidSideEffectRowsError(ValueError):
+    """Raised when submitted side-effect rows are not a JSON list."""
+
+
+def _save_treatment_clinical_records(request, session, patient, course_number, session_date):
+    rows_json = request.POST.get('side_effect_rows_json')
+    signature = request.POST.get('side_effect_signature', '')
+    memo = request.POST.get('side_effect_memo', '')
+    try:
+        rows = json.loads(rows_json) if rows_json is not None else []
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise InvalidSideEffectRowsError(
+            '副作用記録の形式が不正です。'
+        ) from exc
+    if not isinstance(rows, list):
+        raise InvalidSideEffectRowsError('副作用記録は配列形式で指定してください。')
+
+    side_effect_check, _ = SideEffectCheck.objects.get_or_create(session=session)
+    side_effect_check.rows = rows
+    side_effect_check.memo = memo or side_effect_check.memo or ""
+    side_effect_check.physician_signature = (
+        signature or side_effect_check.physician_signature or ""
+    )
+    side_effect_check.save()
+
+    sae_map = {
+        'sae_seizure': 'seizure',
+        'sae_finger_muscle': 'finger_muscle',
+        'sae_syncope': 'syncope',
+        'sae_mania': 'mania',
+        'sae_suicide_attempt': 'suicide_attempt',
+        'sae_other': 'other',
+    }
+    sae_event_types = [
+        event_code for field_name, event_code in sae_map.items()
+        if request.POST.get(field_name) == 'on'
+    ]
+    if sae_event_types:
+        SeriousAdverseEvent.objects.update_or_create(
+            patient=patient,
+            course_number=course_number,
+            session=session,
+            defaults={
+                'event_types': sae_event_types,
+                'other_text': (request.POST.get('sae_other_text') or '').strip(),
+                'auto_snapshot': {
+                    'date': session_date.isoformat(),
+                    'mt_percent': session.mt_percent,
+                    'intensity_percent': session.intensity_percent,
+                    'frequency_hz': str(session.frequency_hz),
+                    'train_seconds': str(session.train_seconds),
+                    'train_count': session.train_count,
+                    'total_pulses': session.total_pulses,
+                    'coil_type': session.coil_type,
+                    'target_site': session.target_site,
+                },
+            },
+        )
+        AdverseEventReport.objects.filter(session=session).update(
+            event_types=sae_event_types,
+        )
+    elif request.POST.get('sae_selection_changed') == 'on':
+        SeriousAdverseEvent.objects.filter(
+            patient=patient, course_number=course_number, session=session,
+        ).delete()
+        AdverseEventReport.objects.filter(session=session).update(event_types=[])
+
+
+def _retry_patient_course_sqlite_busy(view):
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        if request.method != 'POST' or request.POST.get('action') == 'cancel':
+            return view(request, *args, **kwargs)
+        action = request.POST.get('action')
+        error_message = (
+            '同時処理のため治療予定を保存できませんでした。もう一度お試しください。'
+            if action == 'skip'
+            else '同時処理のため保存できませんでした。もう一度お試しください。'
+        )
+        try:
+            return _run_with_cancellation_busy_retry(
+                lambda: view(request, *args, **kwargs),
+                operation_owns_atomic=True,
+                error_message=error_message,
+            )
+        except TreatmentReservationBusyError as exc:
+            return HttpResponse(str(exc), status=503)
+
+    return wrapped
+
+
 @login_required
+@_retry_patient_course_sqlite_busy
 def treatment_add(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id); dashboard_date = request.GET.get('dashboard_date')
     target_date_str = request.GET.get('date'); now = timezone.localtime(timezone.now())
@@ -1833,6 +1942,29 @@ def treatment_add(request, patient_id):
                 if current_weekly > 1: alert_msg = f"【制限超過】第6週(週1回まで)です。今回で週{current_weekly}回目になります。"
                 else: alert_msg = f"【漸減】第6週です。週1回まで (現在: 週{current_weekly}回目)"
             elif week_num >= 7: alert_msg = "【警告】第7週以降のため、原則として治療は算定できません。"
+    if request.method == 'POST' and request.POST.get('action') == 'cancel':
+        session_date = parse_date(request.POST.get('treatment_date') or '')
+        if session_date is None:
+            return HttpResponseBadRequest('中止対象日が不正です。')
+        try:
+            cancel_treatment_sessions(
+                patient_id=patient.pk,
+                course_number=course_number,
+                treatment_date=session_date,
+                user=request.user,
+                reason=(request.POST.get('skip_reason') or '').strip(),
+                expected_course_id=(
+                    treatment_course.pk if treatment_course is not None else None
+                ),
+            )
+        except (TreatmentCancellationError, PatientCourseWriteError) as exc:
+            return HttpResponseBadRequest(str(exc))
+        except TreatmentReservationBusyError as exc:
+            return HttpResponse(str(exc), status=503)
+        if dashboard_date:
+            return redirect(build_url('dashboard', query={'date': dashboard_date}))
+        return redirect(build_url('dashboard'))
+
     if request.method == 'POST':
         form = TreatmentForm(request.POST)
         if not form.is_valid():
@@ -1848,17 +1980,6 @@ def treatment_add(request, patient_id):
             safety_alcohol = cleaned.get('safety_alcohol', True)
             safety_meds = cleaned.get('safety_meds', True)
 
-            existing_treatment = TreatmentSession.objects.filter(
-                **session_scope,
-                session_date=session_date,
-                slot=slot,
-            ).first()
-            if existing_treatment is None and not can_create_treatment_session(patient, course_number):
-                message = 'この患者・コースの治療予定は30回に達しているため、新規登録できません。'
-                if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.headers.get('Accept', '').startswith('application/json'):
-                    return JsonResponse({'error': message}, status=400)
-                return HttpResponseBadRequest(message)
-            treatment_meta = dict(existing_treatment.meta or {}) if existing_treatment and isinstance(existing_treatment.meta, dict) else {}
             def posted_coordinate(name, default):
                 try:
                     value = request.POST.get(name, '')
@@ -1866,177 +1987,261 @@ def treatment_add(request, patient_id):
                 except (TypeError, ValueError):
                     return default
 
-            saved_a = treatment_meta.get('treatment_position_a') or {}
-            saved_b = treatment_meta.get('treatment_position_b') or {}
-            treatment_meta['treatment_position_a'] = {
-                'x': posted_coordinate('treatment_position_a_x', saved_a.get('x', 3)),
-                'y': posted_coordinate('treatment_position_a_y', saved_a.get('y', 1)),
-            }
-            treatment_meta['treatment_position_b'] = {
-                'x': posted_coordinate('treatment_position_b_x', saved_b.get('x', 9)),
-                'y': posted_coordinate('treatment_position_b_y', saved_b.get('y', 1)),
-            }
-
-            defaults = {
-                'patient': patient,
-                'date': aware_dt,
-                'safety_sleep': safety_sleep,
-                'safety_alcohol': safety_alcohol,
-                'safety_meds': safety_meds,
-                'coil_type': cleaned.get('coil_type', ''),
-                'target_site': cleaned.get('target_site', ''),
-                'mt_percent': cleaned.get('mt_percent'),
-                'frequency_hz': cleaned.get('frequency_hz'),
-                'train_seconds': cleaned.get('train_seconds'),
-                'intertrain_seconds': cleaned.get('intertrain_seconds'),
-                'train_count': cleaned.get('train_count'),
-                'total_pulses': cleaned.get('total_pulses'),
-                'helmet_shift_cm': existing_treatment.helmet_shift_cm if existing_treatment else 6,
-                'meta': treatment_meta,
-                'treatment_notes': cleaned.get('treatment_notes',''),
-                'motor_threshold': cleaned.get('mt_percent'),
-                'intensity_percent': cleaned.get('intensity_percent'),
-                'intensity': cleaned.get('intensity_percent'),
-                'performer': request.user,
-                'treatment_course': treatment_course,
-                'course_number': course_number,
-                'session_date': session_date,
-                'slot': slot,
-            }
-            with transaction.atomic():
-                Patient.objects.select_for_update().get(pk=patient.pk)
-                latest_existing = TreatmentSession.objects.filter(
-                    **session_scope,
-                    session_date=session_date,
-                    slot=slot,
-                ).first()
-                if latest_existing is None and not can_create_treatment_session(patient, course_number):
-                    message = 'この患者・コースの治療予定は30回に達しているため、新規登録できません。'
-                    if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.headers.get('Accept', '').startswith('application/json'):
-                        return JsonResponse({'error': message}, status=400)
-                    return HttpResponseBadRequest(message)
-                if treatment_course is not None:
-                    s, created = update_or_create_treatment_session_strict(
-                        patient,
-                        treatment_course,
-                        course_number=course_number,
+            skip_action = request.POST.get('action') == 'skip'
+            write_commit_state = {'committed': False}
+            try:
+                with patient_course_writer(
+                    patient.pk,
+                    course_number if requested_course_number else None,
+                    expected_course_id=(
+                        treatment_course.pk if treatment_course is not None else None
+                    ),
+                    require_course=bool(requested_course_number),
+                ) as writer:
+                    transaction.on_commit(
+                        lambda: write_commit_state.__setitem__('committed', True)
+                    )
+                    patient = writer.patient
+                    treatment_course = writer.treatment_course
+                    course_number = writer.course_number
+                    session_scope = writer.session_filter
+                    existing_treatment = TreatmentSession.objects.select_for_update().filter(
+                        **session_scope,
                         session_date=session_date,
                         slot=slot,
-                        defaults=defaults,
+                    ).first()
+                    if (
+                        existing_treatment is None
+                        and TreatmentSession.objects.filter(**session_scope).count()
+                        >= MAX_TREATMENT_SESSIONS
+                    ):
+                        message = 'この患者・コースの治療予定は30回に達しているため、新規登録できません。'
+                        if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.headers.get('Accept', '').startswith('application/json'):
+                            return JsonResponse({'error': message}, status=400)
+                        return HttpResponseBadRequest(message)
+                    if (
+                        skip_action
+                        and existing_treatment is not None
+                        and existing_treatment.status not in {'planned', 'skipped'}
+                    ):
+                        raise PatientCourseWriteError(
+                            '実施済みまたはスキップ以外の状態の治療予定はスキップできません。'
+                        )
+                    if existing_treatment is not None:
+                        validate_session_course(
+                            existing_treatment,
+                            patient,
+                            course_number,
+                            treatment_course,
+                        )
+
+                    treatment_meta = dict(existing_treatment.meta or {}) if existing_treatment and isinstance(existing_treatment.meta, dict) else {}
+                    saved_a = treatment_meta.get('treatment_position_a') or {}
+                    saved_b = treatment_meta.get('treatment_position_b') or {}
+                    treatment_meta['treatment_position_a'] = {
+                        'x': posted_coordinate('treatment_position_a_x', saved_a.get('x', 3)),
+                        'y': posted_coordinate('treatment_position_a_y', saved_a.get('y', 1)),
+                    }
+                    treatment_meta['treatment_position_b'] = {
+                        'x': posted_coordinate('treatment_position_b_x', saved_b.get('x', 9)),
+                        'y': posted_coordinate('treatment_position_b_y', saved_b.get('y', 1)),
+                    }
+
+                    defaults = {
+                        'patient': patient,
+                        'date': aware_dt,
+                        'safety_sleep': safety_sleep,
+                        'safety_alcohol': safety_alcohol,
+                        'safety_meds': safety_meds,
+                        'coil_type': cleaned.get('coil_type', ''),
+                        'target_site': cleaned.get('target_site', ''),
+                        'mt_percent': cleaned.get('mt_percent'),
+                        'frequency_hz': cleaned.get('frequency_hz'),
+                        'train_seconds': cleaned.get('train_seconds'),
+                        'intertrain_seconds': cleaned.get('intertrain_seconds'),
+                        'train_count': cleaned.get('train_count'),
+                        'total_pulses': cleaned.get('total_pulses'),
+                        'helmet_shift_cm': existing_treatment.helmet_shift_cm if existing_treatment else 6,
+                        'meta': treatment_meta,
+                        'treatment_notes': cleaned.get('treatment_notes',''),
+                        'motor_threshold': cleaned.get('mt_percent'),
+                        'intensity_percent': cleaned.get('intensity_percent'),
+                        'intensity': cleaned.get('intensity_percent'),
+                        'performer': request.user,
+                        'treatment_course': treatment_course,
+                        'course_number': course_number,
+                        'session_date': session_date,
+                        'slot': slot,
+                    }
+                    if (
+                        skip_action
+                        and existing_treatment is not None
+                        and existing_treatment.status == 'skipped'
+                    ):
+                        s = existing_treatment
+                        created = False
+                    elif treatment_course is not None:
+                        s, created = update_or_create_treatment_session_strict(
+                            patient,
+                            treatment_course,
+                            course_number=course_number,
+                            session_date=session_date,
+                            slot=slot,
+                            defaults=defaults,
+                        )
+                        if not skip_action:
+                            from rtms_app.services.rtms_treatment_reservations import (
+                                sync_rtms_treatment_reservation_from_sessions,
+                            )
+                            sync_rtms_treatment_reservation_from_sessions(
+                                treatment_course=treatment_course,
+                                user=request.user,
+                            )
+                    else:
+                        s, created = update_or_create_treatment_session_legacy(
+                            patient,
+                            course_number,
+                            session_date=session_date,
+                            slot=slot,
+                            defaults=defaults,
+                        )
+                    if skip_action:
+                        skipped_session = TreatmentSession.objects.select_for_update().filter(
+                            **session_scope,
+                            pk=s.pk,
+                        ).first()
+                        if skipped_session is None:
+                            raise PatientCourseWriteError(
+                                '対象の治療予定を確認できません。'
+                            )
+                        validate_session_course(
+                            skipped_session,
+                            patient,
+                            course_number,
+                            treatment_course,
+                        )
+                        if skipped_session.status not in {'planned', 'skipped'}:
+                            raise PatientCourseWriteError(
+                                '実施済みまたはスキップ以外の状態の治療予定はスキップできません。'
+                            )
+
+                        if skipped_session.status == 'planned':
+                            future_sessions = list(
+                                TreatmentSession.objects.select_for_update().filter(
+                                    **session_scope,
+                                    session_date__gt=skipped_session.session_date,
+                                ).order_by('session_date', 'id')
+                            )
+                            snapshot = {
+                                'affected_sessions': [
+                                    {
+                                        'id': future.id,
+                                        'session_date': future.session_date.isoformat()
+                                        if future.session_date else None,
+                                        'date': future.date.isoformat()
+                                        if future.date else None,
+                                    }
+                                    for future in future_sessions
+                                ],
+                                'patient_discharge_date': (
+                                    patient.discharge_date.isoformat()
+                                    if patient.discharge_date else None
+                                ),
+                                'course_discharge_date': (
+                                    treatment_course.discharge_date
+                                    .isoformat()
+                                    if treatment_course is not None
+                                    and treatment_course.discharge_date else None
+                                ),
+                                'skipped_session_id': skipped_session.pk,
+                                'skipped_session_date': (
+                                    skipped_session.session_date.isoformat()
+                                    if skipped_session.session_date else None
+                                ),
+                            }
+                            snapshot.update(capture_skip_undo_before(
+                                patient=patient,
+                                treatment_course=treatment_course,
+                                course_number=course_number,
+                                affected_sessions=future_sessions,
+                            ))
+                            skip_record = TreatmentSkip.objects.create(
+                                treatment=skipped_session,
+                                action_type='postpone',
+                                effective_date=skipped_session.session_date,
+                                reason=(request.POST.get('skip_reason') or '').strip(),
+                                performed_by=request.user,
+                                snapshot=snapshot,
+                            )
+                            skipped_session.status = 'skipped'
+                            skipped_session.save(update_fields=['status'])
+                            shift_future_sessions(
+                                patient,
+                                skipped_session.session_date,
+                                course_number,
+                            )
+                            capture_skip_undo_after(
+                                skip=skip_record,
+                                patient=patient,
+                                treatment_course=treatment_course,
+                                course_number=course_number,
+                            )
+                    if skip_action:
+                        _save_treatment_clinical_records(
+                            request, s, patient, course_number, session_date,
+                        )
+                    else:
+                        saved_session = TreatmentSession.objects.select_for_update().filter(
+                            **session_scope,
+                            pk=s.pk,
+                        ).first()
+                        if saved_session is None:
+                            raise PatientCourseWriteError(
+                                '保存対象の治療Sessionを確認できません。'
+                            )
+                        validate_session_course(
+                            saved_session,
+                            patient,
+                            course_number,
+                            treatment_course,
+                        )
+                        s = saved_session
+                        _save_treatment_clinical_records(
+                            request, s, patient, course_number, session_date,
+                        )
+            except InvalidSideEffectRowsError as exc:
+                return HttpResponseBadRequest(str(exc))
+            except PatientCourseWriteError as exc:
+                if write_commit_state['committed']:
+                    logging.getLogger('django').exception(
+                        'Treatment skip committed, but an on_commit callback failed.'
+                        if skip_action
+                        else 'Treatment write committed, but an on_commit callback failed.'
                     )
-                    from rtms_app.services.rtms_treatment_reservations import (
-                        sync_rtms_treatment_reservation_from_sessions,
-                    )
-                    sync_rtms_treatment_reservation_from_sessions(
-                        treatment_course=treatment_course,
-                        user=request.user,
+                elif skip_action:
+                    return HttpResponseBadRequest(
+                        '治療予定のスキップに失敗しました。変更は保存されていません。'
                     )
                 else:
-                    s, created = update_or_create_treatment_session_legacy(
-                        patient,
-                        course_number,
-                        session_date=session_date,
-                        slot=slot,
-                        defaults=defaults,
+                    return HttpResponseBadRequest(str(exc))
+            except Exception as exc:
+                if write_commit_state['committed']:
+                    logging.getLogger('django').exception(
+                        'Treatment skip committed, but an on_commit callback failed.'
+                        if skip_action
+                        else 'Treatment write committed, but an on_commit callback failed.'
                     )
-
-            # Upsert SideEffectCheck linked to this session
-            rows_json = request.POST.get('side_effect_rows_json')
-            signature = request.POST.get('side_effect_signature', '')
-            memo = request.POST.get('side_effect_memo', '')
-            try:
-                rows = json.loads(rows_json) if rows_json else []
-            except Exception:
-                rows = []
-
-            sec, created = SideEffectCheck.objects.get_or_create(session=s)
-            sec.rows = rows or []
-            # Save provided memo and signature
-            sec.memo = memo or sec.memo or ""
-            sec.physician_signature = signature or sec.physician_signature or ""
-            sec.save()
-
-            sae_map = {
-                'sae_seizure': 'seizure',
-                'sae_finger_muscle': 'finger_muscle',
-                'sae_syncope': 'syncope',
-                'sae_mania': 'mania',
-                'sae_suicide_attempt': 'suicide_attempt',
-                'sae_other': 'other',
-            }
-            sae_event_types = [
-                event_code for field_name, event_code in sae_map.items()
-                if request.POST.get(field_name) == 'on'
-            ]
-            if sae_event_types:
-                SeriousAdverseEvent.objects.update_or_create(
-                    patient=patient,
-                    course_number=course_number,
-                    session=s,
-                    defaults={
-                        'event_types': sae_event_types,
-                        'other_text': (request.POST.get('sae_other_text') or '').strip(),
-                        'auto_snapshot': {
-                            'date': session_date.isoformat(),
-                            'mt_percent': s.mt_percent,
-                            'intensity_percent': s.intensity_percent,
-                            'frequency_hz': str(s.frequency_hz),
-                            'train_seconds': str(s.train_seconds),
-                            'train_count': s.train_count,
-                            'total_pulses': s.total_pulses,
-                            'coil_type': s.coil_type,
-                            'target_site': s.target_site,
-                        },
-                    },
-                )
-            else:
-                SeriousAdverseEvent.objects.filter(
-                    patient=patient, course_number=course_number, session=s
-                ).delete()
-
-            if request.POST.get('action') == 'save_sae_report':
-                def report_int(name):
-                    try:
-                        return int(request.POST.get(name)) if request.POST.get(name) else None
-                    except (TypeError, ValueError):
-                        return None
-                def report_date(name):
-                    value = request.POST.get(name, '')
-                    return parse_date(value) if value else None
-                diagnosis = request.POST.get('diagnosis', 'うつ病エピソード')
-                diagnosis_category = {
-                    'うつ病エピソード': 'depressive_episode',
-                    '反復性うつ病性障害': 'recurrent_depressive_disorder',
-                }.get(diagnosis, 'other')
-                report, _ = AdverseEventReport.objects.update_or_create(
-                    session=s,
-                    defaults={
-                        'event_types': sae_event_types,
-                        'adverse_event_name': (request.POST.get('event_name') or '').strip(),
-                        'onset_date': report_date('onset_date'),
-                        'age': report_int('age'),
-                        'sex': (request.POST.get('gender') or '').strip(),
-                        'initials': (request.POST.get('initials') or '').strip(),
-                        'diagnosis_category': diagnosis_category,
-                        'diagnosis_other_text': (request.POST.get('diagnosis_other') or '').strip(),
-                        'concomitant_meds_text': request.POST.get('concomitant_meds', ''),
-                        'substance_intake_text': request.POST.get('substance_use', ''),
-                        'seizure_history_flag': request.POST.get('seizure_history') == 'あり',
-                        'seizure_history_date_text': request.POST.get('seizure_history_detail', ''),
-                        'rmt_value': report_int('rmt'),
-                        'intensity_value': report_int('intensity'),
-                        'stimulation_site_category': 'other' if request.POST.get('site') == 'その他' else 'left_dlpfc',
-                        'stimulation_site_other_text': request.POST.get('site', '') if request.POST.get('site') == 'その他' else '',
-                        'treatment_course_number': report_int('treatment_number'),
-                        'outcome_flags': [request.POST.get('outcome')] if request.POST.get('outcome') else [],
-                        'outcome_date': report_date('outcome_date'),
-                        'special_notes': request.POST.get('notes', ''),
-                        'physician_comment': request.POST.get('doctor_comment', ''),
-                        'prefilled_snapshot': {'source': 'treatment_add', 'session_date': session_date.isoformat()},
-                    },
-                )
-                if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-                    return JsonResponse({'status': 'success', 'report_id': report.id})
+                elif not skip_action:
+                    raise
+                elif (
+                    isinstance(exc, TreatmentReservationBusyError)
+                    or _is_sqlite_busy_error(exc)
+                ):
+                    raise
+                else:
+                    return HttpResponseBadRequest(
+                        '治療予定のスキップに失敗しました。変更は保存されていません。'
+                    )
 
             # Check if print action is requested
             action = request.POST.get('action')
@@ -2066,47 +2271,6 @@ def treatment_add(request, patient_id):
                 return redirect(html_url)
 
             if action == 'skip':
-                # Record snapshot of affected future planned sessions, then mark skip and shift
-                try:
-                    with transaction.atomic():
-                        session_scope = {'treatment_course': s.treatment_course} if s.treatment_course else {
-                            'patient': patient, 'course_number': s.course_number,
-                        }
-                        futures = list(TreatmentSession.objects.filter(**session_scope, session_date__gt=s.session_date).order_by('session_date', 'id'))
-                        snapshot_list = []
-                        for ts in futures:
-                            snapshot_list.append({
-                                'id': ts.id,
-                                'session_date': ts.session_date.isoformat() if ts.session_date else None,
-                                'date': ts.date.isoformat() if getattr(ts, 'date', None) else None,
-                            })
-                        snapshot = {
-                            'affected_sessions': snapshot_list,
-                            'patient_discharge_date': patient.discharge_date.isoformat() if getattr(patient, 'discharge_date', None) else None,
-                            'course_discharge_date': s.treatment_course.discharge_date.isoformat() if s.treatment_course and s.treatment_course.discharge_date else None,
-                            'skipped_session_id': s.id,
-                            'skipped_session_date': s.session_date.isoformat() if s.session_date else None,
-                        }
-
-                        reason = (request.POST.get('skip_reason') or '').strip()
-                        sk = TreatmentSkip.objects.create(
-                            treatment=s,
-                            action_type='postpone',
-                            effective_date=s.session_date,
-                            reason=reason,
-                            performed_by=request.user,
-                            snapshot=snapshot,
-                        )
-
-                        # Mark the session as skipped
-                        s.status = 'skipped'
-                        s.save(update_fields=['status'])
-
-                        # Shift subsequent planned sessions forward by one treatment day each
-                        shift_future_sessions(patient, s.session_date, s.course_number)
-                except Exception:
-                    return HttpResponseBadRequest('治療予定のスキップに失敗しました。変更は保存されていません。')
-
                 # Redirect back to dashboard or treatment page
                 if dashboard_date:
                     return redirect(build_url('dashboard', query={'date': dashboard_date}))
@@ -2421,6 +2585,164 @@ def treatment_add(request, patient_id):
     })
 
 
+def _validated_cancel_batch_root(batch_id):
+    rows = list(
+        TreatmentSkip.objects.filter(batch_id=batch_id)
+        .select_related("treatment", "performed_by", "treatment__treatment_course")
+        .order_by("pk")
+    )
+    roots = [
+        row for row in rows
+        if isinstance(row.snapshot, dict)
+        and row.snapshot.get("batch_role") == "root"
+    ]
+    if len(roots) != 1:
+        return None, rows
+
+    root = roots[0]
+    snapshot = root.snapshot
+    course = root.treatment.treatment_course
+    if (
+        root.action_type != "cancel"
+        or snapshot.get("version") != 2
+        or snapshot.get("kind") != "cancel"
+        or snapshot.get("batch_id") != str(batch_id)
+        or snapshot.get("selected_session_id") != root.treatment_id
+        or snapshot.get("patient_id") != root.treatment.patient_id
+        or snapshot.get("treatment_course_id") != root.treatment.treatment_course_id
+        or snapshot.get("course_number") != root.treatment.course_number
+        or (course is not None and course.patient_id != root.treatment.patient_id)
+        or (course is not None and course.course_number != root.treatment.course_number)
+    ):
+        return None, rows
+
+    expected_records = snapshot.get("batch_records")
+    if (
+        not isinstance(expected_records, list)
+        or any(not isinstance(item, dict) for item in expected_records)
+        or any(
+            not isinstance(item.get("id"), int) or isinstance(item.get("id"), bool)
+            for item in expected_records
+        )
+    ):
+        return None, rows
+
+    current_records = []
+    member_session_ids = []
+    for row in rows:
+        row_snapshot = row.snapshot
+        treatment = row.treatment
+        if (
+            row.action_type != "cancel"
+            or treatment.patient_id != root.treatment.patient_id
+            or treatment.course_number != root.treatment.course_number
+            or treatment.treatment_course_id != root.treatment.treatment_course_id
+            or (row.undone_at is None) != (root.undone_at is None)
+            or row.undone_at != root.undone_at
+            or not isinstance(row_snapshot, dict)
+            or row_snapshot.get("version") != 2
+            or row_snapshot.get("kind") != "cancel"
+            or row_snapshot.get("batch_id") != str(batch_id)
+        ):
+            return None, rows
+
+        role = row_snapshot.get("batch_role")
+        if role == "root":
+            if row.pk != root.pk or row.treatment_id != root.treatment_id:
+                return None, rows
+        elif role == "member":
+            if (
+                row_snapshot.get("root_skip_id") != root.pk
+                or row_snapshot.get("treatment_session_id") != row.treatment_id
+                or row_snapshot.get("patient_id") != root.treatment.patient_id
+                or row_snapshot.get("treatment_course_id") != root.treatment.treatment_course_id
+                or row_snapshot.get("course_number") != root.treatment.course_number
+            ):
+                return None, rows
+            member_session_ids.append(row.treatment_id)
+        else:
+            return None, rows
+
+        current_records.append({
+            "id": row.pk,
+            "treatment_session_id": row.treatment_id,
+            "batch_role": role,
+            "effective_date": row.effective_date.isoformat() if row.effective_date else None,
+            "reason": row.reason,
+            "performed_by_id": row.performed_by_id,
+        })
+
+    current_records.sort(key=lambda item: item["id"])
+    expected_records = sorted(expected_records, key=lambda item: item.get("id", -1))
+    target_session_ids = snapshot.get("target_session_ids")
+    before_sessions = snapshot.get("affected_sessions_before")
+    if (
+        not isinstance(target_session_ids, list)
+        or any(not isinstance(item, int) or isinstance(item, bool) for item in target_session_ids)
+        or len(target_session_ids) != len(set(target_session_ids))
+        or not isinstance(before_sessions, list)
+        or any(not isinstance(item, dict) for item in before_sessions)
+    ):
+        return None, rows
+    planned_session_ids = [
+        item.get("id") for item in before_sessions
+        if item.get("status") == "planned"
+    ]
+    if any(
+        not isinstance(session_id, int) or isinstance(session_id, bool)
+        for session_id in planned_session_ids
+    ):
+        return None, rows
+    if (
+        current_records != expected_records
+        or sorted(member_session_ids) != sorted(
+            item for item in target_session_ids if item != root.treatment_id
+        )
+        or sorted(target_session_ids) != sorted(planned_session_ids)
+    ):
+        return None, rows
+    return root, rows
+
+
+def _skip_history_rows(skips):
+    skips = list(skips)
+    individual_rows = []
+    batch_ids = set()
+    visible_by_batch = {}
+    for skip in skips:
+        if skip.action_type == "cancel" and skip.batch_id is not None:
+            batch_ids.add(skip.batch_id)
+            visible_by_batch.setdefault(skip.batch_id, []).append(skip)
+        else:
+            skip.is_cancel_batch = False
+            skip.batch_count = 1
+            skip.can_undo = skip.undone_at is None
+            individual_rows.append(skip)
+
+    for batch_id in batch_ids:
+        root, _all_rows = _validated_cancel_batch_root(batch_id)
+        visible_rows = visible_by_batch[batch_id]
+        if root is not None and any(row.pk == root.pk for row in visible_rows):
+            display_row = root
+            display_row.can_undo = root.undone_at is None
+        else:
+            display_row = next(
+                (row for row in visible_rows
+                 if isinstance(row.snapshot, dict) and row.snapshot.get("batch_role") == "root"),
+                visible_rows[0],
+            )
+            display_row.can_undo = False
+        display_row.is_cancel_batch = True
+        display_row.batch_count = len(visible_rows)
+        individual_rows.append(display_row)
+
+    return sorted(
+        individual_rows,
+        key=lambda row: (row.created_at, row.pk),
+        reverse=True,
+    )
+
+
 @login_required
 def treatment_skip_list(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id)
@@ -2436,6 +2758,7 @@ def treatment_skip_list(request, patient_id):
     skips = TreatmentSkip.objects.filter(**session_scope).select_related(
         'treatment', 'performed_by', 'treatment__treatment_course',
     ).order_by('-created_at')
+    skips = _skip_history_rows(skips)
     return render(request, 'rtms_app/skip_list.html', {
         'patient': patient, 'course_number': course_number, 'skips': skips,
     })
@@ -2449,105 +2772,41 @@ def treatment_skip_undo(request, skip_id):
     # import model dynamically to avoid any name-resolution issues during import-time quirks
     sk = get_object_or_404(__import__('rtms_app.models', fromlist=['TreatmentSkip']).TreatmentSkip, pk=skip_id)
     patient = sk.treatment.patient
+    if sk.action_type == 'cancel':
+        if sk.batch_id is not None:
+            root, _batch_rows = _validated_cancel_batch_root(sk.batch_id)
+            if root is None or root.pk != sk.pk:
+                return HttpResponseBadRequest('中止バッチroot以外から取消解除できません。')
+        try:
+            undo_treatment_cancellation(skip_id=skip_id, user=request.user)
+        except (TreatmentCancellationError, PatientCourseWriteError) as exc:
+            return HttpResponseBadRequest(str(exc))
+        except TreatmentReservationBusyError as exc:
+            return HttpResponse(str(exc), status=503)
+        return redirect('rtms_app:treatment_skip_list', patient_id=patient.id)
     try:
-        # If a snapshot exists, restore affected sessions and patient discharge_date
-        snap = sk.snapshot or {}
-        affected = snap.get('affected_sessions') if isinstance(snap, dict) else None
-
-        if affected:
-            # For cancel action: recreate deleted sessions
-            if sk.action_type == 'cancel':
-                for item in affected:
-                    try:
-                        ts_id = item.get('id')
-                        # Try to get the existing session first
-                        ts = TreatmentSession.objects.filter(pk=ts_id).first()
-                        if not ts:
-                            # Session was deleted, we can't fully recreate it
-                            # Log this but don't fail
-                            continue
-
-                        orig_sd = item.get('session_date')
-                        orig_dt = item.get('date')
-                        if orig_sd:
-                            from datetime import date as _d, datetime as _dt
-                            ts.session_date = _dt.fromisoformat(orig_sd).date() if 'T' in orig_sd else _d.fromisoformat(orig_sd)
-                        if orig_dt:
-                            try:
-                                ts.date = _dt.fromisoformat(orig_dt)
-                            except Exception:
-                                try:
-                                    ts.date = _dt.combine(_d.fromisoformat(orig_dt), _dt.min.time())
-                                except Exception:
-                                    pass
-                        ts.save(update_fields=['session_date', 'date'])
-                    except Exception:
-                        continue
-            else:
-                # For postpone action: restore original session dates
-                for item in affected:
-                    try:
-                        ts = TreatmentSession.objects.filter(pk=item.get('id')).first()
-                        if not ts:
-                            continue
-                        orig_sd = item.get('session_date')
-                        orig_dt = item.get('date')
-                        if orig_sd:
-                            from datetime import date as _d, datetime as _dt
-                            # parse date
-                            ts.session_date = _dt.fromisoformat(orig_sd).date() if 'T' in orig_sd else _d.fromisoformat(orig_sd)
-                        if orig_dt:
-                            # parse datetime
-                            try:
-                                ts.date = _dt.fromisoformat(orig_dt)
-                            except Exception:
-                                # fallback to date only
-                                try:
-                                    ts.date = _dt.combine(_d.fromisoformat(orig_dt), _dt.min.time())
-                                except Exception:
-                                    pass
-                        ts.save(update_fields=['session_date', 'date'])
-                    except Exception:
-                        continue
-
-        # restore course discharge_date if snapshot provided
-        try:
-            from datetime import date as _d
-            treatment_course = getattr(sk.treatment, 'treatment_course', None)
-            cdd = snap.get('course_discharge_date') if isinstance(snap, dict) else None
-            pdd = snap.get('patient_discharge_date') if isinstance(snap, dict) else None
-            if treatment_course is not None and 'course_discharge_date' in snap:
-                treatment_course.discharge_date = _d.fromisoformat(cdd) if cdd else None
-                treatment_course.save(update_fields=['discharge_date'])
-                if treatment_course.course_number == 1 and 'patient_discharge_date' in snap:
-                    patient.discharge_date = _d.fromisoformat(pdd) if pdd else None
-                    patient.save(update_fields=['discharge_date'])
-            elif treatment_course is None and pdd:
-                patient.discharge_date = _d.fromisoformat(pdd)
-                patient.save(update_fields=['discharge_date'])
-        except Exception:
-            pass
-
-        # restore status of the skipped/cancelled session to planned
-        t = sk.treatment
-        t.status = 'planned'
-        t.save(update_fields=['status'])
-
-        # mark skip as undone (preserve record for audit)
-        try:
-            sk.undone_by = request.user
-            sk.undone_at = timezone.now()
-            sk.save(update_fields=['undone_by', 'undone_at'])
-        except Exception:
-            pass
-        try:
-            action_str = 'cancel' if sk.action_type == 'cancel' else 'skip'
-            log_audit_action(patient, f'undo_{action_str}', 'TreatmentSkip', skip_id, summary=f"undo {action_str} via UI by {request.user.username}")
-        except Exception:
-            pass
+        undo_treatment_skip(
+            skip_id=sk.pk,
+            patient_id=patient.pk,
+            course_number=sk.treatment.course_number,
+            treatment_course_id=sk.treatment.treatment_course_id,
+            treatment_id=sk.treatment_id,
+            user=request.user,
+        )
+    except (TreatmentSkipUndoError, PatientCourseWriteError) as exc:
+        return HttpResponseBadRequest(str(exc))
+    except TreatmentReservationBusyError as exc:
+        return HttpResponse(str(exc), status=503)
+    try:
+        log_audit_action(
+            patient,
+            'undo_skip',
+            'TreatmentSkip',
+            skip_id,
+            summary=f"undo skip via UI by {request.user.username}",
+        )
     except Exception:
         pass
-    # redirect back to patient skips page
     return redirect('rtms_app:treatment_skip_list', patient_id=patient.id)
 
 def _hamd_items():

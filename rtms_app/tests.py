@@ -3377,7 +3377,99 @@ class TestSideEffectAndAdverseEventFlow(TestCase):
         html = response.content.decode()
         self.assertIn('id="sideEffectCandidates" class="alert alert-warning d-none', html)
         self.assertIn("panel.classList.add('d-none')", html)
-        self.assertIn("reportCheckbox.checked = false", html)
+        self.assertIn('name="sae_selection_changed" id="saeSelectionChanged"', html)
+        self.assertIn("if (!candidates.size) {\n      panel.classList.add('d-none');\n      return;", html)
+
+    def test_skip_without_sae_checkboxes_preserves_existing_sae_and_report(self):
+        session = TreatmentSession.objects.create(
+            patient=self.patient,
+            session_date=date(2026, 8, 3),
+            status='planned',
+        )
+        sae = SeriousAdverseEvent.objects.create(
+            patient=self.patient,
+            course_number=1,
+            session=session,
+            event_types=['seizure'],
+        )
+        report = AdverseEventReport.objects.create(
+            session=session,
+            event_types=['seizure'],
+            adverse_event_name='existing report',
+        )
+
+        response = self.treatment_post(action='skip')
+
+        self.assertEqual(response.status_code, 302)
+        session.refresh_from_db()
+        sae.refresh_from_db()
+        report.refresh_from_db()
+        self.assertEqual(session.status, 'skipped')
+        self.assertEqual(sae.event_types, ['seizure'])
+        self.assertEqual(report.event_types, ['seizure'])
+        self.assertEqual(report.adverse_event_name, 'existing report')
+
+    def test_explicit_empty_sae_selection_removes_event_and_clears_report_types(self):
+        session = TreatmentSession.objects.create(
+            patient=self.patient,
+            session_date=date(2026, 8, 3),
+            status='planned',
+        )
+        sae = SeriousAdverseEvent.objects.create(
+            patient=self.patient,
+            course_number=1,
+            session=session,
+            event_types=['seizure'],
+        )
+        report = AdverseEventReport.objects.create(
+            session=session,
+            event_types=['seizure'],
+            adverse_event_name='existing report',
+        )
+
+        response = self.treatment_post(
+            action='save',
+            sae_selection_changed='on',
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(SeriousAdverseEvent.objects.filter(pk=sae.pk).exists())
+        report.refresh_from_db()
+        self.assertEqual(report.event_types, [])
+        self.assertEqual(report.adverse_event_name, 'existing report')
+
+    def test_sae_type_edit_updates_existing_report_types(self):
+        session = TreatmentSession.objects.create(
+            patient=self.patient,
+            session_date=date(2026, 8, 3),
+            status='planned',
+        )
+        SeriousAdverseEvent.objects.create(
+            patient=self.patient,
+            course_number=1,
+            session=session,
+            event_types=['seizure'],
+        )
+        report = AdverseEventReport.objects.create(
+            session=session,
+            event_types=['seizure'],
+            adverse_event_name='existing report',
+        )
+
+        response = self.treatment_post(
+            action='save',
+            sae_selection_changed='on',
+            sae_syncope='on',
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            SeriousAdverseEvent.objects.get(session=session).event_types,
+            ['syncope'],
+        )
+        report.refresh_from_db()
+        self.assertEqual(report.event_types, ['syncope'])
+        self.assertEqual(report.adverse_event_name, 'existing report')
 
     def test_candidate_defaults_apply_only_on_first_report_enable(self):
         response = self.client.get(reverse('rtms_app:treatment_add', args=[self.patient.pk]))
@@ -3815,22 +3907,108 @@ class TestSkipSessions(TestCase):
         self.client.login(username='skipper', password='pw')
         self.patient = Patient.objects.create(card_id='SKIP1', name='Skip Test', birth_date=datetime.date(1990,1,1))
 
-    def _skip_post(self, treatment_date):
+    def _skip_post(self, treatment_date, course_number=None, **extra):
+        post_data = {
+            'treatment_date': treatment_date.isoformat(),
+            'treatment_time': '09:00',
+            'mt_percent': '120',
+            'frequency_hz': '18.0',
+            'train_seconds': '2.0',
+            'intertrain_seconds': '20.0',
+            'train_count': '55',
+            'total_pulses': '1980',
+            'action': 'skip',
+        }
+        if course_number is not None:
+            post_data['course_number'] = str(course_number)
+        post_data.update(extra)
         return self.client.post(
             reverse('rtms_app:treatment_add', args=[self.patient.id]),
-            {
-                'treatment_date': treatment_date.isoformat(),
-                'treatment_time': '09:00',
-                'mt_percent': '120',
-                'frequency_hz': '18.0',
-                'train_seconds': '2.0',
-                'intertrain_seconds': '20.0',
-                'train_count': '55',
-                'total_pulses': '1980',
-                'action': 'skip',
-            },
+            post_data,
             follow=False,
         )
+
+    def test_skip_history_hides_undo_after_successful_undo(self):
+        selected = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 5), status='planned',
+        )
+        TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 6), status='planned',
+        )
+        response = self._skip_post(selected.session_date)
+        self.assertEqual(response.status_code, 302)
+        skip = TreatmentSkip.objects.get(treatment=selected, action_type='postpone')
+
+        history = self.client.get(
+            reverse('rtms_app:treatment_skip_list', args=[self.patient.pk]),
+        )
+        self.assertTrue(history.context['skips'][0].can_undo)
+        self.assertContains(
+            history,
+            reverse('rtms_app:treatment_skip_undo', args=[skip.pk]),
+        )
+
+        response = self.client.post(
+            reverse('rtms_app:treatment_skip_undo', args=[skip.pk]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        history = self.client.get(
+            reverse('rtms_app:treatment_skip_list', args=[self.patient.pk]),
+        )
+        self.assertFalse(history.context['skips'][0].can_undo)
+        self.assertNotContains(
+            history,
+            reverse('rtms_app:treatment_skip_undo', args=[skip.pk]),
+        )
+    def _create_skip_reservation_fixture(self, *, add_date_collision=False):
+        from rtms_app.models import RtmSTreatmentReservation
+
+        course = TreatmentCourse.objects.create(
+            patient=self.patient,
+            course_number=1,
+            first_treatment_date=date(2026, 1, 19),
+        )
+        selected = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=course,
+            course_number=1,
+            session_date=date(2026, 1, 23),
+            status='planned',
+        )
+        future = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=course,
+            course_number=1,
+            session_date=date(2026, 1, 27),
+            status='planned',
+        )
+        MappingSchedule.objects.create(
+            patient=self.patient,
+            treatment_course=course,
+            course_number=1,
+            week_number=2,
+            planned_date=future.session_date,
+        )
+        reservations = [
+            RtmSTreatmentReservation.objects.create(
+                treatment_course=course,
+                treatment_date=session.session_date,
+                sequence_number=sequence_number,
+                status='provisional',
+                capacity_type='general_ward',
+            )
+            for sequence_number, session in enumerate((selected, future), start=1)
+        ]
+        if add_date_collision:
+            RtmSTreatmentReservation.objects.create(
+                treatment_course=course,
+                treatment_date=date(2026, 1, 26),
+                sequence_number=3,
+                status='cancelled',
+                capacity_type='general_ward',
+            )
+        return course, selected, future, reservations
 
     def test_skip_shifts_future_planned_sessions_and_discharge(self):
         # create three planned sessions: day1, day2, day3
@@ -3927,6 +4105,180 @@ class TestSkipSessions(TestCase):
         delta = new_last - original_last
         self.assertEqual(self.patient.discharge_date, date(2026,1,31) + delta)
 
+    def test_skip_reflow_skips_weekend_and_holiday(self):
+        source_date = date(2026, 1, 9)
+        first_future = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 10), status='planned',
+        )
+        second_future = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 13), status='planned',
+        )
+        original_holidays = set(schedule_service.EXTRA_HOLIDAYS)
+        schedule_service.EXTRA_HOLIDAYS.add(date(2026, 1, 12))
+        try:
+            response = self._skip_post(source_date)
+        finally:
+            schedule_service.EXTRA_HOLIDAYS.clear()
+            schedule_service.EXTRA_HOLIDAYS.update(original_holidays)
+
+        self.assertIn(response.status_code, (302, 303))
+        first_future.refresh_from_db()
+        second_future.refresh_from_db()
+        self.assertEqual(first_future.session_date, date(2026, 1, 13))
+        self.assertEqual(second_future.session_date, date(2026, 1, 14))
+
+    def _assert_skip_reflows_around_fixed_session(self, fixed_status):
+        from rtms_app.models import TreatmentSession
+
+        source_date = date(2026, 1, 5)
+        fixed_date = date(2026, 1, 6)
+        selected = TreatmentSession.objects.create(
+            patient=self.patient, session_date=source_date, status='planned',
+        )
+        fixed = TreatmentSession.objects.create(
+            patient=self.patient, session_date=fixed_date, status=fixed_status,
+        )
+        future_sessions = [
+            TreatmentSession.objects.create(
+                patient=self.patient, session_date=session_date, status='planned',
+            )
+            for session_date in (date(2026, 1, 7), date(2026, 1, 9), date(2026, 1, 12))
+        ]
+        fixed_history = TreatmentSkip.objects.create(
+            treatment=fixed,
+            action_type='postpone',
+            effective_date=fixed_date,
+            reason='preserve existing history',
+            performed_by=self.user,
+            snapshot={'audit_marker': fixed_status},
+        )
+
+        response = self._skip_post(source_date)
+
+        self.assertIn(response.status_code, (302, 303))
+        selected.refresh_from_db()
+        fixed.refresh_from_db()
+        fixed_history.refresh_from_db()
+        self.assertEqual(selected.status, 'skipped')
+        self.assertEqual((fixed.status, fixed.session_date), (fixed_status, fixed_date))
+        self.assertEqual(fixed_history.snapshot, {'audit_marker': fixed_status})
+        self.assertIsNone(fixed_history.undone_at)
+        self.assertEqual(
+            list(TreatmentSession.objects.filter(pk__in=[item.pk for item in future_sessions])
+                 .order_by('session_date').values_list('session_date', flat=True)),
+            [date(2026, 1, 7), date(2026, 1, 8), date(2026, 1, 9)],
+        )
+
+    def test_skip_reflow_avoids_done_session(self):
+        self._assert_skip_reflows_around_fixed_session('done')
+
+    def test_skip_reflow_avoids_skipped_session(self):
+        self._assert_skip_reflows_around_fixed_session('skipped')
+
+    def test_course_two_skip_does_not_block_or_modify_course_one(self):
+        course_one = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+        )
+        course_two = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=2,
+        )
+        course_one_done = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=course_one,
+            course_number=1,
+            session_date=date(2026, 1, 6),
+            status='done',
+        )
+        selected = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=course_two,
+            course_number=2,
+            session_date=date(2026, 1, 5),
+            status='planned',
+        )
+        future = TreatmentSession.objects.create(
+            patient=self.patient,
+            treatment_course=course_two,
+            course_number=2,
+            session_date=date(2026, 1, 7),
+            status='planned',
+        )
+
+        response = self._skip_post(selected.session_date, course_number=2)
+
+        self.assertIn(response.status_code, (302, 303))
+        selected.refresh_from_db()
+        future.refresh_from_db()
+        course_one_done.refresh_from_db()
+        self.assertEqual(selected.status, 'skipped')
+        self.assertEqual(future.session_date, course_one_done.session_date)
+        self.assertEqual(course_one_done.status, 'done')
+        self.assertEqual(course_one_done.session_date, date(2026, 1, 6))
+
+    def test_skip_rolls_back_when_reservation_capacity_is_insufficient(self):
+        from rtms_app.models import RtmSTreatmentCapacity, RtmSTreatmentReservation
+
+        course, selected, future, reservations = self._create_skip_reservation_fixture()
+        capacities = list(RtmSTreatmentCapacity.objects.filter(
+            capacity_type__in=('rTMS_private', 'general_ward'),
+            valid_from=date(2026, 1, 1),
+        ))
+        self.assertEqual(len(capacities), 2)
+        for capacity in capacities:
+            capacity.capacity = 0
+            capacity.save(update_fields=['capacity', 'updated_at'])
+
+        response = self._skip_post(selected.session_date)
+
+        self.assertEqual(response.status_code, 400)
+        selected.refresh_from_db()
+        future.refresh_from_db()
+        schedule = MappingSchedule.objects.get(
+            treatment_course=course, week_number=2,
+        )
+        self.assertEqual(selected.status, 'planned')
+        self.assertEqual(future.session_date, date(2026, 1, 27))
+        self.assertEqual(schedule.planned_date, date(2026, 1, 27))
+        self.assertEqual(
+            list(RtmSTreatmentReservation.objects.filter(treatment_course=course)
+                 .order_by('sequence_number')
+                 .values_list('pk', 'treatment_date', 'status')),
+            [(item.pk, item.treatment_date, item.status) for item in reservations],
+        )
+        self.assertFalse(TreatmentSkip.objects.filter(treatment=selected).exists())
+
+    def test_skip_rolls_back_when_reservation_date_collides(self):
+        from rtms_app.models import RtmSTreatmentReservation
+
+        course, selected, future, reservations = self._create_skip_reservation_fixture(
+            add_date_collision=True,
+        )
+        self.assertEqual(len(reservations), 2)
+        reservation_states = list(
+            RtmSTreatmentReservation.objects.filter(treatment_course=course)
+            .order_by('sequence_number')
+            .values_list('pk', 'treatment_date', 'status')
+        )
+
+        response = self._skip_post(selected.session_date)
+
+        self.assertEqual(response.status_code, 400)
+        selected.refresh_from_db()
+        future.refresh_from_db()
+        schedule = MappingSchedule.objects.get(
+            treatment_course=course, week_number=2,
+        )
+        self.assertEqual(selected.status, 'planned')
+        self.assertEqual(future.session_date, date(2026, 1, 27))
+        self.assertEqual(schedule.planned_date, date(2026, 1, 27))
+        self.assertEqual(
+            list(RtmSTreatmentReservation.objects.filter(treatment_course=course)
+                 .order_by('sequence_number')
+                 .values_list('pk', 'treatment_date', 'status')),
+            reservation_states,
+        )
+        self.assertFalse(TreatmentSkip.objects.filter(treatment=selected).exists())
+
     def test_course_two_skip_shifts_only_course_discharge_and_sessions(self):
         course_one = TreatmentCourse.objects.create(
             patient=self.patient, course_number=1, discharge_date=date(2026, 1, 31),
@@ -3997,6 +4349,7 @@ class TestSkipSessions(TestCase):
         self.assertEqual(future.session_date, date(2026, 1, 12))
         self.assertEqual(later.session_date, date(2026, 1, 13))
         self.assertEqual(mapping.planned_date, date(2026, 1, 9))
+        self.assertEqual(TreatmentSkip.objects.filter(treatment=first).count(), 0)
 
     def test_skip_rolls_back_when_mapping_sync_fails(self):
         self.patient.first_treatment_date = date(2026, 1, 9)
@@ -4031,6 +4384,90 @@ class TestSkipSessions(TestCase):
         self.assertEqual(future.session_date, date(2026, 1, 10))
         self.assertEqual(later.session_date, date(2026, 1, 12))
         self.assertEqual(mapping.planned_date, date(2026, 1, 9))
+        self.assertEqual(TreatmentSkip.objects.filter(treatment=first).count(), 0)
+
+    def test_skip_rolls_back_reservation_sync_failure(self):
+        from rtms_app.models import RtmSTreatmentReservation
+
+        course = TreatmentCourse.objects.create(
+            patient=self.patient, course_number=1,
+        )
+        first = TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=course, course_number=1,
+            session_date=date(2026, 1, 5), status='planned',
+        )
+        TreatmentSession.objects.create(
+            patient=self.patient, treatment_course=course, course_number=1,
+            session_date=date(2026, 1, 6), status='planned',
+        )
+        reservation = RtmSTreatmentReservation.objects.create(
+            treatment_course=course, treatment_date=date(2026, 1, 5),
+            sequence_number=1, status='provisional', capacity_type='general_ward',
+        )
+
+        sync_reservations = schedule_service._sync_treatment_reservations
+
+        def sync_then_fail(patient, course_number, **kwargs):
+            sync_reservations(patient, course_number, **kwargs)
+            raise RuntimeError('forced reservation sync failure')
+
+        with patch(
+            'rtms_app.services.schedule._sync_treatment_reservations',
+            side_effect=sync_then_fail,
+        ):
+            response = self._skip_post(first.session_date)
+
+        first.refresh_from_db()
+        reservation.refresh_from_db()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(first.status, 'planned')
+        self.assertEqual(reservation.status, 'provisional')
+        self.assertEqual(TreatmentSkip.objects.filter(treatment=first).count(), 0)
+
+    def test_skip_reuses_patient_mutex_for_reflow(self):
+        from rtms_app.services.patient_mutex import acquire_patient_mutex
+
+        first = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 5), status='planned',
+        )
+        TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 6), status='planned',
+        )
+
+        with patch(
+            'rtms_app.services.session_writes.acquire_patient_mutex',
+            wraps=acquire_patient_mutex,
+        ) as acquire_mutex:
+            response = self._skip_post(first.session_date)
+
+        self.assertIn(response.status_code, (302, 303))
+        acquire_mutex.assert_called_once_with(self.patient.pk)
+        first.refresh_from_db()
+        self.assertEqual(first.status, 'skipped')
+
+    def test_skip_rechecks_status_after_patient_mutex(self):
+        from rtms_app.services.session_writes import acquire_patient_mutex
+
+        first = TreatmentSession.objects.create(
+            patient=self.patient, session_date=date(2026, 1, 5), status='planned',
+        )
+
+        def change_status_after_lock(patient_id):
+            locked_patient = acquire_patient_mutex(patient_id)
+            TreatmentSession.objects.filter(pk=first.pk).update(status='done')
+            return locked_patient
+
+        with patch(
+            'rtms_app.services.session_writes.acquire_patient_mutex',
+            side_effect=change_status_after_lock,
+        ), patch('rtms_app.views.shift_future_sessions') as shift_future:
+            response = self._skip_post(first.session_date)
+
+        first.refresh_from_db()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(first.status, 'planned')
+        self.assertEqual(TreatmentSkip.objects.filter(treatment=first).count(), 0)
+        shift_future.assert_not_called()
 
     def test_repeating_skip_post_keeps_current_http_state(self):
         self.patient.first_treatment_date = date(2026, 1, 9)
@@ -4050,6 +4487,13 @@ class TestSkipSessions(TestCase):
         )
 
         first_response = self._skip_post(first.session_date)
+        first.refresh_from_db()
+        future.refresh_from_db()
+        later.refresh_from_db()
+        self.assertEqual(first.status, 'skipped')
+        self.assertEqual(TreatmentSkip.objects.filter(treatment=first).count(), 1)
+        future_date_after_first_skip = future.session_date
+        later_date_after_first_skip = later.session_date
         second_response = self._skip_post(first.session_date)
 
         first.refresh_from_db()
@@ -4059,8 +4503,9 @@ class TestSkipSessions(TestCase):
         self.assertIn(first_response.status_code, (302, 303))
         self.assertIn(second_response.status_code, (302, 303))
         self.assertEqual(first.status, 'skipped')
-        self.assertEqual(future.session_date, date(2026, 1, 12))
-        self.assertEqual(later.session_date, date(2026, 1, 13))
+        self.assertEqual(future.session_date, future_date_after_first_skip)
+        self.assertEqual(later.session_date, later_date_after_first_skip)
+        self.assertEqual(TreatmentSkip.objects.filter(treatment=first).count(), 1)
         self.assertEqual(mapping.planned_date, date(2026, 1, 9))
 
 
@@ -6257,7 +6702,7 @@ class TestPatientSurveyFlow(TestCase):
         # Now undo via POST
         undo_url = reverse('rtms_app:treatment_skip_undo', args=[sk.id])
         resp = self.client.post(undo_url, {}, follow=False)
-        self.assertIn(resp.status_code, (302,303))
+        self.assertIn(resp.status_code, (302,303), resp.content.decode())
 
         # Refresh skip and sessions
         sk.refresh_from_db()
